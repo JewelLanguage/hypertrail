@@ -2139,6 +2139,7 @@ interface EditContext : EventTarget
 interface Element : Node
     attribute @@toStringTag
     attribute @@unscopables
+    getter ariaActiveDescendantElement
     getter ariaAtomic
     getter ariaAutoComplete
     getter ariaBrailleLabel
@@ -2149,15 +2150,21 @@ interface Element : Node
     getter ariaColIndex
     getter ariaColIndexText
     getter ariaColSpan
+    getter ariaControlsElements
     getter ariaCurrent
+    getter ariaDescribedByElements
     getter ariaDescription
+    getter ariaDetailsElements
     getter ariaDisabled
+    getter ariaErrorMessageElements
     getter ariaExpanded
+    getter ariaFlowToElements
     getter ariaHasPopup
     getter ariaHidden
     getter ariaInvalid
     getter ariaKeyShortcuts
     getter ariaLabel
+    getter ariaLabelledByElements
     getter ariaLevel
     getter ariaLive
     getter ariaModal
@@ -2278,6 +2285,7 @@ interface Element : Node
     method webkitMatchesSelector
     method webkitRequestFullScreen
     method webkitRequestFullscreen
+    setter ariaActiveDescendantElement
     setter ariaAtomic
     setter ariaAutoComplete
     setter ariaBrailleLabel
@@ -2288,15 +2296,21 @@ interface Element : Node
     setter ariaColIndex
     setter ariaColIndexText
     setter ariaColSpan
+    setter ariaControlsElements
     setter ariaCurrent
+    setter ariaDescribedByElements
     setter ariaDescription
+    setter ariaDetailsElements
     setter ariaDisabled
+    setter ariaErrorMessageElements
     setter ariaExpanded
+    setter ariaFlowToElements
     setter ariaHasPopup
     setter ariaHidden
     setter ariaInvalid
     setter ariaKeyShortcuts
     setter ariaLabel
+    setter ariaLabelledByElements
     setter ariaLevel
     setter ariaLive
     setter ariaModal
@@ -2342,6 +2356,7 @@ interface Element : Node
     setter slot
 interface ElementInternals
     attribute @@toStringTag
+    getter ariaActiveDescendantElement
     getter ariaAtomic
     getter ariaAutoComplete
     getter ariaBrailleLabel
@@ -2352,15 +2367,21 @@ interface ElementInternals
     getter ariaColIndex
     getter ariaColIndexText
     getter ariaColSpan
+    getter ariaControlsElements
     getter ariaCurrent
+    getter ariaDescribedByElements
     getter ariaDescription
+    getter ariaDetailsElements
     getter ariaDisabled
+    getter ariaErrorMessageElements
     getter ariaExpanded
+    getter ariaFlowToElements
     getter ariaHasPopup
     getter ariaHidden
     getter ariaInvalid
     getter ariaKeyShortcuts
     getter ariaLabel
+    getter ariaLabelledByElements
     getter ariaLevel
     getter ariaLive
     getter ariaModal
@@ -2398,6 +2419,7 @@ interface ElementInternals
     method reportValidity
     method setFormValue
     method setValidity
+    setter ariaActiveDescendantElement
     setter ariaAtomic
     setter ariaAutoComplete
     setter ariaBrailleLabel
@@ -2408,15 +2430,21 @@ interface ElementInternals
     setter ariaColIndex
     setter ariaColIndexText
     setter ariaColSpan
+    setter ariaControlsElements
     setter ariaCurrent
+    setter ariaDescribedByElements
     setter ariaDescription
+    setter ariaDetailsElements
     setter ariaDisabled
+    setter ariaErrorMessageElements
     setter ariaExpanded
+    setter ariaFlowToElements
     setter ariaHasPopup
     setter ariaHidden
     setter ariaInvalid
     setter ariaKeyShortcuts
     setter ariaLabel
+    setter ariaLabelledByElements
     setter ariaLevel
     setter ariaLive
     setter ariaModal
@@ -2721,6 +2749,8 @@ interface GPUAdapterInfo
     getter architecture
     getter description
     getter device
+    getter subgroupMaxSize
+    getter subgroupMinSize
     getter vendor
     method constructor
 interface GPUBindGroup
@@ -2975,7 +3005,6 @@ interface GPUSupportedLimits
     getter maxComputeWorkgroupsPerDimension
     getter maxDynamicStorageBuffersPerPipelineLayout
     getter maxDynamicUniformBuffersPerPipelineLayout
-    getter maxInterStageShaderComponents
     getter maxInterStageShaderVariables
     getter maxSampledTexturesPerShaderStage
     getter maxSamplersPerShaderStage
@@ -3388,12 +3417,15 @@ interface HTMLDetailsElement : HTMLElement
     setter open
 interface HTMLDialogElement : HTMLElement
     attribute @@toStringTag
+    getter closedBy
     getter open
     getter returnValue
     method close
     method constructor
+    method requestClose
     method show
     method showModal
+    setter closedBy
     setter open
     setter returnValue
 interface HTMLDirectoryElement : HTMLElement
@@ -5956,6 +5988,7 @@ interface NavigateEvent : Event
     getter info
     getter navigationType
     getter signal
+    getter sourceElement
     getter userInitiated
     method constructor
     method intercept
@@ -6331,6 +6364,7 @@ interface OffscreenCanvasRenderingContext2D
     method fill
     method fillRect
     method fillText
+    method getContextAttributes
     method getImageData
     method getLineDash
     method getTransform
@@ -8784,6 +8818,7 @@ interface SharedStorage
     attribute @@toStringTag
     getter worklet
     method append
+    method batchUpdate
     method clear
     method constructor
     method createWorklet
@@ -8792,6 +8827,21 @@ interface SharedStorage
     method run
     method selectURL
     method set
+interface SharedStorageAppendMethod : SharedStorageModifierMethod
+    attribute @@toStringTag
+    method constructor
+interface SharedStorageClearMethod : SharedStorageModifierMethod
+    attribute @@toStringTag
+    method constructor
+interface SharedStorageDeleteMethod : SharedStorageModifierMethod
+    attribute @@toStringTag
+    method constructor
+interface SharedStorageModifierMethod
+    attribute @@toStringTag
+    method constructor
+interface SharedStorageSetMethod : SharedStorageModifierMethod
+    attribute @@toStringTag
+    method constructor
 interface SharedStorageWorklet
     attribute @@toStringTag
     method addModule
@@ -12031,7 +12081,6 @@ namespace console
     method moveBy
     method moveTo
     method open
-    method openDatabase
     method postMessage
     method print
     method prompt

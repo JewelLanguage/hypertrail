@@ -35,6 +35,7 @@
 <translation id="164952285225495380">Tento balíček již byl v prohlížeči Chromium sledován.</translation>
 <translation id="1707458603865303524">Používejte Chromium, kdykoli klepnete na odkazy ve zprávách nebo jiných aplikacích.</translation>
 <translation id="1722370509450468186">Heslo bude uloženo do vašeho účtu (<ph name="EMAIL" />).</translation>
+<translation id="1747088204252710672">Feed přizpůsobený pro vás</translation>
 <translation id="1811860791247653035">Pokud chcete získat personalizaci a další funkce, zahrňte Chromium do: <ph name="FEATURE_NAME_1" /> a <ph name="FEATURE_NAME_2" /></translation>
 <translation id="1838412507805038478">Prohlížeč Chromium ověřil, že certifikát tohoto webu byl vydán vydavatelem <ph name="ISSUER" />.</translation>
 <translation id="1839447949248872139">Otevírejte odkazy v Chromiu ve výchozím nastavení</translation>
@@ -68,6 +69,7 @@ Zkuste s odhlášením několik minut počkat. Pokud se teď odhlásíte, tato 
 <translation id="2459183986985456602">Otevřít v prohlížeči Chromium naposledy otevřenou kartu.</translation>
 <translation id="2476409803017965813">Svůj výběr můžete v nastavení prohlížeče Chromium kdykoli aktualizovat.</translation>
 <translation id="2478931088402984578">Vyberte <ph name="BEGIN_BOLD" />Chromium<ph name="END_BOLD" /></translation>
+<translation id="2485774047568879945">Nastavte Chromium jako výchozí prohlížeč, abyste mohli snadno sdílet a otevírat odkazy</translation>
 <translation id="2512597191798760956">Podržte ikonu prohlížeče Chromium a klikněte na Upravit plochu</translation>
 <translation id="2517624234762908348">Synchronizovat data prohlížeče Chromium</translation>
 <translation id="2592940277904433508">Pokračovat v používání prohlížeče Chromium</translation>
@@ -165,6 +167,7 @@ Pokud toto nastavení chcete změnit, <ph name="BEGIN_LINK" />vymažte data proh
 <translation id="5088872414922783602">Získejte rychlejší přístup k prohlížeči Chromium z Docku na ploše.</translation>
 <translation id="5124429847818367226">Nyní můžete Chromium použít při každém procházení a pokaždé, když klepnete na odkazy ve zprávách, dokumentech a jiných aplikacích.</translation>
 <translation id="5131565040785979529">Účet, ke kterému jste přihlášeni, a způsob používání prohlížeče Chromium spravuje doména <ph name="DOMAIN" />.</translation>
+<translation id="5134464247000681876">Otevírejte odkazy z Gmailu, Map, YouTube a dalších aplikací v prohlížeči Chromium</translation>
 <translation id="5224391634244552924">Nemáte žádná uložená hesla. Chromium může hesla zkontrolovat, pouze když si je uložíte.</translation>
 <translation id="5259423875997548710">Vyhledat obrazový materiál v prohlížeči Chromium.</translation>
 <translation id="5308226104666789935">Chromium nemůže vyhledat dostupné aktualizace</translation>
@@ -180,10 +183,10 @@ Pokud toto nastavení chcete změnit, <ph name="BEGIN_LINK" />vymažte data proh
 2. Klepněte na Výchozí prohlížeč.
 3. Vyberte Chromium</translation>
 <translation id="5521125884468363740">Chcete-li mít své karty k dispozici všude, kde používáte Chromium, přihlaste se a zapněte synchronizaci</translation>
-<translation id="5522297504975449419">Některé funkce prohlížeče Chromium už nebudou dostupné.</translation>
 <translation id="5534584691915394889">Tyto údaje poslouží k vytváření událostí v Kalendáři Apple z prohlížeče Chromium a z Google Lens.</translation>
 <translation id="5571094606370987472">Otevře nedávno použité karty prohlížeče Chromium.</translation>
 <translation id="5603085937604338780">chromium</translation>
+<translation id="5657280937522795751">Zapněte možnost Chromium</translation>
 <translation id="5664395081284292058">Otevřít v prohlížeči Chromium naposledy otevřenou kartu</translation>
 <translation id="5671188105328420281">Tipy pro Chromium</translation>
 <translation id="5688047395118852662">Tato karta zobrazuje návrhy, jak Chromium využít na maximum.</translation>
@@ -214,7 +217,6 @@ Co je třeba zvážit:
 <translation id="6268381023930128611">Odhlásit se z prohlížeče Chromium?</translation>
 <translation id="6324041800010509197">Navštívit mřížku karet v prohlížeči Chromium</translation>
 <translation id="6325378625795868881">Používejte Chromium, kdykoli klepnete na odkazy ve zprávách a jiných aplikacích.</translation>
-<translation id="6337530241089703714">Zvolte, zda z tohoto zařízení chcete vymazat data prohlížeče Chromium, nebo je ponechat</translation>
 <translation id="6424492062988593837">Chromium je opět o něco lepší. K dispozici je nová verze.</translation>
 <translation id="6433172051771630690">Tipy, jak Chromium využít na maximum.</translation>
 <translation id="65045991564554105">Zobrazit Záložky prohlížeče Chromium</translation>
@@ -227,6 +229,7 @@ Co je třeba zvážit:
 <translation id="6752854822223394465">Vaše organizace nastavuje Chromium…</translation>
 <translation id="6794054469102824109">Otevře dinosauří hru v prohlížeči Chromium</translation>
 <translation id="6820823224820483452">Chromiu se nepodařilo zkontrolovat všechna hesla. Zkuste to znovu zítra.</translation>
+<translation id="6830782797004194206">Přihlašujte se rychleji s automatickým vyplňováním v prohlížeči Chromium</translation>
 <translation id="6831043979455480757">Přeložit</translation>
 <translation id="6852419005633611413">Získejte rychlejší přístup k prohlížeči Chromium z Docku na ploše</translation>
 <translation id="6852799557929001644">Získejte přístup ke svým heslům v prohlížeči Chromium a k dalším funkcím v jiných aplikacích na tomto zařízení.</translation>
@@ -258,6 +261,7 @@ Vaše šifrovaná data mohou číst pouze uživatelé, kteří mají vaši heslo
 <translation id="7674213385180944843">Otevřete Nastavení &gt; Soukromí &gt; Kamera &gt; Chromium a zapněte fotoaparát.</translation>
 <translation id="7733418656985455268">Tip pro Chromium: Vyhledávejte pomocí Lens</translation>
 <translation id="7747820849741499258">Vyhledat v prohlížeči Chromium</translation>
+<translation id="7753923083404296545">Otevřeno v anonymním režimu prohlížeče Chromium</translation>
 <translation id="7762622637388462191">Uzamkněte anonymní karty, když prohlížeč Chromium opustíte nebo přejdete do jiné aplikace.</translation>
 <translation id="7763454117143368771">Používejte Chromium jako výchozí prohlížeč – ochrání vás před nebezpečnými weby a vaše hesla budou v bezpečí</translation>
 <translation id="7784950022329154821">Při zavření Chromia zamknout anonymní karty</translation>
@@ -283,7 +287,6 @@ Vaše šifrovaná data mohou číst pouze uživatelé, kteří mají vaši heslo
 <translation id="8197822717502700527">Nyní využijete Chromium na svém zařízení na maximum.</translation>
 <translation id="8240981428553046115">Chromium nemůže vyhledat dostupné aktualizace. Zkuste to znovu později.</translation>
 <translation id="8254729934443216898">Prozkoumejte nové funkce, které vám pomohou využít Chromium na maximum.</translation>
-<translation id="829047622686389424">Feed přizpůsobený pro vás.</translation>
 <translation id="8293572045658095405">Jste v anonymním režimu prohlížeče Chromium</translation>
 <translation id="830951810931292870">Otevře zadané adresy URL v prohlížeči Chromium v anonymním režimu.</translation>
 <translation id="8409374867500149834">Máte nejsilnější zabezpečení prohlížeče Chromium proti škodlivým webům</translation>
@@ -305,7 +308,6 @@ Vaše šifrovaná data mohou číst pouze uživatelé, kteří mají vaši heslo
 <translation id="8866191443434488382">Chromium na navštívených webech rozpozná čísla zásilek a bude vám na stránce Nová karta zobrazovat aktuální informace o zásilkách. Sledovací číslo zásilky a název webu se odešlou týmu prohlížeče Chromium, aby bylo možné tuto funkci poskytovat a zlepšovat funkce nakupování pro všechny. Toto nastavení můžete kdykoli změnit v <ph name="BEGIN_LINK" />Nastavení sledování zásilek<ph name="END_LINK" />.</translation>
 <translation id="8880024619507699923">Vaše organizace vyžaduje, abyste se k používání prohlížeče Chromium přihlásili. <ph name="BEGIN_LINK" />Další informace<ph name="END_LINK" /></translation>
 <translation id="8900052431807804054">Aktivujte si v prohlížeči Chromium maximální zabezpečení</translation>
-<translation id="894437814105052438">Když se odhlásíte, Chromium do vašeho účtu Google nebude synchronizovat žádná nová data. Dříve synchronizovaná data v účtu zůstanou.</translation>
 <translation id="8950326149985259075">{THRESHOLD,plural, =1{K tomuto dochází, když Chromium {THRESHOLD} minutu nepoužíváte}few{K tomuto dochází, když Chromium {THRESHOLD} minuty nepoužíváte}many{K tomuto dochází, když Chromium {THRESHOLD} minuty nepoužíváte}other{K tomuto dochází, když Chromium {THRESHOLD} minut nepoužíváte}}</translation>
 <translation id="8963279154877372067">Pokud chcete dostávat upozornění na pokles ceny, povolte oznámení prohlížeče Chromium</translation>
 <translation id="8975812008711371178">Vyhledávat hlasem v prohlížeči Chromium</translation>

@@ -338,9 +338,6 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
            kSetOnlyIfOverridden},
           {"AttributionReporting",
            raw_ref(features::kPrivacySandboxAdsAPIsM1Override)},
-          {"AttributionReportingCrossAppWeb",
-           raw_ref(features::kPrivacySandboxAdsAPIsOverride),
-           kSetOnlyIfOverridden},
           {"AndroidDownloadableFontsMatching",
            raw_ref(features::kAndroidDownloadableFontsMatching)},
 #if BUILDFLAG(IS_ANDROID)
@@ -377,6 +374,13 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
           {"OriginIsolationHeader", raw_ref(features::kOriginIsolationHeader)},
           {"ReduceAcceptLanguage",
            raw_ref(network::features::kReduceAcceptLanguage)},
+          {"Serial",
+#if BUILDFLAG(IS_ANDROID)
+           raw_ref(device::features::kBluetoothRfcommAndroid)
+#else
+           raw_ref(device::features::kSerial)
+#endif
+          },
           {"SerialPortConnected", raw_ref(features::kSerialPortConnected)},
           {"SignatureBasedIntegrity",
            raw_ref(network::features::kSRIMessageSignatureEnforcement)},
@@ -613,21 +617,6 @@ void ResolveInvalidConfigurations() {
         << attribution_reporting::features::kConversionMeasurement.name
         << " in addition.";
     WebRuntimeFeatures::EnableAttributionReporting(false);
-  }
-
-  if (!base::FeatureList::IsEnabled(
-          attribution_reporting::features::kConversionMeasurement) ||
-      !base::FeatureList::IsEnabled(
-          network::features::kAttributionReportingCrossAppWeb)) {
-    LOG_IF(WARNING,
-           WebRuntimeFeatures::IsAttributionReportingCrossAppWebEnabled())
-        << "AttributionReportingCrossAppWeb cannot be enabled in this "
-           "configuration. Use --"
-        << switches::kEnableFeatures << "="
-        << attribution_reporting::features::kConversionMeasurement.name << ","
-        << network::features::kAttributionReportingCrossAppWeb.name
-        << " in addition.";
-    WebRuntimeFeatures::EnableAttributionReportingCrossAppWeb(false);
   }
 
   if (!base::FeatureList::IsEnabled(blink::features::kInterestGroupStorage)) {

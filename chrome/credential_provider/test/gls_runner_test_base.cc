@@ -37,7 +37,7 @@ namespace testing {
 
 // Corresponding default email and username for tests that don't override them.
 const char kDefaultEmail[] = "foo@gmail.com";
-const char kDefaultGaiaId[] = "test-gaia-id";
+const GaiaId::Literal kDefaultGaiaId("test-gaia-id");
 const wchar_t kDefaultUsername[] = L"foo";
 const char kDefaultInvalidTokenHandleResponse[] = "{}";
 const char kDefaultValidTokenHandleResponse[] = "{\"expires_in\":1}";

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "chrome/browser/ui/browser_navigator.h"
 
 #include <algorithm>
@@ -16,7 +21,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/web_contents_app_id_utils.h"
 #include "chrome/browser/apps/link_capturing/link_capturing_tab_data.h"
 #include "chrome/browser/browser_about_handler.h"
@@ -67,16 +71,11 @@
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
 #endif  // !BUILDFLAG(IS_ANDROID)
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "ash/public/cpp/multi_user_window_manager.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_helper.h"
 #include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #include "components/account_id/account_id.h"
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chrome/browser/lacros/lacros_url_handling.h"
-#include "chromeos/crosapi/cpp/gurl_os_handler_utils.h"
 #endif
 
 #if defined(USE_AURA)
@@ -576,7 +575,7 @@ bool IsHostAllowedInIncognito(const GURL& url) {
   // chrome://settings.
   return host != chrome::kChromeUIAppLauncherPageHost &&
          host != chrome::kChromeUISettingsHost &&
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
          host != chrome::kChromeUIOSSettingsHost &&
 #endif
          host != chrome::kChromeUIHelpHost &&
@@ -629,11 +628,11 @@ base::WeakPtr<content::NavigationHandle> Navigate(NavigateParams* params) {
   if (source_browser) {
     bool should_block_navigation =
         platform_util::IsBrowserLockedFullscreen(source_browser);
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     if (source_browser->IsLockedForOnTask()) {
       should_block_navigation = false;
     }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
     if (should_block_navigation) {
       return nullptr;
     }
@@ -642,7 +641,7 @@ base::WeakPtr<content::NavigationHandle> Navigate(NavigateParams* params) {
   // Open System Apps in their standalone window if necessary.
   // TODO(crbug.com/40136163): Remove this code after we integrate with intent
   // handling.
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   const std::optional<ash::SystemWebAppType> capturing_system_app_type =
       ash::GetCapturingSystemAppForURL(params->initiating_profile, params->url);
   if (capturing_system_app_type &&
@@ -664,7 +663,7 @@ base::WeakPtr<content::NavigationHandle> Navigate(NavigateParams* params) {
     // the navigation should appear to be cancelled.
     return nullptr;
   }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if !BUILDFLAG(IS_ANDROID)
   // Force isolated PWAs to open in an app window.
@@ -693,15 +692,6 @@ base::WeakPtr<content::NavigationHandle> Navigate(NavigateParams* params) {
       return nullptr;
     }
   }
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  const GURL& source_url =
-      params->source_contents ? params->source_contents->GetURL() : GURL();
-  if (lacros_url_handling::IsNavigationInterceptable(*params, source_url) &&
-      lacros_url_handling::MaybeInterceptNavigation(params->url)) {
-    return nullptr;
-  }
-#endif
 
   // If no source WebContents was specified, we use the selected one from the
   // target browser. This must happen before GetBrowserAndTabForDisposition()
@@ -792,7 +782,7 @@ base::WeakPtr<content::NavigationHandle> Navigate(NavigateParams* params) {
   if (params->force_open_pwa_window) {
     CHECK(web_app::AppBrowserController::IsWebApp(params->browser));
   }
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   if (source_browser && source_browser != params->browser) {
     // When the newly created browser was spawned by a browser which visits
     // another user's desktop, it should be shown on the same desktop as the
@@ -813,13 +803,6 @@ base::WeakPtr<content::NavigationHandle> Navigate(NavigateParams* params) {
         window_manager->ShowWindowForUser(new_window, src_account_id);
       }
     }
-  }
-#endif
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  // If Lacros gets here with an internal os:// redirect scheme to Ash, Ash
-  // did not accept the URL. Convert it into a blocked URL instead.
-  if (crosapi::gurl_os_handler_utils::HasOsScheme(params->url)) {
-    params->url = GURL(content::kBlockedURL);
   }
 #endif
 

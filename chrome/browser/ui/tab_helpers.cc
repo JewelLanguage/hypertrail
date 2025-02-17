@@ -13,7 +13,6 @@
 #include "base/time/default_tick_clock.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/breadcrumbs/breadcrumb_manager_tab_helper.h"
 #include "chrome/browser/browser_process.h"
@@ -60,13 +59,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_key.h"
 #include "chrome/browser/resource_coordinator/tab_helper.h"
-#include "chrome/browser/safe_browsing/chrome_password_reuse_detection_manager_client.h"
 #include "chrome/browser/safe_browsing/chrome_safe_browsing_tab_observer_delegate.h"
 #include "chrome/browser/safe_browsing/safe_browsing_navigation_observer_manager_factory.h"
-#include "chrome/browser/safe_browsing/safe_browsing_service.h"
-#include "chrome/browser/safe_browsing/tailored_security/tailored_security_service_factory.h"
-#include "chrome/browser/safe_browsing/tailored_security/tailored_security_url_observer.h"
-#include "chrome/browser/safe_browsing/trigger_creator.h"
 #include "chrome/browser/sessions/session_tab_helper_factory.h"
 #include "chrome/browser/site_protection/site_protection_metrics_observer.h"
 #include "chrome/browser/ssl/chrome_security_blocking_page_factory.h"
@@ -153,7 +147,6 @@
 #include "components/site_engagement/content/site_engagement_service.h"
 #include "components/tracing/common/tracing_switches.h"
 #include "components/ukm/content/source_url_recorder.h"
-#include "components/user_notes/user_notes_features.h"
 #include "components/webapps/browser/installable/installable_manager.h"
 #include "components/webapps/browser/installable/ml_installability_promoter.h"
 #include "content/public/browser/web_contents.h"
@@ -212,22 +205,15 @@
 #include "components/zoom/zoom_controller.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ash/boot_times_recorder/boot_times_recorder_tab_helper.h"
 #include "chrome/browser/ash/growth/campaigns_manager_session_tab_helper.h"
 #include "chrome/browser/ash/mahi/web_contents/mahi_tab_helper.h"
-#include "chrome/browser/ui/ash/google_one/google_one_offer_iph_tab_helper.h"
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chrome/browser/lacros/web_contents_can_go_back_observer.h"
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/chromeos/cros_apps/cros_apps_tab_helper.h"
 #include "chrome/browser/chromeos/gemini_app/gemini_app_tab_helper.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_content_tab_helper.h"
 #include "chrome/browser/chromeos/printing/print_preview/printing_init_cros.h"
+#include "chrome/browser/ui/ash/google_one/google_one_offer_iph_tab_helper.h"
 #endif
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
@@ -286,6 +272,14 @@
 
 #if BUILDFLAG(ENABLE_REPORTING)
 #include "components/tpcd/enterprise_reporting/enterprise_reporting_tab_helper.h"
+#endif
+
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+#include "chrome/browser/safe_browsing/chrome_password_reuse_detection_manager_client.h"
+#include "chrome/browser/safe_browsing/safe_browsing_service.h"
+#include "chrome/browser/safe_browsing/tailored_security/tailored_security_service_factory.h"
+#include "chrome/browser/safe_browsing/tailored_security/tailored_security_url_observer.h"
+#include "chrome/browser/safe_browsing/trigger_creator.h"
 #endif
 
 using content::WebContents;
@@ -356,7 +350,8 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   }
 
   if (fingerprinting_protection_filter::features::
-          IsFingerprintingProtectionFeatureEnabled()) {
+          IsFingerprintingProtectionEnabledForIncognitoState(
+              profile->IsIncognitoProfile())) {
     CreateFingerprintingProtectionWebContentsHelper(
         web_contents, profile->GetPrefs(),
         HostContentSettingsMapFactory::GetForProfile(profile),
@@ -374,7 +369,9 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   if (!autofill_client_provider.uses_platform_autofill()) {
     ChromePasswordManagerClient::CreateForWebContents(web_contents);
   }
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   ChromePasswordReuseDetectionManagerClient::CreateForWebContents(web_contents);
+#endif
   CreateSubresourceFilterWebContentsHelper(web_contents);
 #if BUILDFLAG(ENABLE_RLZ)
   ChromeRLZTrackerWebContentsObserver::CreateForWebContentsIfNeeded(
@@ -494,14 +491,17 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   //     See https://crbug.com/910288.
   resource_coordinator::ResourceCoordinatorTabHelper::CreateForWebContents(
       web_contents);
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   safe_browsing::SafeBrowsingNavigationObserver::MaybeCreateForWebContents(
       web_contents, HostContentSettingsMapFactory::GetForProfile(profile),
       safe_browsing::SafeBrowsingNavigationObserverManagerFactory::
           GetForBrowserContext(profile),
       profile->GetPrefs(), g_browser_process->safe_browsing_service());
+#endif
   site_protection::SiteProtectionMetricsObserver::CreateForWebContents(
       web_contents);
 
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   if (base::FeatureList::IsEnabled(
           safe_browsing::kTailoredSecurityIntegration)) {
     safe_browsing::TailoredSecurityUrlObserver::CreateForWebContents(
@@ -514,6 +514,7 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
         safe_browsing::AsyncCheckTracker::
             IsPlatformEligibleForSyncCheckerCheckAllowlist());
   }
+#endif
   // SafeBrowsingTabObserver creates a ClientSideDetectionHost, which observes
   // events from PermissionRequestManager and AsyncCheckTracker in its
   // constructor. Therefore, PermissionRequestManager and AsyncCheckTracker need
@@ -521,8 +522,10 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   safe_browsing::SafeBrowsingTabObserver::CreateForWebContents(
       web_contents,
       std::make_unique<safe_browsing::ChromeSafeBrowsingTabObserverDelegate>());
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   safe_browsing::TriggerCreator::MaybeCreateTriggersForWebContents(
       profile, web_contents);
+#endif
   SafetyTipWebContentsObserver::CreateForWebContents(web_contents);
   SearchEngineTabHelper::CreateForWebContents(web_contents);
   if (site_engagement::SiteEngagementService::IsEnabled()) {
@@ -662,20 +665,14 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   }
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   GoogleOneOfferIphTabHelper::CreateForWebContents(web_contents);
   // Do not create for Incognito mode.
   if (!profile->IsOffTheRecord()) {
     CampaignsManagerSessionTabHelper::CreateForWebContents(web_contents);
   }
   ash::BootTimesRecorderTabHelper::MaybeCreateForWebContents(web_contents);
-#endif
 
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  WebContentsCanGoBackObserver::CreateForWebContents(web_contents);
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS)
   CrosAppsTabHelper::MaybeCreateForWebContents(web_contents);
   GeminiAppTabHelper::MaybeCreateForWebContents(web_contents);
   mahi::MahiTabHelper::MaybeCreateForWebContents(web_contents);
@@ -686,10 +683,7 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   webapps::PreRedirectionURLObserver::CreateForWebContents(web_contents);
 #endif
 
-// TODO(crbug.com/40118868): Revisit the macro expression once build flag switch
-// of lacros-chrome is complete.
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || \
-    (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
   metrics::DesktopSessionDurationObserver::CreateForWebContents(web_contents);
 #endif
 
@@ -709,7 +703,11 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
               kPerformanceControlsMemorySaverOptOutSurvey) ||
       base::FeatureList::IsEnabled(
           performance_manager::features::
-              kPerformanceControlsBatterySaverOptOutSurvey)) {
+              kPerformanceControlsBatterySaverOptOutSurvey) ||
+      base::FeatureList::IsEnabled(
+          page_info::kMerchantTrustEvaluationControlSurvey) ||
+      base::FeatureList::IsEnabled(
+          page_info::kMerchantTrustEvaluationExperimentSurvey)) {
     HatsHelper::CreateForWebContents(web_contents);
   }
   SharedHighlightingPromo::CreateForWebContents(web_contents);

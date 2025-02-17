@@ -15,8 +15,8 @@
 #include "content/public/browser/render_process_host.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "services/device/public/mojom/geoposition.mojom.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom.h"
 #include "third_party/blink/public/common/permissions/permission_utils.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom.h"
 
 #if BUILDFLAG(IS_IOS)
 #include "services/device/public/cpp/geolocation/geolocation_system_permission_manager.h"
@@ -92,7 +92,7 @@ void GeolocationServiceImpl::CreateGeolocation(
     bool user_gesture,
     CreateGeolocationCallback callback) {
   if (!render_frame_host_->IsFeatureEnabled(
-          blink::mojom::PermissionsPolicyFeature::kGeolocation)) {
+          network::mojom::PermissionsPolicyFeature::kGeolocation)) {
     std::move(callback).Run(blink::mojom::PermissionStatus::DENIED);
     return;
   }
@@ -108,7 +108,7 @@ void GeolocationServiceImpl::CreateGeolocation(
       // outlive the GeolocationServiceImpl.
       base::BindOnce(
           &GeolocationServiceImpl::CreateGeolocationWithPermissionStatus,
-          base::Unretained(this), std::move(receiver),
+          weak_factory_.GetWeakPtr(), std::move(receiver),
           std::move(scoped_callback)));
 }
 

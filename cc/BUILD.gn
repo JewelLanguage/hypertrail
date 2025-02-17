@@ -39,7 +39,8 @@ cc_component("cc") {
     "input/browser_controls_offset_manager.cc",
     "input/browser_controls_offset_manager.h",
     "input/browser_controls_offset_manager_client.h",
-    "input/browser_controls_offset_tags_info.h",
+    "input/browser_controls_offset_tag_modifications.h",
+    "input/browser_controls_offset_tags.h",
     "input/browser_controls_state.h",
     "input/compositor_input_interfaces.h",
     "input/hit_test_opaqueness.cc",
@@ -77,6 +78,8 @@ cc_component("cc") {
     "input/snap_selection_strategy.cc",
     "input/snap_selection_strategy.h",
     "input/touch_action.h",
+    "layers/append_quads_context.cc",
+    "layers/append_quads_context.h",
     "layers/append_quads_data.cc",
     "layers/append_quads_data.h",
     "layers/content_layer_client.h",
@@ -329,6 +332,7 @@ cc_component("cc") {
     "tiles/tile_index.h",
     "tiles/tile_manager.cc",
     "tiles/tile_manager.h",
+    "tiles/tile_manager_client.h",
     "tiles/tile_manager_settings.h",
     "tiles/tile_priority.cc",
     "tiles/tile_priority.h",
@@ -386,6 +390,7 @@ cc_component("cc") {
     "trees/layer_tree_host_client.h",
     "trees/layer_tree_host_impl.cc",
     "trees/layer_tree_host_impl.h",
+    "trees/layer_tree_host_impl_client.h",
     "trees/layer_tree_host_single_thread_client.h",
     "trees/layer_tree_impl.cc",
     "trees/layer_tree_impl.h",
@@ -415,6 +420,11 @@ cc_component("cc") {
     "trees/property_tree.h",
     "trees/property_tree_builder.cc",
     "trees/property_tree_builder.h",
+    "trees/property_tree_delegate.h",
+    "trees/property_tree_layer_list_delegate.cc",
+    "trees/property_tree_layer_list_delegate.h",
+    "trees/property_tree_layer_tree_delegate.cc",
+    "trees/property_tree_layer_tree_delegate.h",
     "trees/proxy.h",
     "trees/proxy_common.cc",
     "trees/proxy_common.h",
@@ -523,6 +533,7 @@ cc_test_static_library("test_support") {
     "test/fake_frame_info.cc",
     "test/fake_frame_info.h",
     "test/fake_impl_task_runner_provider.h",
+    "test/fake_layer_context.cc",
     "test/fake_layer_context.h",
     "test/fake_layer_tree_frame_sink.cc",
     "test/fake_layer_tree_frame_sink.h",
@@ -635,6 +646,7 @@ cc_test_static_library("test_support") {
     "test/test_client_shared_image_interface.h",
     "test/test_hooks.cc",
     "test/test_hooks.h",
+    "test/test_layer_context.cc",
     "test/test_layer_context.h",
     "test/test_layer_tree_frame_sink.cc",
     "test/test_layer_tree_frame_sink.h",
@@ -672,6 +684,7 @@ cc_test_static_library("test_support") {
   deps = [
     "//base",
     "//base/test:test_support",
+    "//cc/mojo_embedder",
     "//cc/paint",
     "//components/ukm",
     "//components/ukm:test_support",
@@ -810,6 +823,7 @@ cc_test("cc_unittests") {
     "paint/oop_pixeltest.cc",
     "paint/paint_cache_unittest.cc",
     "paint/paint_filter_unittest.cc",
+    "paint/paint_flags_unittest.cc",
     "paint/paint_image_unittest.cc",
     "paint/paint_op_buffer_unittest.cc",
     "paint/paint_op_helper_unittest.cc",
@@ -1070,7 +1084,8 @@ if (is_android) {
 
   generate_jni("cc_jni_headers") {
     sources = [
-      "input/android/java/src/org/chromium/cc/input/BrowserControlsOffsetTagsInfo.java",
+      "input/android/java/src/org/chromium/cc/input/BrowserControlsOffsetTagModifications.java",
+      "input/android/java/src/org/chromium/cc/input/BrowserControlsOffsetTags.java",
       "input/android/java/src/org/chromium/cc/input/OffsetTag.java",
     ]
   }
@@ -1084,7 +1099,8 @@ if (is_android) {
     ]
 
     sources = [
-      "input/android/java/src/org/chromium/cc/input/BrowserControlsOffsetTagsInfo.java",
+      "input/android/java/src/org/chromium/cc/input/BrowserControlsOffsetTagModifications.java",
+      "input/android/java/src/org/chromium/cc/input/BrowserControlsOffsetTags.java",
       "input/android/java/src/org/chromium/cc/input/OffsetTag.java",
     ]
 

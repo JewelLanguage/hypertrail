@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.tasks.tab_management;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -19,16 +18,17 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import static org.chromium.chrome.browser.tasks.tab_management.MessageCardViewProperties.DESCRIPTION_TEXT;
+import static org.chromium.chrome.browser.tasks.tab_management.MessageCardViewProperties.UI_DISMISS_ACTION_PROVIDER;
+import static org.chromium.chrome.browser.tasks.tab_management.MessageService.MessageType.ALL;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.COLOR_INDEX;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.DELETE_RUNNABLE;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.LEAVE_RUNNABLE;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.OPEN_RUNNABLE;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGroupRowProperties.TITLE_DATA;
+import static org.chromium.chrome.browser.tasks.tab_management.TabListModel.CardProperties.CARD_TYPE;
+import static org.chromium.chrome.browser.tasks.tab_management.TabListModel.CardProperties.ModelType.MESSAGE;
 import static org.chromium.components.data_sharing.SharedGroupTestHelper.COLLABORATION_ID1;
-import static org.chromium.components.data_sharing.SharedGroupTestHelper.EMAIL1;
-import static org.chromium.components.data_sharing.SharedGroupTestHelper.EMAIL2;
-import static org.chromium.components.data_sharing.SharedGroupTestHelper.GAIA_ID1;
-import static org.chromium.components.data_sharing.SharedGroupTestHelper.GAIA_ID2;
 import static org.chromium.components.data_sharing.SharedGroupTestHelper.GROUP_MEMBER1;
 import static org.chromium.components.data_sharing.SharedGroupTestHelper.GROUP_MEMBER2;
 import static org.chromium.components.tab_group_sync.SyncedGroupTestHelper.SYNC_GROUP_ID1;
@@ -57,22 +57,33 @@ import org.chromium.base.Token;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
+import org.chromium.chrome.browser.collaboration.messaging.MessagingBackendServiceFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.hub.PaneId;
 import org.chromium.chrome.browser.hub.PaneManager;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabRemover;
+import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager.MaybeBlockingResult;
 import org.chromium.components.browser_ui.widget.ActionConfirmationResult;
+import org.chromium.components.collaboration.CollaborationService;
+import org.chromium.components.collaboration.ServiceStatus;
+import org.chromium.components.collaboration.messaging.CollaborationEvent;
+import org.chromium.components.collaboration.messaging.MessageAttribution;
+import org.chromium.components.collaboration.messaging.MessagingBackendService;
+import org.chromium.components.collaboration.messaging.MessagingBackendService.PersistentMessageObserver;
+import org.chromium.components.collaboration.messaging.PersistentMessage;
+import org.chromium.components.collaboration.messaging.PersistentNotificationType;
+import org.chromium.components.collaboration.messaging.TabGroupMessageMetadata;
+import org.chromium.components.collaboration.messaging.TabMessageMetadata;
 import org.chromium.components.data_sharing.DataSharingService;
-import org.chromium.components.data_sharing.PeopleGroupActionFailure;
-import org.chromium.components.data_sharing.PeopleGroupActionOutcome;
+import org.chromium.components.data_sharing.DataSharingUIDelegate;
 import org.chromium.components.data_sharing.SharedGroupTestHelper;
-import org.chromium.components.signin.base.CoreAccountInfo;
-import org.chromium.components.signin.identitymanager.IdentityManager;
+import org.chromium.components.data_sharing.member_role.MemberRole;
 import org.chromium.components.sync.DataType;
 import org.chromium.components.sync.SyncService;
 import org.chromium.components.tab_group_sync.LocalTabGroupId;
@@ -92,6 +103,7 @@ import org.chromium.ui.test.util.MockitoHelper;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 /** Tests for {@link TabGroupListMediator}. */
 @RunWith(BaseRobolectricTestRunner.class)
@@ -101,6 +113,10 @@ public class TabGroupListMediatorUnitTest {
     private static final Token LOCAL_GROUP_ID2 = new Token(2, 2);
     private static final int ROOT_ID1 = 1;
     private static final int ROOT_ID2 = 2;
+    private static final String GROUP_NAME1 = "Shopping";
+    private static final String GROUP_NAME2 = "Travel";
+    private static final String MESSAGE_ID1 = "MESSAGE_ID1";
+    private static final String MESSAGE_ID2 = "MESSAGE_ID2";
 
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
 
@@ -110,7 +126,9 @@ public class TabGroupListMediatorUnitTest {
     @Mock private TabList mComprehensiveModel;
     @Mock private TabGroupSyncService mTabGroupSyncService;
     @Mock private DataSharingService mDataSharingService;
-    @Mock private IdentityManager mIdentityManager;
+    @Mock private DataSharingUIDelegate mDataSharingUiDelegate;
+    @Mock private CollaborationService mCollaborationService;
+    @Mock private ServiceStatus mServiceStatus;
     @Mock private PaneManager mPaneManager;
     @Mock private FaviconResolver mFaviconResolver;
     @Mock private TabSwitcherPaneBase mTabSwitcherPaneBase;
@@ -120,16 +138,24 @@ public class TabGroupListMediatorUnitTest {
     @Mock private Tab mTab1;
     @Mock private Tab mTab2;
     @Mock private ModalDialogManager mModalDialogManager;
+    @Mock private Profile mProfile;
+    @Mock private MessagingBackendService mMessagingBackendService;
+    @Mock private Runnable mFinishBlocking;
 
     @Captor private ArgumentCaptor<TabModelObserver> mTabModelObserver;
     @Captor private ArgumentCaptor<TabGroupSyncService.Observer> mTabGroupSyncObserverCaptor;
     @Captor private ArgumentCaptor<Callback<Integer>> mActionConfirmationResultCallbackCaptor;
 
     @Captor
+    private ArgumentCaptor<Callback<MaybeBlockingResult>> mMaybeBlockingResultCallbackCaptor;
+
+    @Captor
     private ArgumentCaptor<SyncService.SyncStateChangedListener> mSyncStateChangedListenerCaptor;
 
-    @Captor private ArgumentCaptor<Callback<Integer>> mActionOutcomeCallbackCaptor;
+    @Captor private ArgumentCaptor<Callback<Boolean>> mDeleteGroupResultCallbackCaptor;
     @Captor private ArgumentCaptor<PropertyModel> mModalPropertyModelCaptor;
+
+    @Captor private ArgumentCaptor<PersistentMessageObserver> mPersistentMessageObserverCaptor;
 
     private PropertyModel mPropertyModel;
     private ModelList mModelList;
@@ -150,8 +176,14 @@ public class TabGroupListMediatorUnitTest {
         when(mTabGroupModelFilter.getTabModel()).thenReturn(mTabModel);
         when(mTabModel.getComprehensiveModel()).thenReturn(mComprehensiveModel);
         when(mTabModel.getTabRemover()).thenReturn(mTabRemover);
-        mSharedGroupTestHelper = new SharedGroupTestHelper(mDataSharingService);
+        mSharedGroupTestHelper =
+                new SharedGroupTestHelper(mDataSharingService, mCollaborationService);
         mSyncedGroupTestHelper = new SyncedGroupTestHelper(mTabGroupSyncService);
+        MessagingBackendServiceFactory.setForTesting(mMessagingBackendService);
+
+        when(mCollaborationService.getServiceStatus()).thenReturn(mServiceStatus);
+        when(mServiceStatus.isAllowedToJoin()).thenReturn(true);
+        when(mDataSharingService.getUiDelegate()).thenReturn(mDataSharingUiDelegate);
     }
 
     private TabGroupListMediator createMediator() {
@@ -163,7 +195,8 @@ public class TabGroupListMediatorUnitTest {
                 mFaviconResolver,
                 mTabGroupSyncService,
                 mDataSharingService,
-                mIdentityManager,
+                mCollaborationService,
+                mMessagingBackendService,
                 mPaneManager,
                 mTabGroupUiActionHandler,
                 mActionConfirmationManager,
@@ -567,15 +600,14 @@ public class TabGroupListMediatorUnitTest {
         mTabGroupSyncObserverCaptor.getValue().onTabGroupAdded(null, 0);
         ShadowLooper.idleMainLooper();
         verify(mTabGroupSyncService, never()).getAllGroupIds();
+
+        verify(mMessagingBackendService)
+                .addPersistentMessageObserver(mPersistentMessageObserverCaptor.capture());
     }
 
     @Test
     @EnableFeatures(ChromeFeatureList.DATA_SHARING)
     public void testDeleteRunnable_SharedGroup() {
-        CoreAccountInfo coreAccountInfo =
-                CoreAccountInfo.createFromEmailAndGaiaId(EMAIL1, GAIA_ID1);
-        when(mIdentityManager.getPrimaryAccountInfo(anyInt())).thenReturn(coreAccountInfo);
-
         SavedTabGroup group1 = mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID1);
         group1.savedTabs = SyncedGroupTestHelper.tabsFromCount(1);
         group1.localId = new LocalTabGroupId(LOCAL_GROUP_ID1);
@@ -589,28 +621,30 @@ public class TabGroupListMediatorUnitTest {
         when(mTab1.getRootId()).thenReturn(ROOT_ID1);
         when(mTab1.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
         when(mTab1.isClosing()).thenReturn(false);
-
+        mSharedGroupTestHelper.respondToReadGroup(COLLABORATION_ID1, GROUP_MEMBER1);
+        when(mCollaborationService.getCurrentUserRoleForGroup(COLLABORATION_ID1))
+                .thenReturn(MemberRole.OWNER);
         createMediator();
 
         assertEquals(1, mModelList.size());
         PropertyModel model = mModelList.get(0).model;
-        assertNull(model.get(DELETE_RUNNABLE));
-
-        mSharedGroupTestHelper.respondToReadGroup(COLLABORATION_ID1, GROUP_MEMBER1);
 
         assertNotNull(model.get(DELETE_RUNNABLE));
         model.get(DELETE_RUNNABLE).run();
 
         verify(mActionConfirmationManager)
                 .processDeleteSharedGroupAttempt(
-                        any(), mActionConfirmationResultCallbackCaptor.capture());
-        mActionConfirmationResultCallbackCaptor
+                        any(), mMaybeBlockingResultCallbackCaptor.capture());
+        mMaybeBlockingResultCallbackCaptor
                 .getValue()
-                .onResult(ActionConfirmationResult.CONFIRMATION_POSITIVE);
+                .onResult(
+                        new MaybeBlockingResult(
+                                ActionConfirmationResult.CONFIRMATION_POSITIVE, mFinishBlocking));
 
-        verify(mDataSharingService)
-                .deleteGroup(eq(COLLABORATION_ID1), mActionOutcomeCallbackCaptor.capture());
-        mActionOutcomeCallbackCaptor.getValue().onResult(PeopleGroupActionOutcome.SUCCESS);
+        verify(mCollaborationService)
+                .deleteGroup(eq(COLLABORATION_ID1), mDeleteGroupResultCallbackCaptor.capture());
+        mDeleteGroupResultCallbackCaptor.getValue().onResult(true);
+        verify(mFinishBlocking).run();
         verify(mModalDialogManager, never())
                 .showDialog(mModalPropertyModelCaptor.capture(), anyInt());
     }
@@ -618,10 +652,6 @@ public class TabGroupListMediatorUnitTest {
     @Test
     @EnableFeatures(ChromeFeatureList.DATA_SHARING)
     public void testLeaveRunnable() {
-        CoreAccountInfo coreAccountInfo =
-                CoreAccountInfo.createFromEmailAndGaiaId(EMAIL2, GAIA_ID2);
-        when(mIdentityManager.getPrimaryAccountInfo(anyInt())).thenReturn(coreAccountInfo);
-
         SavedTabGroup group1 = mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID1);
         group1.savedTabs = SyncedGroupTestHelper.tabsFromCount(1);
         group1.localId = new LocalTabGroupId(LOCAL_GROUP_ID1);
@@ -634,29 +664,28 @@ public class TabGroupListMediatorUnitTest {
         when(mTab1.getRootId()).thenReturn(ROOT_ID1);
         when(mTab1.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
         when(mTab1.isClosing()).thenReturn(false);
+        mSharedGroupTestHelper.respondToReadGroup(COLLABORATION_ID1, GROUP_MEMBER1, GROUP_MEMBER2);
 
         createMediator();
 
         assertEquals(1, mModelList.size());
         PropertyModel model = mModelList.get(0).model;
-        assertNull(model.get(LEAVE_RUNNABLE));
-
-        mSharedGroupTestHelper.respondToReadGroup(COLLABORATION_ID1, GROUP_MEMBER1, GROUP_MEMBER2);
 
         assertNotNull(model.get(LEAVE_RUNNABLE));
         model.get(LEAVE_RUNNABLE).run();
 
         verify(mActionConfirmationManager)
-                .processLeaveGroupAttempt(any(), mActionConfirmationResultCallbackCaptor.capture());
-        mActionConfirmationResultCallbackCaptor
+                .processLeaveGroupAttempt(any(), mMaybeBlockingResultCallbackCaptor.capture());
+        mMaybeBlockingResultCallbackCaptor
                 .getValue()
-                .onResult(ActionConfirmationResult.CONFIRMATION_POSITIVE);
+                .onResult(
+                        new MaybeBlockingResult(
+                                ActionConfirmationResult.CONFIRMATION_POSITIVE, mFinishBlocking));
 
-        verify(mDataSharingService)
-                .leaveGroup(eq(COLLABORATION_ID1), mActionOutcomeCallbackCaptor.capture());
-        mActionOutcomeCallbackCaptor
-                .getValue()
-                .onResult(PeopleGroupActionOutcome.TRANSIENT_FAILURE);
+        verify(mCollaborationService)
+                .leaveGroup(eq(COLLABORATION_ID1), mDeleteGroupResultCallbackCaptor.capture());
+        mDeleteGroupResultCallbackCaptor.getValue().onResult(false);
+        verify(mFinishBlocking).run();
 
         verify(mModalDialogManager).showDialog(mModalPropertyModelCaptor.capture(), anyInt());
 
@@ -669,10 +698,6 @@ public class TabGroupListMediatorUnitTest {
     @Test
     @EnableFeatures(ChromeFeatureList.DATA_SHARING)
     public void testDeleteRunnable_shareReadFailure() {
-        CoreAccountInfo coreAccountInfo =
-                CoreAccountInfo.createFromEmailAndGaiaId(EMAIL1, GAIA_ID1);
-        when(mIdentityManager.getPrimaryAccountInfo(anyInt())).thenReturn(coreAccountInfo);
-
         SavedTabGroup group1 = mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID1);
         group1.syncId = SYNC_GROUP_ID1;
         group1.savedTabs = SyncedGroupTestHelper.tabsFromCount(1);
@@ -687,18 +712,183 @@ public class TabGroupListMediatorUnitTest {
         when(mTab1.getRootId()).thenReturn(ROOT_ID1);
         when(mTab1.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
         when(mTab1.isClosing()).thenReturn(false);
+        mSharedGroupTestHelper.respondToReadGroupWithFailure(COLLABORATION_ID1);
 
         createMediator();
 
         assertEquals(1, mModelList.size());
         PropertyModel model = mModelList.get(0).model;
-        assertNull(model.get(DELETE_RUNNABLE));
-
-        mSharedGroupTestHelper.respondToReadGroup(
-                COLLABORATION_ID1, PeopleGroupActionFailure.TRANSIENT_FAILURE);
 
         assertNotNull(model.get(DELETE_RUNNABLE));
         model.get(DELETE_RUNNABLE).run();
         verify(mTabRemover).closeTabs(any(), eq(true));
+    }
+
+    @Test
+    @EnableFeatures(ChromeFeatureList.DATA_SHARING)
+    public void testNoTabGroupRemovedMessageCard() {
+        List<PersistentMessage> messageList = List.of();
+        when(mMessagingBackendService.getMessages(any())).thenReturn(messageList);
+        createMediator();
+        assertEquals(0, mModelList.size());
+    }
+
+    @Test
+    @EnableFeatures(ChromeFeatureList.DATA_SHARING)
+    public void testNoGroupRemovedMessageCard_NullId() {
+        PersistentMessage messageWithoutId = new PersistentMessage();
+        messageWithoutId.attribution = new MessageAttribution();
+        when(mMessagingBackendService.getMessages(any())).thenReturn(List.of(messageWithoutId));
+
+        createMediator();
+
+        assertEquals(0, mModelList.size());
+    }
+
+    @Test
+    @EnableFeatures(ChromeFeatureList.DATA_SHARING)
+    public void testOneTabGroupRemovedMessageCard() {
+        List<PersistentMessage> messageList =
+                List.of(makeTabGroupRemovedMessage(MESSAGE_ID1, GROUP_NAME1));
+        when(mMessagingBackendService.getMessages(any())).thenReturn(messageList);
+
+        createMediator();
+
+        assertEquals(1, mModelList.size());
+
+        PropertyModel model = mModelList.get(0).model;
+        assertEquals("Shopping tab group no longer available", model.get(DESCRIPTION_TEXT));
+        assertEquals(MESSAGE, model.get(CARD_TYPE));
+        assertEquals(
+                MESSAGE_ID1,
+                model.get(TabGroupMessageCardViewProperties.MESSAGING_BACKEND_SERVICE_ID));
+    }
+
+    @Test
+    @EnableFeatures(ChromeFeatureList.DATA_SHARING)
+    public void testTabGroupRemovedMessageCardsAndTabGroupsOrdering() {
+        List<PersistentMessage> messageList =
+                List.of(
+                        makeTabGroupRemovedMessage(MESSAGE_ID1, GROUP_NAME1),
+                        makeTabGroupRemovedMessage(MESSAGE_ID2, GROUP_NAME2));
+        when(mMessagingBackendService.getMessages(any())).thenReturn(messageList);
+
+        SavedTabGroup fooGroup = mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID1);
+        fooGroup.title = "Foo";
+        fooGroup.color = TabGroupColorId.BLUE;
+        fooGroup.savedTabs = SyncedGroupTestHelper.tabsFromCount(2);
+        fooGroup.creationTimeMs = 1;
+
+        SavedTabGroup barGroup = mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID2);
+        barGroup.title = "Bar";
+        barGroup.color = TabGroupColorId.RED;
+        barGroup.savedTabs = SyncedGroupTestHelper.tabsFromCount(3);
+        barGroup.creationTimeMs = 2;
+
+        createMediator();
+
+        assertEquals(4, mModelList.size());
+
+        PropertyModel model1 = mModelList.get(0).model;
+        assertEquals("Shopping tab group no longer available", model1.get(DESCRIPTION_TEXT));
+        assertEquals(MESSAGE, model1.get(CARD_TYPE));
+        assertEquals(
+                MESSAGE_ID1,
+                model1.get(TabGroupMessageCardViewProperties.MESSAGING_BACKEND_SERVICE_ID));
+
+        PropertyModel model2 = mModelList.get(1).model;
+        assertEquals("Travel tab group no longer available", model2.get(DESCRIPTION_TEXT));
+        assertEquals(MESSAGE, model2.get(CARD_TYPE));
+        assertEquals(
+                MESSAGE_ID2,
+                model2.get(TabGroupMessageCardViewProperties.MESSAGING_BACKEND_SERVICE_ID));
+
+        PropertyModel barModel = mModelList.get(2).model;
+        assertEquals(new Pair<>("Bar", 3), barModel.get(TITLE_DATA));
+        assertEquals(TabGroupColorId.RED, barModel.get(COLOR_INDEX));
+
+        PropertyModel fooModel = mModelList.get(3).model;
+        assertEquals(new Pair<>("Foo", 2), fooModel.get(TITLE_DATA));
+        assertEquals(TabGroupColorId.BLUE, fooModel.get(COLOR_INDEX));
+    }
+
+    @Test
+    @EnableFeatures(ChromeFeatureList.DATA_SHARING)
+    public void testTabGroupRemovedMessageCardDismissed() {
+        List<PersistentMessage> messageList =
+                List.of(
+                        makeTabGroupRemovedMessage(MESSAGE_ID1, GROUP_NAME1),
+                        makeTabGroupRemovedMessage(MESSAGE_ID2, GROUP_NAME2));
+        when(mMessagingBackendService.getMessages(any())).thenReturn(messageList);
+
+        SavedTabGroup fooGroup = mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID1);
+        fooGroup.title = "Foo";
+        fooGroup.color = TabGroupColorId.BLUE;
+        fooGroup.savedTabs = SyncedGroupTestHelper.tabsFromCount(2);
+        fooGroup.creationTimeMs = 1;
+
+        SavedTabGroup barGroup = mSyncedGroupTestHelper.newTabGroup(SYNC_GROUP_ID2);
+        barGroup.title = "Bar";
+        barGroup.color = TabGroupColorId.RED;
+        barGroup.savedTabs = SyncedGroupTestHelper.tabsFromCount(3);
+        barGroup.creationTimeMs = 2;
+
+        createMediator();
+
+        // Dismiss the second message card.
+        PropertyModel modelToBeRemoved = mModelList.get(1).model;
+        modelToBeRemoved.get(UI_DISMISS_ACTION_PROVIDER).dismiss(ALL);
+
+        assertEquals(3, mModelList.size());
+        verify(mMessagingBackendService)
+                .clearPersistentMessage(
+                        MESSAGE_ID2, Optional.of(PersistentNotificationType.TOMBSTONED));
+
+        PropertyModel model1 = mModelList.get(0).model;
+        assertEquals("Shopping tab group no longer available", model1.get(DESCRIPTION_TEXT));
+        assertEquals(MESSAGE, model1.get(CARD_TYPE));
+        assertEquals(
+                MESSAGE_ID1,
+                model1.get(TabGroupMessageCardViewProperties.MESSAGING_BACKEND_SERVICE_ID));
+
+        PropertyModel barModel = mModelList.get(1).model;
+        assertEquals(new Pair<>("Bar", 3), barModel.get(TITLE_DATA));
+        assertEquals(TabGroupColorId.RED, barModel.get(COLOR_INDEX));
+
+        PropertyModel fooModel = mModelList.get(2).model;
+        assertEquals(new Pair<>("Foo", 2), fooModel.get(TITLE_DATA));
+        assertEquals(TabGroupColorId.BLUE, fooModel.get(COLOR_INDEX));
+    }
+
+    @Test
+    @EnableFeatures(ChromeFeatureList.DATA_SHARING)
+    public void testSyncObservationForTabGroupRemovedCards() {
+        PersistentMessage originalMessage = makeTabGroupRemovedMessage(MESSAGE_ID1, GROUP_NAME1);
+        PersistentMessage newMessageCard = makeTabGroupRemovedMessage(MESSAGE_ID2, GROUP_NAME2);
+
+        when(mMessagingBackendService.getMessages(any()))
+                .thenReturn(List.of(originalMessage), List.of(originalMessage, newMessageCard));
+
+        createMediator();
+        assertEquals(1, mModelList.size());
+
+        verify(mMessagingBackendService)
+                .addPersistentMessageObserver(mPersistentMessageObserverCaptor.capture());
+        mPersistentMessageObserverCaptor.getValue().displayPersistentMessage(newMessageCard);
+        ShadowLooper.idleMainLooper();
+
+        assertEquals(2, mModelList.size());
+    }
+
+    private PersistentMessage makeTabGroupRemovedMessage(String messageId, String groupName) {
+        PersistentMessage message = new PersistentMessage();
+        message.type = PersistentNotificationType.TOMBSTONED;
+        message.collaborationEvent = CollaborationEvent.TAB_GROUP_REMOVED;
+        message.attribution = new MessageAttribution();
+        message.attribution.id = messageId;
+        message.attribution.tabMetadata = new TabMessageMetadata();
+        message.attribution.tabGroupMetadata = new TabGroupMessageMetadata();
+        message.attribution.tabGroupMetadata.lastKnownTitle = groupName;
+        return message;
     }
 }

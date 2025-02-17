@@ -4,6 +4,7 @@
 
 #include "device/fido/get_assertion_request_handler.h"
 
+#include <algorithm>
 #include <map>
 #include <set>
 #include <string>
@@ -15,12 +16,10 @@
 #include "base/functional/bind.h"
 #include "base/json/json_writer.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/ranges/algorithm.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "components/cbor/diagnostic_writer.h"
 #include "components/device_event_log/device_event_log.h"
 #include "device/fido/authenticator_get_assertion_response.h"
@@ -294,7 +293,7 @@ bool IsOnlyHybridOrInternal(const PublicKeyCredentialDescriptor& credential) {
   if (credential.transports.empty()) {
     return false;
   }
-  return base::ranges::all_of(credential.transports, [](const auto& transport) {
+  return std::ranges::all_of(credential.transports, [](const auto& transport) {
     return transport == FidoTransportProtocol::kHybrid ||
            transport == FidoTransportProtocol::kInternal;
   });
@@ -302,12 +301,12 @@ bool IsOnlyHybridOrInternal(const PublicKeyCredentialDescriptor& credential) {
 
 bool AllowListOnlyHybridOrInternal(const CtapGetAssertionRequest& request) {
   return !request.allow_list.empty() &&
-         base::ranges::all_of(request.allow_list, &IsOnlyHybridOrInternal);
+         std::ranges::all_of(request.allow_list, &IsOnlyHybridOrInternal);
 }
 
 bool AllowListIncludedTransport(const CtapGetAssertionRequest& request,
                                 FidoTransportProtocol transport) {
-  return base::ranges::any_of(
+  return std::ranges::any_of(
       request.allow_list,
       [transport](const PublicKeyCredentialDescriptor& cred) {
         return cred.transports.empty() ||
@@ -357,7 +356,7 @@ GetAssertionRequestHandler::GetAssertionRequestHandler(
           request_, FidoTransportProtocol::kNearFieldCommunication);
   transport_availability_info().request_is_internal_only =
       !request_.allow_list.empty() &&
-      base::ranges::all_of(
+      std::ranges::all_of(
           request_.allow_list, [](const PublicKeyCredentialDescriptor& cred) {
             return cred.transports ==
                    std::vector{FidoTransportProtocol::kInternal};

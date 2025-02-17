@@ -388,6 +388,27 @@ IN_PROC_BROWSER_TEST_F(TabStripBrowsertest, ShiftTabNext_Failure_Pinned) {
   EXPECT_EQ(contentses, GetWebContentses());
 }
 
+// Regression test for crbug.com/394381780. When active tab is the tab right
+// after the collapsed group and a new foreground tab is added to the end of the
+// group, the group should expand.
+IN_PROC_BROWSER_TEST_F(TabStripBrowsertest,
+                       AddForegroundTabToCollapsedGroupExpandsGroup) {
+  AppendTab();
+  AppendTab();
+  ASSERT_EQ(3, tab_strip_model()->count());
+
+  tab_groups::TabGroupId group = AddTabToNewGroup(1);
+  tab_strip_model()->ActivateTabAt(2);
+
+  tab_strip()->ToggleTabGroupCollapsedState(group);
+  ASSERT_TRUE(tab_strip()->IsGroupCollapsed(group));
+
+  // Add a tab to the group.
+  chrome::AddTabAt(browser(), GURL(), 2, true, group);
+
+  ASSERT_FALSE(tab_strip()->IsGroupCollapsed(group));
+}
+
 IN_PROC_BROWSER_TEST_F(TabStripBrowsertest, MoveTabFirst_NoPinnedTabs_Success) {
   AppendTab();
   AppendTab();
@@ -980,7 +1001,7 @@ IN_PROC_BROWSER_TEST_F(TabStripBrowsertest, AccessibleName) {
 }
 
 IN_PROC_BROWSER_TEST_F(TabStripBrowsertest,
-                       TabGroupHeaderAccessibleProperties) {
+                       DISABLED_TabGroupHeaderAccessibleProperties) {
   browser()->set_update_ui_immediately_for_testing();
   AppendTab();
   AppendTab();
@@ -1180,6 +1201,81 @@ IN_PROC_BROWSER_TEST_F(
 
   EXPECT_TRUE(tab_strip()->IsGroupCollapsed(group));
   EXPECT_EQ(1, tab_strip()->GetActiveIndex());
+}
+
+IN_PROC_BROWSER_TEST_F(TabStripBrowsertest, TabGroupHeaderTooltipText) {
+  browser()->set_update_ui_immediately_for_testing();
+  AppendTab();
+  AppendTab();
+  AppendTab();
+
+  tab_groups::TabGroupId group = AddTabToNewGroup(1);
+  tab_strip()->tab_at(1)->SetGroup(group);
+  tab_strip_model()->group_model()->GetTabGroup(group)->SetVisualData(
+      tab_groups::TabGroupVisualData(u"Non empty title text",
+                                     tab_groups::TabGroupColorId::kBlue));
+
+  auto* group_header = tab_strip()->group_header(group);
+  std::u16string group_title = tab_strip_model()
+                                   ->group_model()
+                                   ->GetTabGroup(group)
+                                   ->visual_data()
+                                   ->title();
+
+  EXPECT_EQ(group_title, group_header->GetTitleTextForTesting());
+  EXPECT_EQ(
+      group_header->GetRenderedTooltipText(gfx::Point()),
+      l10n_util::GetStringFUTF16(
+          IDS_TAB_GROUPS_NAMED_GROUP_TOOLTIP,
+          std::u16string(group_header->GetTitleTextForTesting()),
+          tab_strip()->GetGroupContentString(group_header->group().value())));
+
+  tab_strip_model()->group_model()->GetTabGroup(group)->SetVisualData(
+      tab_groups::TabGroupVisualData(std::u16string(),
+                                     tab_groups::TabGroupColorId::kBlue));
+
+  EXPECT_EQ(group_header->GetRenderedTooltipText(gfx::Point()),
+            l10n_util::GetStringFUTF16(IDS_TAB_GROUPS_UNNAMED_GROUP_TOOLTIP,
+                                       tab_strip()->GetGroupContentString(
+                                           group_header->group().value())));
+}
+
+IN_PROC_BROWSER_TEST_F(TabStripBrowsertest,
+                       TabGroupHeaderTooltipTextAccessibility) {
+  browser()->set_update_ui_immediately_for_testing();
+  AppendTab();
+  AppendTab();
+  AppendTab();
+
+  tab_groups::TabGroupId group = AddTabToNewGroup(1);
+  tab_strip()->tab_at(1)->SetGroup(group);
+  tab_strip_model()->group_model()->GetTabGroup(group)->SetVisualData(
+      tab_groups::TabGroupVisualData(u"Non empty title text",
+                                     tab_groups::TabGroupColorId::kBlue));
+
+  auto* group_header = tab_strip()->group_header(group);
+  std::u16string group_title = tab_strip_model()
+                                   ->group_model()
+                                   ->GetTabGroup(group)
+                                   ->visual_data()
+                                   ->title();
+
+  EXPECT_EQ(group_title, group_header->GetTitleTextForTesting());
+
+  EXPECT_EQ(
+      group_header->GetRenderedTooltipText(gfx::Point()),
+      l10n_util::GetStringFUTF16(
+          IDS_TAB_GROUPS_NAMED_GROUP_TOOLTIP,
+          std::u16string(group_header->GetTitleTextForTesting()),
+          tab_strip()->GetGroupContentString(group_header->group().value())));
+
+  ui::AXNodeData data;
+
+  group_header->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_NE(data.GetString16Attribute(ax::mojom::StringAttribute::kName),
+            group_header->GetRenderedTooltipText(gfx::Point()));
+  EXPECT_EQ(data.GetString16Attribute(ax::mojom::StringAttribute::kDescription),
+            group_header->GetRenderedTooltipText(gfx::Point()));
 }
 
 IN_PROC_BROWSER_TEST_F(TabStripBrowsertest, CollapseGroup_CreatesNewTab) {

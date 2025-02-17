@@ -19,7 +19,6 @@
 <translation id="1184145431117212167">Windows のバージョンがサポートされていないためインストールできませんでした。</translation>
 <translation id="1194807384646768652">このダウンロードは Chrome でブロックされました。ファイル形式が一般的にダウンロードされるものではなく、危害を及ぼす可能性があります</translation>
 <translation id="1203500561924088507">インストールいただきありがとうございます。<ph name="BUNDLE_NAME" /> を使用するにはブラウザを再起動してください。</translation>
-<translation id="1229096353876452996">Chrome を既定のブラウザに設定することをおすすめします</translation>
 <translation id="1265739287306757398">詳細</translation>
 <translation id="1278833599417554002">再起動して Chrome を更新(&amp;C)</translation>
 <translation id="1290883685122687410">設定エラー: <ph name="METAINSTALLER_EXIT_CODE" />。<ph name="WINDOWS_ERROR" /></translation>
@@ -40,7 +39,6 @@
 <translation id="1507198376417198979">新しい Chrome プロフィールをカスタマイズ</translation>
 <translation id="1547295885616600893">ChromeOS は、追加の<ph name="BEGIN_LINK_CROS_OSS" />オープンソース ソフトウェア<ph name="END_LINK_CROS_OSS" />によって実現しました。</translation>
 <translation id="1553358976309200471">Chrome を更新</translation>
-<translation id="1583073672411044740"><ph name="EXISTING_USER" /> さんはこの Chrome プロファイルにすでにログインしています。<ph name="USER_EMAIL_ADDRESS" /> 用の新しい Chrome プロファイルが作成されます。</translation>
 <translation id="1587223624401073077">Google Chrome がカメラを使用しています。</translation>
 <translation id="1587325591171447154"><ph name="FILE_NAME" /> は危険なファイルであるため、Chrome でブロックしました。</translation>
 <translation id="1597911401261118146">パスワードにデータ侵害などセキュリティに関する問題がないかどうかを確認するには、<ph name="BEGIN_LINK" />Chrome にログイン<ph name="END_LINK" />してください。</translation>
@@ -55,7 +53,6 @@
 <translation id="1698376642261615901">Google Chrome は、ウェブページやアプリケーションを高速に実行できるスピードと、高い安定性を兼ね備えた非常に使いやすいウェブブラウザです。不正なソフトウェアやフィッシングに対する保護機能が組み込まれており、ウェブを安全にブラウジングできます。</translation>
 <translation id="1713301662689114961">{0,plural, =1{Chrome は 1 時間後に再起動されます}other{Chrome は # 時間後に再起動されます}}</translation>
 <translation id="1722488837206509557">これにより、利用可能なデバイスから選択してコンテンツを表示できるようになります。</translation>
-<translation id="1734234790201236882">このパスワードは Google アカウントに保存されるため、覚えておく必要はありません。</translation>
 <translation id="1786003790898721085"><ph name="TARGET_DEVICE_NAME" /> で Chrome にログインしていることを確認してから、もう一度送信してください。</translation>
 <translation id="1786044937610313874">ショートカットは Chrome で開きます</translation>
 <translation id="178701303897325119">この拡張機能は現在サポートされていません。代わりに削除することをおすすめします。</translation>
@@ -81,6 +78,7 @@
 <translation id="2094648590148273905">ChromeOS Flex 利用規約</translation>
 <translation id="2094919256425865063">今すぐ Chrome を終了しますか？</translation>
 <translation id="2106831557840787829">ChromeOS Flex も <ph name="BEGIN_LINK_LINUX_OSS" />Linux 開発環境<ph name="END_LINK_LINUX_OSS" />も追加の<ph name="BEGIN_LINK_CROS_OSS" />オープンソース ソフトウェア<ph name="END_LINK_CROS_OSS" />によって実現しました。</translation>
+<translation id="2108778574543343055">Chrome のアプリ向けのバックグラウンドでの実行を無効にする</translation>
 <translation id="2120620239521071941">このデバイスから <ph name="ITEMS_COUNT" /> 件の項目を削除します。後でデータを取得するには、<ph name="USER_EMAIL" /> として Chrome にログインしてください。</translation>
 <translation id="2121284319307530122">再起動して Chrome を更新(&amp;C)</translation>
 <translation id="2123055963409958220"><ph name="BEGIN_LINK" />現在の設定<ph name="END_LINK" />を送信して Chrome の品質向上にご協力ください</translation>
@@ -124,7 +122,6 @@
 <translation id="2574930892358684005"><ph name="EXISTING_USER" /> さんはこの Chrome プロファイルにすでにログインしています。ブラウジング環境を分ける場合は、Chrome で自分用のプロファイルを作成できます。</translation>
 <translation id="2580411288591421699">実行中の Google Chrome と同じバージョンをインストールすることはできません。Google Chrome を閉じてからもう一度お試しください。</translation>
 <translation id="2586406160782125153">このデバイスから閲覧データを削除します。後でデータを取得するには、<ph name="USER_EMAIL" /> として Chrome にログインしてください。</translation>
-<translation id="2597976513418770460">Chrome ブラウザのアイテムを <ph name="ACCOUNT_EMAIL" /> から取得</translation>
 <translation id="259935314519650377">ダウンロードしたインストーラのキャッシュに失敗しました。エラー: <ph name="UNPACK_CACHING_ERROR_CODE" />。</translation>
 <translation id="2632707915638608719">Chrome に拡張機能を追加すると、できることが広がります</translation>
 <translation id="2645435784669275700">ChromeOS</translation>
@@ -143,12 +140,12 @@
 <translation id="2797864378188255696"><ph name="USER_EMAIL" /> で Gmail や YouTube などの Google サービスにログインするときに、同じアカウントで Chrome に自動的にログインできます</translation>
 <translation id="2799162042226656283">Chrome</translation>
 <translation id="2799223571221894425">再起動</translation>
+<translation id="2818684386420968393">Chrome のアプリ向けのバックグラウンドでの実行を無効にする</translation>
 <translation id="2825024317344269723">危険なサイトのため、Chrome で通知の権限を削除しました。</translation>
 <translation id="2841525013647267359">原文の言語</translation>
 <translation id="2846251086934905009">インストール エラー: インストーラが完了しませんでした。インストールは中止されました。</translation>
 <translation id="2853415089995957805">アクセスする可能性の高いページはプリロードされるので、実際にアクセスしたときの読み込み時間が短縮されます</translation>
 <translation id="2857540653560290388">Chrome を起動しています...</translation>
-<translation id="2857972467023607093">このアカウントの Chrome プロファイルはすでに存在します</translation>
 <translation id="286025080868315611">Chrome で一部のダウンロードがブロックされる理由</translation>
 <translation id="2861074815332034794">Chrome を更新しています（<ph name="PROGRESS_PERCENT" />）</translation>
 <translation id="2871893339301912279">Chrome にログインしました</translation>
@@ -203,7 +200,6 @@
 <translation id="345171907106878721">Chrome に自分を追加</translation>
 <translation id="3453763134178591239">ChromeOS 利用規約</translation>
 <translation id="3503306920980160878">このサイトで現在地を共有するには、Chrome で位置情報の使用を許可する必要があります</translation>
-<translation id="3512634283363927263">これらのページは Chrome デベロッパーが使用することを目的としたもので、積極的なメンテナンスやテストが行われていない可能性があります。これらのページを有効にするには、<ph name="BEGIN_LINK" />chrome://chrome-urls<ph name="LINK_END" /> でデバッグページを有効にするボタンをクリックしてから、このページに戻ります。</translation>
 <translation id="3533694711092285624">保存されているパスワードがありません。パスワードを保存すると Chrome で確認できるようになります。</translation>
 <translation id="3541482654983822893">Chrome でパスワードを確認できません。24 時間後にもう一度お試しください。</translation>
 <translation id="3564543103555793392">Chrome にログインすると、ブックマークやパスワードなどの設定を保存して、スマートフォンで使用できます</translation>
@@ -221,7 +217,6 @@
 <translation id="3673813398384385993">Chrome で「<ph name="EXTENSION_NAME" />」に不正なソフトウェアが含まれていることが検出されました</translation>
 <translation id="3695446226812920698">詳細</translation>
 <translation id="3697952514309507634">その他の Chrome プロフィール</translation>
-<translation id="3700276346088749847">アカウントの Chrome データを削除</translation>
 <translation id="3703994572283698466">ChromeOS は、<ph name="BEGIN_LINK_LINUX_OSS" />Linux 開発環境<ph name="END_LINK_LINUX_OSS" />と同様に、追加の<ph name="BEGIN_LINK_CROS_OSS" />オープンソース ソフトウェア<ph name="END_LINK_CROS_OSS" />によって実現しました。</translation>
 <translation id="3716540481907974026">ChromeOS Flex のバージョン</translation>
 <translation id="3718181793972440140">このデバイスから 1 件の項目を削除します。後でデータを取得するには、<ph name="USER_EMAIL" /> として Chrome にログインしてください。</translation>
@@ -230,7 +225,6 @@
 <translation id="3785324443014631273">ログイン時にエラーが発生したため、ChromeOS Flex はデータを同期できませんでした。</translation>
 <translation id="3795971588916395511">Google ChromeOS</translation>
 <translation id="3809772425479558446">Google Chrome のご利用には Windows 10 以上が必要です。</translation>
-<translation id="3835168907083856002"><ph name="USER_EMAIL_ADDRESS" /> 用の新しい Chrome プロファイルが作成されます。</translation>
 <translation id="383928141529488001">Bluetooth デバイスを検出するには、Google Chrome に Bluetooth へのアクセスを許可する必要があります。<ph name="IDS_SERIAL_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH_LINK" /></translation>
 <translation id="386202838227397562">すべての Google Chrome ウィンドウを閉じてからもう一度お試しください。</translation>
 <translation id="3873044882194371212">Chrome のシークレット ウインドウでリンクを開く(&amp;G)</translation>
@@ -278,7 +272,6 @@
 <translation id="4389991535395284064">シークレット モードでブラウジングする際、Chrome で安全でない接続を使用してサイトを読み込む前に警告を表示します</translation>
 <translation id="4427306783828095590">保護強化機能により、フィッシングを防ぎ、不正なソフトウェアをより強力にブロックします</translation>
 <translation id="4434353761996769206">インストーラー エラー: <ph name="INSTALLER_ERROR" /></translation>
-<translation id="4438657683599538446"><ph name="USER_EMAIL" /> として Chrome にログイン</translation>
 <translation id="4450664632294415862">Chrome - ネットワークにログイン - <ph name="PAGE_TITLE" /></translation>
 <translation id="4458462641685292929">Google Chrome で別の処理が行われています。しばらくしてからもう一度お試しください。</translation>
 <translation id="4459234553906210702">広告の測定により、アクセスしたサイトは、サイトが広告のパフォーマンスを測定する際に役立つ Chrome の情報をリクエストできます。広告の測定は、サイト間で転送する情報をできるだけ少なくすることで、クロスサイト トラッキングを制限します。</translation>
@@ -322,6 +315,7 @@
 <translation id="4990567037958725628">Google Chrome Canary</translation>
 <translation id="4997044641749333913">Chrome では、これらのタブを非アクティブにして、ブラウジング環境を改善し、処理を高速に保つことができます。</translation>
 <translation id="5003967926796347400">[Google パスワード マネージャー] をクリックします</translation>
+<translation id="5114340746415930644">アカウント「<ph name="USER_EMAIL" />」で Chrome のデータを使用、保存するには、パスフレーズを入力してください</translation>
 <translation id="5120334927898581447">他の Google サービスにログインしたときに Chrome にログインする</translation>
 <translation id="5126049312684316860">アクセスする可能性の高いページがさらに多くプリロードされ、該当のページにアクセスしたときにページの読み込み速度が向上します</translation>
 <translation id="5132929315877954718">Google Chrome のすばらしいアプリ、ゲーム、拡張機能、テーマをぜひご利用ください。</translation>
@@ -355,8 +349,10 @@
 <translation id="5596627076506792578">その他のオプション</translation>
 <translation id="5602351063754773347">削除することをおすすめします。<ph name="BEGIN_LINK" />サポートされている拡張機能の詳細<ph name="END_LINK" /></translation>
 <translation id="5648328599815354043">Chrome はオンラインのユーザーをさまざまな方法で安全に保護します</translation>
+<translation id="5649680279845190972">すべてのパソコンで同じ拡張機能などを使用するには、Chrome にログインしてください</translation>
 <translation id="565744775970812598"><ph name="FILE_NAME" /> は危険なファイルの可能性があるため、Chrome でブロックしました。</translation>
 <translation id="566568153320186256">バックグラウンド アクティビティと視覚効果（スムーズ スクロールや動画フレームレートなど）を制限することで、バッテリーを節約します。<ph name="BEGIN_LINK" />省エネモードの詳細<ph name="END_LINK" /></translation>
+<translation id="567202749201779594">アカウントの Chrome データを消去</translation>
 <translation id="5678190148303298925">{COUNT,plural, =0{管理者が、このアップデートを適用するために Chrome を再起動するよう求めています}=1{管理者が、このアップデートを適用するために Chrome を再起動するよう求めています。シークレット ウィンドウは、再起動後は自動的には開きません。}other{管理者が、このアップデートを適用するために Chrome を再起動するよう求めています。現在開いている # 個のシークレット ウィンドウは、再起動後は自動的には開きません。}}</translation>
 <translation id="5686916850681061684">Google Chrome をカスタマイズ、制御します。確認の必要な項目があります。クリックして詳細をご覧ください。</translation>
 <translation id="5690427481109656848">Google LLC</translation>
@@ -433,18 +429,17 @@
 <translation id="6497147134301593682">Chrome は自動的に終了しました</translation>
 <translation id="6506909944137591434">周囲の 3D マップを作成するには、Chrome にカメラの使用を許可する必要があります</translation>
 <translation id="6515495397637126556"><ph name="PAGE_TITLE" /> - Google Chrome Dev</translation>
-<translation id="6515549163407364048">お使いのどのパソコンでも同じ拡張機能を使用するには、Chrome にログインします</translation>
 <translation id="6520670145826811516">位置情報を使用するには、<ph name="BEGIN_LINK" />システム設定<ph name="END_LINK" />で Chrome にアクセスを許可してください</translation>
 <translation id="659498884637196217">このデバイスの Google パスワード マネージャー</translation>
 <translation id="6632473616050862500">ChromeOS Flex は、追加の<ph name="BEGIN_LINK_CROS_OSS" />オープンソース ソフトウェア<ph name="END_LINK_CROS_OSS" />によって実現しました。</translation>
 <translation id="6660596345553328257">Chrome にログインしますか？</translation>
+<translation id="6664219008737641504">パスフレーズを忘れた場合や、この設定を変更する場合は、アカウントの Chrome データを<ph name="SETTINGS_LINK" />してください</translation>
 <translation id="6676384891291319759">インターネットにアクセス</translation>
 <translation id="6679975945624592337">Google Chrome をバックグラウンドで実行する</translation>
 <translation id="6696915334902295848">このサイトを利用するには、Chrome でマイクの使用を許可する必要があります</translation>
 <translation id="6712881677154121168">ダウンロード エラー: <ph name="DOWNLOAD_ERROR" />。</translation>
 <translation id="6718739135284199302">Chrome を高速化する</translation>
 <translation id="6735387454586646204">ChromeOS Flex システム</translation>
-<translation id="6739177684496155661">新しい Chrome プロファイルで続行しますか？</translation>
 <translation id="6750954913813541382">スペルミスを修正するために、ブラウザに入力したテキストが Chrome から Google に送信されます</translation>
 <translation id="677276454032249905">今すぐ Chrome を終了しますか？</translation>
 <translation id="6794858689789885890">Chrome を閉じるとき、常にデバイスからサイトデータを削除する</translation>
@@ -469,9 +464,6 @@
 <translation id="7024536598735240744">解凍エラー: <ph name="UNPACK_ERROR" />。</translation>
 <translation id="7025789849649390912">インストールが停止しました。</translation>
 <translation id="7025800014283535195">こちらで Chrome プロファイルを切り替えることができます</translation>
-<translation id="7036251913954633326">このアカウントを 1 回だけ使用する場合は、Chrome ブラウザの<ph name="GUEST_LINK_BEGIN" />ゲストモード<ph name="GUEST_LINK_END" />を使用できます。他のユーザーのアカウントを追加する場合は、<ph name="DEVICE_TYPE" /> に<ph name="LINK_BEGIN" />新しいユーザーを追加<ph name="LINK_END" />します。
-
-これまでにウェブサイトやアプリに許可した権限がこのアカウントに適用される可能性があります。Google アカウントは [<ph name="SETTINGS_LINK_BEGIN" />設定<ph name="SETTINGS_LINK_END" />] で管理できます。</translation>
 <translation id="7048502283602470098">AI 機能を見る</translation>
 <translation id="7059914902409643750">Chrome を自分用にカスタマイズ</translation>
 <translation id="7071827361006050863">Chrome でまもなく閲覧データが削除されます</translation>
@@ -514,7 +506,6 @@
 <translation id="7572537927358445944">オフ • Chrome では、この拡張機能の提供元を確認できません</translation>
 <translation id="7583399374488819119"><ph name="COMPANY_NAME" /> インストーラ</translation>
 <translation id="7606334485649076285">Google ChromeOS Flex</translation>
-<translation id="7617512710641355143">Chrome は管理されています</translation>
 <translation id="7626032353295482388">Chrome へようこそ</translation>
 <translation id="7626072681686626474"><ph name="MANAGER" /> では、このデバイスを使用する前に下記の利用規約を確認しこれに同意していただく必要があります。これらの規約は Google ChromeOS 利用規約を拡張、変更、制限するものではありません。</translation>
 <translation id="7629695634924605473">Chrome では、特定のパスワードが侵害された事実の有無がわかります</translation>
@@ -547,7 +538,6 @@
 <translation id="7845233973568007926">インストールいただきありがとうございます。<ph name="BUNDLE_NAME" /> を使用するにはコンピュータを再起動してください。</translation>
 <translation id="7852254990718225089">Chrome の AI 機能がウェブをより高速、安全に使いやすくサポートします</translation>
 <translation id="7872446069773932638">ダウンロードしています... 残り <ph name="SECONDS" /> 秒です</translation>
-<translation id="7880591377632733558">Chrome へようこそ、<ph name="ACCOUNT_FIRST_NAME" /> さん</translation>
 <translation id="7886087451482920026">Google レンズでテキストを選択します</translation>
 <translation id="7890208801193284374">パソコンを共有している場合、友だちや家族はそれぞれ Chrome を自分専用のブラウザとして自分用の設定をして使うことができます。</translation>
 <translation id="7896673875602241923">前回このパソコンで別のユーザー（<ph name="ACCOUNT_EMAIL_LAST" />）が Chrome にログインしました。情報を個別に保持するには、新しい Chrome ユーザーを作成してください。</translation>
@@ -557,7 +547,6 @@
 <translation id="7947083960301164556">新機能を表示</translation>
 <translation id="7951272445806340501">アップデートを適用するには ChromeOS Flex を再起動する必要があります。</translation>
 <translation id="7959172989483770734">Chrome プロファイルを管理</translation>
-<translation id="7962368738413920945">サイトはおおむね想定どおりに機能しますが、Chrome のウィンドウをすべて閉じるとユーザーに関する情報は失われます</translation>
 <translation id="7962410387636238736">Windows XP と Windows Vista はサポートされなくなったため、このパソコンでは今後 Google Chrome のアップデートは受信されません</translation>
 <translation id="8005666035647241369">保存先: このデバイスの Google パスワード マネージャー</translation>
 <translation id="8008534537613507642">Chrome を再インストール</translation>
@@ -599,7 +588,6 @@
 <translation id="8428213095426709021">設定</translation>
 <translation id="8429214465555795676">続行するには、<ph name="EMAIL" /> で Chrome にログインする必要があります。これにより、組織のポリシーを遵守できます。</translation>
 <translation id="8433638294851456451">Android スマートフォンに番号を送信するには、両方のデバイスで Chrome にログインしてください。</translation>
-<translation id="8451192282033883849">あなたのアカウントは <ph name="MANAGER_NAME" /> によって管理されています。管理者は、この Chrome ブラウザのプロフィールとそのデータ（ブックマーク、履歴、パスワードなど）を表示、編集できます。</translation>
 <translation id="8496177819998570653">Google パスワード マネージャー(&amp;A)</translation>
 <translation id="8498858610309223613">Google Chrome の特別なセキュリティ アップデートが適用されました。今すぐ再起動してください。タブは復元されます。</translation>
 <translation id="8516431725144212809">Chrome が推定したお客様の興味 / 関心</translation>
@@ -658,7 +646,6 @@
 <translation id="919706545465235479">同期を開始するには、Chrome を更新します</translation>
 <translation id="922152298093051471">Chrome をカスタマイズ</translation>
 <translation id="93760716455950538">ChromeOS Flex を再起動</translation>
-<translation id="940313311831216333">お使いのすべてのデバイスで Chrome の設定やデータを使用するには、ログインして同期を有効にしてください。</translation>
 <translation id="943390475793766444">このファイルは危害を及ぼす可能性があるため、スキャンすることをおすすめします。</translation>
 <translation id="945522503751344254">フィードバックを送信</translation>
 <translation id="983803489796659991">更新サーバーにアプリケーションのハッシュデータがないため、インストールできませんでした。</translation>

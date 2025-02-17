@@ -18,6 +18,8 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.ResettersForTesting;
 import org.chromium.base.SysUtils;
 import org.chromium.base.TimeUtils;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.components.cached_flags.BooleanCachedFeatureParam;
 import org.chromium.components.cached_flags.CachedFeatureParam;
 import org.chromium.components.cached_flags.CachedFlag;
@@ -31,6 +33,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** This is the place where we define these: List of Omnibox features and parameters. */
+@NullMarked
 public class OmniboxFeatures {
     @IntDef({FeatureState.DISABLED, FeatureState.ENABLED_IN_TEST, FeatureState.ENABLED_IN_PROD})
     @Retention(RetentionPolicy.SOURCE)
@@ -70,7 +73,7 @@ public class OmniboxFeatures {
     private static final List<CachedFeatureParam<?>> sCachedParams = new ArrayList<>();
 
     /// Holds the information whether logic should focus on preserving memory on this device.
-    private static Boolean sIsLowMemoryDevice;
+    private static @Nullable Boolean sIsLowMemoryDevice;
 
     public static final CachedFlag sOmniboxAnswerActions =
             newFlag(OmniboxFeatureList.OMNIBOX_ANSWER_ACTIONS, FeatureState.ENABLED_IN_TEST);
@@ -155,9 +158,6 @@ public class OmniboxFeatures {
                     "max_prefetches_per_omnibox_session",
                     DEFAULT_MAX_PREFETCHES_PER_OMNIBOX_SESSION);
 
-    public static final BooleanCachedFeatureParam sRichInlineShowFullUrl =
-            newBooleanParam(sRichInlineAutocomplete, "rich_autocomplete_full_url", true);
-
     public static final IntCachedFeatureParam sJumpStartOmniboxMemoryThresholdKb =
             newIntParam(sJumpStartOmnibox, "jump_start_memory_threshold_kb", 2 * 1024 * 1024);
 
@@ -180,11 +180,17 @@ public class OmniboxFeatures {
     public static final BooleanCachedFeatureParam sAndroidHubSearchEnterPerformsSearch =
             newBooleanParam(sAndroidHubSearch, "enable_press_enter_to_search", false);
 
+    // Omnibox Diagnostics
+    private static final CachedFlag sDiagnostics =
+            newFlag(OmniboxFeatureList.DIAGNOSTICS, FeatureState.DISABLED);
+    public static final BooleanCachedFeatureParam sDiagInputConnection =
+            newBooleanParam(sDiagnostics, "omnibox_diag_input_connection", false);
+
     /** See {@link #setShouldRetainOmniboxOnFocusForTesting(boolean)}. */
-    private static Boolean sShouldRetainOmniboxOnFocusForTesting;
+    private static @Nullable Boolean sShouldRetainOmniboxOnFocusForTesting;
 
     /** When enabled, Jump Start Omnibox is activated and can engage if the feature is enabled. */
-    private static Boolean sActivateJumpStartOmnibox;
+    private static @Nullable Boolean sActivateJumpStartOmnibox;
 
     /**
      * Create an instance of a CachedFeatureFlag.
@@ -335,9 +341,7 @@ public class OmniboxFeatures {
      * @return Whether the rich inline autocomplete URL should be shown.
      */
     public static boolean shouldShowRichInlineAutocompleteUrl(int inputCount) {
-        return sRichInlineAutocomplete.isEnabled()
-                && sRichInlineShowFullUrl.getValue()
-                && inputCount >= DEFAULT_RICH_INLINE_MIN_CHAR;
+        return sRichInlineAutocomplete.isEnabled() && inputCount >= DEFAULT_RICH_INLINE_MIN_CHAR;
     }
 
     /** Modifies the output of {@link #shouldRetainOmniboxOnFocus()} for testing. */

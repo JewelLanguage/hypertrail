@@ -80,8 +80,6 @@ TemplateURLData::TemplateURLData(
     std::string_view search_url_post_params,
     std::string_view suggest_url_post_params,
     std::string_view image_url_post_params,
-    std::string_view side_search_param,
-    std::string_view side_image_search_param,
     std::string_view image_translate_source_language_param_key,
     std::string_view image_translate_target_language_param_key,
     std::vector<std::string> search_intent_params,
@@ -104,8 +102,6 @@ TemplateURLData::TemplateURLData(
       search_url_post_params(search_url_post_params),
       suggestions_url_post_params(suggest_url_post_params),
       image_url_post_params(image_url_post_params),
-      side_search_param(side_search_param),
-      side_image_search_param(side_image_search_param),
       image_translate_source_language_param_key(
           image_translate_source_language_param_key),
       image_translate_target_language_param_key(
@@ -171,8 +167,8 @@ void TemplateURLData::SetURL(const std::string& url) {
 }
 
 std::vector<uint8_t> TemplateURLData::GenerateHash() const {
-  CHECK(!url_.empty());
-  CHECK_NE(id, 0);
+  DCHECK(!url_.empty());
+  DCHECK_NE(id, 0);
   base::Pickle pickle;
   pickle.WriteInt64(id);
   pickle.WriteString(url_);
@@ -202,8 +198,6 @@ size_t TemplateURLData::EstimateMemoryUsage() const {
   res += base::trace_event::EstimateMemoryUsage(search_url_post_params);
   res += base::trace_event::EstimateMemoryUsage(suggestions_url_post_params);
   res += base::trace_event::EstimateMemoryUsage(image_url_post_params);
-  res += base::trace_event::EstimateMemoryUsage(side_search_param);
-  res += base::trace_event::EstimateMemoryUsage(side_image_search_param);
   res += base::trace_event::EstimateMemoryUsage(favicon_url);
   res += base::trace_event::EstimateMemoryUsage(image_search_branding_label);
   res += base::trace_event::EstimateMemoryUsage(originating_url);
@@ -227,4 +221,8 @@ bool TemplateURLData::CreatedByDefaultSearchProviderPolicy() const {
 
 bool TemplateURLData::CreatedByNonDefaultSearchProviderPolicy() const {
   return CreatedByPolicy() && !CreatedByDefaultSearchProviderPolicy();
+}
+
+bool TemplateURLData::CreatedByEnterpriseSearchAggregatorPolicy() const {
+  return policy_origin == PolicyOrigin::kSearchAggregator;
 }

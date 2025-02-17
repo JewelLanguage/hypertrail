@@ -49,9 +49,21 @@ std::vector<tab_groups::SavedTabGroupTab> GetRemovedTabs(
     const tab_groups::SavedTabGroup& before,
     const tab_groups::SavedTabGroup& after) {
   std::vector<tab_groups::SavedTabGroupTab> removed_tabs;
-  for (const auto& tab : before.saved_tabs()) {
+  const std::map<base::Uuid, tab_groups::SavedTabGroup::RemovedTabMetadata>&
+      removed_tabs_metadata = after.last_removed_tabs_metadata();
+  for (const tab_groups::SavedTabGroupTab& tab : before.saved_tabs()) {
     if (!after.ContainsTab(tab.saved_tab_guid())) {
       removed_tabs.emplace_back(tab);
+
+      if (auto it = removed_tabs_metadata.find(tab.saved_tab_guid());
+          it != removed_tabs_metadata.end()) {
+        // Copy over metadata for the removed tabs from SavedTabGroup.
+        const tab_groups::SavedTabGroup::RemovedTabMetadata& metadata =
+            it->second;
+        removed_tabs.back().SetUpdatedByAttribution(metadata.removed_by);
+        removed_tabs.back().SetUpdateTimeWindowsEpochMicros(
+            metadata.removal_time);
+      }
     }
   }
   return removed_tabs;
@@ -132,7 +144,8 @@ void TabGroupChangeNotifierImpl::
 void TabGroupChangeNotifierImpl::OnTabGroupAdded(
     const tab_groups::SavedTabGroup& group,
     tab_groups::TriggerSource source) {
-  if (!is_initialized_) {
+  if (!is_initialized_ || sync_bridge_update_type_ !=
+                              tab_groups::SyncBridgeUpdateType::kDefaultState) {
     return;
   }
   if (!group.is_shared_tab_group()) {
@@ -155,36 +168,26 @@ void TabGroupChangeNotifierImpl::OnTabGroupAdded(
 void TabGroupChangeNotifierImpl::OnTabGroupUpdated(
     const tab_groups::SavedTabGroup& group,
     tab_groups::TriggerSource source) {
-  if (!is_initialized_) {
-    return;
-  }
-  if (!group.is_shared_tab_group()) {
-    return;
-  }
-  auto group_it = last_known_tab_groups_.find(group.saved_guid());
-  if (group_it == last_known_tab_groups_.end()) {
-    // We do not know what changed in the case where we got an update for
-    // something unknown, so store the new value and tell our observers it was
-    // added if this was not local.
-    last_known_tab_groups_.emplace(group.saved_guid(), group);
-    for (auto& observer : observers_) {
-      observer.OnTabGroupAdded(last_known_tab_groups_.at(group.saved_guid()),
-                               source);
-    }
+  if (!is_initialized_ || sync_bridge_update_type_ !=
+                              tab_groups::SyncBridgeUpdateType::kDefaultState) {
     return;
   }
 
-  // Create a copy of the old group and store the new one.
-  tab_groups::SavedTabGroup last_known_group = group_it->second;
-  last_known_tab_groups_.insert_or_assign(group.saved_guid(), group);
-
-  ProcessTabGroupUpdates(last_known_group, group, source);
+  // When an incoming sync update is received, it hasn't been processed by tab
+  // model UI yet. Delay to post task to make sure tabs are updated with local
+  // ID before notifying observers.
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&TabGroupChangeNotifierImpl::OnTabGroupUpdatedAfterPosted,
+                     weak_ptr_factory_.GetWeakPtr(), group.saved_guid(),
+                     source));
 }
 
 void TabGroupChangeNotifierImpl::OnTabGroupRemoved(
     const base::Uuid& sync_id,
     tab_groups::TriggerSource source) {
-  if (!is_initialized_) {
+  if (!is_initialized_ || sync_bridge_update_type_ !=
+                              tab_groups::SyncBridgeUpdateType::kDefaultState) {
     return;
   }
   auto group_it = last_known_tab_groups_.find(sync_id);
@@ -203,21 +206,41 @@ void TabGroupChangeNotifierImpl::OnTabGroupRemoved(
 }
 
 void TabGroupChangeNotifierImpl::OnTabSelected(
-    const std::optional<base::Uuid>& sync_tab_group_id,
-    const std::optional<base::Uuid>& sync_tab_id) {
+    const tab_groups::SelectedTabInfo& selected_tab_info) {
   if (!is_initialized_) {
     return;
   }
 
-  std::optional<tab_groups::SavedTabGroupTab> selected_tab =
-      GetSelectedSharedTabForPublishing(sync_tab_group_id, sync_tab_id);
+  std::optional<tab_groups::SavedTabGroupTab> selected_saved_tab =
+      GetSelectedSharedTabForPublishing(selected_tab_info.tab_group_id,
+                                        selected_tab_info.tab_id);
+  if (selected_saved_tab) {
+    selected_saved_tab->SetTitle(selected_tab_info.tab_title.value_or(u""));
+  }
 
   for (auto& observer : observers_) {
-    observer.OnTabSelected(selected_tab);
+    observer.OnTabSelected(selected_saved_tab);
   }
 }
 
 void TabGroupChangeNotifierImpl::OnTabGroupLocalIdChanged(
+    const base::Uuid& sync_id,
+    const std::optional<tab_groups::LocalTabGroupID>& local_id) {
+  // When tab group local id is changed, tabs are not updating yet.
+  // Delay to post task to make sure tabs are
+  // updated before notifying observers.
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&TabGroupChangeNotifierImpl::OnTabGroupOpenedOrClosed,
+                     weak_ptr_factory_.GetWeakPtr(), sync_id, local_id));
+}
+
+void TabGroupChangeNotifierImpl::OnSyncBridgeUpdateTypeChanged(
+    tab_groups::SyncBridgeUpdateType sync_bridge_update_type) {
+  sync_bridge_update_type_ = sync_bridge_update_type;
+}
+
+void TabGroupChangeNotifierImpl::OnTabGroupOpenedOrClosed(
     const base::Uuid& sync_id,
     const std::optional<tab_groups::LocalTabGroupID>& local_id) {
   std::optional<tab_groups::SavedTabGroup> tab_group =
@@ -282,6 +305,34 @@ void TabGroupChangeNotifierImpl::ProcessChangesSinceStartup() {
                            current_tab_groups.at(old_group.saved_guid()),
                            tab_groups::TriggerSource::REMOTE);
   }
+}
+
+void TabGroupChangeNotifierImpl::OnTabGroupUpdatedAfterPosted(
+    const base::Uuid& sync_tab_group_id,
+    tab_groups::TriggerSource source) {
+  std::optional<tab_groups::SavedTabGroup> group =
+      tab_group_sync_service_->GetGroup(sync_tab_group_id);
+  if (!group || !group->is_shared_tab_group()) {
+    return;
+  }
+  auto group_it = last_known_tab_groups_.find(group->saved_guid());
+  if (group_it == last_known_tab_groups_.end()) {
+    // We do not know what changed in the case where we got an update for
+    // something unknown, so store the new value and tell our observers it was
+    // added if this was not local.
+    last_known_tab_groups_.emplace(group->saved_guid(), *group);
+    for (auto& observer : observers_) {
+      observer.OnTabGroupAdded(last_known_tab_groups_.at(group->saved_guid()),
+                               source);
+    }
+    return;
+  }
+
+  // Create a copy of the old group and store the new one.
+  tab_groups::SavedTabGroup last_known_group = group_it->second;
+  last_known_tab_groups_.insert_or_assign(group->saved_guid(), *group);
+
+  ProcessTabGroupUpdates(last_known_group, *group, source);
 }
 
 void TabGroupChangeNotifierImpl::ProcessTabGroupUpdates(

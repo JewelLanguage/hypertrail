@@ -11,6 +11,11 @@
 
 namespace flag_descriptions {
 
+// Title and description for the flag that enables adding an address manually
+// from Address Settings.
+extern const char kAddAddressManuallyName[];
+extern const char kAddAddressManuallyDescription[];
+
 // Title and description for the flag that disables app background refresh.
 extern const char kAppBackgroundRefreshName[];
 extern const char kAppBackgroundRefreshDescription[];
@@ -32,6 +37,12 @@ extern const char kAutofillDisableProfileUpdatesDescription[];
 // updates for testing purposes.
 extern const char kAutofillDisableSilentProfileUpdatesName[];
 extern const char kAutofillDisableSilentProfileUpdatesDescription[];
+
+// Title and description for the flag to enable allowlist for showing category
+// benefits for BMO cards.
+extern const char kAutofillEnableAllowlistForBmoCardCategoryBenefitsName[];
+extern const char
+    kAutofillEnableAllowlistForBmoCardCategoryBenefitsDescription[];
 
 // Title and description for the flag to enable American Express card benefits
 // for autofill Payments UI.
@@ -105,11 +116,6 @@ extern const char kAutofillEnableVerveCardSupportDescription[];
 extern const char kAutofillIsolatedWorldForJavascriptIOSName[];
 extern const char kAutofillIsolatedWorldForJavascriptIOSDescription[];
 
-// Title and description for the flag to parse standalone CVC fields for VCN
-// card on file in Autofill.
-extern const char kAutofillParseVcnCardOnFileStandaloneCvcFieldsName[];
-extern const char kAutofillParseVcnCardOnFileStandaloneCvcFieldsDescription[];
-
 // Title and description for the flag to enable the V2 of the Autofill Payments
 // Sheet.
 extern const char kAutofillPaymentsSheetV2Name[];
@@ -166,6 +172,10 @@ extern const char kAutofillUseRendererIDsDescription[];
 extern const char kAutofillVcnEnrollRequestTimeoutName[];
 extern const char kAutofillVcnEnrollRequestTimeoutDescription[];
 
+// Title and description for blue dot promo on tools menu button.
+extern const char kBlueDotOnToolsMenuButtonName[];
+extern const char kBlueDotOnToolsMenuButtonDescription[];
+
 // Title and description for the flag that changes the default setting for the
 // omnibox position.
 extern const char kBottomOmniboxDefaultSettingName[];
@@ -210,6 +220,11 @@ extern const char kContextualPanelForceShowEntrypointDescription[];
 // Title and description for the flag to enable the contextual panel.
 extern const char kContextualPanelName[];
 extern const char kContextualPanelDescription[];
+
+// Title and description for the flag to enable automatic passkey upgrade in the
+// Credential Provider.
+extern const char kCredentialProviderAutomaticPasskeyUpgradeName[];
+extern const char kCredentialProviderAutomaticPasskeyUpgradeDescription[];
 
 // Title and description for the flag to enable passkey PRF support in the
 // Credential Provider.
@@ -294,14 +309,20 @@ extern const char kDefaultBrowserBannerPromoDescription[];
 extern const char kDefaultBrowserTriggerCriteriaExperimentName[];
 extern const char kDefaultBrowserTriggerCriteriaExperimentDescription[];
 
-// Title and description for blue dot promo on tools menu button.
-extern const char kBlueDotOnToolsMenuButtonName[];
-extern const char kBlueDotOnToolsMenuButtonDescription[];
+// Title and description for the experiment deprecating feed header toggle and
+// repositions elements in the new tab page.
+extern const char kDeprecateFeedHeaderExperimentName[];
+extern const char kDeprecateFeedHeaderExperimentDescription[];
 
 // Title and description for the flag to control if a crash report is generated
 // on main thread freeze.
 extern const char kDetectMainThreadFreezeName[];
 extern const char kDetectMainThreadFreezeDescription[];
+
+// Title and description for the flag to enable the downloads auto deletion
+// system in Chrome.
+extern const char kDownloadAutoDeletionName[];
+extern const char kDownloadAutoDeletionDescription[];
 
 // Title and description for the flag to enable the opening of PDF files in
 // Chrome.
@@ -408,6 +429,11 @@ extern const char kFeedBackgroundRefreshDescription[];
 extern const char kForceStartupSigninPromoName[];
 extern const char kForceStartupSigninPromoDescription[];
 
+// Title and description for the flag to determine if the FRE Default Browser
+// promo should be animated.
+extern const char kAnimatedDefaultBrowserPromoInFREName[];
+extern const char kAnimatedDefaultBrowserPromoInFREDescription[];
+
 // Title and description for the flag to trigger improvement for fullscreen
 // feature.
 extern const char kFullscreenImprovementName[];
@@ -417,6 +443,11 @@ extern const char kFullscreenImprovementDescription[];
 // limits of the Fullscreen Promos Manager.
 extern const char kFullscreenPromosManagerSkipInternalLimitsName[];
 extern const char kFullscreenPromosManagerSkipInternalLimitsDescription[];
+
+// Title and description for the flag to change the fullscreen transition speed
+// and offset.
+extern const char kFullscreenTransitionName[];
+extern const char kFullscreenTransitionDescription[];
 
 // Title and description for the command line switch used to determine the
 // active fullscreen viewport adjustment mode.
@@ -493,14 +524,14 @@ extern const char kIOSKeyboardAccessoryUpgradeName[];
 extern const char kIOSKeyboardAccessoryUpgradeDescription[];
 
 // Title and description for the flag to enable the keyboard accessory upgrade
+// for iPads.
+extern const char kIOSKeyboardAccessoryUpgradeForIPadName[];
+extern const char kIOSKeyboardAccessoryUpgradeForIPadDescription[];
+
+// Title and description for the flag to enable the keyboard accessory upgrade
 // with a shorter manual fill menu.
 extern const char kIOSKeyboardAccessoryUpgradeShortManualFillMenuName[];
 extern const char kIOSKeyboardAccessoryUpgradeShortManualFillMenuDescription[];
-
-// Title and description for the flag to enable the new following feed entry
-// points.
-extern const char kIOSNewFollowingFeedEntryPointsName[];
-extern const char kIOSNewFollowingFeedEntryPointsDescription[];
 
 // Title and description for the flag to enable password bottom sheet triggering
 // on autofocus on IOS.
@@ -534,6 +565,11 @@ extern const char kIOSSaveToPhotosImprovementsDescription[];
 // and the homestack.
 extern const char kNewFeedPositioningExperimentName[];
 extern const char kNewFeedPositioningExperimentDescription[];
+
+// Title and description for the flag to enable the new share extension
+// experiment on iOS.
+extern const char kNewShareExtensionName[];
+extern const char kNewShareExtensionDescription[];
 
 // Title and description of the flag to enable client side new tab page
 // experiments aimed at improving user retention.
@@ -589,6 +625,15 @@ extern const char kLensClearcutLoggerFastQosEnabledDescription[];
 extern const char kLensFiltersAblationModeEnabledName[];
 extern const char kLensFiltersAblationModeEnabledDescription[];
 
+// Title and description for the flag to disable Lens gesture text selection.
+extern const char kLensGestureTextSelectionDisabledName[];
+extern const char kLensGestureTextSelectionDisabledDescription[];
+
+// Title and description for the flag to disable Lens ink library's multi-sample
+// mode.
+extern const char kLensInkMultiSampleModeDisabledName[];
+extern const char kLensInkMultiSampleModeDisabledDescription[];
+
 // Title and description for the flag to force show lens overlay onboarding
 // screen.
 extern const char kLensOverlayForceShowOnboardingScreenName[];
@@ -612,6 +657,15 @@ extern const char kLensOverlayPriceInsightsCounterfactualDescription[];
 // Title and description for the flag to allow lens overlay on iPad devices.
 extern const char kLensOverlayEnableIPadCompatibilityName[];
 extern const char kLensOverlayEnableIPadCompatibilityDescription[];
+
+// Title and description for the flag to allow lens overlay in landscape.
+extern const char kLensOverlayEnableLandscapeCompatibilityName[];
+extern const char kLensOverlayEnableLandscapeCompatibilityDescription[];
+
+// Title and description for the flag to allow the LVF escape hatch in lens
+// overlay overflow menu.
+extern const char kLensOverlayEnableLVFEscapeHatchName[];
+extern const char kLensOverlayEnableLVFEscapeHatchDescription[];
 
 // Title and description for the flag to enable the Lens overlay location bar
 // entrypoint.
@@ -640,10 +694,19 @@ extern const char kLensTranslateToggleModeEnabledDescription[];
 extern const char kLensUnaryApisWithHttpTransportEnabledName[];
 extern const char kLensUnaryApisWithHttpTransportEnabledDescription[];
 
+// Title and description for the flag to enable client data header for unary
+// requests.
+extern const char kLensUnaryClientDataHeaderEnabledName[];
+extern const char kLensUnaryClientDataHeaderEnabledDescription[];
+
 // Title and description for the flag to enable HTTP transport for unary
 // requests.
 extern const char kLensUnaryHttpTransportEnabledName[];
 extern const char kLensUnaryHttpTransportEnabledDescription[];
+
+// Title and description for the flag to enable the vsint param.
+extern const char kLensVsintParamEnabledName[];
+extern const char kLensVsintParamEnabledDescription[];
 
 // Title and description for the flag to enable the Lens web page load
 // optimization.
@@ -684,11 +747,6 @@ extern const char kMostVisitedTilesHorizontalRenderGroupDescription[];
 // for iOS 16 and later.
 extern const char kNativeFindInPageName[];
 extern const char kNativeFindInPageDescription[];
-
-// Title and description for the new illustration in the sync opt-in promotion
-// view.
-extern const char kNewSyncOptInIllustrationName[];
-extern const char kNewSyncOptInIllustrationDescription[];
 
 // Title and description for temporary bug fix to broken NTP view hierarhy.
 // TODO(crbug.com/40799579): Remove this when fixed.
@@ -856,6 +914,11 @@ extern const char kPageInfoLastVisitedIOSDescription[];
 extern const char kPageVisibilityPageContentAnnotationsName[];
 extern const char kPageVisibilityPageContentAnnotationsDescription[];
 
+// Title and description for the flag to enable clientside password form
+// parsing model.
+extern const char kPasswordFormClientsideClassifierName[];
+extern const char kPasswordFormClientsideClassifierDescription[];
+
 // Title and description for the flag to enable PhishGuard password reuse
 // detection.
 extern const char kPasswordReuseDetectionName[];
@@ -894,14 +957,14 @@ extern const char kIPHPriceNotificationsWhileBrowsingDescription[];
 extern const char kNotificationSettingsMenuItemName[];
 extern const char kNotificationSettingsMenuItemDescription[];
 
+// Title and description for the flag to refactor the toolbarUI.
+extern const char kRefactorToolbarUIName[];
+extern const char kRefactorToolbarUIDescription[];
+
 // Title and description for the flag to remove excess NTP tabs that don't have
 // navigation history.
 extern const char kRemoveExcessNTPsExperimentName[];
 extern const char kRemoveExcessNTPsExperimentDescription[];
-
-// Title and description for the flag to remove the image from rich IPH bubble.
-extern const char kRichBubbleWithoutImageName[];
-extern const char kRichBubbleWithoutImageDescription[];
 
 // Title and description for the flag to enable async real time checks.
 extern const char kSafeBrowsingAsyncRealTimeCheckName[];
@@ -984,6 +1047,10 @@ extern const char kSeparateProfilesForManagedAccountsDescription[];
 // Text Edit Menu option).
 extern const char kSharedHighlightingIOSName[];
 extern const char kSharedHighlightingIOSDescription[];
+
+// Title and description for the flag to enable ShopCard.
+extern const char kShopCardName[];
+extern const char kShopCardDescription[];
 
 // Title and description for the flag to enable the Set Up List in the First
 // Run.
@@ -1101,6 +1168,11 @@ extern const char kTabResumptionImagesDescription[];
 // Title and description for the flag to update the sequence of the FRE screens.
 extern const char kUpdatedFRESequenceName[];
 extern const char kUpdatedFRESequenceDescription[];
+
+// Title and description for the flag to query accounts from IdentityManager
+// instead of ChromeAccountManagerService.
+extern const char kUseAccountListFromIdentityManagerName[];
+extern const char kUseAccountListFromIdentityManagerDescription[];
 
 // Title and description for the flag to control the maximum wait time (in
 // seconds) for a response from the Account Capabilities API.

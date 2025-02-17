@@ -30,6 +30,10 @@ class EmbeddedPermissionPromptAndroid : public PermissionPromptAndroid {
 
   ~EmbeddedPermissionPromptAndroid() override;
 
+  static std::unique_ptr<EmbeddedPermissionPromptAndroid> Create(
+      content::WebContents* web_contents,
+      Delegate* delegate);
+
   // PermissionPrompt:
   PermissionPromptDisposition GetPromptDisposition() const override;
   bool ShouldFinalizeRequestAfterDecided() const override;
@@ -40,7 +44,11 @@ class EmbeddedPermissionPromptAndroid : public PermissionPromptAndroid {
   void Closing() override;
   void Accept() override;
   void AcceptThisTime() override;
+  void Acknowledge() override;
   void Deny() override;
+  void Resumed() override;
+  void SystemSettingsShown() override;
+  void SystemPermissionResolved(bool accepted) override;
   bool ShouldCurrentRequestUseQuietUI() override;
   std::optional<PermissionUiSelector::QuietUiReason> ReasonForUsingQuietUi()
       const override;
@@ -56,9 +64,12 @@ class EmbeddedPermissionPromptAndroid : public PermissionPromptAndroid {
       JNIEnv* env,
       bool is_one_time) const override;
   bool ShouldUseRequestingOriginFavicon() const override;
+  std::vector<permissions::ElementAnchoredBubbleVariant> GetPromptVariants()
+      const override;
   const std::vector<
       raw_ptr<permissions::PermissionRequest, VectorExperimental>>&
   Requests() const override;
+  int GetIconId() const override;
 
  private:
   // Decide to destroy the current dialog or update the dialog with new screen

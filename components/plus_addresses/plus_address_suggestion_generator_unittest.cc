@@ -94,8 +94,6 @@ class PlusAddressSuggestionGeneratorTest : public ::testing::Test {
   FakePlusAddressSettingService& setting_service() { return setting_service_; }
 
  private:
-  base::test::ScopedFeatureList features_{
-      features::kPlusAddressUserOnboardingEnabled};
   autofill::test::AutofillUnitTestEnvironment autofill_env_;
 
   FakePlusAddressAllocator allocator_;
@@ -107,9 +105,6 @@ class PlusAddressSuggestionGeneratorTest : public ::testing::Test {
 // addresses.
 TEST_F(PlusAddressSuggestionGeneratorTest,
        InlineGenerationWithoutPreallocatedAddresses) {
-  base::test::ScopedFeatureList inline_creation_feature(
-      features::kPlusAddressInlineCreation);
-
   allocator().set_is_next_allocation_synchronous(false);
   PlusAddressSuggestionGenerator generator(
       &setting_service(), &allocator(),
@@ -128,9 +123,6 @@ TEST_F(PlusAddressSuggestionGeneratorTest,
 // the PlusAddressPayload.
 TEST_F(PlusAddressSuggestionGeneratorTest,
        InlineGenerationWithPreallocatedAddresses) {
-  base::test::ScopedFeatureList inline_creation_feature(
-      features::kPlusAddressInlineCreation);
-
   allocator().set_is_next_allocation_synchronous(true);
   PlusAddressSuggestionGenerator generator(
       &setting_service(), &allocator(),
@@ -223,8 +215,6 @@ TEST_F(PlusAddressSuggestionGeneratorTest, LoadingStateProperties) {
 // triggered.
 TEST_F(PlusAddressSuggestionGeneratorTest,
        CreationSuggestionOnPreviouslyAutofilledFields) {
-  base::test::ScopedFeatureList inline_creation_feature(
-      features::kPlusAddressInlineCreation);
   PlusAddressSuggestionGenerator generator(
       &setting_service(), &allocator(),
       url::Origin::Create(GURL("https://foo.bar")));
@@ -291,6 +281,7 @@ TEST_F(PlusAddressSuggestionGeneratorTest, NoSuggestionsOnLoginForm) {
   PasswordFormClassification classification;
   classification.type = PasswordFormClassification::Type::kLoginForm;
   classification.username_field = focused_field.global_id();
+  classification.password_field = login_form.fields()[1].global_id();
   EXPECT_THAT(generator.GetSuggestions(
                   /*affiliated_plus_addresses=*/{},
                   /*is_creation_enabled=*/true, login_form, focused_field,
@@ -303,9 +294,6 @@ TEST_F(PlusAddressSuggestionGeneratorTest, NoSuggestionsOnLoginForm) {
 // they have name or address fields included.
 TEST_F(PlusAddressSuggestionGeneratorTest,
        SuggestionsOnLoginFormWithNameFields) {
-  base::test::ScopedFeatureList feature_list{
-      features::kPlusAddressRefinedPasswordFormClassification};
-
   PlusAddressSuggestionGenerator generator(
       &setting_service(), &allocator(),
       url::Origin::Create(GURL("https://foo.bar")));
@@ -329,22 +317,18 @@ TEST_F(PlusAddressSuggestionGeneratorTest,
   PasswordFormClassification classification;
   classification.type = PasswordFormClassification::Type::kLoginForm;
   classification.username_field = focused_field.global_id();
-  EXPECT_THAT(
-      generator.GetSuggestions(
-          /*affiliated_plus_addresses=*/{},
-          /*is_creation_enabled=*/true, form, focused_field,
-          form_field_type_groups, classification,
-          AutofillSuggestionTriggerSource::kFormControlElementClicked),
-      ElementsAre(EqualsSuggestion(SuggestionType::kCreateNewPlusAddress)));
+  EXPECT_THAT(generator.GetSuggestions(
+                  /*affiliated_plus_addresses=*/{},
+                  /*is_creation_enabled=*/true, form, focused_field,
+                  form_field_type_groups, classification,
+                  AutofillSuggestionTriggerSource::kFormControlElementClicked),
+              test::IsSingleCreatePlusAddressSuggestion());
 }
 
 // Tests that creation is offered on forms classified by PWM as login forms if
 // the password field is hidden.
 TEST_F(PlusAddressSuggestionGeneratorTest,
        SuggestionsOnLoginFormWithHiddenPasswordField) {
-  base::test::ScopedFeatureList feature_list{
-      features::kPlusAddressOfferCreationIfPasswordFieldIsNotVisible};
-
   PlusAddressSuggestionGenerator generator(
       &setting_service(), &allocator(),
       url::Origin::Create(GURL("https://foo.bar")));
@@ -360,13 +344,12 @@ TEST_F(PlusAddressSuggestionGeneratorTest,
   classification.type = PasswordFormClassification::Type::kLoginForm;
   classification.username_field = focused_field.global_id();
   classification.password_field = form.fields()[1].global_id();
-  EXPECT_THAT(
-      generator.GetSuggestions(
-          /*affiliated_plus_addresses=*/{},
-          /*is_creation_enabled=*/true, form, focused_field,
-          /*form_field_type_groups=*/{}, classification,
-          AutofillSuggestionTriggerSource::kFormControlElementClicked),
-      ElementsAre(EqualsSuggestion(SuggestionType::kCreateNewPlusAddress)));
+  EXPECT_THAT(generator.GetSuggestions(
+                  /*affiliated_plus_addresses=*/{},
+                  /*is_creation_enabled=*/true, form, focused_field,
+                  /*form_field_type_groups=*/{}, classification,
+                  AutofillSuggestionTriggerSource::kFormControlElementClicked),
+              test::IsSingleCreatePlusAddressSuggestion());
 }
 
 // Tests that filling is offered on fields where autofill was previously

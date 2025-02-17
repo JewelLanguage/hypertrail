@@ -73,7 +73,6 @@ blink::UserAgentBrandList GenerateBrandVersionList(
     int seed,
     std::optional<std::string> brand,
     const std::string& version,
-    bool enable_updated_grease_by_policy,
     blink::UserAgentBrandVersionType output_version_type,
     std::optional<blink::UserAgentBrandVersion> additional_brand_version =
         std::nullopt);
@@ -109,7 +108,6 @@ const blink::UserAgentBrandList GetUserAgentBrandMajorVersionList(
 // https://wicg.github.io/ua-client-hints/#create-arbitrary-brands-section.
 blink::UserAgentBrandVersion GetGreasedUserAgentBrandVersion(
     int seed,
-    bool enable_updated_grease_by_policy,
     blink::UserAgentBrandVersionType output_version_type);
 
 #if BUILDFLAG(IS_ANDROID)
@@ -129,8 +127,8 @@ int GetHighestKnownUniversalApiContractVersionForTesting();
 // Returns the UserAgentReductionEnterprisePolicyState enum value corresponding
 // to the provided integer policy value for UserAgentReduction.
 // TODO(crbug.com/40843535): Remove this function with policy.
-embedder_support::UserAgentReductionEnterprisePolicyState
-GetUserAgentReductionFromPrefs(const PrefService* pref_service);
+UserAgentReductionEnterprisePolicyState GetUserAgentReductionFromPrefs(
+    const PrefService* pref_service);
 
 }  // namespace embedder_support
 

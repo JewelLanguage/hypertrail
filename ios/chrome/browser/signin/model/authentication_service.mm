@@ -45,12 +45,7 @@
 #import "ios/chrome/browser/signin/model/system_identity.h"
 #import "ios/chrome/browser/signin/model/system_identity_manager.h"
 #import "ios/chrome/browser/signin/model/system_identity_util.h"
-#import "ios/chrome/browser/widget_kit/model/features.h"
 #import "ios/chrome/common/app_group/app_group_constants.h"
-
-#if BUILDFLAG(ENABLE_WIDGETS_FOR_MIM)
-#import "ios/chrome/browser/widget_kit/model/model_swift.h"  // nogncheck
-#endif
 
 using signin::constants::kNoHostedDomainFound;
 
@@ -75,29 +70,6 @@ CoreAccountId SystemIdentityToAccountID(
   GaiaId gaia_id([identity gaiaID]);
   std::string email = base::SysNSStringToUTF8([identity userEmail]);
   return identity_manager->PickAccountIdForAccount(gaia_id, email);
-}
-
-// Updates list of loaded profiles used in widgets.
-// TODO(crbug.com/380847504): Move this logic out of this class.
-void UpdateLoadedAccounts(std::vector<AccountInfo> accounts_on_device) {
-  NSMutableDictionary* accounts = [[NSMutableDictionary alloc] init];
-  for (const AccountInfo& account_info : accounts_on_device) {
-    NSMutableDictionary* account = [[NSMutableDictionary alloc] init];
-    [account setObject:base::SysUTF8ToNSString(account_info.hosted_domain)
-                forKey:app_group::kHostedDomain];
-    [account setObject:base::SysUTF8ToNSString(account_info.email)
-                forKey:app_group::kEmail];
-    // Add the account to the dictionary of accounts.
-    [accounts setObject:account forKey:account_info.gaia.ToNSString()];
-    // TODO(crbug.com/380847504): Save avatar info to disk.
-  }
-
-  NSUserDefaults* shared_defaults = app_group::GetGroupUserDefaults();
-  [shared_defaults setObject:accounts forKey:app_group::kAccountsOnDevice];
-
-#if BUILDFLAG(ENABLE_WIDGETS_FOR_MIM)
-  [WidgetTimelinesUpdater reloadAllTimelines];
-#endif
 }
 
 }  // namespace
@@ -231,9 +203,8 @@ void AuthenticationService::Initialize(
       [](ProfileAttributesStorageIOS* attributes_storage,
          std::string_view profile_name) {
         attributes_storage->UpdateAttributesForProfileWithName(
-            profile_name, base::BindOnce([](ProfileAttributesIOS attrs) {
+            profile_name, base::BindOnce([](ProfileAttributesIOS& attrs) {
               attrs.SetFullyInitialized();
-              return attrs;
             }));
       },
       attributes_storage, profile_name));
@@ -252,8 +223,7 @@ void AuthenticationService::Initialize(
     return;
   }
   // TODO(crbug.com/375605572): Need to set the right access point.
-  SignIn(identities_for_profile[0],
-         signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+  SignIn(identities_for_profile[0], signin_metrics::AccessPoint::kUnknown);
 }
 
 void AuthenticationService::Shutdown() {
@@ -334,11 +304,8 @@ base::ScopedClosureRunner
 AuthenticationService::DeclareAccountSwitchInProgress() {
   CHECK(!account_switch_in_progress_);
   account_switch_in_progress_ = true;
-  return base::ScopedClosureRunner(base::BindOnce(
-      [](AuthenticationService* service) {
-        service->account_switch_in_progress_ = false;
-      },
-      this));
+  return base::ScopedClosureRunner(
+      base::BindOnce(&AuthenticationService::AccountSwitchDone, GetWeakPtr()));
 }
 
 void AuthenticationService::SetReauthPromptForSignInAndSync() {
@@ -458,8 +425,7 @@ void AuthenticationService::GrantSyncConsent(
   // TODO(crbug.com/40067025): Turn sync on was deprecated. Remove
   // `GrantSyncConsent()` as it is obsolete.
   DUMP_WILL_BE_CHECK(access_point !=
-                     signin_metrics::AccessPoint::
-                         ACCESS_POINT_POST_DEVICE_RESTORE_SIGNIN_PROMO)
+                     signin_metrics::AccessPoint::kPostDeviceRestoreSigninPromo)
       << "Turn sync on should not be available as sync promos are deprecated "
          "[access point = "
       << int(access_point) << "]";
@@ -498,12 +464,12 @@ void AuthenticationService::GrantSyncConsent(
 
 void AuthenticationService::SignOut(
     signin_metrics::ProfileSignout signout_source,
-    bool force_clear_browsing_data,
     ProceduralBlock completion) {
   if (!identity_manager_->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
-    if (completion)
+    if (completion) {
       base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(completion));
+    }
     return;
   }
 
@@ -539,9 +505,6 @@ void AuthenticationService::SignOut(
 
   if (base::FeatureList::IsEnabled(kSeparateProfilesForManagedAccounts) &&
       is_managed) {
-    // TODO(crbug.com/375605174): Unify the decision to clear data on signout.
-    // Currently, this is done twice: in SignoutActionSheetCoordinator and again
-    // here based on the account state.
     if (completion) {
       base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, std::move(callback_closure));
@@ -549,8 +512,7 @@ void AuthenticationService::SignOut(
     return;
   }
 
-  if (force_clear_browsing_data ||
-      (is_managed && is_initial_sync_feature_setup_complete) ||
+  if ((is_managed && is_initial_sync_feature_setup_complete) ||
       (is_managed && is_migrated_from_syncing)) {
     // If `is_clear_data_feature_for_managed_users_enabled` is false, browsing
     // data for managed account needs to be cleared only if sync has started at
@@ -613,7 +575,7 @@ void AuthenticationService::OnPrimaryAccountChanged(
   }
 }
 
-void AuthenticationService::OnIdentityListChanged() {
+void AuthenticationService::OnIdentitiesInProfileChanged() {
   ClearAccountSettingsPrefsOfRemovedAccounts();
   ReloadCredentialsFromIdentities();
 }
@@ -657,8 +619,7 @@ void AuthenticationService::MDMErrorHandled(id<SystemIdentity> identity,
     return;
   }
 
-  SignOut(signin_metrics::ProfileSignout::kAbortSignin,
-          /*force_clear_browsing_data*/ false, nil);
+  SignOut(signin_metrics::ProfileSignout::kAbortSignin, nil);
 }
 
 void AuthenticationService::OnRefreshTokenUpdated(id<SystemIdentity> identity) {
@@ -710,12 +671,12 @@ void AuthenticationService::HandleForgottenIdentity(
     return;
   }
 
-  // YES if the primary identity should be ignore to simulate a backup/restore
+  // YES if the primary identity should be ignored to simulate a backup/restore
   // of the device.
   bool simulate_identity_lost_for_restore =
-      device_restore && experimental_flags::SimulatePostDeviceRestore();
-  // If the restore shorty is needs to be simulated, the primary identity should
-  // not found.
+      device_restore && SimulatePostDeviceRestore();
+  // If the restore shorty needs to be simulated, the primary identity should
+  // not be found.
   id<SystemIdentity> authenticated_identity =
       simulate_identity_lost_for_restore
           ? nil
@@ -762,7 +723,7 @@ void AuthenticationService::HandleForgottenIdentity(
   }
 
   // Sign the user out.
-  SignOut(signout_source, /*force_clear_browsing_data=*/false, nil);
+  SignOut(signout_source, nil);
 
   NSString* gaia_id = account_info.gaia.ToNSString();
   // Should prompt the user if the identity was not removed by the user.
@@ -792,7 +753,6 @@ void AuthenticationService::ReloadCredentialsFromIdentities() {
       ->ReloadAllAccountsFromSystemWithPrimaryAccount(
           identity_manager_->GetPrimaryAccountId(
               signin::ConsentLevel::kSignin));
-  UpdateLoadedAccounts(identity_manager_->GetAccountsOnDevice());
 }
 
 void AuthenticationService::FirePrimaryAccountRestricted() {
@@ -832,6 +792,11 @@ void AuthenticationService::ClearAccountSettingsPrefsOfRemovedAccounts() {
   syncer::KeepAccountKeyedPrefValuesOnlyForUsers(
       pref_service_, prefs::kSigninHasAcceptedManagementDialog,
       available_gaia_ids);
+}
+
+void AuthenticationService::AccountSwitchDone() {
+  CHECK(account_switch_in_progress_, base::NotFatalUntil::M140);
+  account_switch_in_progress_ = false;
 }
 
 NSArray<id<SystemIdentity>>* AuthenticationService::ActiveIdentities() {

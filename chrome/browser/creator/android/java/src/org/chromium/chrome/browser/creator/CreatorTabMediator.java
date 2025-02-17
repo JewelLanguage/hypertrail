@@ -212,7 +212,6 @@ public class CreatorTabMediator {
                 return R.drawable.omnibox_info;
             case ConnectionSecurityLevel.DANGEROUS:
                 return R.drawable.omnibox_not_secure_warning;
-            case ConnectionSecurityLevel.SECURE_WITH_POLICY_INSTALLED_CERT:
             case ConnectionSecurityLevel.SECURE:
                 return R.drawable.omnibox_https_valid_lock;
             default:
@@ -231,6 +230,5 @@ public class CreatorTabMediator {
         mWebContents = null;
         mSheetContent = null;
         mProfile = null;
-        mFaviconLoader.destroy();
     }
 }

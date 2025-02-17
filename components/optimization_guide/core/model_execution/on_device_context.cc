@@ -5,6 +5,7 @@
 #include "components/optimization_guide/core/model_execution/on_device_context.h"
 
 #include "base/metrics/histogram_functions.h"
+#include "components/optimization_guide/core/model_execution/multimodal_message.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
 
 namespace optimization_guide {
@@ -33,7 +34,7 @@ OnDeviceContext::OnDeviceContext(OnDeviceOptions opts,
     : opts_(std::move(opts)), feature_(feature) {}
 OnDeviceContext::~OnDeviceContext() = default;
 
-bool OnDeviceContext::SetInput(const google::protobuf::MessageLite& request) {
+bool OnDeviceContext::SetInput(MultimodalMessageReadView request) {
   auto input =
       opts_.adapter->ConstructInputString(request, /*want_input_context=*/true);
   if (!input) {
@@ -73,11 +74,11 @@ void OnDeviceContext::CloneSession(
 }
 
 void OnDeviceContext::AddContext() {
-  auto options = on_device_model::mojom::InputOptions::New();
+  auto options = on_device_model::mojom::AppendOptions::New();
   options->input = input_.Clone();
   options->max_tokens = opts_.token_limits.max_context_tokens;
   options->token_offset = 0;
-  session_->AddContext(std::move(options), client_.BindNewPipeAndPassRemote());
+  session_->Append(std::move(options), client_.BindNewPipeAndPassRemote());
 }
 
 void OnDeviceContext::OnComplete(uint32_t tokens_processed) {

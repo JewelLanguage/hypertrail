@@ -369,7 +369,7 @@ class NewTabPageCoordinatorTest : public PlatformTest {
     DynamicallyCallSelector(coordinator_, coordinator_selector,
                             [coordinator_ class]);
 
-    [view_controller_mock verify];
+    EXPECT_OCMOCK_VERIFY(view_controller_mock);
     coordinator_.NTPViewController = original_vc;
   }
 
@@ -381,8 +381,7 @@ class NewTabPageCoordinatorTest : public PlatformTest {
             GetApplicationContext()->GetSystemIdentityManager());
     system_identity_manager->AddIdentity(fake_identity);
     AuthenticationServiceFactory::GetForProfile(GetProfile())
-        ->SignIn(fake_identity,
-                 signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+        ->SignIn(fake_identity, signin_metrics::AccessPoint::kUnknown);
   }
 
   web::WebTaskEnvironment task_environment_;

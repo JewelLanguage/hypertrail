@@ -25,7 +25,7 @@
 #import "ios/chrome/browser/lens/model/lens_browser_agent.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_coordinator.h"
-#import "ios/chrome/browser/omnibox/model/omnibox_position_browser_agent.h"
+#import "ios/chrome/browser/omnibox/model/omnibox_position/omnibox_position_browser_agent.h"
 #import "ios/chrome/browser/prerender/model/prerender_service_factory.h"
 #import "ios/chrome/browser/save_to_photos/ui_bundled/save_to_photos_coordinator.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
@@ -212,7 +212,6 @@ class BrowserCoordinatorTest : public PlatformTest {
 
 // Tests if the URL to open the downlads directory from files.app is valid.
 TEST_F(BrowserCoordinatorTest, ShowDownloadsFolder) {
-
   base::FilePath download_dir;
   GetDownloadsDirectory(&download_dir);
 
@@ -242,9 +241,9 @@ TEST_F(BrowserCoordinatorTest, ShowDownloadsFolder) {
   EXPECT_OCMOCK_VERIFY(shared_application_mock);
 }
 
-// Tests that -sharePage is leaving fullscreena and starting the share
+// Tests that `-showShareSheet` is leaving fullscreen and starting the share
 // coordinator.
-TEST_F(BrowserCoordinatorTest, SharePage) {
+TEST_F(BrowserCoordinatorTest, ShowShareSheet) {
   FullscreenModel model;
   std::unique_ptr<TestFullscreenController> controller =
       std::make_unique<TestFullscreenController>(&model);
@@ -271,7 +270,7 @@ TEST_F(BrowserCoordinatorTest, SharePage) {
 
   BrowserCoordinator* browser_coordinator = GetBrowserCoordinator();
   [browser_coordinator start];
-  [browser_coordinator sharePage];
+  [browser_coordinator showShareSheet];
 
   // Check that fullscreen is exited.
   EXPECT_EQ(1.0, controller_ptr->GetProgress());
@@ -282,10 +281,10 @@ TEST_F(BrowserCoordinatorTest, SharePage) {
   EXPECT_OCMOCK_VERIFY(classMock);
 }
 
-// Tests that -shareChromeApp is instantiating the SharingCoordinator
-// with SharingParams where scenario is ShareChrome, leaving fullscreen
-// and starting the share coordinator.
-TEST_F(BrowserCoordinatorTest, ShareChromeApp) {
+// Tests that `-showShareSheetForChromeApp` is instantiating the
+// SharingCoordinator with SharingParams where scenario is ShareChrome, leaving
+// fullscreen and starting the share coordinator.
+TEST_F(BrowserCoordinatorTest, ShowShareSheetForChromeApp) {
   FullscreenModel model;
   std::unique_ptr<TestFullscreenController> controller =
       std::make_unique<TestFullscreenController>(&model);
@@ -315,7 +314,7 @@ TEST_F(BrowserCoordinatorTest, ShareChromeApp) {
 
   BrowserCoordinator* browser_coordinator = GetBrowserCoordinator();
   [browser_coordinator start];
-  [browser_coordinator shareChromeApp];
+  [browser_coordinator showShareSheetForChromeApp];
 
   // Check that fullscreen is exited.
   EXPECT_EQ(1.0, controller_ptr->GetProgress());
@@ -418,10 +417,10 @@ TEST_F(BrowserCoordinatorTest, StartsAndStopsSaveToPhotosCoordinator) {
   [browser_coordinator stop];
 }
 
-// Tests that the displayDefaultBrowserPromoAfterRemindMeLater command does not
+// Tests that the `-showDefaultBrowserPromoAfterRemindMeLater` command does not
 // crash.
-TEST_F(BrowserCoordinatorTest, DisplayDefaultBrowserPromoAfterRemindMeLater) {
-  // Start the BrowserCoordinator
+TEST_F(BrowserCoordinatorTest, ShowDefaultBrowserPromoAfterRemindMeLater) {
+  // Starts the `BrowserCoordinator`.
   BrowserCoordinator* browser_coordinator = GetBrowserCoordinator();
   [browser_coordinator start];
 
@@ -429,7 +428,7 @@ TEST_F(BrowserCoordinatorTest, DisplayDefaultBrowserPromoAfterRemindMeLater) {
   id<PromosManagerCommands> handler =
       HandlerForProtocol(dispatcher, PromosManagerCommands);
 
-  [handler displayDefaultBrowserPromoAfterRemindMeLater];
+  [handler showDefaultBrowserPromoAfterRemindMeLater];
 
   [browser_coordinator stop];
 }

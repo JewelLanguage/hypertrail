@@ -71,8 +71,7 @@ export class BrailleIme {
 
   /**
    * Identifier for the use standard keyboard option used
-   * in the menu and
-   * {@code localStorage}.  This can be switched on to
+   * in the menu and chrome.storage.local.  This can be switched on to
    * type braille using the standard keyboard, or off
    * (default) for the usual keyboard behaviour.
    */
@@ -155,12 +154,17 @@ export class BrailleIme {
     if (!this.port_) {
       this.connectChromeVox_();
     }
-    this.useStandardKeyboard_ =
-        localStorage[this.USE_STANDARD_KEYBOARD_ID] === String(true);
-    this.accumulated_ = 0;
-    this.pressed_ = 0;
-    this.updateMenuItems_();
-    this.sendActiveState_();
+
+    chrome.storage.local.get(
+        [this.USE_STANDARD_KEYBOARD_ID], (store: {[key: string]: any}) => {
+          this.useStandardKeyboard_ =
+              Boolean(store[this.USE_STANDARD_KEYBOARD_ID]);
+
+          this.accumulated_ = 0;
+          this.pressed_ = 0;
+          this.updateMenuItems_();
+          this.sendActiveState_();
+        });
   }
 
   /**
@@ -208,9 +212,8 @@ export class BrailleIme {
    * @param requestId
    */
   private onKeyEvent_(
-      // @ts-ignore Unread value
-      engineID: string, event: KeyboardEvent, requestId: string): undefined {
-    var result = this.processKey_(event);
+      _engineID: string, event: KeyboardEvent, _requestId: string): undefined {
+    const result = this.processKey_(event);
     if (result === undefined || event.requestId === undefined) {
       return;
     }
@@ -236,13 +239,15 @@ export class BrailleIme {
     if (engineID === this.engineID_ &&
         itemID === this.USE_STANDARD_KEYBOARD_ID) {
       this.useStandardKeyboard_ = !this.useStandardKeyboard_;
-      localStorage[this.USE_STANDARD_KEYBOARD_ID] =
-          String(this.useStandardKeyboard_);
-      if (!this.useStandardKeyboard_) {
-        this.accumulated_ = 0;
-        this.pressed_ = 0;
-      }
-      this.updateMenuItems_();
+
+      chrome.storage.local.set(
+          {[this.USE_STANDARD_KEYBOARD_ID]: this.useStandardKeyboard_}, () => {
+            if (!this.useStandardKeyboard_) {
+              this.accumulated_ = 0;
+              this.pressed_ = 0;
+            }
+            this.updateMenuItems_();
+          });
     }
   }
 
@@ -277,7 +282,7 @@ export class BrailleIme {
       this.sendToChromeVox_({type: 'backspace', requestId: event.requestId});
       return undefined;
     }
-    var dot = this.CODE_TO_DOT_[event.code];
+    const dot = this.CODE_TO_DOT_[event.code];
     if (!dot || event.altKey || event.ctrlKey || event.shiftKey ||
         event.capsLock) {
       this.pressed_ = 0;
@@ -291,7 +296,7 @@ export class BrailleIme {
     } else if (event.type === 'keyup') {
       this.pressed_ &= ~dot;
       if (this.pressed_ === 0 && this.accumulated_ !== 0) {
-        var dotsToSend = this.accumulated_;
+        let dotsToSend = this.accumulated_;
         this.accumulated_ = 0;
         if (dotsToSend & this.SPACE) {
           if (dotsToSend !== this.SPACE) {
@@ -399,10 +404,10 @@ export class BrailleIme {
    */
   private replaceText_(
       contextID: number, deleteBefore: number, toInsert: string): void {
-    var addText = chrome.input.ime.commitText.bind(
+    const addText = chrome.input.ime.commitText.bind(
         null, {contextID, text: toInsert}, function() {});
     if (deleteBefore > 0) {
-      var deleteText = chrome.input.ime.deleteSurroundingText.bind(
+      const deleteText = chrome.input.ime.deleteSurroundingText.bind(
           null, {
             engineID: this.engineID_,
             contextID,

@@ -576,6 +576,8 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter architecture
 [Worker]     getter description
 [Worker]     getter device
+[Worker]     getter subgroupMaxSize
+[Worker]     getter subgroupMinSize
 [Worker]     getter vendor
 [Worker]     method constructor
 [Worker] interface GPUBindGroup
@@ -830,7 +832,6 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     getter maxComputeWorkgroupsPerDimension
 [Worker]     getter maxDynamicStorageBuffersPerPipelineLayout
 [Worker]     getter maxDynamicUniformBuffersPerPipelineLayout
-[Worker]     getter maxInterStageShaderComponents
 [Worker]     getter maxInterStageShaderVariables
 [Worker]     getter maxSampledTexturesPerShaderStage
 [Worker]     getter maxSamplersPerShaderStage
@@ -1197,6 +1198,7 @@ Starting worker: resources/global-interface-listing-worker.js
 [Worker]     method fill
 [Worker]     method fillRect
 [Worker]     method fillText
+[Worker]     method getContextAttributes
 [Worker]     method getImageData
 [Worker]     method getLineDash
 [Worker]     method getTransform

@@ -9,6 +9,7 @@
 
 #include "net/dns/host_resolver_manager_unittest.h"
 
+#include <algorithm>
 #include <iterator>
 #include <limits>
 #include <optional>
@@ -28,7 +29,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/rand_util.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -396,7 +396,7 @@ const DohProviderEntry& GetDohProviderEntryForTesting(
     std::string_view provider) {
   auto provider_list = DohProviderEntry::GetList();
   auto it =
-      base::ranges::find(provider_list, provider, &DohProviderEntry::provider);
+      std::ranges::find(provider_list, provider, &DohProviderEntry::provider);
   CHECK(it != provider_list.end());
   return **it;
 }
@@ -525,10 +525,17 @@ bool HostResolverManagerTest::GetLastIpv6ProbeResult() {
 
 void HostResolverManagerTest::PopulateCache(const HostCache::Key& key,
                                             IPEndPoint endpoint) {
-  resolver_->CacheResult(resolve_context_->host_cache(), key,
-                         HostCache::Entry(OK, {endpoint}, /*aliases=*/{},
-                                          HostCache::Entry::SOURCE_UNKNOWN),
-                         base::Seconds(1));
+  std::vector<IPEndPoint> endpoints = {endpoint};
+  PopulateCache(key, std::move(endpoints));
+}
+
+void HostResolverManagerTest::PopulateCache(const HostCache::Key& key,
+                                            std::vector<IPEndPoint> endpoints) {
+  resolver_->CacheResult(
+      resolve_context_->host_cache(), key,
+      HostCache::Entry(OK, std::move(endpoints), /*aliases=*/{},
+                       HostCache::Entry::SOURCE_UNKNOWN),
+      base::Seconds(1));
 }
 
 const std::pair<const HostCache::Key, HostCache::Entry>*

@@ -44,6 +44,7 @@
 #include "components/sync/base/data_type.h"
 #include "components/sync/base/features.h"
 #include "components/sync/base/time.h"
+#include "components/sync/base/user_selectable_type.h"
 #include "components/sync/engine/loopback_server/loopback_server_entity.h"
 #include "components/sync/engine/nigori/cross_user_sharing_public_private_key_pair.h"
 #include "components/sync/engine/nigori/key_derivation_params.h"
@@ -51,6 +52,8 @@
 #include "components/sync/nigori/cross_user_sharing_keys.h"
 #include "components/sync/nigori/cryptographer_impl.h"
 #include "components/sync/protocol/nigori_local_data.pb.h"
+#include "components/sync/service/sync_service.h"
+#include "components/sync/service/sync_user_settings.h"
 #include "components/sync/service/trusted_vault_synthetic_field_trial.h"
 #include "components/sync/test/fake_server_nigori_helper.h"
 #include "components/sync/test/nigori_test_utils.h"
@@ -2114,7 +2117,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientNigoriWithWebApiTest,
   EXPECT_FALSE(GetSecurityDomainsServer()->ReceivedInvalidRequest());
 
   histogram_tester.ExpectUniqueSample(
-      "Sync.TrustedVaultDownloadKeysStatus",
+      "TrustedVault.DownloadKeysStatus.ChromeSync",
       /*sample=*/trusted_vault::TrustedVaultDownloadKeysStatus::kSuccess,
       /*expected_bucket_count=*/1);
   histogram_tester.ExpectUniqueSample(
@@ -2248,33 +2251,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientNigoriWithWebApiTest,
 
 // ChromeOS doesn't have unconsented primary accounts.
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
-
-class SingleClientNigoriWithWebApiExplicitParamTest
-    : public SingleClientNigoriWithWebApiTest,
-      public testing::WithParamInterface<bool /*explicit_signin*/> {
- public:
-  SingleClientNigoriWithWebApiExplicitParamTest() = default;
-
-  bool is_explicit_signin() const { return GetParam(); }
-
-  void SignInMaybeExplicit() {
-    if (is_explicit_signin()) {
-      secondary_account_helper::SignInUnconsentedAccount(
-          GetProfile(0), &test_url_loader_factory_,
-          SyncTest::kDefaultUserEmail);
-    } else {
-      secondary_account_helper::ImplicitSignInUnconsentedAccount(
-          GetProfile(0), &test_url_loader_factory_,
-          SyncTest::kDefaultUserEmail);
-    }
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_{
-      switches::kExplicitBrowserSigninUIOnDesktop};
-};
-
-IN_PROC_BROWSER_TEST_P(SingleClientNigoriWithWebApiExplicitParamTest,
+IN_PROC_BROWSER_TEST_F(SingleClientNigoriWithWebApiTest,
                        ShouldAcceptEncryptionKeysFromTheWebInTransportMode) {
   // Mimic the account using a trusted vault passphrase.
   SetNigoriInFakeServer(BuildTrustedVaultNigoriSpecifics({kTestEncryptionKey}),
@@ -2282,19 +2259,11 @@ IN_PROC_BROWSER_TEST_P(SingleClientNigoriWithWebApiExplicitParamTest,
 
   ASSERT_TRUE(SetupClients());
 
-  SignInMaybeExplicit();
+  secondary_account_helper::SignInUnconsentedAccount(
+      GetProfile(0), &test_url_loader_factory_, SyncTest::kDefaultUserEmail);
+
   ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
   ASSERT_FALSE(GetSyncService(0)->IsSyncFeatureEnabled());
-
-  if (!is_explicit_signin()) {
-    // If signin is implicit, Chrome isn't trying to sync passwords, because the
-    // user hasn't opted in to passwords account storage. So the error shouldn't
-    // be surfaced yet.
-    ASSERT_FALSE(GetAvatarSyncErrorType(GetProfile(0)).has_value());
-
-    password_manager::features_util::OptInToAccountStorage(
-        GetProfile(0)->GetPrefs(), GetSyncService(0));
-  }
 
   // The error is now shown, because PASSWORDS is trying to sync. The data
   // type isn't active yet though due to the missing encryption keys.
@@ -2326,8 +2295,8 @@ IN_PROC_BROWSER_TEST_P(SingleClientNigoriWithWebApiExplicitParamTest,
   EXPECT_FALSE(GetAvatarSyncErrorType(GetProfile(0)).has_value());
 }
 
-IN_PROC_BROWSER_TEST_P(
-    SingleClientNigoriWithWebApiExplicitParamTest,
+IN_PROC_BROWSER_TEST_F(
+    SingleClientNigoriWithWebApiTest,
     ShouldReportDegradedTrustedVaultRecoverabilityInTransportMode) {
   base::HistogramTester histogram_tester;
 
@@ -2347,18 +2316,10 @@ IN_PROC_BROWSER_TEST_P(
       GetSecurityDomainsServer()->GetAllTrustedVaultKeys(),
       /*last_key_version=*/GetSecurityDomainsServer()->GetCurrentEpoch());
 
-  SignInMaybeExplicit();
+  secondary_account_helper::SignInUnconsentedAccount(
+      GetProfile(0), &test_url_loader_factory_, SyncTest::kDefaultUserEmail);
   ASSERT_TRUE(GetClient(0)->AwaitSyncTransportActive());
   ASSERT_FALSE(GetSyncService(0)->IsSyncFeatureEnabled());
-
-  if (!is_explicit_signin()) {
-    // Chrome isn't trying to sync passwords, because the user hasn't opted in
-    // to passwords account storage. So the error shouldn't be surfaced yet.
-    ASSERT_FALSE(GetAvatarSyncErrorType(GetProfile(0)).has_value());
-
-    password_manager::features_util::OptInToAccountStorage(
-        GetProfile(0)->GetPrefs(), GetSyncService(0));
-  }
 
   ASSERT_TRUE(TrustedVaultRecoverabilityDegradedStateChecker(GetSyncService(0),
                                                              /*degraded=*/true)
@@ -2388,13 +2349,6 @@ IN_PROC_BROWSER_TEST_P(
       /*sample=*/true, /*expected_bucket_count=*/1);
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
-    SingleClientNigoriWithWebApiExplicitParamTest,
-    ::testing::Bool(),
-    [](const testing::TestParamInfo<bool>& info) {
-      return info.param ? "Explicit" : "Implicit";
-    });
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 }  // namespace

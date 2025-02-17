@@ -16,7 +16,6 @@
 #include "base/test/metrics/user_action_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/autofill/autofill_uitest_util.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
@@ -104,7 +103,7 @@
 #include "ui/views/window/non_client_view.h"
 #include "url/url_constants.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chromeos/ash/services/multidevice_setup/public/cpp/prefs.h"
 #endif
@@ -915,7 +914,7 @@ class SaveCardBubbleViewsFullFormBrowserTestSettings
 
   void SetUpOnMainThread() override {
     SaveCardBubbleViewsFullFormBrowserTest::SetUpOnMainThread();
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     // OpenSettingsFromManageCardsPrompt() tries to retrieve the PhoneHubManager
     // keyed service, whose factory implementation relies on ChromeOS having a
     // single profile, and consequently a single service instance. Creating a
@@ -930,7 +929,7 @@ class SaveCardBubbleViewsFullFormBrowserTestSettings
     FillForm();
     SubmitFormAndWaitForCardLocalSaveBubble();
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
     ResetEventWaiterForSequence({DialogEvent::BUBBLE_SHOWN});
 #endif
 
@@ -1023,7 +1022,7 @@ IN_PROC_BROWSER_TEST_F(
 
 // On Chrome OS, the test profile starts with a primary account already set, so
 // sync-the-transport tests don't apply.
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 
 // Sets up Chrome with Sync-the-transport mode enabled, with the Wallet datatype
 // as enabled type.
@@ -1032,8 +1031,7 @@ class SaveCardBubbleViewsSyncTransportFullFormBrowserTest
  protected:
   SaveCardBubbleViewsSyncTransportFullFormBrowserTest() {
     feature_list_.InitWithFeatures(
-        /*enabled_features=*/{features::kAutofillUpstream,
-                              switches::kExplicitBrowserSigninUIOnDesktop},
+        /*enabled_features=*/{features::kAutofillUpstream},
         /*disabled_features=*/{});
   }
 
@@ -1161,7 +1159,7 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsSyncTransportFullFormBrowserTest,
       autofill_metrics::SaveCardPromptResult::kAccepted, 1);
 }
 
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 // Tests the fully-syncing state. Ensures that the Butter (i) info icon does not
 // appear for fully-syncing users.
@@ -2216,7 +2214,7 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsFullFormBrowserTest,
   FillForm();
   SubmitFormAndWaitForCardLocalSaveBubble();
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
   ResetEventWaiterForSequence({DialogEvent::BUBBLE_SHOWN});
 #endif
 
@@ -2245,7 +2243,7 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsFullFormBrowserTest,
   FillForm();
   SubmitFormAndWaitForCardLocalSaveBubble();
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
   ResetEventWaiterForSequence({DialogEvent::BUBBLE_SHOWN});
 #endif
 

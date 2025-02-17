@@ -37,8 +37,6 @@ class FakeServiceEndpointRequest : public HostResolver::ServiceEndpointRequest {
   FakeServiceEndpointRequest();
   ~FakeServiceEndpointRequest() override;
 
-  void set_start_result(int start_result) { start_result_ = start_result; }
-
   // Sets the current endpoints to `endpoints`. Previous endpoints are
   // discarded.
   FakeServiceEndpointRequest& set_endpoints(
@@ -97,6 +95,8 @@ class FakeServiceEndpointRequest : public HostResolver::ServiceEndpointRequest {
   const std::set<std::string>& GetDnsAliasResults() override;
   bool EndpointsCryptoReady() override;
   ResolveErrorInfo GetResolveErrorInfo() override;
+  const HostCache::EntryStaleness* GetStaleInfo() const override;
+  bool IsStaleWhileRefresing() const override;
   void ChangeRequestPriority(RequestPriority priority) override;
 
  private:

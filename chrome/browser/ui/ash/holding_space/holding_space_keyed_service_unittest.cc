@@ -196,7 +196,7 @@ GetExpectedTotalCountV2HistogramSamples(const HoldingSpaceModel* model) {
     result.emplace(
         base::StrCat({kTotalCountV2HistogramPrefix, ".All.FileSystemType.",
                       holding_space_util::ToString(fs_type)}),
-        std::vector<Bucket>({Bucket(/*sample=*/base::ranges::count(
+        std::vector<Bucket>({Bucket(/*sample=*/std::ranges::count(
                                         model->items(), fs_type,
                                         [&](const auto& item) {
                                           return item->file().file_system_type;
@@ -209,8 +209,8 @@ GetExpectedTotalCountV2HistogramSamples(const HoldingSpaceModel* model) {
     result.emplace(base::StrCat({kTotalCountV2HistogramPrefix, ".",
                                  holding_space_util::ToString(type)}),
                    std::vector<Bucket>({Bucket(
-                       /*sample=*/base::ranges::count(model->items(), type,
-                                                      &HoldingSpaceItem::type),
+                       /*sample=*/std::ranges::count(model->items(), type,
+                                                     &HoldingSpaceItem::type),
                        /*count=*/1u)}));
 
     // Fill "HoldingSpace.Item.TotalCountV2.{type}.FileSystemType.{fs_type}".
@@ -220,7 +220,7 @@ GetExpectedTotalCountV2HistogramSamples(const HoldingSpaceModel* model) {
                         holding_space_util::ToString(type), ".FileSystemType.",
                         holding_space_util::ToString(fs_type)}),
           std::vector<Bucket>({Bucket(
-              /*sample=*/base::ranges::count_if(
+              /*sample=*/std::ranges::count_if(
                   model->items(),
                   [&](const auto& item) {
                     return item->type() == type &&
@@ -252,7 +252,7 @@ std::map<std::string, std::vector<Bucket>> MergeHistogramSamples(
     // Case: Name *did* exist in other map.
     for (const auto& bucket : buckets) {
       auto bucket_it =
-          base::ranges::find(result_buckets, bucket.min, &Bucket::min);
+          std::ranges::find(result_buckets, bucket.min, &Bucket::min);
 
       // Case: Bucket did *not* exist in other map. Add bucket.
       if (bucket_it == result_buckets.end()) {
@@ -605,13 +605,11 @@ class HoldingSpaceKeyedServiceTest : public BrowserWithTestWindowTest {
   TestingProfile* CreateSecondaryProfile(
       std::unique_ptr<sync_preferences::PrefServiceSyncable> prefs = nullptr) {
     constexpr char kSecondaryProfileName[] = "secondary_profile";
-    constexpr char kFakeGaia2[] = "fakegaia2";
-    LogIn(kSecondaryProfileName, GaiaId(kFakeGaia2));
-    auto* profile = profile_manager()->CreateTestingProfile(
+    const GaiaId kFakeGaia2("fakegaia2");
+    LogIn(kSecondaryProfileName, kFakeGaia2);
+    return profile_manager()->CreateTestingProfile(
         kSecondaryProfileName, std::move(prefs), /*user_name=*/std::u16string(),
         /*avatar_id=*/0, GetTestingFactories());
-    OnUserProfileCreated(kSecondaryProfileName, profile);
-    return profile;
   }
 
   using PopulatePrefStoreCallback = base::OnceCallback<void(TestingPrefStore*)>;
@@ -635,7 +633,6 @@ class HoldingSpaceKeyedServiceTest : public BrowserWithTestWindowTest {
   void ActivateSecondaryProfile() {
     const std::string kSecondaryProfileName = "secondary_profile";
     const AccountId account_id(AccountId::FromUserEmail(kSecondaryProfileName));
-    GetSessionControllerClient()->AddUserSession(kSecondaryProfileName);
     GetSessionControllerClient()->SwitchActiveUser(account_id);
   }
 
@@ -768,7 +765,7 @@ class HoldingSpaceKeyedServiceWithExperimentalFeatureForGuestTest
     // needed because `profile_` is owned by the test not `TestProfileManager`.
     ash_test_helper()->prefs_provider()->ClearUnownedUserPrefs(
         AccountId::FromUserEmail(profile_->GetProfileUserName()));
-    profile_.reset();
+    profile_ = nullptr;
     HoldingSpaceKeyedServiceWithExperimentalFeatureTest::TearDown();
   }
 
@@ -795,8 +792,6 @@ class HoldingSpaceKeyedServiceWithExperimentalFeatureForGuestTest
     // Profile is created outside of TestingProfileManager management
     // to inject more factories.
     TestingProfile::Builder guest_profile_builder;
-    guest_profile_builder.SetGuestSession();
-    guest_profile_builder.SetProfileName(profile_name);
     guest_profile_builder.AddTestingFactories(
         {TestingProfile::TestingFactory{
              arc::ArcFileSystemBridge::GetFactory(),
@@ -804,9 +799,9 @@ class HoldingSpaceKeyedServiceWithExperimentalFeatureForGuestTest
          TestingProfile::TestingFactory{
              file_manager::VolumeManagerFactory::GetInstance(),
              base::BindRepeating(&BuildVolumeManager)}});
-    profile_ = guest_profile_builder.Build();
-    OnUserProfileCreated(profile_name, profile_.get());
-    return profile_.get();
+    profile_ =
+        profile_manager()->CreateGuestProfile(std::move(guest_profile_builder));
+    return profile_;
   }
 
   std::unique_ptr<Browser> CreateBrowser(
@@ -819,7 +814,7 @@ class HoldingSpaceKeyedServiceWithExperimentalFeatureForGuestTest
   }
 
  private:
-  std::unique_ptr<TestingProfile> profile_;
+  raw_ptr<TestingProfile> profile_;
 };
 
 INSTANTIATE_TEST_SUITE_P(

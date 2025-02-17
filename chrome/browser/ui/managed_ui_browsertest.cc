@@ -6,7 +6,6 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/enterprise/browser_management/management_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
@@ -33,13 +32,9 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/vector_icon_types.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ash/policy/core/device_policy_cros_browser_test.h"
 #include "ui/chromeos/devicetype_utils.h"
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "components/policy/core/common/policy_loader_lacros.h"
 #endif
 
 class ManagedUiTest : public InProcessBrowserTest {
@@ -93,7 +88,7 @@ IN_PROC_BROWSER_TEST_F(
     ShouldDisplayManagedUiWithPoliciesNotSupervisedReturnsTrueOnDesktop) {
   AddEnterpriseManagedPolicies();
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   EXPECT_FALSE(ShouldDisplayManagedUi(browser()->profile()));
 #else
   EXPECT_TRUE(ShouldDisplayManagedUi(browser()->profile()));
@@ -140,7 +135,7 @@ IN_PROC_BROWSER_TEST_F(ManagedUiTest, GetDeviceManagedUiHelpLabelEnterprise) {
   std::unique_ptr<TestingProfile> profile_supervised =
       builder_supervised.Build();
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   EXPECT_EQ(l10n_util::GetStringFUTF16(IDS_MANAGEMENT_NOT_MANAGED_SUBTITLE,
                                        ui::GetChromeOSDeviceName()),
             GetDeviceManagedUiHelpLabel(profile.get()));
@@ -178,12 +173,9 @@ IN_PROC_BROWSER_TEST_F(ManagedUiTest, GetDeviceManagedUiHelpLabelSupervised) {
   builder.SetIsSupervisedProfile();
   std::unique_ptr<TestingProfile> profile = builder.Build();
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   EXPECT_EQ(l10n_util::GetStringFUTF16(IDS_MANAGEMENT_NOT_MANAGED_SUBTITLE,
                                        ui::GetChromeOSDeviceName()),
-            GetDeviceManagedUiHelpLabel(profile.get()));
-#elif BUILDFLAG(IS_CHROMEOS_LACROS)
-  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_MANAGEMENT_NOT_MANAGED_SUBTITLE),
             GetDeviceManagedUiHelpLabel(profile.get()));
 #else
   EXPECT_EQ(l10n_util::GetStringUTF16(IDS_HELP_MANAGED_BY_YOUR_PARENT),
@@ -196,7 +188,7 @@ IN_PROC_BROWSER_TEST_F(ManagedUiTest, GetDeviceManagedUiHelpLabelNotManaged) {
   TestingProfile::Builder builder;
   std::unique_ptr<TestingProfile> profile = builder.Build();
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   EXPECT_EQ(l10n_util::GetStringFUTF16(IDS_MANAGEMENT_NOT_MANAGED_SUBTITLE,
                                        ui::GetChromeOSDeviceName()),
             GetDeviceManagedUiHelpLabel(profile.get()));
@@ -613,7 +605,7 @@ IN_PROC_BROWSER_TEST_F(ManagedUiTest, GetManagedUiWebUIIconEnterprise) {
   std::unique_ptr<TestingProfile> profile_supervised =
       builder_supervised.Build();
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   EXPECT_TRUE(GetManagedUiWebUIIcon(profile.get()).empty());
   EXPECT_TRUE(GetManagedUiWebUIIcon(profile_supervised.get()).empty());
 #else
@@ -822,7 +814,7 @@ IN_PROC_BROWSER_TEST_F(ManagedUiTest, GetManagedUiWebUILabelEnterprise) {
   }
 }
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(ManagedUiTest, GetManagementPageSubtitle) {
   TestingProfile::Builder builder;
   auto profile = builder.Build();
@@ -980,9 +972,7 @@ IN_PROC_BROWSER_TEST_F(ManagedUiTest, GetManagementPageSubtitle) {
               GetManagementPageSubtitle(profile_supervised.get()));
   }
 }
-#endif  //  !BUILDFLAG(IS_CHROMEOS_ASH)
 
-#if !BUILDFLAG(IS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(ManagedUiTest, GetManagementBubbleTitle) {
   TestingProfile::Builder builder;
   auto profile = builder.Build();
@@ -1161,7 +1151,7 @@ IN_PROC_BROWSER_TEST_F(ManagedUiTest, GetManagedUiWebUILabelSupervised) {
   }
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 using ManagedUiTestCros = policy::DevicePolicyCrosBrowserTest;
 IN_PROC_BROWSER_TEST_F(ManagedUiTestCros, GetManagedUiWebUILabel) {
   policy::ScopedManagementServiceOverrideForTesting platform_management(
@@ -1173,25 +1163,5 @@ IN_PROC_BROWSER_TEST_F(ManagedUiTestCros, GetManagedUiWebUILabel) {
       u"href=\"chrome://management\">Chrome device is "
       u"managed</a> by example.com",
       GetDeviceManagedUiWebUILabel());
-}
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-IN_PROC_BROWSER_TEST_F(ManagedUiTest, GetSessionManagerIdentity_Unmanaged) {
-  EXPECT_EQ(std::nullopt, GetSessionManagerIdentity());
-}
-
-IN_PROC_BROWSER_TEST_F(ManagedUiTest, GetSessionManagerIdentity_Managed) {
-  enterprise_management::PolicyData profile_policy_data;
-  profile_policy_data.add_user_affiliation_ids("affiliation-id-1");
-  profile_policy_data.set_managed_by("domain.com");
-  profile_policy_data.set_device_id("fake-profile-client-id");
-  profile_policy_data.set_request_token("fake-browser-dm-token");
-  policy::PolicyLoaderLacros::set_main_user_policy_data_for_testing(
-      std::move(profile_policy_data));
-
-  std::optional<std::string> identity = GetSessionManagerIdentity();
-  EXPECT_TRUE(identity.has_value());
-  EXPECT_EQ("domain.com", *identity);
 }
 #endif

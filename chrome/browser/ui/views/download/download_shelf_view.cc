@@ -6,13 +6,13 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <optional>
 #include <utility>
 
 #include "base/check.h"
 #include "base/containers/adapters.h"
 #include "base/not_fatal_until.h"
-#include "base/ranges/algorithm.h"
 #include "base/time/time.h"
 #include "chrome/browser/download/download_ui_model.h"
 #include "chrome/browser/themes/theme_properties.h"
@@ -84,14 +84,6 @@ DownloadShelfView::DownloadShelfView(Browser* browser, BrowserView* parent)
   close_button_->SizeToPreferredSize();
 
   accessible_alert_ = AddChildView(std::make_unique<views::View>());
-
-  if (gfx::Animation::ShouldRenderRichAnimation()) {
-    new_item_animation_.SetSlideDuration(base::Milliseconds(800));
-    shelf_animation_.SetSlideDuration(base::Milliseconds(120));
-  } else {
-    new_item_animation_.SetSlideDuration(base::TimeDelta());
-    shelf_animation_.SetSlideDuration(base::TimeDelta());
-  }
 
   views::ViewAccessibility& accessibility = GetViewAccessibility();
   accessibility.SetName(l10n_util::GetStringUTF16(IDS_ACCNAME_DOWNLOADS_BAR),
@@ -253,7 +245,7 @@ void DownloadShelfView::MouseMovedOutOfHost() {
 }
 
 void DownloadShelfView::AutoClose() {
-  if (base::ranges::all_of(download_views_, [](const DownloadItemView* view) {
+  if (std::ranges::all_of(download_views_, [](const DownloadItemView* view) {
         return view->model()->GetOpened();
       })) {
     mouse_watcher_.Start(GetWidget()->GetNativeWindow());
@@ -262,7 +254,7 @@ void DownloadShelfView::AutoClose() {
 
 void DownloadShelfView::RemoveDownloadView(View* view) {
   DCHECK(view);
-  const auto i = base::ranges::find(download_views_, view);
+  const auto i = std::ranges::find(download_views_, view);
   CHECK(i != download_views_.end(), base::NotFatalUntil::M130);
   download_views_.erase(i);
   RemoveChildViewT(view);
@@ -302,6 +294,8 @@ void DownloadShelfView::DoShowDownload(
   }
 
   new_item_animation_.Reset();
+  new_item_animation_.SetSlideDuration(
+      gfx::Animation::RichAnimationDuration(base::Milliseconds(800)));
   new_item_animation_.Show();
 
   if (was_empty && !shelf_animation_.is_animating() && GetVisible()) {
@@ -312,11 +306,15 @@ void DownloadShelfView::DoShowDownload(
 
 void DownloadShelfView::DoOpen() {
   SetVisible(true);
+  shelf_animation_.SetSlideDuration(
+      gfx::Animation::RichAnimationDuration(base::Milliseconds(120)));
   shelf_animation_.Show();
 }
 
 void DownloadShelfView::DoClose() {
   parent_->SetDownloadShelfVisible(false);
+  shelf_animation_.SetSlideDuration(
+      gfx::Animation::RichAnimationDuration(base::Milliseconds(120)));
   shelf_animation_.Hide();
 }
 

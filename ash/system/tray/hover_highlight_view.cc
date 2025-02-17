@@ -17,6 +17,7 @@
 #include "ash/system/tray/tri_view.h"
 #include "ash/system/tray/unfocusable_label.h"
 #include "ash/system/tray/view_click_listener.h"
+#include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -238,7 +239,8 @@ void HoverHighlightView::SetAccessibilityState(
   }
 
   if (accessibility_state_ != AccessibilityState::DEFAULT) {
-    NotifyAccessibilityEvent(ax::mojom::Event::kCheckedStateChanged, true);
+    NotifyAccessibilityEventDeprecated(ax::mojom::Event::kCheckedStateChanged,
+                                       true);
   }
 }
 
@@ -259,10 +261,10 @@ void HoverHighlightView::Reset() {
 
 void HoverHighlightView::OnSetTooltipText(const std::u16string& tooltip_text) {
   if (text_label_) {
-    text_label_->SetTooltipText(tooltip_text);
+    text_label_->SetCustomTooltipText(tooltip_text);
   }
   if (sub_text_label_) {
-    sub_text_label_->SetTooltipText(tooltip_text);
+    sub_text_label_->SetCustomTooltipText(tooltip_text);
   }
   if (left_view_) {
     DCHECK(views::IsViewClass<views::ImageView>(left_view_));
@@ -319,12 +321,10 @@ void HoverHighlightView::OnEnabledChanged() {
 }
 
 void HoverHighlightView::SetAndUpdateAccessibleDefaultAction() {
-  SetDefaultActionVerb(
-      (right_view_ && right_view_->GetVisible() &&
-       std::string(right_view_->GetClassName()).find("Button") !=
-           std::string::npos)
-          ? ax::mojom::DefaultActionVerb::kClick
-          : ax::mojom::DefaultActionVerb::kPress);
+  SetDefaultActionVerb((right_view_ && right_view_->GetVisible() &&
+                        base::Contains(right_view_->GetClassName(), "Button"))
+                           ? ax::mojom::DefaultActionVerb::kClick
+                           : ax::mojom::DefaultActionVerb::kPress);
   UpdateAccessibleDefaultActionVerb();
 }
 

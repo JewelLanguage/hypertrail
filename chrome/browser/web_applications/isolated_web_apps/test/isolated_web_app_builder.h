@@ -25,10 +25,9 @@
 #include "components/web_package/signed_web_bundles/signed_web_bundle_id.h"
 #include "components/web_package/test_support/signed_web_bundles/web_bundle_signer.h"
 #include "net/http/http_status_code.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-forward.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom-forward.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-forward.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-forward.h"
 #include "ui/gfx/geometry/size.h"
 
 class Profile;
@@ -99,14 +98,20 @@ class ManifestBuilder {
   ManifestBuilder& SetVersion(std::string_view version);
   ManifestBuilder& SetStartUrl(std::string_view start_url);
   ManifestBuilder& SetDisplayMode(blink::mojom::DisplayMode display_mode);
+
+  // Sets the display mode fallback chain. If overridden display modes are
+  // blocked, it falls back to the mode set through SetDisplayMode; see:
+  // https://github.com/WICG/display-override/blob/main/explainer.md#part-1-display_override
+  ManifestBuilder& SetDisplayModeOverride(
+      std::vector<blink::mojom::DisplayMode> display_mode_override);
   ManifestBuilder& AddIcon(std::string_view resource_path,
                            gfx::Size size,
                            std::string_view content_type);
 
   ManifestBuilder& AddPermissionsPolicyWildcard(
-      blink::mojom::PermissionsPolicyFeature feature);
+      network::mojom::PermissionsPolicyFeature feature);
   ManifestBuilder& AddPermissionsPolicy(
-      blink::mojom::PermissionsPolicyFeature feature,
+      network::mojom::PermissionsPolicyFeature feature,
       bool self,
       std::vector<url::Origin> origins);
 
@@ -130,8 +135,9 @@ class ManifestBuilder {
   std::string start_url_;
   blink::mojom::DisplayMode display_mode_ =
       blink::mojom::DisplayMode::kStandalone;
+  std::vector<blink::mojom::DisplayMode> display_mode_override_;
   std::vector<IconMetadata> icons_;
-  std::map<blink::mojom::PermissionsPolicyFeature, PermissionsPolicy>
+  std::map<network::mojom::PermissionsPolicyFeature, PermissionsPolicy>
       permissions_policy_;
   std::vector<std::pair<std::string, std::string>> protocol_handlers_;
   std::map<std::string, FileHandlerAccept> file_handlers_;
@@ -155,11 +161,12 @@ class IsolatedWebAppBuilder {
   using Headers = std::vector<Header>;
 
   // Initializes the builder with the specified manifest and some common
-  // resources such as a default text/html file at '/'.
+  // resources such as a default text/html file at '/'. The provided manifest
+  // cannot be overridden.
   //
   // The following resources will be present in the app:
   //   * /
-  //   * /manifest.webmanifest
+  //   * /.well-known/manifest.webmanifest
   //   * /icon.png
   explicit IsolatedWebAppBuilder(const ManifestBuilder& manifest_builder);
   IsolatedWebAppBuilder(const IsolatedWebAppBuilder&);
@@ -216,11 +223,19 @@ class IsolatedWebAppBuilder {
   //
   // .mock-http-headers sibling files are supported as described in
   // `AddFileFromDisk`.
+  //
+  // Files added from this method will replace any previously added files with
+  // the same path, except for /.well-known/manifest.webmanifest, which will
+  // always be set through ManifestBuilder.
   IsolatedWebAppBuilder& AddFolderFromDisk(std::string_view resource_path,
                                            const base::FilePath& folder_path);
 
   // Recursively adds the contents of a folder specified by a path relative to
   // //chrome/test/data to the app.
+  //
+  // Files added from this method will replace any previously added files with
+  // the same path, except for /.well-known/manifest.webmanifest, which will
+  // always be set through ManifestBuilder.
   IsolatedWebAppBuilder& AddFolderFromDisk(
       std::string_view resource_path,
       std::string_view chrome_test_data_relative_path);
@@ -383,7 +398,7 @@ class BundledIsolatedWebApp {
       Profile* profile,
       base::FunctionRef<IsolatedWebAppInstallSource(IwaSourceDevModeWithFileOp)>
           install_source_provider,
-      IwaSourceBundleDevFileOp file_op = kDefaultBundleDevFileOp,
+      IwaSourceBundleDevFileOp file_op = IwaSourceBundleDevFileOp::kCopy,
       InstallationTraits&&... traits);
 
   WITH_TRAITS(InstallationTraits)
@@ -394,10 +409,6 @@ class BundledIsolatedWebApp {
       IwaSourceBundleModeAndFileOp file_op =
           IwaSourceBundleModeAndFileOp::kProdModeCopy,
       InstallationTraits&&... traits);
-
-  // TODO(crbug.com/390443309): Delete this
-  base::expected<IsolatedWebAppUrlInfo, std::string> TrustBundleAndInstall(
-      Profile* profile);
 
  private:
   WITH_TRAITS(InstallationTraits)
@@ -429,16 +440,17 @@ WITH_TRAITS(InstallationTraits)
 base::expected<IsolatedWebAppUrlInfo, std::string>
 BundledIsolatedWebApp::Install(Profile* profile,
                                InstallationTraits&&... traits) {
-  return InstallWithSource(
-      profile, &IsolatedWebAppInstallSource::FromGraphicalInstaller,
-      IwaSourceBundleModeAndFileOp::kProdModeCopy, traits...);
+  return InstallWithSource(profile,
+                           &IsolatedWebAppInstallSource::FromGraphicalInstaller,
+                           IwaSourceBundleModeAndFileOp::kProdModeCopy,
+                           std::forward<InstallationTraits>(traits)...);
 }
 
 WITH_TRAITS(InstallationTraits)
 IsolatedWebAppUrlInfo BundledIsolatedWebApp::InstallChecked(
     Profile* profile,
     InstallationTraits&&... traits) {
-  auto result = Install(profile, traits...);
+  auto result = Install(profile, std::forward<InstallationTraits>(traits)...);
   CHECK(result.has_value()) << result.error();
   return *result;
 }
@@ -455,7 +467,7 @@ BundledIsolatedWebApp::InstallWithSource(
       profile,
       install_source_provider(IwaSourceProdModeWithFileOp(
           IwaSourceBundleProdModeWithFileOp(path(), file_op))),
-      traits...);
+      std::forward<InstallationTraits>(traits)...);
 }
 
 WITH_TRAITS(InstallationTraits)
@@ -470,7 +482,7 @@ BundledIsolatedWebApp::InstallWithSource(
       profile,
       install_source_provider(IwaSourceDevModeWithFileOp(
           IwaSourceBundleDevModeWithFileOp(path(), file_op))),
-      traits...);
+      std::forward<InstallationTraits>(traits)...);
 }
 
 WITH_TRAITS(InstallationTraits)
@@ -485,7 +497,7 @@ BundledIsolatedWebApp::InstallWithSource(
       profile,
       install_source_provider(
           IwaSourceBundleWithModeAndFileOp(path(), file_op)),
-      traits...);
+      std::forward<InstallationTraits>(traits)...);
 }
 #undef WITH_TRAITS
 

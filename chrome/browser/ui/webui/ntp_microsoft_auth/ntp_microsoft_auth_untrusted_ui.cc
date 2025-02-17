@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/ntp_microsoft_auth/ntp_microsoft_auth_untrusted_ui.h"
 
+#include "base/strings/stringprintf.h"
+#include "chrome/browser/new_tab_page/new_tab_page_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/new_tab_page/new_tab_page_ui.h"
 #include "chrome/common/url_constants.h"
@@ -21,11 +23,8 @@ NtpMicrosoftAuthUntrustedUIConfig::NtpMicrosoftAuthUntrustedUIConfig()
 
 bool NtpMicrosoftAuthUntrustedUIConfig::IsWebUIEnabled(
     content::BrowserContext* browser_context) {
-  return base::FeatureList::IsEnabled(
-             ntp_features::kNtpMicrosoftAuthenticationModule) &&
-         (base::FeatureList::IsEnabled(
-              ntp_features::kNtpOutlookCalendarModule) ||
-          base::FeatureList::IsEnabled(ntp_features::kNtpSharepointModule));
+  return IsMicrosoftModuleEnabledForProfile(
+      Profile::FromBrowserContext(browser_context));
 }
 
 NtpMicrosoftAuthUntrustedUI::NtpMicrosoftAuthUntrustedUI(content::WebUI* web_ui)
@@ -70,6 +69,9 @@ NtpMicrosoftAuthUntrustedUI::NtpMicrosoftAuthUntrustedUI(content::WebUI* web_ui)
   untrusted_source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ConnectSrc,
       "connect-src https://login.microsoftonline.com;");
+  untrusted_source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ChildSrc,
+      "child-src https://login.microsoftonline.com;");
 }
 
 NtpMicrosoftAuthUntrustedUI::~NtpMicrosoftAuthUntrustedUI() = default;
@@ -88,9 +90,11 @@ void NtpMicrosoftAuthUntrustedUI::BindInterface(
 void NtpMicrosoftAuthUntrustedUI::CreatePageHandler(
     mojo::PendingReceiver<
         new_tab_page::mojom::MicrosoftAuthUntrustedPageHandler>
-        pending_page_handler) {
+        pending_page_handler,
+    mojo::PendingRemote<new_tab_page::mojom::MicrosoftAuthUntrustedDocument>
+        pending_document) {
   page_handler_ = std::make_unique<MicrosoftAuthUntrustedPageHandler>(
-      std::move(pending_page_handler), profile_);
+      std::move(pending_page_handler), std::move(pending_document), profile_);
 }
 
 void NtpMicrosoftAuthUntrustedUI::ConnectToParentDocument(

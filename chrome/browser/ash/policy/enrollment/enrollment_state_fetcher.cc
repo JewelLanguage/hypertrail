@@ -89,6 +89,9 @@ std::string_view AutoEnrollmentStateToUmaSuffix(AutoEnrollmentState state) {
           [](AutoEnrollmentSystemClockSyncError) {
             return kUMASuffixConnectionError;
           },
+          [](AutoEnrollmentMachineInfoRetrievalError) {
+            return kUMASuffixMachineInfoRetrievalError;
+          },
           [](AutoEnrollmentStateKeysRetrievalError) {
             return kUMASuffixStateKeysRetrievalError;
           },
@@ -888,8 +891,10 @@ class EnrollmentStateFetcherImpl::Sequence {
     if (!device_identifiers_.Retrieve(context_.statistics_provider,
                                       context_.rlz_brand_code,
                                       context_.serial_number)) {
-      // Skip enrollment if serial number or brand code are missing.
-      return ReportResult(AutoEnrollmentResult::kNoEnrollment);
+      // Block OOBE if the serial number and/or brand code cannot be obtained.
+      // The device is likely in need of repair at this point.
+      return ReportResult(
+          base::unexpected(AutoEnrollmentMachineInfoRetrievalError{}));
     }
 
     step_started_ = base::TimeTicks::Now();
@@ -903,6 +908,11 @@ class EnrollmentStateFetcherImpl::Sequence {
     ReportStepDurationAndResetTimer(kUMASuffixOwnershipCheck);
     base::UmaHistogramEnumeration(kUMAStateDeterminationOwnershipStatus,
                                   status);
+    if (local_state_->GetBoolean(prefs::kEnrollmentRecoveryRequired)) {
+      base::UmaHistogramEnumeration(
+          kUMAStateDeterminationOwnershipStatusDuringEnrollmentRecovery,
+          status);
+    }
     if (status ==
         ash::DeviceSettingsService::OwnershipStatus::kOwnershipUnknown) {
       LOG(ERROR) << "Device ownership is unknown. Skipping enrollment";

@@ -31,22 +31,22 @@ import {assert} from 'chrome://resources/js/assert.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {OpenWindowProxyImpl} from 'chrome://resources/js/open_window_proxy.js';
+import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
+import type {PropertyValues} from 'chrome://resources/lit/v3_0/lit.rollup.js';
 import type {Uuid} from 'chrome://resources/mojo/mojo/public/mojom/base/uuid.mojom-webui.js';
-import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {getTemplate} from './app.html.js';
-import type {BuyingOptions} from './buying_options_section.js';
-import type {ComparisonTableDetails, ComparisonTableListElement} from './comparison_table_list.js';
-import type {ComparisonTableListItemClickEvent, ComparisonTableListItemDeleteEvent, ComparisonTableListItemRenameEvent} from './comparison_table_list_item.js';
-import type {ProductDescription} from './description_section.js';
+import {getCss} from './app.css.js';
+import {getHtml} from './app.html.js';
+import type {ComparisonTableListElement} from './comparison_table_list.js';
+import type {ComparisonTableListItemClickEvent, ComparisonTableListItemRenameEvent} from './comparison_table_list_item.js';
 import type {HeaderElement} from './header.js';
 import type {NewColumnSelectorElement} from './new_column_selector.js';
 import {SectionType} from './product_selection_menu.js';
 import type {ProductSelectorElement} from './product_selector.js';
 import {Router} from './router.js';
 import type {ProductSpecifications, ProductSpecificationsProduct} from './shopping_service.mojom-webui.js';
-import type {TableElement} from './table.js';
-import {isValidLowercaseUuid, type UrlListEntry} from './utils.js';
+import type {ProductDetail, TableColumn, TableElement} from './table.js';
+import {isValidLowercaseUuid} from './utils.js';
 import {WindowProxy} from './window_proxy.js';
 
 interface AggregatedProductData {
@@ -59,27 +59,15 @@ interface LoadingState {
   urlCount: number;
 }
 
-export type Content = string|ProductDescription|BuyingOptions|null;
-
-interface ProductDetail {
-  title: string|null;
-  content: Content;
-}
-
-export interface TableColumn {
-  selectedItem: UrlListEntry;
-  productDetails: ProductDetail[]|null;
-}
-
 export interface ProductSpecificationsElement {
   $: {
     comparisonTableList: ComparisonTableListElement,
+    contentContainer: HTMLElement,
     empty: HTMLElement,
     error: HTMLElement,
     errorToast: CrToastElement,
     header: HeaderElement,
     loading: HTMLElement,
-    managementContainer: HTMLElement,
     newColumnSelector: NewColumnSelectorElement,
     offlineToast: CrToastElement,
     productSelector: ProductSelectorElement,
@@ -123,7 +111,7 @@ export const COLUMN_MODIFICATION_HISTOGRAM_NAME: string =
 export const TABLE_LOAD_HISTOGRAM_NAME: string =
     'Commerce.Compare.Table.LoadStatus';
 
-enum AppState {
+export enum AppState {
   ERROR = 0,
   TABLE_EMPTY = 1,
   SYNC_SCREEN = 2,
@@ -140,13 +128,24 @@ function getProductDetails(
 
   // First add rows that don't come directly from the product specifications
   // backend. This includes the current price and buying options URL.
-  productDetails.push({
-    title: loadTimeData.getString('priceRowTitle'),
-    content: {
-      price: productInfo?.priceSummary || productInfo?.currentPrice || '',
-      jackpotUrl: product?.buyingOptionsUrl.url || '',
-    },
-  });
+  const priceRowTitle = loadTimeData.getString('priceRowTitle');
+  const price = productInfo?.priceSummary || productInfo?.currentPrice || '';
+  const jackpotUrl = product?.buyingOptionsUrl.url || '';
+  if (price || jackpotUrl) {
+    productDetails.push({
+      title: priceRowTitle,
+      content: {
+        price,
+        jackpotUrl,
+      },
+    });
+  } else {
+    // Show a dash if we don't have the price or buying options.
+    productDetails.push({
+      title: priceRowTitle,
+      content: null,
+    });
+  }
 
   // The second row is the product-level summary.
   productDetails.push({
@@ -188,9 +187,10 @@ function getProductDetails(
 }
 
 function areStatesEqual(
-    firstState: ProductSpecificationsFeatureState,
-    secondState: ProductSpecificationsFeatureState) {
-  return firstState.isSyncingTabCompare === secondState.isSyncingTabCompare &&
+    firstState: ProductSpecificationsFeatureState|null,
+    secondState: ProductSpecificationsFeatureState|null) {
+  return firstState !== null && secondState !== null &&
+      firstState.isSyncingTabCompare === secondState.isSyncingTabCompare &&
       firstState.canLoadFullPageUi === secondState.canLoadFullPageUi &&
       firstState.canManageSets === secondState.canManageSets &&
       firstState.canFetchData === secondState.canFetchData &&
@@ -218,66 +218,91 @@ export const LOADING_END_EVENT_TYPE: string = 'loading-animation-end';
 
 const LOADING_ANIMATION_SLIDE_PX = 16;
 
-export class ProductSpecificationsElement extends PolymerElement {
+export class ProductSpecificationsElement extends CrLitElement {
   static get is() {
     return 'product-specifications-app';
   }
 
-  static get template() {
-    return getTemplate();
+  static override get styles() {
+    return getCss();
   }
 
-  static get properties() {
+  static override get properties() {
     return {
-      appState_: {
-        type: Object,
-        computed: 'computeAppState_(productSpecificationsFeatureState_.*,' +
-            ' loadingState_.loading, showEmptyState_)',
-      },
-      comparisonTableDetails_: Array,
-      loadingState_: Object,
-      setName_: String,
-      showComparisonTableList_: {
-        type: Boolean,
-        computed: 'computeShowComparisonTableList_(showEmptyState_,' +
-            ' comparisonTableDetails_)',
-      },
+      appState_: {type: Object},
+      id_: {type: Object},
+      sets_: {type: Array},
+      loadingState_: {type: Object},
+      productSpecificationsFeatureState_: {type: Object},
+      setName_: {type: String},
+      showComparisonTableList_: {type: Boolean},
+      showEmptyState_: {type: Boolean},
       showTableDataUnavailableContainer_: {
         type: Boolean,
-        computed: 'computeShowTableDataUnavailableContainer_(appState_)',
-        reflectToAttribute: true,
+        reflect: true,
       },
-      tableColumns_: Object,
+      tableColumns_: {type: Object},
     };
   }
 
-  private appState_: AppState = AppState.NO_CONTENT;
-  private comparisonTableDetails_: ComparisonTableDetails[] = [];
-  private loadingState_: LoadingState = {loading: false, urlCount: 0};
-  private setName_: string|null = null;
-  private showComparisonTableList_: boolean = false;
-  private showTableDataUnavailableContainer_: boolean;
-  private tableColumns_: TableColumn[] = [];
+  protected appState_: AppState = AppState.NO_CONTENT;
+  protected id_: Uuid|null = null;
+  protected loadingState_: LoadingState = {loading: false, urlCount: 0};
+  protected productSpecificationsFeatureState_:
+      ProductSpecificationsFeatureState|null = null;
+  protected setName_: string|null = null;
+  protected sets_: ProductSpecificationsSet[] = [];
+  protected showComparisonTableList_: boolean = false;
+  private showEmptyState_: boolean = false;
+  protected showTableDataUnavailableContainer_: boolean = false;
+  protected tableColumns_: TableColumn[] = [];
 
   private callbackRouter_: PageCallbackRouter;
   private eventTracker_: EventTracker = new EventTracker();
-  private id_: Uuid|null = null;
   private isWindowFocused_: boolean = true;
   private listenerIds_: number[] = [];
   private loadingAnimationSlideDurationMs_: number = 200;
+  private contentContainerIsHidden_: boolean = false;
   private minLoadingAnimationMs_: number = 500;
   private pendingSetUpdate_: (() => void)|null = null;
-  private productSpecificationsFeatureState_: ProductSpecificationsFeatureState;
   private productSpecificationsProxy_: ProductSpecificationsBrowserProxy =
       ProductSpecificationsBrowserProxyImpl.getInstance();
   private shoppingApi_: ShoppingServiceBrowserProxy =
       ShoppingServiceBrowserProxyImpl.getInstance();
-  private showEmptyState_: boolean;
 
   constructor() {
     super();
     this.callbackRouter_ = this.productSpecificationsProxy_.getCallbackRouter();
     ColorChangeUpdater.forDocument().start();
+  }
+
+  override willUpdate(changedProperties: PropertyValues<this>) {
+    super.willUpdate(changedProperties);
+
+    const changedPrivateProperties =
+        changedProperties as Map<PropertyKey, unknown>;
+
+    if (changedPrivateProperties.has('productSpecificationsFeatureState_') ||
+        changedPrivateProperties.has('loadingState_') ||
+        changedPrivateProperties.has('showEmptyState_')) {
+      this.appState_ = this.computeAppState_();
+    }
+
+    if (changedPrivateProperties.has('appState_') ||
+        changedPrivateProperties.has('id_') ||
+        changedPrivateProperties.has('sets_') ||
+        changedPrivateProperties.has('showEmptyState_')) {
+      this.showComparisonTableList_ = this.computeShowComparisonTableList_();
+    }
+
+    if (changedPrivateProperties.has('appState_')) {
+      this.showTableDataUnavailableContainer_ =
+          this.computeShowTableDataUnavailableContainer_();
+    }
+  }
+
+  override render() {
+    return getHtml.bind(this)();
   }
 
   override async connectedCallback() {
@@ -320,6 +345,13 @@ export class ProductSpecificationsElement extends PolymerElement {
 
     window.addEventListener('blur', () => {
       this.isWindowFocused_ = false;
+    });
+
+    window.addEventListener('popstate', () => {
+      // Since we are modifying the browser's history with pushState, navigating
+      // forward or backward will display but not load the URL associated with a
+      // history entry. This forces the URL to be loaded.
+      window.location.replace(window.location.href);
     });
 
     this.eventTracker_.add(
@@ -430,30 +462,6 @@ export class ProductSpecificationsElement extends PolymerElement {
     return AppState.NO_CONTENT;
   }
 
-  private isAppStateError_() {
-    return this.appState_ === AppState.ERROR;
-  }
-
-  private isAppStateTableEmpty_() {
-    return this.appState_ === AppState.TABLE_EMPTY;
-  }
-
-  private isAppStateSyncScreen_() {
-    return this.appState_ === AppState.SYNC_SCREEN;
-  }
-
-  private isAppStateTablePopulated_() {
-    return this.appState_ === AppState.TABLE_POPULATED;
-  }
-
-  private isAppStateLoading_() {
-    return this.appState_ === AppState.LOADING;
-  }
-
-  private isAppStateNoContent_() {
-    return this.appState_ === AppState.NO_CONTENT;
-  }
-
   private computeShowTableDataUnavailableContainer_() {
     return this.appState_ === AppState.ERROR ||
         this.appState_ === AppState.TABLE_EMPTY ||
@@ -465,22 +473,27 @@ export class ProductSpecificationsElement extends PolymerElement {
       return false;
     }
 
-    return this.showEmptyState_ && this.id_ === null &&
-        this.comparisonTableDetails_.length > 0;
+    return this.showEmptyState_ && this.id_ === null && this.sets_.length > 0 &&
+        this.appState_ === AppState.TABLE_EMPTY;
   }
 
-  private canShowFooter_(
+  protected isHeaderEnabled_() {
+    return !this.loadingState_.loading && this.appState_ !== AppState.ERROR &&
+        this.appState_ !== AppState.SYNC_SCREEN;
+  }
+
+  protected canShowFooter_(
       showTableDataUnavailableContainer: boolean, appState: AppState) {
     return !(
         showTableDataUnavailableContainer || appState === AppState.NO_CONTENT);
   }
 
-  private canShowFeedbackButtons_() {
+  protected canShowFeedbackButtons_() {
     return Boolean(
         this.productSpecificationsFeatureState_?.isQualityLoggingAllowed);
   }
 
-  private showSyncSetupFlow_() {
+  protected showSyncSetupFlow_() {
     assert(this.productSpecificationsFeatureState_);
     assert(!this.productSpecificationsFeatureState_.isSyncingTabCompare);
 
@@ -494,7 +507,7 @@ export class ProductSpecificationsElement extends PolymerElement {
     this.productSpecificationsProxy_.showSyncSetupFlow();
   }
 
-  private showOfflineToast_() {
+  protected showOfflineToast_() {
     this.$.offlineToast.show();
   }
 
@@ -505,6 +518,7 @@ export class ProductSpecificationsElement extends PolymerElement {
     if (urls.length === 0) {
       this.tableColumns_ = [];
       this.updateEmptyState_(true);
+      await this.showContentContainer_();
       return;
     }
 
@@ -514,55 +528,63 @@ export class ProductSpecificationsElement extends PolymerElement {
     this.updateEmptyState_(false);
 
     const tableColumns: TableColumn[] = [];
-    if (urls.length) {
-      const {productSpecs} =
-          await this.shoppingApi_.getProductSpecificationsForUrls(
-              urls.map(url => ({url})));
-      const aggregatedDataByUrl =
-          await this.aggregateProductDataByUrl_(urls, productSpecs);
+    const {productSpecs} =
+        await this.shoppingApi_.getProductSpecificationsForUrls(
+            urls.map(url => ({url})));
+    const aggregatedDataByUrl =
+        await this.aggregateProductDataByUrl_(urls, productSpecs);
 
+    // Since it's possible we need the titles from an async source, fetch them
+    // before building the column list. Mapping the URLs with an async function
+    // runs the risk of the tasks finishing out of order and displaying the
+    // table incorrectly.
+    const titleMap: Map<string, string> = new Map();
+    await Promise.all(urls.map(async (url) => {
+      const info = aggregatedDataByUrl.get(url)?.productInfo;
+      const product = aggregatedDataByUrl.get(url)?.spec;
+      const title = product?.title || info?.title ||
+          (await this.productSpecificationsProxy_.getPageTitleFromHistory(
+               {url}))
+              .title;
+      titleMap.set(url, title);
+    }));
 
-      await Promise.all(urls.map(async (url: string) => {
-        const info = aggregatedDataByUrl.get(url)?.productInfo;
-        const product = aggregatedDataByUrl.get(url)?.spec;
-        const title = product?.title || info?.title ||
-            (await this.productSpecificationsProxy_.getPageTitleFromHistory(
-                 {url}))
-                .title;
+    urls.map((url: string, index: number) => {
+      const info = aggregatedDataByUrl.get(url)?.productInfo;
+      const product = aggregatedDataByUrl.get(url)?.spec;
 
-        tableColumns.push({
-          selectedItem: {
-            title,
-            url,
-            imageUrl: info?.imageUrl?.url || product?.imageUrl?.url || '',
-          },
-          productDetails:
-              getProductDetails(product || null, productSpecs, info || null),
-        });
-      }));
+      tableColumns[index] = {
+        selectedItem: {
+          title: titleMap.get(url) || '',
+          url: url,
+          imageUrl: info?.imageUrl?.url || product?.imageUrl?.url || '',
+        },
+        productDetails:
+            getProductDetails(product || null, productSpecs, info || null),
+      };
+    });
 
-      // Show an error message if we didn't get back any dimensions. Note that
-      // the URLs in the comparison will still be displayed as columns.
-      if (productSpecs.productDimensionMap.size === 0 && urls.length > 1) {
-        this.$.errorToast.show();
-        // If there's no product info for any of the URLs, the table is a
-        // collection of non-products.
-        if (urls.some((url) => !!aggregatedDataByUrl.get(url))) {
-          chrome.metricsPrivate.recordEnumerationValue(
-              TABLE_LOAD_HISTOGRAM_NAME,
-              CompareTableLoadStatus.FAILURE_EMPTY_TABLE_NON_PRODUCTS,
-              CompareTableLoadStatus.MAX_VALUE);
-        } else {
-          chrome.metricsPrivate.recordEnumerationValue(
-              TABLE_LOAD_HISTOGRAM_NAME,
-              CompareTableLoadStatus.FAILURE_EMPTY_TABLE_BACKEND,
-              CompareTableLoadStatus.MAX_VALUE);
-        }
+    // Show an error message if we didn't get back any dimensions. Note that
+    // the URLs in the comparison will still be displayed as columns.
+    if (productSpecs.productDimensionMap.size === 0 && urls.length > 1) {
+      this.$.errorToast.show();
+      // If there's no product info for any of the URLs, the table is a
+      // collection of non-products.
+      if (urls.some((url) => !!aggregatedDataByUrl.get(url))) {
+        chrome.metricsPrivate.recordEnumerationValue(
+            TABLE_LOAD_HISTOGRAM_NAME,
+            CompareTableLoadStatus.FAILURE_EMPTY_TABLE_NON_PRODUCTS,
+            CompareTableLoadStatus.MAX_VALUE);
       } else {
         chrome.metricsPrivate.recordEnumerationValue(
-            TABLE_LOAD_HISTOGRAM_NAME, CompareTableLoadStatus.SUCCESS,
+            TABLE_LOAD_HISTOGRAM_NAME,
+            CompareTableLoadStatus.FAILURE_EMPTY_TABLE_BACKEND,
             CompareTableLoadStatus.MAX_VALUE);
       }
+    } else {
+      chrome.metricsPrivate.recordEnumerationValue(
+          TABLE_LOAD_HISTOGRAM_NAME, CompareTableLoadStatus.SUCCESS,
+          CompareTableLoadStatus.MAX_VALUE);
     }
 
     // Enforce a minimum amount of time in the loading state to avoid it
@@ -631,6 +653,15 @@ export class ProductSpecificationsElement extends PolymerElement {
         this.id_ = null;
         return false;
       }
+
+      // Hide the content container if transitioning from the empty state. We
+      // will only show the loading state later if the set has at least one URL.
+      // The comparison table list will be hidden once the table ID is set, so
+      // we hide the content container first.
+      if (this.appState_ === AppState.TABLE_EMPTY) {
+        await this.hideContentContainer_();
+      }
+
       this.id_ = set.uuid;
       document.title = set.name;
       this.setName_ = set.name;
@@ -654,7 +685,7 @@ export class ProductSpecificationsElement extends PolymerElement {
     }
   }
 
-  private updateSetName_(e: CustomEvent<{name: string}>) {
+  protected updateSetName_(e: CustomEvent<{name: string}>) {
     if (this.isOffline_) {
       this.showOfflineToast_();
       return;
@@ -666,40 +697,7 @@ export class ProductSpecificationsElement extends PolymerElement {
     }
   }
 
-  private async fetchComparisonTableDetails_() {
-    const {sets} = await this.shoppingApi_.getAllProductSpecificationsSets();
-
-    if (sets.length === 0 && this.comparisonTableDetails_.length === 0) {
-      return;
-    }
-
-    this.comparisonTableDetails_ = await Promise.all(
-        sets.map(async set => this.createTableDetailsFromSet_(set)));
-  }
-
-  private async createTableDetailsFromSet_(set: ProductSpecificationsSet):
-      Promise<ComparisonTableDetails> {
-    // Find the first product with an image to use as the list item image.
-    let imageUrl = null;
-    for (let i = 0; i < set.urls.length; i++) {
-      const {productInfo} =
-          await this.shoppingApi_.getProductInfoForUrl(set.urls[i]);
-
-      if (productInfo.imageUrl.url) {
-        imageUrl = productInfo.imageUrl;
-        break;
-      }
-    }
-
-    return {
-      name: set.name,
-      uuid: set.uuid,
-      numUrls: set.urls.length,
-      imageUrl,
-    };
-  }
-
-  private seeAllSets_() {
+  protected seeAllSets_() {
     if (loadTimeData.getBoolean('comparisonTableListEnabled')) {
       this.productSpecificationsProxy_.showComparePage(true);
       return;
@@ -709,7 +707,7 @@ export class ProductSpecificationsElement extends PolymerElement {
         loadTimeData.getString('productSpecificationsManagementUrl'));
   }
 
-  private async onUrlAdd_(
+  protected async onUrlAdd_(
       e: CustomEvent<{url: string, urlSection: SectionType}>) {
     if (this.isOffline_) {
       this.showOfflineToast_();
@@ -748,7 +746,7 @@ export class ProductSpecificationsElement extends PolymerElement {
     }
   }
 
-  private onUrlChange_(
+  protected onUrlChange_(
       e: CustomEvent<{url: string, urlSection: SectionType, index: number}>) {
     if (this.isOffline_) {
       this.showOfflineToast_();
@@ -773,7 +771,7 @@ export class ProductSpecificationsElement extends PolymerElement {
     this.modifyUrls_(urls);
   }
 
-  private onUrlOrderUpdate_() {
+  protected onUrlOrderUpdate_() {
     if (this.isOffline_) {
       this.showOfflineToast_();
       return;
@@ -788,7 +786,7 @@ export class ProductSpecificationsElement extends PolymerElement {
     this.modifyUrls_(urls);
   }
 
-  private onUrlRemove_(e: CustomEvent<{index: number}>) {
+  protected onUrlRemove_(e: CustomEvent<{index: number}>) {
     if (this.isOffline_) {
       this.showOfflineToast_();
       return;
@@ -806,7 +804,7 @@ export class ProductSpecificationsElement extends PolymerElement {
   private modifyUrls_(urls: string[]) {
     if (this.id_) {
       this.shoppingApi_.setUrlsForProductSpecificationsSet(
-          this.id_!, urls.map(url => ({url})));
+          this.id_, urls.map(url => ({url})));
     } else {
       this.createNewSet_(urls);
     }
@@ -825,21 +823,21 @@ export class ProductSpecificationsElement extends PolymerElement {
     if (createdSet) {
       this.id_ = createdSet.uuid;
       document.title = this.setName_;
-      window.history.replaceState(undefined, '', `?id=${this.id_.value}`);
+      window.history.pushState(undefined, '', `?id=${this.id_.value}`);
     }
     this.populateTable_(urls);
   }
 
-  private getTableUrls_(): string[] {
+  protected getTableUrls_(): string[] {
     return this.tableColumns_.map(
         (column: TableColumn) => column.selectedItem.url);
   }
 
-  private isTableFull_(columnCount: number): boolean {
-    return columnCount >= loadTimeData.getInteger('maxTableSize');
+  protected isTableFull_(): boolean {
+    return this.tableColumns_.length >= loadTimeData.getInteger('maxTableSize');
   }
 
-  private async onSetUpdated_(set: ProductSpecificationsSet) {
+  private onSetUpdated_(set: ProductSpecificationsSet) {
     // If the page does not have focus, schedule the update for later in case a
     // newer update is received before the tab is focused. This prevents all
     // updates from triggering at the same time, which may cause a flicker.
@@ -853,11 +851,10 @@ export class ProductSpecificationsElement extends PolymerElement {
 
   private async updateSet_(set: ProductSpecificationsSet) {
     if (this.showEmptyState_) {
-      const tableIndex = this.comparisonTableDetails_.findIndex(
-          table => table.uuid.value === set.uuid.value);
+      const tableIndex =
+          this.sets_.findIndex(table => table.uuid.value === set.uuid.value);
       if (tableIndex !== -1) {
-        this.comparisonTableDetails_ = this.comparisonTableDetails_.toSpliced(
-            tableIndex, 1, await this.createTableDetailsFromSet_(set));
+        this.sets_ = this.sets_.toSpliced(tableIndex, 1, set);
       }
     }
 
@@ -888,6 +885,11 @@ export class ProductSpecificationsElement extends PolymerElement {
 
     if (urlSetChanged) {
       this.closeAllProductSelectionMenus_();
+
+      // Hide the content container as we might transition directly to the
+      // empty state if there are no URLs left.
+      await this.hideContentContainer_();
+
       this.populateTable_(set.urls.map(url => url.url));
     } else if (orderChanged) {
       const newCols: TableColumn[] = [];
@@ -896,7 +898,9 @@ export class ProductSpecificationsElement extends PolymerElement {
         const existingIndex = tableUrls.indexOf(setUrl.url);
         assert(existingIndex >= 0, 'Did not find column to reorder!');
 
-        newCols.push(this.tableColumns_[existingIndex]);
+        const col = this.tableColumns_[existingIndex];
+        assert(col);
+        newCols.push(col);
       }
 
       this.tableColumns_ = newCols;
@@ -909,12 +913,11 @@ export class ProductSpecificationsElement extends PolymerElement {
     }
 
     if (this.showEmptyState_) {
-      this.comparisonTableDetails_ = this.comparisonTableDetails_.filter(
-          table => table.uuid.value !== id.value);
+      this.sets_ = this.sets_.filter(table => table.uuid.value !== id.value);
     }
   }
 
-  private onFeedbackSelectedOptionChanged_(
+  protected onFeedbackSelectedOptionChanged_(
       e: CustomEvent<{value: CrFeedbackOption}>) {
     switch (e.detail.value) {
       case CrFeedbackOption.UNSPECIFIED:
@@ -932,21 +935,25 @@ export class ProductSpecificationsElement extends PolymerElement {
     }
   }
 
-  private async onSetAdded_(set: ProductSpecificationsSet) {
+  private onSetAdded_(set: ProductSpecificationsSet) {
     if (this.showEmptyState_) {
-      this.comparisonTableDetails_ =
-          [await this.createTableDetailsFromSet_(set)].concat(
-              this.comparisonTableDetails_);
+      this.sets_ = [set].concat(this.sets_);
     }
   }
 
-  private getDisclaimerText_(): string {
+  protected getDisclaimerText_(): string {
     return loadTimeData.getStringF(
         'experimentalFeatureDisclaimer', loadTimeData.getString('userEmail'));
   }
 
-  private async fadeAndSlideOutManagementContainer_() {
-    await this.$.managementContainer
+  // Hide the content container with an animation if not already hidden.
+  private async hideContentContainer_() {
+    if (this.contentContainerIsHidden_) {
+      return;
+    }
+
+    this.contentContainerIsHidden_ = true;
+    await this.$.contentContainer
         .animate(
             [
               {opacity: 1, transform: 'translateY(0px)'},
@@ -963,8 +970,13 @@ export class ProductSpecificationsElement extends PolymerElement {
         .finished;
   }
 
-  private async fadeAndSlideInManagementContainer_() {
-    await this.$.managementContainer
+  // Show the content container with an animation if not already shown.
+  private async showContentContainer_() {
+    if (!this.contentContainerIsHidden_) {
+      return;
+    }
+
+    await this.$.contentContainer
         .animate(
             [
               {
@@ -979,6 +991,7 @@ export class ProductSpecificationsElement extends PolymerElement {
               fill: 'forwards',
             })
         .finished;
+    this.contentContainerIsHidden_ = false;
   }
 
   // Resolves upon updating the loading state.
@@ -995,61 +1008,55 @@ export class ProductSpecificationsElement extends PolymerElement {
     }
 
     return new Promise<void>(async resolve => {
-      await this.fadeAndSlideOutManagementContainer_();
+      await this.hideContentContainer_();
       this.loadingState_ = {loading: true, urlCount};
       resolve();
-      await this.fadeAndSlideInManagementContainer_();
+      await this.showContentContainer_();
       this.dispatchLoadingStartEvent_();
     });
   }
 
   private async exitLoadingState_() {
-    await this.fadeAndSlideOutManagementContainer_();
+    await this.hideContentContainer_();
     this.loadingState_ = {loading: false, urlCount: 0};
-    await this.fadeAndSlideInManagementContainer_();
+    await this.showContentContainer_();
     this.dispatchLoadingEndEvent_();
   }
 
   private dispatchLoadingStartEvent_() {
-    this.dispatchEvent(new CustomEvent(
-        LOADING_START_EVENT_TYPE, {bubbles: true, composed: true}));
+    this.fire(LOADING_START_EVENT_TYPE);
   }
 
   private dispatchLoadingEndEvent_() {
-    this.dispatchEvent(new CustomEvent(
-        LOADING_END_EVENT_TYPE, {bubbles: true, composed: true}));
+    this.fire(LOADING_END_EVENT_TYPE);
   }
 
-  private updateEmptyState_(shouldShow: boolean) {
+  private async updateEmptyState_(shouldShow: boolean) {
     this.showEmptyState_ = shouldShow;
+    this.requestUpdate();
 
     // If we show the empty state and there are no comparison tables, try to
     // fetch them.
     if (loadTimeData.getBoolean('comparisonTableListEnabled') &&
-        this.showEmptyState_ && this.comparisonTableDetails_.length === 0) {
-      this.fetchComparisonTableDetails_();
+        this.showEmptyState_ && this.sets_.length === 0) {
+      const {sets} = await this.shoppingApi_.getAllProductSpecificationsSets();
+      this.sets_ = sets;
     }
   }
 
-  private onComparisonTableListItemClick_(
+  protected onComparisonTableListItemClick_(
       event: ComparisonTableListItemClickEvent) {
-    window.history.replaceState(
-        undefined, '', `?id=${event.detail.uuid.value}`);
+    window.history.pushState(undefined, '', `?id=${event.detail.uuid.value}`);
     this.loadSet_(event.detail.uuid);
   }
 
-  private onComparisonTableListItemRename_(
+  protected onComparisonTableListItemRename_(
       event: ComparisonTableListItemRenameEvent) {
     this.shoppingApi_.setNameForProductSpecificationsSet(
         event.detail.uuid, event.detail.name);
   }
 
-  private onComparisonTableListItemDelete_(
-      event: ComparisonTableListItemDeleteEvent) {
-    this.deleteSet_(event.detail.uuid);
-  }
-
-  private onHeaderMenuDeleteClick_() {
+  protected onHeaderMenuDeleteClick_() {
     this.deleteSet_();
   }
 

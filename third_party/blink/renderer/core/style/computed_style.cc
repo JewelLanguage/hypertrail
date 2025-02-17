@@ -30,7 +30,6 @@
 #include "base/memory/values_equivalent.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/clamped_math.h"
-#include "base/ranges/algorithm.h"
 #include "build/build_config.h"
 #include "cc/input/overscroll_behavior.h"
 #include "cc/paint/paint_flags.h"
@@ -336,13 +335,6 @@ bool ComputedStyle::NeedsReattachLayoutTree(const Element& element,
   if (!old_style->ScrollMarkerGroupEqual(*new_style)) {
     return true;
   }
-  // line-clamping is currently only handled by LayoutDeprecatedFlexibleBox,
-  // so that if line-clamping changes then the LayoutObject needs to be
-  // recreated.
-  if (old_style->IsDeprecatedFlexboxUsingFlexLayout() !=
-      new_style->IsDeprecatedFlexboxUsingFlexLayout()) {
-    return true;
-  }
   // We need to perform a reattach if a "display: layout(foo)" has changed to a
   // "display: layout(bar)". This is because one custom layout could be
   // registered and the other may not, affecting the box-tree construction.
@@ -432,6 +424,9 @@ ComputedStyle::ComputeDifferenceIgnoringInheritedFirstLineStyle(
   if (old_style.Display() != new_style.Display() &&
       (old_style.BlockifiesChildren() != new_style.BlockifiesChildren() ||
        old_style.InlinifiesChildren() != new_style.InlinifiesChildren())) {
+    return Difference::kDescendantAffecting;
+  }
+  if (old_style.ScrollMarkerGroupNone() != new_style.ScrollMarkerGroupNone()) {
     return Difference::kDescendantAffecting;
   }
   // TODO(crbug.com/1213888): Only recalc affected descendants.
@@ -1336,18 +1331,18 @@ static bool IsWillChangeCompositingHintProperty(CSSPropertyID property) {
 }
 
 bool ComputedStyle::HasWillChangeCompositingHint() const {
-  return base::ranges::any_of(WillChangeProperties(),
-                              IsWillChangeCompositingHintProperty);
+  return std::ranges::any_of(WillChangeProperties(),
+                             IsWillChangeCompositingHintProperty);
 }
 
 bool ComputedStyle::HasWillChangeTransformHint() const {
-  return base::ranges::any_of(WillChangeProperties(),
-                              IsWillChangeTransformHintProperty);
+  return std::ranges::any_of(WillChangeProperties(),
+                             IsWillChangeTransformHintProperty);
 }
 
 bool ComputedStyle::HasWillChangeHintForAnyTransformProperty() const {
-  return base::ranges::any_of(WillChangeProperties(),
-                              IsWillChangeHintForAnyTransformProperty);
+  return std::ranges::any_of(WillChangeProperties(),
+                             IsWillChangeHintForAnyTransformProperty);
 }
 
 bool ComputedStyle::RequireTransformOrigin(
@@ -1848,7 +1843,7 @@ const AtomicString& ComputedStyle::HyphenString() const {
                       (base::span_from_ref(kHyphenMinusCharacter)));
   DEFINE_STATIC_LOCAL(AtomicString, hyphen_string,
                       (base::span_from_ref(kHyphenCharacter)));
-  const SimpleFontData* primary_font = GetFont().PrimaryFont();
+  const SimpleFontData* primary_font = GetFont()->PrimaryFont();
   DCHECK(primary_font);
   return primary_font && primary_font->GlyphForCharacter(kHyphenCharacter)
              ? hyphen_string
@@ -2074,7 +2069,7 @@ FontBaseline ComputedStyle::GetFontBaseline() const {
 }
 
 FontHeight ComputedStyle::GetFontHeight(FontBaseline baseline) const {
-  if (const SimpleFontData* font_data = GetFont().PrimaryFont()) {
+  if (const SimpleFontData* font_data = GetFont()->PrimaryFont()) {
     return font_data->GetFontMetrics().GetFontHeight(baseline);
   }
   return FontHeight();
@@ -2347,7 +2342,7 @@ float ComputedStyle::ComputedLineHeight(const Length& lh, const Font& font) {
 }
 
 float ComputedStyle::ComputedLineHeight() const {
-  return ComputedLineHeight(LineHeight(), GetFont());
+  return ComputedLineHeight(LineHeight(), *GetFont());
 }
 
 LayoutUnit ComputedStyle::ComputedLineHeightAsFixed(const Font& font) const {
@@ -2369,7 +2364,7 @@ LayoutUnit ComputedStyle::ComputedLineHeightAsFixed(const Font& font) const {
 }
 
 LayoutUnit ComputedStyle::ComputedLineHeightAsFixed() const {
-  return ComputedLineHeightAsFixed(GetFont());
+  return ComputedLineHeightAsFixed(*GetFont());
 }
 
 StyleColor ComputedStyle::DecorationColorIncludingFallback(
@@ -2649,10 +2644,10 @@ blink::Color ComputedStyle::GetInternalForcedVisitedCurrentColor(
 
 bool ComputedStyle::ShadowListHasCurrentColor(const ShadowList* shadow_list) {
   return shadow_list &&
-         base::ranges::any_of(shadow_list->Shadows(),
-                              [](const ShadowData& shadow) {
-                                return shadow.GetColor().IsCurrentColor();
-                              });
+         std::ranges::any_of(shadow_list->Shadows(),
+                             [](const ShadowData& shadow) {
+                               return shadow.GetColor().IsCurrentColor();
+                             });
 }
 
 const AtomicString& ComputedStyle::ListStyleStringValue() const {
@@ -3048,21 +3043,17 @@ ComputedStyleBuilder::MutableNonInheritedVariables() {
   return *variables;
 }
 
-void ComputedStyleBuilder::CopyInheritedVariablesFrom(
+void ComputedStyleBuilder::SetInheritedVariablesFrom(
     const ComputedStyle* style) {
-  if (style->InheritedVariablesInternal()) {
-    has_own_inherited_variables_ = false;
-    MutableInheritedVariablesInternal() = style->InheritedVariablesInternal();
-  }
+  MutableInheritedVariablesInternal() = style->InheritedVariablesInternal();
+  has_own_inherited_variables_ = false;
 }
 
-void ComputedStyleBuilder::CopyNonInheritedVariablesFrom(
+void ComputedStyleBuilder::SetNonInheritedVariablesFrom(
     const ComputedStyle* style) {
-  if (style->NonInheritedVariablesInternal()) {
-    has_own_non_inherited_variables_ = false;
-    MutableNonInheritedVariablesInternal() =
-        style->NonInheritedVariablesInternal();
-  }
+  MutableNonInheritedVariablesInternal() =
+      style->NonInheritedVariablesInternal();
+  has_own_non_inherited_variables_ = false;
 }
 
 STATIC_ASSERT_ENUM(cc::OverscrollBehavior::Type::kAuto,

@@ -157,11 +157,12 @@ IdentityManager::CreateAccessTokenFetcherForAccount(
     const std::string& oauth_consumer_name,
     const ScopeSet& scopes,
     AccessTokenFetcher::TokenCallback callback,
-    AccessTokenFetcher::Mode mode) {
+    AccessTokenFetcher::Mode mode,
+    AccessTokenFetcher::Source token_source) {
   return std::make_unique<AccessTokenFetcher>(
       account_id, oauth_consumer_name, token_service_.get(),
       primary_account_manager_.get(), scopes, std::move(callback), mode,
-      require_sync_consent_for_scope_verification_);
+      require_sync_consent_for_scope_verification_, token_source);
 }
 
 std::unique_ptr<AccessTokenFetcher>
@@ -177,6 +178,16 @@ IdentityManager::CreateAccessTokenFetcherForAccount(
       primary_account_manager_.get(), url_loader_factory, scopes,
       std::move(callback), mode, require_sync_consent_for_scope_verification_);
 }
+
+#if BUILDFLAG(IS_IOS)
+void IdentityManager::GetRefreshTokenFromDevice(
+    const CoreAccountId& account_id,
+    const OAuth2AccessTokenManager::ScopeSet& scopes,
+    AccessTokenFetcher::TokenCallback callback) {
+  GetTokenService()->GetRefreshTokenFromDevice(account_id, scopes,
+                                               std::move(callback));
+}
+#endif
 
 void IdentityManager::RemoveAccessTokenFromCache(
     const CoreAccountId& account_id,
@@ -224,6 +235,13 @@ bool IdentityManager::HasAccountWithRefreshToken(
     const CoreAccountId& account_id) const {
   return token_service_->RefreshTokenIsAvailable(account_id);
 }
+
+#if BUILDFLAG(IS_IOS)
+bool IdentityManager::HasAccountWithRefreshTokenOnDevice(
+    const CoreAccountId& account_id) const {
+  return token_service_->RefreshTokenIsAvailableOnDevice(account_id);
+}
+#endif
 
 bool IdentityManager::AreRefreshTokensLoaded() const {
   return token_service_->AreAllCredentialsLoaded();
@@ -571,6 +589,13 @@ void IdentityManager::OnAuthErrorChanged(
 void IdentityManager::OnAccountsOnDeviceChanged() {
   for (auto& observer : observer_list_) {
     observer.OnAccountsOnDeviceChanged();
+  }
+}
+
+void IdentityManager::OnAccountOnDeviceUpdated(
+    const AccountInfo& account_info) {
+  for (auto& observer : observer_list_) {
+    observer.OnExtendedAccountInfoUpdated(account_info);
   }
 }
 #endif

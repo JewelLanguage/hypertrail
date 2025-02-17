@@ -10,7 +10,6 @@
 
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -388,6 +387,7 @@ void MediaSessionImpl::MediaPictureInPictureChanged(
     bool is_picture_in_picture) {
   RebuildAndNotifyMediaSessionInfoChanged();
   RebuildAndNotifyActionsChanged();
+  uma_helper_.OnMediaPictureInPictureChanged(is_picture_in_picture);
 }
 
 void MediaSessionImpl::RenderFrameHostStateChanged(
@@ -1567,6 +1567,7 @@ void MediaSessionImpl::OnServiceCreated(MediaSessionServiceImpl* service) {
 }
 
 void MediaSessionImpl::OnServiceDestroyed(MediaSessionServiceImpl* service) {
+  uma_helper_.OnServiceDestroyed();
   services_.erase(service->GetRenderFrameHostId());
 
   if (routed_service_ == service)
@@ -1810,6 +1811,14 @@ void MediaSessionImpl::RebuildAndNotifyActionsChanged() {
       routed_service_ ? routed_service_->actions()
                       : std::set<media_session::mojom::MediaSessionAction>();
 
+  // Picture-in-Picture window controller needs to know only actions that are
+  // handled by the website.
+  if (auto* pip_window_controller_ =
+          VideoPictureInPictureWindowControllerImpl::FromWebContents(
+              web_contents())) {
+    pip_window_controller_->MediaSessionActionsChanged(actions);
+  }
+
   // If we are controllable then we should always add these actions as we can
   // support them by directly interacting with the players underneath.
   if (IsControllable()) {
@@ -1860,15 +1869,6 @@ void MediaSessionImpl::RebuildAndNotifyActionsChanged() {
       IsAudioOutputDeviceSwitchingSupported()) {
     actions.insert(
         media_session::mojom::MediaSessionAction::kSwitchAudioDevice);
-  }
-
-  // Notify the VideoPictureInPictureWindowControllerImpl regardless of whether
-  // or not the actions have actually changed, since there may or may not have
-  // been a picture-in-picture window last time we updated.
-  if (auto* pip_window_controller_ =
-          VideoPictureInPictureWindowControllerImpl::FromWebContents(
-              web_contents())) {
-    pip_window_controller_->MediaSessionActionsChanged(actions);
   }
 
   if (actions_ == actions)
@@ -2039,7 +2039,7 @@ std::string MediaSessionImpl::GetSharedAudioOutputDeviceId() const {
 
   auto& first = normal_players_.begin()->first;
   const auto& first_id = first.observer->GetAudioOutputSinkId(first.player_id);
-  if (base::ranges::all_of(normal_players_, [&first_id](const auto& player) {
+  if (std::ranges::all_of(normal_players_, [&first_id](const auto& player) {
         return player.first.observer->GetAudioOutputSinkId(
                    player.first.player_id) == first_id;
       })) {
@@ -2053,7 +2053,7 @@ bool MediaSessionImpl::IsAudioOutputDeviceSwitchingSupported() const {
   if (normal_players_.empty())
     return false;
 
-  return base::ranges::all_of(normal_players_, [](const auto& player) {
+  return std::ranges::all_of(normal_players_, [](const auto& player) {
     return player.first.observer->SupportsAudioOutputDeviceSwitching(
         player.first.player_id);
   });

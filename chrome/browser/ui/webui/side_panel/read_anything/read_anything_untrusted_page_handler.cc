@@ -67,13 +67,16 @@
 #include "pdf/pdf_features.h"
 #endif  // BUILDFLAG(ENABLE_PDF)
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "ash/public/cpp/session/session_controller.h"
 #include "chromeos/ash/components/language_packs/language_pack_manager.h"
 using ash::language_packs::LanguagePackManager;
 using ash::language_packs::PackResult;
 #else
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/component_updater/wasm_tts_engine_component_installer.h"
 #include "chrome/common/extensions/extension_constants.h"
+#include "components/update_client/crx_update_item.h"
 #endif
 
 using content::TtsController;
@@ -103,7 +106,7 @@ int GetNormalizedFontScale(double font_scale) {
          (1 / kReadAnythingFontScaleIncrement);
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 
 InstallationState GetInstallationStateFromStatusCode(
     const PackResult::StatusCode status_code) {
@@ -313,9 +316,16 @@ ReadAnythingUntrustedPageHandler::ReadAnythingUntrustedPageHandler(
   ax_action_handler_observer_.Observe(
       ui::AXActionHandlerRegistry::GetInstance());
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
   content::TtsController::GetInstance()->AddUpdateLanguageStatusDelegate(this);
-  extensions::ExtensionRegistry::Get(profile_)->AddObserver(this);
+
+  if (features::IsWasmTtsComponentUpdaterEnabled()) {
+    component_updater_observation_.Observe(
+        g_browser_process->component_updater());
+  } else {
+    extensions::ExtensionRegistry::Get(profile_)->AddObserver(this);
+  }
+
 #endif
   side_panel_controller_ = ReadAnythingSidePanelControllerGlue::FromWebContents(
                                web_ui_->GetWebContents())
@@ -392,7 +402,7 @@ ReadAnythingUntrustedPageHandler::ReadAnythingUntrustedPageHandler(
   SetUpPdfObserver();
   OnActiveAXTreeIDChanged();
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   auto* session_controller = ash::SessionController::Get();
   if (session_controller) {
     session_controller->AddObserver(this);
@@ -401,7 +411,7 @@ ReadAnythingUntrustedPageHandler::ReadAnythingUntrustedPageHandler(
 }
 
 ReadAnythingUntrustedPageHandler::~ReadAnythingUntrustedPageHandler() {
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
   content::TtsController::GetInstance()->RemoveUpdateLanguageStatusDelegate(
       this);
   extensions::ExtensionRegistry::Get(profile_)->RemoveObserver(this);
@@ -420,7 +430,7 @@ ReadAnythingUntrustedPageHandler::~ReadAnythingUntrustedPageHandler() {
         weak_factory_.GetWeakPtr());
   }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   auto* session_controller = ash::SessionController::Get();
   if (session_controller) {
     session_controller->RemoveObserver(this);
@@ -490,7 +500,7 @@ void ReadAnythingUntrustedPageHandler::GetDependencyParserModel(
   OnDependencyParserModelFileAvailabilityChanged(std::move(callback), true);
 }
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 void ReadAnythingUntrustedPageHandler::OnUpdateLanguageStatus(
     const std::string& language,
     content::LanguageInstallStatus install_status,
@@ -510,6 +520,21 @@ void ReadAnythingUntrustedPageHandler::OnExtensionReady(
   }
   page_->OnTtsEngineInstalled();
 }
+
+// component_updater::ServiceObserver:
+void ReadAnythingUntrustedPageHandler::OnEvent(
+    const update_client::CrxUpdateItem& item) {
+  if (item.id !=
+      component_updater::WasmTtsEngineComponentInstallerPolicy::GetId()) {
+    return;
+  }
+
+  // Once the component has been updated, send a signal so reading mode
+  // can check for new voices.
+  if (item.state == update_client::ComponentState::kUpdated) {
+    page_->OnTtsEngineInstalled();
+  }
+}
 #endif
 
 void ReadAnythingUntrustedPageHandler::OnGetVoicePackInfo(
@@ -519,7 +544,7 @@ void ReadAnythingUntrustedPageHandler::OnGetVoicePackInfo(
 
 void ReadAnythingUntrustedPageHandler::GetVoicePackInfo(
     const std::string& language) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   LanguagePackManager::GetPackState(
       ash::language_packs::kTtsFeatureId, language,
       base::BindOnce(
@@ -535,7 +560,7 @@ void ReadAnythingUntrustedPageHandler::GetVoicePackInfo(
 
 void ReadAnythingUntrustedPageHandler::InstallVoicePack(
     const std::string& language) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   LanguagePackManager::InstallPack(
       ash::language_packs::kTtsFeatureId, language,
       base::BindOnce(
@@ -551,7 +576,7 @@ void ReadAnythingUntrustedPageHandler::InstallVoicePack(
 
 void ReadAnythingUntrustedPageHandler::UninstallVoice(
     const std::string& language) {
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
   TtsController::GetInstance()->UninstallLanguageRequest(
       profile_, language, string_constants::kReadingModeName,
       static_cast<int>(tts_engine_events::TtsClientSource::CHROMEFEATURE),
@@ -947,7 +972,7 @@ void ReadAnythingUntrustedPageHandler::
 }
 
 // ash::SessionObserver
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 void ReadAnythingUntrustedPageHandler::OnLockStateChanged(bool locked) {
   if (locked) {
     page_->OnDeviceLocked();

@@ -570,8 +570,7 @@ void TipsNotificationClient::ShowSignin(Browser* browser) {
   ShowSigninCommand* command = [[ShowSigninCommand alloc]
       initWithOperation:operation
                identity:nil
-            accessPoint:signin_metrics::AccessPoint::
-                            ACCESS_POINT_TIPS_NOTIFICATION
+            accessPoint:signin_metrics::AccessPoint::kTipsNotification
             promoAction:signin_metrics::PromoAction::
                             PROMO_ACTION_NO_SIGNIN_PROMO
              completion:nil];
@@ -771,7 +770,7 @@ void TipsNotificationClient::ClassifyUser() {
 }
 
 bool TipsNotificationClient::HasIdentitiesOnDevice(ProfileIOS* profile) const {
-  if (AreSeparateProfilesForManagedAccountsEnabled()) {
+  if (IsUseAccountListFromIdentityManagerEnabled()) {
     return !IdentityManagerFactory::GetForProfile(profile)
                 ->GetAccountsOnDevice()
                 .empty();

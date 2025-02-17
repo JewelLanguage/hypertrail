@@ -10,7 +10,6 @@
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -371,9 +370,8 @@ IN_PROC_BROWSER_TEST_F(
   ASSERT_FALSE(IsWindowFullscreenForTabOrPending());
 }
 
-// TODO(crbug.com/40779265) Flaky on Linux-ozone, Lacros and MacOS.
-#if (BUILDFLAG(IS_LINUX) && BUILDFLAG(IS_OZONE)) || \
-    BUILDFLAG(IS_CHROMEOS_LACROS) || BUILDFLAG(IS_MAC)
+// TODO(crbug.com/40779265) Flaky on Linux-ozone and MacOS.
+#if (BUILDFLAG(IS_LINUX) && BUILDFLAG(IS_OZONE)) || BUILDFLAG(IS_MAC)
 #define MAYBE_TabEntersPresentationModeFromWindowed \
   DISABLED_TabEntersPresentationModeFromWindowed
 #else
@@ -598,7 +596,7 @@ IN_PROC_BROWSER_TEST_F(FullscreenControllerInteractiveTest,
 }
 
 // Tests pointer lock is exited on page navigation.
-#if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) && defined(USE_AURA)
+#if BUILDFLAG(IS_LINUX) && defined(USE_AURA)
 // https://crbug.com/1191964
 #define MAYBE_TestTabExitsPointerLockOnNavigation \
   DISABLED_TestTabExitsPointerLockOnNavigation
@@ -625,7 +623,7 @@ IN_PROC_BROWSER_TEST_F(FullscreenControllerInteractiveTest,
 }
 
 // Tests pointer lock is exited when navigating back.
-#if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) && defined(USE_AURA)
+#if BUILDFLAG(IS_LINUX) && defined(USE_AURA)
 // https://crbug.com/1192097
 #define MAYBE_TestTabExitsPointerLockOnGoBack \
   DISABLED_TestTabExitsPointerLockOnGoBack
@@ -653,8 +651,7 @@ IN_PROC_BROWSER_TEST_F(FullscreenControllerInteractiveTest,
   ASSERT_FALSE(IsPointerLocked());
 }
 
-#if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) && \
-        defined(USE_AURA) ||                                  \
+#if BUILDFLAG(IS_LINUX) && defined(USE_AURA) || \
     BUILDFLAG(IS_WIN) && defined(NDEBUG)
 // TODO(erg): linux_aura bringup: http://crbug.com/163931
 // Test is flaky on Windows: https://crbug.com/1124492
@@ -885,7 +882,7 @@ class AutomaticFullscreenTest : public FullscreenControllerInteractiveTest,
       std::unique_ptr<web_app::ScopedBundledIsolatedWebApp> app =
           web_app::IsolatedWebAppBuilder(
               web_app::ManifestBuilder().AddPermissionsPolicyWildcard(
-                  blink::mojom::PermissionsPolicyFeature::kFullscreen))
+                  network::mojom::PermissionsPolicyFeature::kFullscreen))
               .BuildBundle();
       app->TrustSigningKey();
       web_app::IsolatedWebAppUrlInfo url_info =
@@ -1147,13 +1144,13 @@ INSTANTIATE_TEST_SUITE_P(, AutomaticFullscreenTest, ::testing::Bool());
 // Tests must run in series to manage virtual displays on supported platforms.
 // Use 2+ physical displays to run locally with --gtest_also_run_disabled_tests.
 // See: //docs/ui/display/multiscreen_testing.md
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 #define MAYBE_MultiScreenFullscreenControllerInteractiveTest \
   MultiScreenFullscreenControllerInteractiveTest
 #else
 #define MAYBE_MultiScreenFullscreenControllerInteractiveTest \
   DISABLED_MultiScreenFullscreenControllerInteractiveTest
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 class MAYBE_MultiScreenFullscreenControllerInteractiveTest
     : public FullscreenControllerInteractiveTest {
  public:
@@ -1315,7 +1312,7 @@ class MAYBE_MultiScreenFullscreenControllerInteractiveTest
 // window server's async handling of the fullscreen window state may transition
 // the window into fullscreen on the actual (non-mocked) display bounds before
 // or after the window bounds checks, yielding flaky results.
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
 #define MAYBE_SeparateDisplay SeparateDisplay
 #else
 #define MAYBE_SeparateDisplay DISABLED_SeparateDisplay
@@ -1347,7 +1344,7 @@ IN_PROC_BROWSER_TEST_F(MAYBE_MultiScreenFullscreenControllerInteractiveTest,
 // window server's async handling of the fullscreen window state may transition
 // the window into fullscreen on the actual (non-mocked) display bounds before
 // or after the window bounds checks, yielding flaky results.
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
 #define MAYBE_SeparateDisplayMaximized SeparateDisplayMaximized
 #else
 #define MAYBE_SeparateDisplayMaximized DISABLED_SeparateDisplayMaximized
@@ -1395,7 +1392,7 @@ IN_PROC_BROWSER_TEST_F(MAYBE_MultiScreenFullscreenControllerInteractiveTest,
 // window server's async handling of the fullscreen window state may transition
 // the window into fullscreen on the actual (non-mocked) display bounds before
 // or after the window bounds checks, yielding flaky results.
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
 #define MAYBE_SameDisplayAndSwap SameDisplayAndSwap
 #else
 #define MAYBE_SameDisplayAndSwap DISABLED_SameDisplayAndSwap
@@ -1431,7 +1428,7 @@ IN_PROC_BROWSER_TEST_F(MAYBE_MultiScreenFullscreenControllerInteractiveTest,
 // window server's async handling of the fullscreen window state may transition
 // the window into fullscreen on the actual (non-mocked) display bounds before
 // or after the window bounds checks, yielding flaky results.
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
 #define MAYBE_SameDisplayAndSwapMaximized SameDisplayAndSwapMaximized
 #else
 #define MAYBE_SameDisplayAndSwapMaximized DISABLED_SameDisplayAndSwapMaximized
@@ -1483,7 +1480,7 @@ IN_PROC_BROWSER_TEST_F(MAYBE_MultiScreenFullscreenControllerInteractiveTest,
 // window server's async handling of the fullscreen window state may transition
 // the window into fullscreen on the actual (non-mocked) display bounds before
 // or after the window bounds checks, yielding flaky results.
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
 #define MAYBE_BrowserFullscreenContentFullscreenSwapDisplay \
   BrowserFullscreenContentFullscreenSwapDisplay
 #else
@@ -1550,7 +1547,7 @@ IN_PROC_BROWSER_TEST_F(MAYBE_MultiScreenFullscreenControllerInteractiveTest,
 // window server's async handling of the fullscreen window state may transition
 // the window into fullscreen on the actual (non-mocked) display bounds before
 // or after the window bounds checks, yielding flaky results.
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
 #define MAYBE_SeparateDisplayAndSwap SeparateDisplayAndSwap
 #else
 #define MAYBE_SeparateDisplayAndSwap DISABLED_SeparateDisplayAndSwap
@@ -1586,7 +1583,7 @@ IN_PROC_BROWSER_TEST_F(MAYBE_MultiScreenFullscreenControllerInteractiveTest,
 // window server's async handling of the fullscreen window state may transition
 // the window into fullscreen on the actual (non-mocked) display bounds before
 // or after the window bounds checks, yielding flaky results.
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
 #define MAYBE_SwapShowsBubble SwapShowsBubble
 #else
 #define MAYBE_SwapShowsBubble DISABLED_SwapShowsBubble
@@ -1655,7 +1652,7 @@ IN_PROC_BROWSER_TEST_F(MAYBE_MultiScreenFullscreenControllerInteractiveTest,
 // where the window server's async handling of the fullscreen window state may
 // transition the window into fullscreen on the actual (non-mocked) display
 // bounds before or after the window bounds checks, yielding flaky results.
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 #define MAYBE_OpenPopupWhileFullscreen DISABLED_OpenPopupWhileFullscreen
 #else
 #define MAYBE_OpenPopupWhileFullscreen OpenPopupWhileFullscreen
@@ -1715,7 +1712,7 @@ IN_PROC_BROWSER_TEST_F(MAYBE_MultiScreenFullscreenControllerInteractiveTest,
 // where the window server's async handling of the fullscreen window state may
 // transition the window into fullscreen on the actual (non-mocked) display
 // bounds before or after the window bounds checks, yielding flaky results.
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 #define MAYBE_FullscreenCompanionWindow DISABLED_FullscreenCompanionWindow
 #else
 #define MAYBE_FullscreenCompanionWindow FullscreenCompanionWindow

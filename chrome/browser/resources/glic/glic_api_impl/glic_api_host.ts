@@ -10,21 +10,35 @@
 
 import {loadTimeData} from '//resources/js/load_time_data.js';
 import type {BigBuffer} from '//resources/mojo/mojo/public/mojom/base/big_buffer.mojom-webui.js';
+import type {TimeDelta} from '//resources/mojo/mojo/public/mojom/base/time.mojom-webui.js';
 import type {BitmapN32} from '//resources/mojo/skia/public/mojom/bitmap.mojom-webui.js';
 import {AlphaType} from '//resources/mojo/skia/public/mojom/image_info.mojom-webui.js';
 import type {Origin} from '//resources/mojo/url/mojom/origin.mojom-webui.js';
 import type {Url} from '//resources/mojo/url/mojom/url.mojom-webui.js';
 
 import type {BrowserProxy} from '../browser_proxy.js';
-import type {PanelState as PanelStateMojo, TabData as TabDataMojo, WebClientHandlerInterface, WebClientInterface} from '../glic.mojom-webui.js';
-import {GetTabContextErrorReason as MojoGetTabContextErrorReason, WebClientHandlerRemote, WebClientReceiver} from '../glic.mojom-webui.js';
-import type {DraggableArea, PanelState, Screenshot, TabContextOptions, WebPageData} from '../glic_api/glic_api.js';
-import {DEFAULT_PDF_SIZE_LIMIT, GetTabContextErrorReason} from '../glic_api/glic_api.js';
+import type {FocusedTabCandidate as FocusedTabCandidateMojo, FocusedTabData as FocusedTabDataMojo, InvalidCandidateError as MojoInvalidCandidateError, NoCandidateTabError as MojoNoCandidateTabError, OpenPanelInfo as OpenPanelInfoMojo, PanelState as PanelStateMojo, ScrollToSelector as ScrollToSelectorMojo, TabData as TabDataMojo, WebClientHandlerInterface, WebClientInterface} from '../glic.mojom-webui.js';
+import {WebClientHandlerRemote, WebClientMode, WebClientReceiver} from '../glic.mojom-webui.js';
+import type {DraggableArea, PanelState, Screenshot, ScrollToParams, TabContextOptions, WebPageData} from '../glic_api/glic_api.js';
+import {CaptureScreenshotErrorReason, DEFAULT_PDF_SIZE_LIMIT, GetTabContextErrorReason, InvalidCandidateError, NoCandidateTabError, ScrollToErrorReason} from '../glic_api/glic_api.js';
 
 import type {PostMessageRequestHandler} from './post_message_transport.js';
 import {PostMessageRequestReceiver, PostMessageRequestSender} from './post_message_transport.js';
-import type {HostRequestTypes, PdfDocumentDataPrivate, RgbaImage, TabContextResultPrivate, TabDataPrivate, UserProfileInfoPrivate} from './request_types.js';
-import {ImageAlphaType, ImageColorType} from './request_types.js';
+import type {AnnotatedPageDataPrivate, FocusedTabCandidatePrivate, FocusedTabDataPrivate, HostRequestTypes, PdfDocumentDataPrivate, RgbaImage, TabContextResultPrivate, TabDataPrivate, UserProfileInfoPrivate} from './request_types.js';
+import {ErrorWithReasonImpl, ImageAlphaType, ImageColorType} from './request_types.js';
+
+// Implemented by the embedder of GlicApiHost.
+export interface ApiHostEmbedder {
+  // Called when the guest requests resize.
+  onGuestResizeRequest(size: {width: number, height: number}): void;
+
+  // Called after the web client is initialized.
+  showGuest(): void;
+
+  // Called when the notifyPanelWillOpen promise resolves to open the panel
+  // when triggered from the browser.
+  webClientReady(): void;
+}
 
 // Turn everything except void into a promise.
 type Promisify<T> = T extends void ? void : Promise<T>;
@@ -43,7 +57,9 @@ type HostMessageHandlerInterface = {
 };
 
 class WebClientImpl implements WebClientInterface {
-  constructor(private sender: PostMessageRequestSender) {}
+  constructor(
+      private sender: PostMessageRequestSender,
+      private embedder: ApiHostEmbedder) {}
 
   notifyPanelOpened(attachedToWindowId: (number|null)): void {
     this.sender.requestNoResponse('glicWebClientNotifyPanelOpened', {
@@ -55,10 +71,32 @@ class WebClientImpl implements WebClientInterface {
     await this.sender.requestWithResponse('glicWebClientNotifyPanelClosed', {});
   }
 
-  notifyPanelWillOpen(panelState: PanelStateMojo): Promise<void> {
-    return this.sender.requestWithResponse(
+  async notifyPanelWillOpen(panelState: PanelStateMojo):
+      Promise<{openPanelInfo: OpenPanelInfoMojo}> {
+    const result = await this.sender.requestWithResponse(
         'glicWebClientNotifyPanelWillOpen',
         {panelState: panelStateToClient(panelState)});
+
+    // The web client is ready to show, ensure the webview is
+    // displayed.
+    this.embedder.webClientReady();
+    const openPanelInfoMojo: OpenPanelInfoMojo = {
+      webClientMode:
+          (result.openPanelInfo?.startingMode as WebClientMode | undefined) ??
+          WebClientMode.kUnknown,
+      panelSize: null,
+      resizeDuration: timeDeltaFromClient(
+          result.openPanelInfo?.resizeParams?.options?.durationMs),
+    };
+    if (result.openPanelInfo?.resizeParams) {
+      const size = {
+        width: result.openPanelInfo?.resizeParams?.width,
+        height: result.openPanelInfo?.resizeParams?.height,
+      };
+      this.embedder.onGuestResizeRequest(size);
+      openPanelInfoMojo.panelSize = size;
+    }
+    return {openPanelInfo: openPanelInfoMojo};
   }
 
   notifyPanelWasClosed(): Promise<void> {
@@ -70,6 +108,11 @@ class WebClientImpl implements WebClientInterface {
     this.sender.requestNoResponse('glicWebClientPanelStateChanged', {
       panelState: panelStateToClient(panelState),
     });
+  }
+
+  notifyPanelCanAttachChange(canAttach: boolean) {
+    this.sender.requestNoResponse(
+        'glicWebClientCanAttachStateChanged', {canAttach});
   }
 
   notifyMicrophonePermissionStateChanged(enabled: boolean): void {
@@ -93,11 +136,12 @@ class WebClientImpl implements WebClientInterface {
         });
   }
 
-  notifyFocusedTabChanged(focusedTab: (TabDataMojo|null)): void {
+  notifyFocusedTabChanged(focusedTabData: (FocusedTabDataMojo)): void {
     const transfer: Transferable[] = [];
     this.sender.requestNoResponse(
         'glicWebClientNotifyFocusedTabChanged', {
-          focusedTab: tabDataToClient(focusedTab, transfer),
+          focusedTabDataPrivate:
+              focusedTabDataToClient(focusedTabData, transfer),
         },
         transfer);
   }
@@ -110,7 +154,8 @@ class HostMessageHandler implements HostMessageHandlerInterface {
 
   constructor(
       private handler: WebClientHandlerInterface,
-      private sender: PostMessageRequestSender) {}
+      private sender: PostMessageRequestSender,
+      private embedder: ApiHostEmbedder) {}
 
   destroy() {
     if (this.receiver) {
@@ -119,14 +164,16 @@ class HostMessageHandler implements HostMessageHandlerInterface {
   }
 
   async glicBrowserWebClientCreated({}, transfer: Transferable[]) {
-    this.receiver = new WebClientReceiver(new WebClientImpl(this.sender));
+    this.receiver =
+        new WebClientReceiver(new WebClientImpl(this.sender, this.embedder));
     const {initialState} = await this.handler.webClientCreated(
         this.receiver.$.bindNewPipeAndPassRemote());
     const chromeVersion = initialState.chromeVersion.components;
 
     return {
       panelState: panelStateToClient(initialState.panelState),
-      focusedTab: tabDataToClient(initialState.focusedTab, transfer),
+      focusedTabData:
+          focusedTabDataToClient(initialState.focusedTabData, transfer),
       microphonePermissionEnabled: initialState.microphonePermissionEnabled,
       locationPermissionEnabled: initialState.locationPermissionEnabled,
       tabContextPermissionEnabled: initialState.tabContextPermissionEnabled,
@@ -136,10 +183,16 @@ class HostMessageHandler implements HostMessageHandlerInterface {
         build: chromeVersion[2] || 0,
         patch: chromeVersion[3] || 0,
       },
+      canAttach: initialState.canAttach,
+      scrollToEnabled: loadTimeData.getBoolean('enableScrollTo'),
     };
   }
 
   glicBrowserWebClientInitialized(request: {success: boolean}) {
+    // The webview may have been re-shown by webui, having previously been
+    // opened by the browser. In that case, show the guest frame again.
+    this.embedder.showGuest();
+
     if (request.success) {
       this.handler.webClientInitialized();
     } else {
@@ -187,28 +240,30 @@ class HostMessageHandler implements HostMessageHandlerInterface {
     this.handler.detachPanel();
   }
 
+  glicBrowserShowProfilePicker() {
+    return this.handler.showProfilePicker();
+  }
+
   async glicBrowserGetContextFromFocusedTab(
-      request: {options: TabContextOptions},
-      transfer: Transferable[]): Promise<{
-    tabContextResult?: TabContextResultPrivate,
-    error?: GetTabContextErrorReason,
-  }> {
+      request: {options: TabContextOptions}, transfer: Transferable[]):
+      Promise<{tabContextResult: TabContextResultPrivate}> {
     const {
       result: {errorReason, tabContext},
     } = await this.handler.getContextFromFocusedTab({
       includeInnerText: request.options.innerText || false,
       includeViewportScreenshot: request.options.viewportScreenshot || false,
       includePdf: request.options.pdfData || false,
+      includeAnnotatedPageContent:
+          request.options.annotatedPageContent || false,
       pdfSizeLimit: request.options.pdfSizeLimit === undefined ?
           DEFAULT_PDF_SIZE_LIMIT :
           Math.min(Number.MAX_SAFE_INTEGER, request.options.pdfSizeLimit),
     });
     if (!tabContext) {
-      let error = GetTabContextErrorReason.UNKNOWN;
-      if (errorReason === MojoGetTabContextErrorReason.kWebContentsChanged) {
-        error = GetTabContextErrorReason.WEB_CONTENTS_CHANGED;
-      }
-      return {error};
+      throw new ErrorWithReasonImpl(
+          'tabContext',
+          (errorReason as GetTabContextErrorReason | undefined) ??
+              GetTabContextErrorReason.UNKNOWN);
     }
     const tabData = tabContext.tabData;
     let favicon: RgbaImage|undefined = undefined;
@@ -263,6 +318,18 @@ class HostMessageHandler implements HostMessageHandlerInterface {
         pdfData,
       };
     }
+    let annotatedPageData: AnnotatedPageDataPrivate|undefined = undefined;
+    if (tabContext.annotatedPageData) {
+      const annotatedPageContent =
+          tabContext.annotatedPageData.annotatedPageContent ?
+          getArrayBufferFromBigBuffer(
+              tabContext.annotatedPageData.annotatedPageContent.smuggled) :
+          undefined;
+      if (annotatedPageContent) {
+        transfer.push(annotatedPageContent);
+      }
+      annotatedPageData = {annotatedPageContent};
+    }
 
     return {
       tabContextResult: {
@@ -270,18 +337,41 @@ class HostMessageHandler implements HostMessageHandlerInterface {
         webPageData: webPageDataResult,
         viewportScreenshot: viewportScreenshotResult,
         pdfDocumentData,
+        annotatedPageData,
       },
     };
   }
 
-  async glicBrowserResizeWindow(request: {width: number, height: number}) {
-    const response = await this.handler.resizeWidget(request);
-    if (!response.actualSize) {
-      return {};
+  async glicBrowserResizeWindow(request: {
+    size: {width: number, height: number},
+    options?: {durationMs?: number},
+  }) {
+    this.embedder.onGuestResizeRequest(request.size);
+    return await this.handler.resizeWidget(
+        request.size, timeDeltaFromClient(request.options?.durationMs));
+  }
+
+  async glicBrowserCaptureScreenshot(_request: {}, transfer: Transferable[]):
+      Promise<{screenshot: Screenshot}> {
+    const {
+      result: {screenshot, errorReason},
+    } = await this.handler.captureScreenshot();
+    if (!screenshot) {
+      throw new ErrorWithReasonImpl(
+          'captureScreenshot',
+          (errorReason as CaptureScreenshotErrorReason | undefined) ??
+              CaptureScreenshotErrorReason.UNKNOWN);
     }
+    const screenshotArray = new Uint8Array(screenshot.data);
+    transfer.push(screenshotArray.buffer);
     return {
-      actualWidth: response.actualSize.width,
-      actualHeight: response.actualSize.height,
+      screenshot: {
+        widthPixels: screenshot.widthPixels,
+        heightPixels: screenshot.heightPixels,
+        data: screenshotArray.buffer,
+        mimeType: screenshot.mimeType,
+        originAnnotations: {},
+      },
     };
   }
 
@@ -325,6 +415,65 @@ class HostMessageHandler implements HostMessageHandlerInterface {
   glicBrowserSetContextAccessIndicator(request: {show: boolean}) {
     this.handler.setContextAccessIndicator(request.show);
   }
+
+  glicBrowserSetAudioDucking(request: {enabled: boolean}) {
+    this.handler.setAudioDucking(request.enabled);
+  }
+
+  glicBrowserOnUserInputSubmitted(request: {mode: number}) {
+    this.handler.onUserInputSubmitted(request.mode);
+  }
+
+  glicBrowserOnResponseStarted() {
+    this.handler.onResponseStarted();
+  }
+
+  glicBrowserOnResponseStopped() {
+    this.handler.onResponseStopped();
+  }
+
+  glicBrowserOnSessionTerminated() {
+    this.handler.onSessionTerminated();
+  }
+
+  glicBrowserOnResponseRated(request: {positive: boolean}) {
+    this.handler.onResponseRated(request.positive);
+  }
+
+  async glicBrowserScrollTo(request: {params: ScrollToParams}) {
+    const {params} = request;
+
+    function getMojoSelector(): ScrollToSelectorMojo {
+      const {selector} = params;
+      if (selector.exactText !== undefined) {
+        return {
+          exactTextSelector: {
+            text: selector.exactText!.text,
+          },
+        };
+      }
+      if (selector.textFragment !== undefined) {
+        return {
+          textFragmentSelector: {
+            textStart: selector.textFragment!.textStart,
+            textEnd: selector.textFragment!.textEnd,
+          },
+        };
+      }
+      throw new ErrorWithReasonImpl(
+          'scrollTo', ScrollToErrorReason.NOT_SUPPORTED);
+    }
+
+    const mojoParams = {
+      highlight: params.highlight === undefined ? true : params.highlight,
+      selector: getMojoSelector(),
+    };
+    const {errorReason} = (await this.handler.scrollTo(mojoParams));
+    if (errorReason !== null) {
+      throw new ErrorWithReasonImpl('scrollTo', errorReason! as number);
+    }
+    return {};
+  }
 }
 
 export class GlicApiHost implements PostMessageRequestHandler {
@@ -336,14 +485,15 @@ export class GlicApiHost implements PostMessageRequestHandler {
 
   constructor(
       private browserProxy: BrowserProxy, private windowProxy: WindowProxy,
-      private embeddedOrigin: string) {
+      private embeddedOrigin: string, embedder: ApiHostEmbedder) {
     this.postMessageReceiver =
         new PostMessageRequestReceiver(embeddedOrigin, windowProxy, this);
     this.sender = new PostMessageRequestSender(windowProxy, embeddedOrigin);
     this.handler = new WebClientHandlerRemote();
     this.browserProxy.handler.createWebClient(
         this.handler.$.bindNewPipeAndPassReceiver());
-    this.messageHandler = new HostMessageHandler(this.handler, this.sender);
+    this.messageHandler =
+        new HostMessageHandler(this.handler, this.sender, embedder);
 
     this.bootstrapPingIntervalId =
         window.setInterval(this.bootstrapPing.bind(this), 50);
@@ -498,6 +648,61 @@ function tabDataToClient(tabData: TabDataMojo|null, transfer: Transferable[]):
   };
 }
 
+function focusedTabCandidateToClient(
+    focusedTabCandidate: FocusedTabCandidateMojo,
+    transfer: Transferable[]): FocusedTabCandidatePrivate {
+  const focusedTabCandidateData =
+      tabDataToClient(focusedTabCandidate.focusedTabCandidateData, transfer);
+  const invalidCandidateError =
+      invalidCandidateErrorToClient(focusedTabCandidate.invalidCandidateError);
+  return {
+    focusedTabCandidateData,
+    invalidCandidateError,
+  };
+}
+
+function focusedTabDataToClient(
+    focusedTabData: FocusedTabDataMojo,
+    transfer: Transferable[]): FocusedTabDataPrivate {
+  if (focusedTabData.focusedTab) {
+    return {
+      focusedTab: tabDataToClient(focusedTabData.focusedTab, transfer),
+    };
+  }
+  if (focusedTabData.focusedTabCandidate) {
+    return {
+      focusedTabCandidate: focusedTabCandidateToClient(
+          focusedTabData.focusedTabCandidate, transfer),
+    };
+  }
+  if (focusedTabData.noCandidateTabError) {
+    return {
+      noCandidateTabError:
+          noCandidateTabErrorToClient(focusedTabData.noCandidateTabError),
+    };
+  }
+  return {noCandidateTabError: NoCandidateTabError.UNKNOWN};
+}
+
+function invalidCandidateErrorToClient(
+    mojoReason: MojoInvalidCandidateError|null): InvalidCandidateError|
+    undefined {
+  if (!mojoReason) {
+    return undefined;
+  }
+  return (mojoReason.valueOf() as InvalidCandidateError | undefined) ??
+      InvalidCandidateError.UNKNOWN;
+}
+
+function noCandidateTabErrorToClient(mojoReason: MojoNoCandidateTabError|null):
+    NoCandidateTabError|undefined {
+  if (!mojoReason) {
+    return undefined;
+  }
+  return (mojoReason.valueOf() as NoCandidateTabError) ??
+      NoCandidateTabError.UNKNOWN;
+}
+
 function getArrayBufferFromBigBuffer(bigBuffer: BigBuffer): ArrayBuffer|
     undefined {
   if (bigBuffer.bytes !== undefined) {
@@ -534,4 +739,12 @@ function panelStateToClient(panelState: PanelStateMojo): PanelState {
     kind: panelState.kind as number,
     windowId: optionalWindowIdToClient(panelState.windowId),
   };
+}
+
+/** Takes a time value in milliseconds and converts to a Mojo TimeDelta. */
+function timeDeltaFromClient(durationMs: number = 0): TimeDelta {
+  if (!Number.isFinite(durationMs)) {
+    throw new Error('Invalid duration value: ' + durationMs);
+  }
+  return {microseconds: BigInt(Math.floor(durationMs * 1000))};
 }

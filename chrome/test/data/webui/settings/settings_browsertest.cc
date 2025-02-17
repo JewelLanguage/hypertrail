@@ -827,7 +827,8 @@ class SettingsPrivacyGuideTest : public SettingsBrowserTest {
     scoped_feature_list_.InitWithFeatures(
         {features::kPrivacyGuideForceAvailable,
          content_settings::features::kTrackingProtection3pcd,
-         optimization_guide::features::kPrivacyGuideAiSettings},
+         optimization_guide::features::kPrivacyGuideAiSettings,
+         privacy_sandbox::kAlwaysBlock3pcsIncognito},
         {});
   }
 
@@ -919,6 +920,12 @@ IN_PROC_BROWSER_TEST_F(SettingsPrivacyGuideTest, SafeBrowsingFragment) {
 IN_PROC_BROWSER_TEST_F(SettingsPrivacyGuideTest, CookiesFragment) {
   RunTest("settings/privacy_guide_cookies_fragment_test.js",
           "runMochaSuite('CookiesFragment')");
+}
+
+IN_PROC_BROWSER_TEST_F(SettingsPrivacyGuideTest,
+                       CookiesFragmentAlwaysBlock3pcsIncognitoDisabled) {
+  RunTest("settings/privacy_guide_cookies_fragment_test.js",
+          "runMochaSuite('CookiesFragmentAlwaysBlock3pcsIncognitoDisabled')");
 }
 
 IN_PROC_BROWSER_TEST_F(SettingsPrivacyGuideTest, CompletionFragment) {
@@ -1191,6 +1198,26 @@ IN_PROC_BROWSER_TEST_F(SettingsPrivacySandboxPageTest,
                        ManageTopicsAndAdTopicsPageState) {
   RunTest("settings/privacy_sandbox_page_test.js",
           "runMochaSuite('ManageTopicsAndAdTopicsPageState')");
+}
+
+IN_PROC_BROWSER_TEST_F(SettingsPrivacySandboxPageTest,
+                       TopicsSubpageAdTopicsContentParity) {
+  RunTest("settings/privacy_sandbox_page_test.js",
+          "runMochaSuite('TopicsSubpageAdTopicsContentParity')");
+}
+
+IN_PROC_BROWSER_TEST_F(SettingsPrivacySandboxPageTest,
+                       TopicsSubpageAdTopicsContentParityDisabled) {
+  RunTest("settings/privacy_sandbox_page_test.js",
+          "runMochaSuite('TopicsSubpageAdTopicsContentParityDisabled')");
+}
+
+IN_PROC_BROWSER_TEST_F(
+    SettingsPrivacySandboxPageTest,
+    TopicsSubpageAdTopicsContentParityAdsApiUxEnhancementDisabled) {
+  RunTest("settings/privacy_sandbox_page_test.js",
+          "runMochaSuite('"
+          "TopicsSubpageAdTopicsContentParityAdsApiUxEnhancementDisabled')");
 }
 
 using SettingsRouteTest = SettingsBrowserTest;

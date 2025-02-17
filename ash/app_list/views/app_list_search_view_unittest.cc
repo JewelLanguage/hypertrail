@@ -4,6 +4,7 @@
 
 #include "ash/app_list/views/app_list_search_view.h"
 
+#include <string_view>
 #include <tuple>
 #include <utility>
 
@@ -190,7 +191,7 @@ class AppListSearchViewTest : public AshTestBase {
         .value();
   }
 
-  std::u16string GetListLabel(
+  std::u16string_view GetListLabel(
       SearchResultContainerView* result_container_view) {
     return static_cast<SearchResultListView*>(result_container_view)
         ->title_label_for_test()
@@ -841,7 +842,7 @@ TEST_P(SearchResultImageViewTest, SearchCategoryMenuItemTooltips) {
   GetSearchBoxView()->GetWidget()->LayoutRootViewIfNecessary();
   views::ImageButton* filter_button = GetSearchBoxView()->filter_button();
   EXPECT_TRUE(filter_button->GetVisible());
-  EXPECT_EQ(filter_button->GetTooltipText({}),
+  EXPECT_EQ(filter_button->GetRenderedTooltipText({}),
             u"Toggle search result categories");
   LeftClickOn(filter_button);
   EXPECT_TRUE(GetSearchBoxView()->IsFilterMenuOpen());
@@ -850,7 +851,7 @@ TEST_P(SearchResultImageViewTest, SearchCategoryMenuItemTooltips) {
                            std::u16string tooltip) {
     EXPECT_EQ(GetSearchBoxView()
                   ->GetFilterMenuItemByCategory(category)
-                  ->GetTooltipText({}),
+                  ->GetRenderedTooltipText({}),
               tooltip);
   };
 

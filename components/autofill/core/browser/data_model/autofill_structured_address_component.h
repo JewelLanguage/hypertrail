@@ -182,11 +182,6 @@ class AddressComponent {
   // Returns the autofill storage type stored in |storage_type_|.
   FieldType GetStorageType() const;
 
-  // Returns the type to be used instead of `field_type` when this type does
-  // not contain information. It is assumed that `field_type` is a supported
-  // type of the node,
-  FieldType GetFallbackType(FieldType field_type) const;
-
   // Returns the string representation of |storage_type_|.
   std::string GetStorageTypeName() const;
 
@@ -200,11 +195,14 @@ class AddressComponent {
   // assigned, an empty string is returned.
   const std::u16string& GetValue() const;
 
-  // Formats `value` to be used for comparison.
-  // In the default implementation this is `value` normalized but this function
-  // can be overridden in subclasses to apply further operations on `value`.
-  // `other` represents the component we are comparing with and is required
-  // for consistent rewriting rules.
+  // Returns the normalized value of this component for comparison. `other` is
+  // the component being compared against and is required for consistent
+  // application of rewriting rules.
+  std::u16string GetValueForComparison(const AddressComponent& other) const;
+
+  // Returns a normalized version of `value` for comparison. `other` is the
+  // component being compared against and is required for consistent application
+  // of rewriting rules.
   virtual std::u16string GetValueForComparison(
       const std::u16string& value,
       const AddressComponent& other) const;
@@ -251,11 +249,6 @@ class AddressComponent {
   // Returns |VerificationStatus::kNoStatus| if `field_type` is not supported.
   VerificationStatus GetVerificationStatusForType(FieldType field_type) const;
 
-  // Convenience method to get the fallback type of a specific node whose
-  // supported type include `field_type`. Returns `field_type` in case it could
-  // not find a `field_type` node.
-  FieldType GetFallbackTypeForType(FieldType field_type) const;
-
   // Returns true if the |value| and |verification_status| were successfully
   // unset for |type|.
   bool UnsetValueForTypeIfSupported(FieldType field_type);
@@ -293,11 +286,11 @@ class AddressComponent {
 
   // Recursively adds the supported types to the set. Calls
   // |GetAdditionalSupportedFieldTypes()| to add field types.
-  void GetSupportedTypes(FieldTypeSet* supported_types) const;
+  FieldTypeSet GetSupportedTypes() const;
 
   // Recursively adds only the storable types to the set. No computed type is
   // ever added (e.g. GetAdditionalSupportedFieldTypes).
-  void GetStorableTypes(FieldTypeSet* supported_types) const;
+  FieldTypeSet GetStorableTypes() const;
 
   // Recursively finds the storable type of `type`:
   // - If `type` is a `storable_type_` of any node, this is simply `type`.
@@ -376,8 +369,8 @@ class AddressComponent {
   // Returns the common country to be used.
   AddressCountryCode GetCommonCountry(const AddressComponent& other) const;
 
-  // If the tree this node is part of contains country code information, this
-  // function retrieves it. Otherwise it returns an empty country code.
+  // If this node is a part of a tree that contains country code information,
+  // this function retrieves it. Otherwise it returns an empty country code.
   AddressCountryCode GetCountryCode() const;
 
   // Deletes the stored structure and returns true if |IsStructureValid()|
@@ -469,20 +462,6 @@ class AddressComponent {
   // Function to be called post assign to do sanitization.
   virtual void PostAssignSanitization() {}
 
-  // Returns a normalized value for comparison.
-  // In the default implementation, this converts the value to lower case and
-  // removes white spaces. This function may be reimplemented to perform
-  // different normalization operations.
-  virtual std::u16string GetNormalizedValue() const;
-
-  // Returns a value used for comparison.
-  // In the default implementation this is just the normalized value but this
-  // function can be overridden in subclasses to apply further operations on
-  // the normalized value.
-  // |other| represents the component we are comparing with and is required
-  // for consistent rewriting rules.
-  std::u16string GetValueForComparison(const AddressComponent& other) const;
-
   // Returns true if the merging of two token identical values should give
   // precedence to the newer value.
   virtual bool HasNewerValuePrecedenceInMerging(
@@ -521,8 +500,7 @@ class AddressComponent {
 
   // Recursively adds the supported types to the set. If `!storable_only`, calls
   // |GetAdditionalSupportedFieldTypes()| to add computed field types.
-  virtual void GetTypes(bool storable_only,
-                        FieldTypeSet* supported_types) const;
+  virtual FieldTypeSet GetTypes(bool storable_only) const;
 
  private:
   friend class AddressComponentTestApi;

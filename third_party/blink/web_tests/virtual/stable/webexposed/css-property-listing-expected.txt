@@ -165,7 +165,6 @@ All changes to this list should go through Blink's feature review process: http:
     direction
     display
     dominant-baseline
-    dynamic-range-limit
     empty-cells
     field-sizing
     fill
@@ -224,6 +223,7 @@ All changes to this list should go through Blink's feature review process: http:
     inset-block-start
     inset-inline-end
     inset-inline-start
+    interactivity
     interpolate-size
     isolation
     justify-content
@@ -284,7 +284,9 @@ All changes to this list should go through Blink's feature review process: http:
     outline-style
     outline-width
     overflow-anchor
+    overflow-block
     overflow-clip-margin
+    overflow-inline
     overflow-wrap
     overflow-x
     overflow-y

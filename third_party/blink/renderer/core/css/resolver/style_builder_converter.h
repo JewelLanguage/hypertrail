@@ -95,7 +95,8 @@ class StyleBuilderConverterBase {
                                                const CSSValue&);
   static FontSelectionValue ConvertFontStyle(const CSSLengthResolver&,
                                              const CSSValue&);
-  static FontSelectionValue ConvertFontWeight(const CSSValue&,
+  static FontSelectionValue ConvertFontWeight(const CSSLengthResolver&,
+                                              const CSSValue&,
                                               FontSelectionValue);
   static FontDescription::FontVariantCaps ConvertFontVariantCaps(
       const CSSValue&);
@@ -138,7 +139,7 @@ class StyleBuilderConverter {
                                                   const CSSValue&,
                                                   CSSPropertyID);
   static FilterOperations ConvertOffscreenFilterOperations(const CSSValue&,
-                                                           const Font&);
+                                                           const Font*);
   // The template parameter ZeroValue indicates which CSSValueID should be
   // converted to zero.
   template <typename T, CSSValueID ZeroValue = CSSValueID::kNone>
@@ -215,6 +216,7 @@ class StyleBuilderConverter {
   static T ConvertLineWidth(StyleResolverState&, const CSSValue&);
   static int ConvertBorderWidth(StyleResolverState&, const CSSValue&);
   static uint16_t ConvertColumnRuleWidth(StyleResolverState&, const CSSValue&);
+  static Superellipse ConvertCornerShape(StyleResolverState&, const CSSValue&);
   static LayoutUnit ConvertLayoutUnit(const StyleResolverState&,
                                       const CSSValue&);
   static std::optional<Length> ConvertGapLength(const StyleResolverState&,

@@ -405,6 +405,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   virtual bool IsNativeSlider() const;
   virtual bool IsSpinButton() const;
   bool IsTabItem() const;
+  bool IsTabList() const;
 
   // This object is a text field. This is any widget in which the user should be
   // able to enter and edit text.
@@ -903,6 +904,10 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
 
   // Heuristic to get the target popover for an invoking element.
   AXObject* GetPopoverTargetForInvoker() const;
+
+  // Heuristic to get the target element defined by the `commandfor` attribute
+  // on an invoking element.
+  AXObject* GetCommandForElement() const;
 
   // Heuristic to get the interest target for an invoking element.
   // Returns null if the interest target points to plain content and can be

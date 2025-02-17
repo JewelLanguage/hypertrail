@@ -62,6 +62,7 @@ import org.chromium.base.PathService;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.library_loader.LibraryLoader;
+import org.chromium.base.library_loader.LibraryPrefetcher;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.ScopedSysTraceEvent;
 import org.chromium.base.task.PostTask;
@@ -394,10 +395,21 @@ public class WebViewChromiumAwInit {
 
             PostTask.postTask(
                     TaskTraits.BEST_EFFORT,
-                    () ->
-                            mFactory.setWebViewContextExperimentValue(
-                                    AwFeatureMap.isEnabled(
-                                            AwFeatures.WEBVIEW_SEPARATE_RESOURCE_CONTEXT)));
+                    () -> {
+                        mFactory.setWebViewContextExperimentValue(
+                                AwFeatureMap.isEnabled(
+                                        AwFeatures.WEBVIEW_SEPARATE_RESOURCE_CONTEXT));
+                        mFactory.setWebViewDisableCHIPSExperimentValue(
+                                AwFeatureMap.isEnabled(AwFeatures.WEBVIEW_DISABLE_CHIPS));
+                    });
+
+            if (AwFeatureMap.isEnabled(AwFeatures.WEBVIEW_PREFETCH_NATIVE_LIBRARY)) {
+                PostTask.postTask(
+                        TaskTraits.BEST_EFFORT,
+                        () -> {
+                            LibraryPrefetcher.prefetchNativeLibraryForWebView();
+                        });
+            }
 
             AwCrashyClassUtils.maybeCrashIfEnabled();
             // Must happen right after Chromium initialization is complete.
@@ -421,6 +433,13 @@ public class WebViewChromiumAwInit {
                 totalTimeTaken,
                 /* callSite= */ callSite,
                 /* fromUIThread= */ triggeredFromUIThread);
+        // Also create the trace events for the earlier WebViewChromiumFactoryProvider init, which
+        // happens before tracing is ready.
+        TraceEvent.webViewStartupTotalFactoryInit(
+                mFactory.getInitInfo().mTotalFactoryInitStartTime,
+                mFactory.getInitInfo().mTotalFactoryInitDuration);
+        TraceEvent.webViewStartupStage1(
+                mFactory.getInitInfo().mStartTime, mFactory.getInitInfo().mDuration);
     }
 
     /**
@@ -747,10 +766,13 @@ public class WebViewChromiumAwInit {
             throw new IllegalStateException(
                     "startUpWebView should not be called on the Android main looper");
         }
-        if (!shouldRunUiThreadStartUpTasks || isChromiumInitialized()) {
+        if (!shouldRunUiThreadStartUpTasks) {
             callback.onSuccess(mWebViewStartUpDiagnostics);
             return;
         }
+
+        // TODO(crbug.com/389871700): We should also early out if the diagnostics information has
+        // been set.
         mWebViewStartUpCallbackRunQueue.addTask(
                 () -> callback.onSuccess(mWebViewStartUpDiagnostics));
         synchronized (mLock) {

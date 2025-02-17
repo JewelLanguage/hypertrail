@@ -39,6 +39,15 @@ message AutofillAiTypeRequest {
   // The form to predict values for. It is expected that the values for each
   // field are empty.
   FormData form_data = 2;
+
+  // A screenshot of the form.
+  // This is optional and may be used by the model to improve predictions.
+  FormMedia media = 3;
+}
+
+message FormMedia {
+  // Screenshots in base64-encoded PNG format
+  repeated bytes screenshots = 1;
 }
 
 message AutofillAiTypeResponse {
@@ -53,6 +62,9 @@ message FieldTypeResponse {
   // request and response.
   string field_global_id = 1;
 
+  // The predicted type for the field.
+  int32 field_type = 2;
+
   // Optional formatting metadata for downstream use.
   // Example formats: "dd/mm/yyyy" for dates, "NAME_FIRST_LAST" for names.
   string formatting_meta = 3;
@@ -60,8 +72,6 @@ message FieldTypeResponse {
   // The confidence score for the prediction, ranging from 0.0 to 1.0.
   // Higher values indicate greater confidence in the predicted type.
   float confidence = 4;
-
-  reserved 2;
 }
 
 message FormTypeQuality {

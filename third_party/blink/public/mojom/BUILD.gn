@@ -27,6 +27,7 @@ mojom("mojom_platform") {
   sources = [
     "ad_tagging/ad_evidence.mojom",
     "aggregation_service/aggregatable_report.mojom",
+    "ai/ai_common.mojom",
     "ai/ai_language_model.mojom",
     "ai/ai_manager.mojom",
     "ai/ai_rewriter.mojom",
@@ -66,8 +67,6 @@ mojom("mojom_platform") {
     "cookie_manager/cookie_manager_automation.mojom",
     "cookie_store/cookie_store.mojom",
     "crash/crash_memory_metrics_reporter.mojom",
-    "credentialmanagement/credential_manager.mojom",
-    "credentialmanagement/credential_type_flags.mojom",
     "css/preferred_color_scheme.mojom",
     "css/preferred_contrast.mojom",
     "data_transfer/data_transfer.mojom",
@@ -189,7 +188,6 @@ mojom("mojom_platform") {
     "permissions/permission_status.mojom",
     "permissions_policy/document_policy_feature.mojom",
     "permissions_policy/permissions_policy.mojom",
-    "permissions_policy/permissions_policy_feature.mojom",
     "permissions_policy/policy_disposition.mojom",
     "permissions_policy/policy_value.mojom",
     "picture_in_picture/picture_in_picture.mojom",
@@ -214,6 +212,7 @@ mojom("mojom_platform") {
     "selection_menu/selection_menu_behavior.mojom",
     "sensor/web_sensor_provider.mojom",
     "sensor/web_sensor_provider_automation.mojom",
+    "serial/serial.mojom",
     "service_worker/controller_service_worker_mode.mojom",
     "service_worker/dispatch_fetch_event_params.mojom",
     "service_worker/service_worker_ancestor_frame_type.mojom",
@@ -311,6 +310,7 @@ mojom("mojom_platform") {
     "//services/device/public/mojom:generic_sensor",
     "//services/network/public/mojom",
     "//services/network/public/mojom:mojom_ip_address",
+    "//services/network/public/mojom:mojom_permissions_policy",
     "//services/network/public/mojom:mojom_proxy_config",
     "//services/network/public/mojom:url_loader_base",
     "//services/network/public/mojom:websocket_mojom",
@@ -359,7 +359,6 @@ mojom("mojom_platform") {
     sources += [
       "direct_sockets/direct_sockets.mojom",
       "printing/web_printing.mojom",
-      "serial/serial.mojom",
     ]
   }
 
@@ -410,18 +409,11 @@ mojom("mojom_platform") {
     {
       types = [
         {
-          mojom = "blink.mojom.OriginWithPossibleWildcards"
-          cpp = "::blink::OriginWithPossibleWildcards"
-        },
-        {
           mojom = "blink.mojom.ParsedPermissionsPolicyDeclaration"
           cpp = "::blink::ParsedPermissionsPolicyDeclaration"
         },
       ]
-      traits_headers = [
-        "//third_party/blink/public/common/permissions_policy/origin_with_possible_wildcards.h",
-        "//third_party/blink/public/common/permissions_policy/permissions_policy_declaration.h",
-      ]
+      traits_headers = [ "//third_party/blink/public/common/permissions_policy/permissions_policy_declaration.h" ]
       traits_private_headers = [ "//third_party/blink/common/permissions_policy/permissions_policy_mojom_traits.h" ]
     },
     {
@@ -902,32 +894,6 @@ mojom("mojom_platform") {
     {
       types = [
         {
-          mojom = "blink.mojom.CredentialType"
-          cpp = "::password_manager::CredentialType"
-        },
-        {
-          mojom = "blink.mojom.CredentialMediationRequirement"
-          cpp = "::password_manager::CredentialMediationRequirement"
-        },
-        {
-          mojom = "blink.mojom.CredentialInfo"
-          cpp = "::password_manager::CredentialInfo"
-        },
-        {
-          mojom = "blink.mojom.CredentialManagerError"
-          cpp = "::password_manager::CredentialManagerError"
-        },
-      ]
-      traits_headers = [ "//components/password_manager/content/common/credential_manager_mojom_traits.h" ]
-      traits_sources = [ "//components/password_manager/content/common/credential_manager_mojom_traits.cc" ]
-      traits_public_deps = [
-        "//base",
-        "//components/password_manager/core/common",
-      ]
-    },
-    {
-      types = [
-        {
           mojom = "blink.mojom.FetchAPIDataElement"
           cpp = "::network::DataElement"
           move_only = true
@@ -1196,6 +1162,8 @@ mojom("android_mojo_bindings") {
     "blob/file_backed_blob_factory.mojom",
     "blob/serialized_blob.mojom",
     "contacts/contacts_manager.mojom",
+    "credentialmanagement/credential_manager.mojom",
+    "credentialmanagement/credential_type_flags.mojom",
     "digital_goods/digital_goods.mojom",
     "document_metadata/document_metadata.mojom",
     "facilitated_payments/payment_link_handler.mojom",
@@ -1207,9 +1175,9 @@ mojom("android_mojo_bindings") {
     "installedapp/installed_app_provider.mojom",
     "installedapp/related_application.mojom",
     "mediasession/media_session.mojom",
-    "payments/payment_credential.mojom",
     "payments/payment_handler_host.mojom",
     "payments/payment_request.mojom",
+    "payments/secure_payment_confirmation_service.mojom",
     "webauthn/authenticator.mojom",
     "webshare/share_error.mojom",
     "webshare/webshare.mojom",
@@ -1225,6 +1193,7 @@ mojom("android_mojo_bindings") {
     "//services/network/public/mojom:mojom_schemeful_site",
     "//url/mojom:url_mojom_gurl",
     "//url/mojom:url_mojom_origin",
+    "//url/mojom:url_mojom_scheme_host_port",
   ]
 
   # This uses target_os rather than current_os (which is what is_android is set
@@ -1304,6 +1273,32 @@ mojom("android_mojo_bindings") {
         "//device/fido",
       ]
     },
+    {
+      types = [
+        {
+          mojom = "blink.mojom.CredentialType"
+          cpp = "::password_manager::CredentialType"
+        },
+        {
+          mojom = "blink.mojom.CredentialMediationRequirement"
+          cpp = "::password_manager::CredentialMediationRequirement"
+        },
+        {
+          mojom = "blink.mojom.CredentialInfo"
+          cpp = "::password_manager::CredentialInfo"
+        },
+        {
+          mojom = "blink.mojom.CredentialManagerError"
+          cpp = "::password_manager::CredentialManagerError"
+        },
+      ]
+      traits_headers = [ "//components/password_manager/content/common/credential_manager_mojom_traits.h" ]
+      traits_sources = [ "//components/password_manager/content/common/credential_manager_mojom_traits.cc" ]
+      traits_public_deps = [
+        "//base",
+        "//components/password_manager/core/common",
+      ]
+    },
   ]
 
   blink_cpp_typemaps = [
@@ -1348,6 +1343,7 @@ mojom("mojom_core") {
     # mojom GN targets to match better the core/platform separation in C++.
     "frame/back_forward_cache_controller.mojom",
     "frame/blocked_navigation_types.mojom",
+    "frame/deferred_fetch_policy.mojom",
     "frame/find_in_page.mojom",
     "frame/frame.mojom",
     "frame/frame_owner_properties.mojom",

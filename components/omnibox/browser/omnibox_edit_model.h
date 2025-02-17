@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
@@ -196,14 +197,14 @@ class OmniboxEditModel {
   // Opens given selection. Most kinds of selection invoke an action or
   // otherwise call `OpenMatch`, but some may `AcceptInput` which is not
   // guaranteed to open a match or commit the omnibox.
-  void OpenSelection(
+  virtual void OpenSelection(
       OmniboxPopupSelection selection,
       base::TimeTicks timestamp = base::TimeTicks(),
       WindowOpenDisposition disposition = WindowOpenDisposition::CURRENT_TAB);
 
   // A simplified version of OpenSelection that opens the model's current
   // selection.
-  void OpenSelection(
+  virtual void OpenSelection(
       base::TimeTicks timestamp = base::TimeTicks(),
       WindowOpenDisposition disposition = WindowOpenDisposition::CURRENT_TAB);
 
@@ -310,7 +311,7 @@ class OmniboxEditModel {
   // for starter pack '@' keywords. Returns true if keyword mode was
   // entered; returns false if feature is disabled or special input
   // conditions were not detected, in which case this is a no-op.
-  bool MaybeAccelerateKeywordSelection(const std::u16string& input_text,
+  bool MaybeAccelerateKeywordSelection(std::u16string_view input_text,
                                        char16_t ch);
 
   // Called when any relevant data changes.  This rolls together several
@@ -382,6 +383,9 @@ class OmniboxEditModel {
   // Gets the icon for the given `match`.
   gfx::Image GetMatchIcon(const AutocompleteMatch& match,
                           SkColor vector_icon_color) const;
+  // Gets the icon for the given `match` if the match was provided by an omnibox
+  // API extension, otherwise returns empty image.
+  gfx::Image GetMatchIconIfExtension(const AutocompleteMatch& match) const;
 #endif
 
   // Returns true if the popup exists and is open. Virtual for testing.
@@ -442,6 +446,18 @@ class OmniboxEditModel {
   // Lookup the bitmap for |result_index|. Returns nullptr if not found.
   const SkBitmap* GetPopupRichSuggestionBitmap(int result_index) const;
 
+  // Lookup the bitmap for the first `match` that has `keyword` as its
+  // `associated_keyword`. Used to fetch bitmap where the `result_index` is
+  // unknown.  Returns nullptr if not found.
+  const SkBitmap* GetPopupRichSuggestionBitmap(
+      const std::u16string& keyword) const;
+
+  // Lookup the bitmap for `match` based on the image URL.  Similar to above,
+  // but Used to fetch bitmap where the `result_index` is unknown and where
+  // there are possibly multiple suggestions with the same `keyword` but not the
+  // `image_url` being looked up. Returns nullptr if not found.
+  const SkBitmap* GetPopupRichSuggestionBitmap(const GURL& image_url) const;
+
   // Stores the image in a local data member and schedules a repaint.
   void SetPopupRichSuggestionBitmap(int result_index, const SkBitmap& bitmap);
 
@@ -478,6 +494,12 @@ class OmniboxEditModel {
   FRIEND_TEST_ALL_PREFIXES(OmniboxEditModelTest, ConsumeCtrlKey);
   FRIEND_TEST_ALL_PREFIXES(OmniboxEditModelTest, ConsumeCtrlKeyOnRequestFocus);
   FRIEND_TEST_ALL_PREFIXES(OmniboxEditModelTest, ConsumeCtrlKeyOnCtrlAction);
+  FRIEND_TEST_ALL_PREFIXES(
+      OmniboxEditModelPopupTest,
+      GetPopupRichSuggestionBitmapForMatchWithoutAssociatedKeyword);
+  FRIEND_TEST_ALL_PREFIXES(
+      OmniboxEditModelPopupTest,
+      GetPopupRichSuggestionBitmapForMatchWithAssociatedKeyword);
 
   enum PasteState {
     NONE,     // Most recent edit was not a paste.
@@ -606,8 +628,8 @@ class OmniboxEditModel {
   // changes.
   void OnFaviconFetched(const GURL& page_url, const gfx::Image& icon) const;
 
-  // Returns view text if there is a view. Until the model is made the primary
-  // data source, this should not be called when there's no view.
+  // Returns view text if there is a view. Until the model is made the
+  // primary data source, this should not be called when there's no view.
   std::u16string GetText() const;
 
   // Owns this.

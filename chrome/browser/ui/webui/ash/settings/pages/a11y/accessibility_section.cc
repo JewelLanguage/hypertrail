@@ -605,7 +605,7 @@ bool IsAccessibilityReducedAnimationsEnabled() {
   return ::features::IsAccessibilityReducedAnimationsEnabled();
 }
 
-bool isAccessibilityOverlayScrollbarEnabled() {
+bool isAccessibilityAlwaysShowScrollbarsEnabled() {
   return ::features::IsOverlayScrollbarOSSettingEnabled();
 }
 
@@ -778,6 +778,50 @@ void AccessibilitySection::AddLoadTimeData(
       {"mouseKeysRightHand",
        IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_RIGHT_HAND},
       {"mouseKeysLeftHand", IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_LEFT_HAND},
+      {"primaryKeyTitle",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_PRIMARY_KEYBOARD_TITLE},
+      {"rightPrimaryKeyMoveCursor",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_RIGHT_KEYBOARD_PREVIEW_MOVE_CURSOR},
+      {"rightPrimaryKeyPressMouseButton",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_RIGHT_KEYBOARD_PREVIEW_PRESS_MOUSE_BUTTON},
+      {"rightPrimaryKeyChangeMouseButton",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_RIGHT_KEYBOARD_PREVIEW_CHANGE_MOUSE_SELECTION},
+      {"rightPrimaryKeyDoubleClick",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_RIGHT_KEYBOARD_PREVIEW_DOUBLE_CLICK},
+      {"rightPrimaryKeyHoldMouseButton",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_RIGHT_KEYBOARD_PREVIEW_HOLD_MOUSE_BUTTON},
+      {"rightPrimaryKeyReleaseMouseButton",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_RIGHT_KEYBOARD_PREVIEW_RELEASE_MOUSE_BUTTON},
+      {"leftPrimaryKeyMoveCursor",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_LEFT_KEYBOARD_PREVIEW_MOVE_CURSOR},
+      {"leftPrimaryKeyPressMouseButton",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_LEFT_KEYBOARD_PREVIEW_PRESS_MOUSE_BUTTON},
+      {"leftPrimaryKeyChangeMouseButton",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_LEFT_KEYBOARD_PREVIEW_CHANGE_MOUSE_SELECTION},
+      {"leftPrimaryKeyDoubleClick",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_LEFT_KEYBOARD_PREVIEW_DOUBLE_CLICK},
+      {"leftPrimaryKeyHoldMouseButton",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_LEFT_KEYBOARD_PREVIEW_HOLD_MOUSE_BUTTON},
+      {"leftPrimaryKeyReleaseMouseButton",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_LEFT_KEYBOARD_PREVIEW_RELEASE_MOUSE_BUTTON},
+      {"numKeypadTitle",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_NUM_KEYPAD_TITLE},
+      {"numPadKeyMoveCursor",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_NUM_KEYPAD_PREVIEW_MOVE_CURSOR},
+      {"numPadKeyPressMouseButton",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_NUM_KEYPAD_PREVIEW_PRESS_MOUSE_BUTTON},
+      {"numPadKeySelectMouseButton",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_NUM_KEYPAD_PREVIEW_SELECT_MOUSE_BUTTON},
+      {"numPadKeyDoubleClick",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_NUM_KEYPAD_PREVIEW_DOUBLE_CLICK},
+      {"numPadKeyHoldMouseButton",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_NUM_KEYPAD_PREVIEW_HOLD_MOUSE_BUTTON},
+      {"numPadKeyReleaseMouseButton",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_NUM_KEYPAD_PREVIEW_RELEASE_MOUSE_BUTTON},
+      {"mouseKeysShortcut",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_KEYBOARD_SHORTCUT},
+      {"mouseKeysShortcutTitle",
+       IDS_OS_SETTINGS_ACCESSIBILITY_MOUSE_KEYS_KEYBOARD_SHORTCUT_TITLE},
       {"cancel", IDS_CANCEL},
       {"caretBrowsingLabel",
        IDS_SETTINGS_ACCESSIBILITY_CARET_BROWSING_DESCRIPTION},
@@ -1003,7 +1047,7 @@ void AccessibilitySection::AddLoadTimeData(
        IDS_SETTINGS_ACCESSIBILITY_REDUCED_ANIMATIONS_LABEL},
       {"reducedAnimationsDescription",
        IDS_SETTINGS_ACCESSIBILITY_REDUCED_ANIMATIONS_DESCRIPTION},
-      {"overlayScrollbarLabel",
+      {"alwaysShowScrollbarsLabel",
        IDS_SETTINGS_ACCESSIBILITY_OVERLAY_SCROLLBAR_LABEL},
       {"caretBlinkIntervalLabel", IDS_SETTINGS_CARET_BLINK_INTERVAL_LABEL},
       {"caretBlinkIntervalOff", IDS_SETTINGS_CARET_BLINK_INTERVAL_OFF},
@@ -1557,8 +1601,8 @@ void AccessibilitySection::AddLoadTimeData(
   html_source->AddBoolean("isAccessibilityReducedAnimationsEnabled",
                           IsAccessibilityReducedAnimationsEnabled());
 
-  html_source->AddBoolean("isAccessibilityOverlayScrollbarEnabled",
-                          isAccessibilityOverlayScrollbarEnabled());
+  html_source->AddBoolean("isAccessibilityAlwaysShowScrollbarsEnabled",
+                          isAccessibilityAlwaysShowScrollbarsEnabled());
 
   html_source->AddBoolean("isAccessibilityMagnifierFollowsChromeVoxEnabled",
                           IsAccessibilityMagnifierFollowsChromeVoxEnabled());
@@ -1766,9 +1810,9 @@ bool AccessibilitySection::LogMetric(mojom::Setting setting,
           "ChromeOS.Settings.Accessibility.ReducedAnimations.Enabled",
           value.GetBool());
       return true;
-    case mojom::Setting::kOverlayScrollbarEnabled:
+    case mojom::Setting::kAlwaysShowScrollbarsEnabled:
       base::UmaHistogramBoolean(
-          "ChromeOS.Settings.Accessibility.OverlayScrollbar.Enabled",
+          "ChromeOS.Settings.Accessibility.AlwaysShowScrollbars.Enabled",
           value.GetBool());
       return true;
     case mojom::Setting::kOverscrollEnabled:
@@ -1897,7 +1941,7 @@ void AccessibilitySection::RegisterHierarchy(
       mojom::Setting::kColorCorrectionFilterAmount,
       mojom::Setting::kCaretBlinkInterval,
       mojom::Setting::kReducedAnimationsEnabled,
-      mojom::Setting::kOverlayScrollbarEnabled,
+      mojom::Setting::kAlwaysShowScrollbarsEnabled,
       mojom::Setting::kOverscrollEnabled,
       mojom::Setting::kFlashNotifications,
       mojom::Setting::kFaceGaze,

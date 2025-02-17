@@ -165,10 +165,12 @@ AshTestHelper::~AshTestHelper() {
 
   SimpleGeolocationProvider::DestroyForTesting();
 
-  // Ensure the next test starts with a null display::Screen.  This must be done
-  // here instead of in TearDown() since some tests test access to the Screen
-  // after the shell shuts down (which they use TearDown() to trigger).
-  ScreenAsh::DeleteScreenForShutdown();
+  if (destroy_screen_) {
+    // Ensure the next test starts with a null display::Screen.  This must be
+    // done here instead of in TearDown() since some tests test access to the
+    // Screen after the shell shuts down (which they use TearDown() to trigger).
+    ScreenAsh::DeleteScreenForShutdown();
+  }
 
   // This should never have a meaningful effect, since either there is no
   // ViewsTestHelperAura instance or the instance is currently in its
@@ -285,6 +287,7 @@ void AshTestHelper::SetUp(InitParams init_params) {
   create_global_cras_audio_handler_ =
       init_params.create_global_cras_audio_handler;
   create_quick_pair_mediator_ = init_params.create_quick_pair_mediator;
+  destroy_screen_ = init_params.destroy_screen;
 
   if (create_global_cras_audio_handler_) {
     // Create `CrasAudioHandler` for testing since `g_browser_process` is not
@@ -395,9 +398,12 @@ void AshTestHelper::SetUp(InitParams init_params) {
   shell->assistant_controller()->SetAssistant(assistant_service_.get());
 
   shell->system_tray_model()->SetClient(system_tray_client_.get());
-
+  prefs_provider_ = std::make_unique<TestPrefServiceProvider>();
   session_controller_client_ = std::make_unique<TestSessionControllerClient>(
-      shell->session_controller(), prefs_provider_.get());
+      shell->session_controller(), prefs_provider_.get(),
+      init_params.create_signin_pref_service);
+  session_controller_client_->set_default_provide_pref_service(
+      init_params.auto_create_prefs_services);
   session_controller_client_->InitializeAndSetClient();
 
   // Requires the AppListController the Shell creates.
@@ -487,12 +493,20 @@ display::Display AshTestHelper::GetSecondaryDisplay() const {
       .GetSecondaryDisplay();
 }
 
-void AshTestHelper::SimulateUserLogin(const AccountId& account_id,
-                                      user_manager::UserType user_type,
-                                      bool is_new_profile) {
+void AshTestHelper::SimulateUserLogin(
+    const AccountId& account_id,
+    user_manager::UserType user_type,
+    bool is_new_profile,
+    std::unique_ptr<PrefService> pref_service) {
+  std::variant<bool, std::unique_ptr<PrefService>> provide_or_pref_service =
+      true;
+  if (pref_service) {
+    provide_or_pref_service = std::move(pref_service);
+  }
+
   session_controller_client_->AddUserSession(
       account_id, account_id.GetUserEmail(), user_type,
-      /*provide_pref_service=*/true, is_new_profile);
+      std::move(provide_or_pref_service), is_new_profile);
   session_controller_client_->SwitchActiveUser(account_id);
   session_controller_client_->SetSessionState(
       session_manager::SessionState::ACTIVE);

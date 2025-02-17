@@ -13,7 +13,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/ui/signin/signin_modal_dialog.h"
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
 #include "chrome/common/url_constants.h"
@@ -22,7 +21,7 @@
 #include "components/sync/base/data_type.h"
 #include "url/gurl.h"
 
-#if BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
 #include "chrome/browser/ui/webui/signin/signin_email_confirmation_dialog.h"
 #endif
 
@@ -122,9 +121,7 @@ class SigninViewController {
   void MaybeShowChromeSigninDialogForExtensions(
       const std::u16string& extension_name_for_display,
       base::OnceClosure on_complete);
-#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
-#if BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
   // Shows the modal profile customization dialog as a browser-modal dialog on
   // top of the |browser_|'s window.
   void ShowModalProfileCustomizationDialog(
@@ -136,7 +133,7 @@ class SigninViewController {
       const std::string& last_email,
       const std::string& email,
       SigninEmailConfirmationDialog::Callback callback);
-#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
   // Shows the modal sync confirmation dialog as a browser-modal dialog on top
   // of the |browser_|'s window.
@@ -202,9 +199,14 @@ class SigninViewController {
                            CreateLocalProfile);
   FRIEND_TEST_ALL_PREFIXES(ProfilePickerCreationFlowBrowserTest,
                            CancelLocalProfileCreation);
+  FRIEND_TEST_ALL_PREFIXES(SyncSettingsInteractiveTest,
+                           PressingSignOutButtonsSignsOutUser);
+  friend class ChromeSignoutConfirmationPromptPixelTest;
   friend class login_ui_test_utils::SigninViewControllerTestUtil;
   friend class SigninInterceptFirstRunExperienceDialogBrowserTest;
   friend class SyncConfirmationUIDialogPixelTest;
+  friend class SigninViewControllerBrowserTestBase;
+  friend class ProfileMenuViewSignoutTest;
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
   // Shows the DICE-specific sign-in flow: opens a Gaia sign-in webpage in a new
@@ -232,6 +234,12 @@ class SigninViewController {
       const AccountInfo& account_info_for_promos,
       content::WebContents* contents);
 
+  // Shows the WebUI version of the signout confirmation prompt with the given
+  // `prompt_variant` and calls `callback` when the user accepts or closes the
+  // prompt.
+  void ShowSignoutConfirmationPrompt(
+      ChromeSignoutConfirmationPromptVariant prompt_variant,
+      base::OnceCallback<void(ChromeSignoutConfirmationChoice)> callback);
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
   // Returns the web contents of the modal dialog.

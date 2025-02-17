@@ -12,6 +12,7 @@
 #import "base/time/time.h"
 #import "components/data_sharing/public/data_sharing_service.h"
 #import "components/data_sharing/test_support/mock_preview_server_proxy.h"
+#import "components/feature_engagement/public/feature_activation.h"
 #import "components/password_manager/core/browser/sharing/fake_recipients_fetcher.h"
 #import "components/password_manager/ios/fake_bulk_leak_check_service.h"
 #import "components/plus_addresses/fake_plus_address_service.h"
@@ -43,6 +44,7 @@
 #import "ios/chrome/browser/signin/model/fake_system_identity.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity_manager.h"
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
+#import "ios/chrome/browser/signin/model/signin_util.h"
 #import "ios/chrome/browser/sync/model/data_type_store_service_factory.h"
 #import "ios/chrome/browser/sync/model/device_info_sync_service_factory.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
@@ -127,6 +129,10 @@ bool DelayAppLaunchPromos() {
   return true;
 }
 
+bool NeverPurgeDiscardedSessionsData() {
+  return true;
+}
+
 policy::ConfigurationPolicyProvider* GetOverriddenPlatformPolicyProvider() {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           "com.apple.configuration.managed")) {
@@ -135,6 +141,11 @@ policy::ConfigurationPolicyProvider* GetOverriddenPlatformPolicyProvider() {
     return nullptr;
   }
   return GetTestPlatformPolicyProvider();
+}
+
+bool SimulatePostDeviceRestore() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      test_switches::kSimulatePostDeviceRestore);
 }
 
 std::unique_ptr<SystemIdentityManager> CreateSystemIdentityManager() {
@@ -151,21 +162,16 @@ std::unique_ptr<SystemIdentityManager> CreateSystemIdentityManager() {
     const std::string command_line_value = command_line->GetSwitchValueASCII(
         test_switches::kAddFakeIdentitiesAtStartup);
 
-    identities =
-        [FakeSystemIdentity identitiesFromBase64String:command_line_value];
+    if (command_line_value.empty()) {
+      // If no identities were passed via parameter, add a single fake identity.
+      identities = [NSArray arrayWithObject:[FakeSystemIdentity fakeIdentity1]];
+    } else {
+      identities =
+          [FakeSystemIdentity identitiesFromBase64String:command_line_value];
+    }
   }
 
-  auto system_identity_manager =
-      std::make_unique<FakeSystemIdentityManager>(identities);
-
-  // Add a fake identity if asked to start the app in signed-in state but
-  // no identity was passed via the kAddFakeIdentitiesAtStartup parameter.
-  if (identities.count == 0 &&
-      command_line->HasSwitch(test_switches::kSignInAtStartup)) {
-    system_identity_manager->AddIdentity([FakeSystemIdentity fakeIdentity1]);
-  }
-
-  return system_identity_manager;
+  return std::make_unique<FakeSystemIdentityManager>(identities);
 }
 
 std::unique_ptr<TrustedVaultClientBackend> CreateTrustedVaultClientBackend() {
@@ -286,17 +292,14 @@ std::unique_ptr<drive::DriveService> GetOverriddenDriveService() {
   return std::make_unique<drive::TestDriveService>();
 }
 
-std::optional<std::string> FETDemoModeOverride() {
+feature_engagement::FeatureActivation FETDemoModeOverride() {
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
           test_switches::kEnableIPH)) {
-    // The FET Demo Mode tracker uses the returned string here as the feature
-    // name to enable. Using a feature name that doesn't exist will disable all
-    // IPH in tests. This is the desired behavior for EG tests if no specific
-    // feature is enabled.
-    return "disable_all";
+    return feature_engagement::FeatureActivation::AllDisabled();
   }
-  return base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-      test_switches::kEnableIPH);
+  return feature_engagement::FeatureActivation(
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          test_switches::kEnableIPH));
 }
 
 void DeleteFilesRecursively(NSString* directoryPath) {
@@ -315,6 +318,9 @@ void DeleteFilesRecursively(NSString* directoryPath) {
         // Deleting files in /Library/Preferences seems to break
         // NSUserDefaults syncing. Just ignore the directory completely.
         if ([itemPath containsString:@"/Library/Preferences/"]) {
+          continue;
+        }
+        if ([itemPath containsString:@"Saved Application State"]) {
           continue;
         }
         if (![fileManager removeItemAtPath:itemPath error:&error]) {
@@ -340,6 +346,7 @@ void WipeProfileIfRequested(int argc, char* argv[]) {
 
   DeleteFilesRecursively(
       [NSHomeDirectory() stringByAppendingPathComponent:@"Library"]);
+
   // Reset NSUserDefaults.
   [[NSUserDefaults standardUserDefaults]
       setPersistentDomain:[NSDictionary dictionary]

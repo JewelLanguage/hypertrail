@@ -13,10 +13,10 @@ import 'chrome://resources/ash/common/personalization/cros_button_style.css.js';
 import 'chrome://resources/polymer/v3_0/iron-a11y-keys/iron-a11y-keys.js';
 import 'chrome://resources/polymer/v3_0/iron-selector/iron-selector.js';
 
-import {CrButtonElement} from 'chrome://resources/ash/common/cr_elements/cr_button/cr_button.js';
+import type {CrButtonElement} from 'chrome://resources/ash/common/cr_elements/cr_button/cr_button.js';
 import {assert} from 'chrome://resources/js/assert.js';
-import {IronA11yKeysElement} from 'chrome://resources/polymer/v3_0/iron-a11y-keys/iron-a11y-keys.js';
-import {IronSelectorElement} from 'chrome://resources/polymer/v3_0/iron-selector/iron-selector.js';
+import type {IronA11yKeysElement} from 'chrome://resources/polymer/v3_0/iron-a11y-keys/iron-a11y-keys.js';
+import type {IronSelectorElement} from 'chrome://resources/polymer/v3_0/iron-selector/iron-selector.js';
 import {afterNextRender, Debouncer, PolymerElement, timeOut} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {logSuggestionClicked, logSuggestionShuffleClicked} from './sea_pen_metrics_logger.js';
@@ -72,16 +72,12 @@ export class SeaPenSuggestionsElement extends PolymerElement {
       selectableSuggestions_: Array,
 
       hiddenSuggestions_: Object,
-
-      /** The button currently highlighted by keyboard navigation. */
-      ironSelectedSuggestion_: Object,
     };
   }
 
   private suggestions_: string[];
   private selectableSuggestions_: string[];
   private hiddenSuggestions_: Set<string>;
-  private ironSelectedSuggestion_: CrButtonElement;
   private debouncer_: Debouncer;
   private onResized_: () => void = () => {
     this.debouncer_ =
@@ -191,7 +187,7 @@ export class SeaPenSuggestionsElement extends PolymerElement {
   private onSuggestionKeyPressed_(
       e: CustomEvent<{key: string, keyboardEvent: KeyboardEvent}>) {
     const selector = this.$.suggestionSelector;
-    const prevSuggestion = this.ironSelectedSuggestion_;
+    const prevSuggestion = selector.selectedItem as CrButtonElement;
     switch (e.detail.key) {
       case 'left':
         selector.selectPrevious();
@@ -207,9 +203,10 @@ export class SeaPenSuggestionsElement extends PolymerElement {
       prevSuggestion.removeAttribute('tabindex');
     }
     // Add focus state for new button.
-    if (this.ironSelectedSuggestion_) {
-      this.ironSelectedSuggestion_.setAttribute('tabindex', '0');
-      this.ironSelectedSuggestion_.focus();
+    const currentSuggestion = selector.selectedItem as CrButtonElement;
+    if (currentSuggestion) {
+      currentSuggestion.setAttribute('tabindex', '0');
+      currentSuggestion.focus();
     }
     e.detail.keyboardEvent.preventDefault();
   }

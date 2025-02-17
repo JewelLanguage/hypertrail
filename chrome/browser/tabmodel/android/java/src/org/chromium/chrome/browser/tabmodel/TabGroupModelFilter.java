@@ -82,7 +82,7 @@ public interface TabGroupModelFilter extends TabList {
      * @return The root ID of the tab group or {@link Tab.INVALID_TAB_ID} if the group isn't found
      *     in the tab model.
      */
-    int getRootIdFromStableId(@NonNull Token stableId);
+    int getRootIdFromStableId(@Nullable Token stableId);
 
     /**
      * Given a tab group's root ID, finds out the stable ID, or null if the tab group doesn't exist
@@ -136,6 +136,12 @@ public interface TabGroupModelFilter extends TabList {
     int getIndexOfTabInGroup(Tab tab);
 
     /**
+     * @param tabGroupId The tab group id of the group to lookup.
+     * @return the last shown tab in that group or Tab.INVALID_TAB_ID otherwise.
+     */
+    int getGroupLastShownTabId(@Nullable Token tabGroupId);
+
+    /**
      * @param rootId The rootId of the group to lookup.
      * @return the last shown tab in that group or Tab.INVALID_TAB_ID otherwise.
      */
@@ -168,12 +174,11 @@ public interface TabGroupModelFilter extends TabList {
      * Creates a tab group containing a single tab.
      *
      * @param tabId The tab id of the tab to create the group for.
-     * @param notify Whether to notify observers to create an undo snackbar.
      */
-    void createSingleTabGroup(int tabId, boolean notify);
+    void createSingleTabGroup(int tabId);
 
-    /** Same as {@link #createSingleTabGroup(int, boolean)}, but with a {@link Tab} object. */
-    void createSingleTabGroup(Tab tab, boolean notify);
+    /** Same as {@link #createSingleTabGroup(int)}, but with a {@link Tab} object. */
+    void createSingleTabGroup(Tab tab);
 
     /**
      * Creates a tab group with a preallocated {@link Token} for the TabGroupId.
@@ -261,25 +266,26 @@ public interface TabGroupModelFilter extends TabList {
     boolean isTabGroupHiding(@Nullable Token tabGroupId);
 
     /**
-     * Returns a lazy oneshot supplier that generates all the tab group IDs including those pending
-     * closure except those requested to be excluded.
+     * Returns a lazy oneshot supplier that generates all the tab group IDs except those requested
+     * to be excluded.
      *
      * @param tabsToExclude The list of tabs to exclude.
-     * @return A lazy oneshot supplier containing all the tab group IDs including those pending
-     *     closure.
+     * @param includePendingClosures Whether to include pending tab closures.
+     * @return A lazy oneshot supplier containing all the tab group IDs.
      */
-    LazyOneshotSupplier<Set<Token>> getLazyAllTabGroupIdsInComprehensiveModel(
-            List<Tab> tabsToExclude);
+    LazyOneshotSupplier<Set<Token>> getLazyAllTabGroupIds(
+            List<Tab> tabsToExclude, boolean includePendingClosures);
 
     /**
-     * Returns a lazy oneshot supplier that generates all the root IDs including those pending
-     * closure except those requested to be excluded.
+     * Returns a lazy oneshot supplier that generates all the root IDs except those requested to be
+     * excluded.
      *
      * @param tabsToExclude The list of tabs to exclude.
-     * @return A lazy oneshot supplier containing all the root IDs including those pending closure.
+     * @param includePendingClosures Whether to include pending tab closures.
+     * @return A lazy oneshot supplier containing all the root IDs.
      */
-    LazyOneshotSupplier<Set<Integer>> getLazyAllRootIdsInComprehensiveModel(
-            List<Tab> tabsToExclude);
+    LazyOneshotSupplier<Set<Integer>> getLazyAllRootIds(
+            List<Tab> tabsToExclude, boolean includePendingClosures);
 
     /** Returns the current title of the tab group. */
     String getTabGroupTitle(int rootId);

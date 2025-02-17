@@ -16,16 +16,16 @@
 #include "base/memory/ptr_util.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_features.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/commerce/shopping_service_factory.h"
 #include "chrome/browser/compose/compose_enabling.h"
 #include "chrome/browser/download/bubble/download_bubble_prefs.h"
-#include "chrome/browser/glic/glic_enabling.h"
 #include "chrome/browser/history_embeddings/history_embeddings_utils.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
+#include "chrome/browser/password_manager/chrome_password_change_service.h"
+#include "chrome/browser/password_manager/password_change_service_factory.h"
 #include "chrome/browser/performance_manager/public/user_tuning/user_performance_tuning_manager.h"
 #include "chrome/browser/performance_manager/public/user_tuning/user_tuning_utils.h"
 #include "chrome/browser/preloading/preloading_features.h"
@@ -34,7 +34,7 @@
 #include "chrome/browser/privacy_sandbox/tracking_protection_onboarding_factory.h"
 #include "chrome/browser/privacy_sandbox/tracking_protection_settings_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/search_engine_choice/search_engine_choice_service_factory.h"
+#include "chrome/browser/regional_capabilities/regional_capabilities_service_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ssl/https_upgrades_util.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
@@ -88,6 +88,9 @@
 #include "chrome/grit/settings_resources.h"
 #include "chrome/grit/settings_resources_map.h"
 #include "components/account_manager_core/account_manager_facade.h"
+#include "components/autofill/content/browser/content_autofill_client.h"
+#include "components/autofill/core/browser/payments/bnpl_manager.h"
+#include "components/autofill/core/browser/payments/payments_autofill_client.h"
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/commerce/core/feature_utils.h"
 #include "components/commerce/core/shopping_service.h"
@@ -102,10 +105,9 @@
 #include "components/prefs/pref_service.h"
 #include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "components/privacy_sandbox/tracking_protection_settings.h"
+#include "components/regional_capabilities/regional_capabilities_service.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/safe_browsing/core/common/hashprefix_realtime/hash_realtime_utils.h"
-#include "components/search_engines/search_engine_choice/search_engine_choice_service.h"
-#include "components/search_engines/search_engine_choice/search_engine_choice_utils.h"
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/base/signin_switches.h"
 #include "components/sync/base/features.h"
@@ -133,16 +135,11 @@
 #include "chrome/browser/win/conflicts/token_util.h"
 #endif  // BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ui/webui/settings/languages_handler.h"
-#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
-#include "components/language/core/common/language_experiments.h"
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ash/components/arc/arc_util.h"
+#if BUILDFLAG(IS_CHROMEOS)
 #include "ash/webui/eche_app_ui/eche_app_manager.h"
 #include "chrome/browser/ash/account_manager/account_apps_availability.h"
 #include "chrome/browser/ash/account_manager/account_apps_availability_factory.h"
@@ -155,16 +152,19 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/ui/webui/ash/settings/pages/multidevice/multidevice_handler.h"
 #include "chrome/browser/ui/webui/ash/settings/pages/people/account_manager_ui_handler.h"
+#include "chrome/browser/ui/webui/certificate_provisioning_ui_handler.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/browser_resources.h"
 #include "chromeos/ash/components/account_manager/account_manager_factory.h"
 #include "chromeos/ash/components/login/auth/password_visibility_utils.h"
 #include "chromeos/ash/components/phonehub/phone_hub_manager.h"
+#include "chromeos/ash/experiences/arc/arc_util.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "components/account_manager_core/chromeos/account_manager.h"
 #include "components/account_manager_core/chromeos/account_manager_facade_factory.h"
 #include "components/user_manager/user.h"
 #include "ui/base/ui_base_features.h"
-#else  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#else  // !BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/search/background/ntp_custom_background_service_factory.h"
 #include "chrome/browser/signin/account_consistency_mode_manager.h"
 #include "chrome/browser/ui/webui/cr_components/theme_color_picker/theme_color_picker_handler.h"
@@ -172,11 +172,7 @@
 #include "chrome/browser/ui/webui/settings/settings_default_browser_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_manage_profile_handler.h"
 #include "chrome/browser/ui/webui/settings/system_handler.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
-#if BUILDFLAG(IS_CHROMEOS)
-#include "chrome/browser/ui/webui/certificate_provisioning_ui_handler.h"
-#include "chromeos/constants/chromeos_features.h"
+#include "components/language/core/common/language_experiments.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(USE_NSS_CERTS)
@@ -191,6 +187,11 @@
 
 #if BUILDFLAG(ENABLE_VR)
 #include "device/vr/public/cpp/features.h"
+#endif
+
+#if BUILDFLAG(ENABLE_GLIC)
+#include "chrome/browser/glic/glic_enabling.h"
+#include "chrome/browser/ui/webui/settings/glic_handler.h"
 #endif
 
 namespace settings {
@@ -238,6 +239,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
   AddSettingsPageUIHandler(
       chromeos::cert_provisioning::CertificateProvisioningUiHandler::
           CreateForProfile(profile));
+  AddSettingsPageUIHandler(std::make_unique<LanguagesHandler>(profile));
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
   AddSettingsPageUIHandler(std::make_unique<AccessibilityMainHandler>());
@@ -254,13 +256,10 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
 #if BUILDFLAG(IS_WIN)
   AddSettingsPageUIHandler(std::make_unique<LanguagesHandler>());
 #endif  // BUILDFLAG(IS_WIN)
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  AddSettingsPageUIHandler(std::make_unique<LanguagesHandler>(profile));
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   AddSettingsPageUIHandler(
       std::make_unique<MediaDevicesSelectionHandler>(profile));
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS)
   AddSettingsPageUIHandler(std::make_unique<MetricsReportingHandler>());
 #endif
   AddSettingsPageUIHandler(std::make_unique<OnStartupHandler>(profile));
@@ -283,7 +282,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
   AddSettingsPageUIHandler(std::make_unique<PasskeysHandler>());
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   InitBrowserSettingsWebUIHandlers();
 #else
   AddSettingsPageUIHandler(
@@ -322,6 +321,9 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
   html_source->AddBoolean("isDasherlessProfile",
                           entry && entry->IsDasherlessManagement());
 
+  html_source->AddBoolean("hasEnterpriseLabel",
+                          entry && !entry->GetEnterpriseProfileLabel().empty());
+
   commerce::ShoppingService* shopping_service =
       commerce::ShoppingServiceFactory::GetForBrowserContext(profile);
   html_source->AddBoolean("changePriceEmailNotificationsEnabled",
@@ -331,15 +333,13 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
         ->FetchPriceEmailPref();
   }
 
-  search_engines::SearchEngineChoiceService*
-      search_engine_choice_dialog_service =
-          search_engines::SearchEngineChoiceServiceFactory::GetForProfile(
-              profile);
-  const bool is_eea_choice_country = search_engines::IsEeaChoiceCountry(
-      search_engine_choice_dialog_service->GetCountryId());
-  html_source->AddBoolean("isEeaChoiceCountry", is_eea_choice_country);
+  regional_capabilities::RegionalCapabilitiesService* regional_capabilties =
+      regional_capabilities::RegionalCapabilitiesServiceFactory::GetForProfile(
+          profile);
+  html_source->AddBoolean("isEeaChoiceCountry",
+                          regional_capabilties->IsInEeaCountry());
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   html_source->AddBoolean(
       "userCannotManuallyEnterPassword",
       !ash::password_visibility::AccountHasUserFacingPassword(
@@ -349,7 +349,7 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
 
   // This is the browser settings page.
   html_source->AddBoolean("isOSSettings", false);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   bool show_privacy_guide =
       base::FeatureList::IsEnabled(features::kPrivacyGuideForceAvailable) ||
@@ -375,9 +375,8 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
                           IsBalancedModeAvailable());
 
   html_source->AddBoolean(
-      "enableKeyboardAndPointerLockPrompt",
-      base::FeatureList::IsEnabled(
-          permissions::features::kKeyboardAndPointerLockPrompt));
+      "enableKeyboardLockPrompt",
+      base::FeatureList::IsEnabled(permissions::features::kKeyboardLockPrompt));
 
   html_source->AddBoolean(
       "enableLinkedServicesSetting",
@@ -413,6 +412,13 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
   html_source->AddBoolean(
       "enablePasswordLeakToggleMove",
       base::FeatureList::IsEnabled(safe_browsing::kPasswordLeakToggleMove));
+
+  html_source->AddBoolean(
+      "shouldShowPayOverTimeSettingsToggle",
+      autofill::ContentAutofillClient::FromWebContents(web_ui->GetWebContents())
+          ->GetPaymentsAutofillClient()
+          ->GetPaymentsBnplManager()
+          ->ShouldShowBnplSettingsToggle());
 
   AddSettingsPageUIHandler(std::make_unique<AboutHandler>(profile));
   AddSettingsPageUIHandler(std::make_unique<ResetSettingsHandler>(profile));
@@ -554,7 +560,9 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
       base::FeatureList::IsEnabled(blink::features::kWebAppInstallation));
 
 #if BUILDFLAG(ENABLE_GLIC)
-  html_source->AddBoolean("showGlicSettings", GlicEnabling::IsEnabledByFlags());
+  AddSettingsPageUIHandler(std::make_unique<GlicHandler>());
+  html_source->AddBoolean("showGlicSettings",
+                          GlicEnabling::IsEnabledAndConsentForProfile(profile));
 #endif
 
   // AI
@@ -578,11 +586,6 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
              : TabOrganizationUtils::GetInstance()->IsEnabled(profile)},
         {"showComposeControl",
          use_is_setting_visible ? compose_visible : compose_enabled},
-        {"showWallpaperSearchControl",
-         use_is_setting_visible
-             ? customize_chrome::IsWallpaperSearchSettingVisibleForProfile(
-                   profile)
-             : customize_chrome::IsWallpaperSearchEnabledForProfile(profile)},
         {"showHistorySearchControl",
          history_embeddings::IsHistoryEmbeddingsSettingVisible(profile)},
         {"showCompareControl",
@@ -591,6 +594,12 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
                    shopping_service->GetAccountChecker())
              : commerce::CanFetchProductSpecificationsData(
                    shopping_service->GetAccountChecker())},
+        {"showPasswordChangeControl",
+         // TODO(crbug.com/391131625): Update accordingly to enterprise
+         // requirements.
+         PasswordChangeServiceFactory::GetForProfile(profile) &&
+         PasswordChangeServiceFactory::GetForProfile(profile)
+             ->IsPasswordChangeAvailable()},
     };
 
     bool show_ai_page = show_ai_settings_for_testing;
@@ -610,8 +619,6 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
             {UserVisibleFeatureKey::kCompose, "showComposeControl"},
             {UserVisibleFeatureKey::kTabOrganization,
              "showTabOrganizationControl"},
-            {UserVisibleFeatureKey::kWallpaperSearch,
-             "showWallpaperSearchControl"},
             {UserVisibleFeatureKey::kHistorySearch, "showHistorySearchControl"},
         };
     bool is_any_ai_feature_enabled = false;
@@ -632,6 +639,9 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
                             is_any_ai_feature_enabled);
     // Compare is only shown when Synpase ("AiSettingsPageRefresh") is enabled.
     html_source->AddBoolean("showCompareControl", false);
+    // Password change is only shown when Synpase ("AiSettingsPageRefresh") is
+    // enabled.
+    html_source->AddBoolean("showPasswordChangeControl", false);
   }
 
   html_source->AddBoolean("enableAiSettingsPageRefresh",
@@ -649,7 +659,7 @@ DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(
 
 SettingsUI::~SettingsUI() = default;
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 void SettingsUI::InitBrowserSettingsWebUIHandlers() {
   Profile* profile = Profile::FromWebUI(web_ui());
 
@@ -692,7 +702,7 @@ void SettingsUI::InitBrowserSettingsWebUIHandlers() {
                           : nullptr));
   }
 }
-#else   // BUILDFLAG(IS_CHROMEOS_ASH)
+#else   // BUILDFLAG(IS_CHROMEOS)
 void SettingsUI::BindInterface(
     mojo::PendingReceiver<
         theme_color_picker::mojom::ThemeColorPickerHandlerFactory>
@@ -703,7 +713,7 @@ void SettingsUI::BindInterface(
   theme_color_picker_handler_factory_receiver_.Bind(
       std::move(pending_receiver));
 }
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 void SettingsUI::BindInterface(
     mojo::PendingReceiver<help_bubble::mojom::HelpBubbleHandlerFactory>
@@ -734,7 +744,7 @@ void SettingsUI::TryShowHatsSurveyWithTimeout() {
   }
 }
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 void SettingsUI::CreateThemeColorPickerHandler(
     mojo::PendingReceiver<theme_color_picker::mojom::ThemeColorPickerHandler>
         handler,
@@ -746,7 +756,7 @@ void SettingsUI::CreateThemeColorPickerHandler(
           Profile::FromWebUI(web_ui())),
       web_ui()->GetWebContents());
 }
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 void SettingsUI::CreateHelpBubbleHandler(
     mojo::PendingRemote<help_bubble::mojom::HelpBubbleClient> client,

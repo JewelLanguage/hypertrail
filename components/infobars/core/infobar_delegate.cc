@@ -13,7 +13,6 @@
 
 #if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
 #include "ui/gfx/color_palette.h"
-#include "ui/gfx/paint_vector_icon.h"
 #endif
 
 namespace infobars {
@@ -27,8 +26,7 @@ int InfoBarDelegate::GetIconId() const {
 }
 
 const gfx::VectorIcon& InfoBarDelegate::GetVectorIcon() const {
-  static gfx::VectorIcon empty_icon;
-  return empty_icon;
+  return gfx::VectorIcon::EmptyIcon();
 }
 
 ui::ImageModel InfoBarDelegate::GetIcon() const {

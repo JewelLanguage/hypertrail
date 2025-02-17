@@ -22,21 +22,8 @@ id<GREYMatcher> WebSigninSkipButtonMatcher();
 // dialog.
 id<GREYMatcher> WebSigninPrimaryButtonMatcher();
 
-// Returns matcher for the Sync Settings button on the main Settings screen.
-// For users who are signed-in but not syncing, this button leads to the sync
-// consent dialog instead.
-id<GREYMatcher> GoogleSyncSettingsButton();
-
 // Matcher for the sign-in screens (like history sync opt-in, upgrade promo…).
 id<GREYMatcher> SigninScreenPromoMatcher();
-
-// DO NOT USE! Use PromoScreenPrimaryButtonMatcher() from chrome_matchers.h
-// instead.
-id<GREYMatcher> SigninScreenPromoPrimaryButtonMatcher();
-
-// DO NOT USE! Use PromoScreenSecondaryButtonMatcher() from chrome_matchers.h
-// instead.
-id<GREYMatcher> SigninScreenPromoSecondaryButtonMatcher();
 
 // Matcher for the Settings row which, upon tap, leads the user to sign-in. The
 // row is only shown to signed-out users.

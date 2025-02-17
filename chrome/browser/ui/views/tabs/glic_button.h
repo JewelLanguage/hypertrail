@@ -6,8 +6,11 @@
 #define CHROME_BROWSER_UI_VIEWS_TABS_GLIC_BUTTON_H_
 
 #include "base/memory/raw_ptr.h"
+#include "chrome/browser/glic/glic_button_controller_delegate.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_control_button.h"
+#include "chrome/common/buildflags.h"
 #include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/gfx/vector_icon_types.h"
 
 class TabStripController;
 
@@ -15,26 +18,42 @@ namespace glic {
 
 // GlicButton should leverage the look and feel of the existing
 // TabSearchButton for sizing and appropriate theming.
-//
-// TODO(iwells): If this button moves outside of c/b/ui/views/tabs, rename to
-// GlicTabStripButton.
-class GlicButton : public TabStripControlButton {
+class GlicButton : public TabStripControlButton,
+                   public GlicButtonControllerDelegate {
   METADATA_HEADER(GlicButton, TabStripControlButton)
 
  public:
-  explicit GlicButton(TabStripController* tab_strip_controller);
+  explicit GlicButton(TabStripController* tab_strip_controller,
+                      PressedCallback callback,
+                      const gfx::VectorIcon& icon,
+                      const std::u16string& tooltip);
   GlicButton(const GlicButton&) = delete;
   GlicButton& operator=(const GlicButton&) = delete;
   ~GlicButton() override;
 
-  // Launches the UI programmatically.
-  void LaunchUI();
+  // GlicButtonControllerDelegate:
+  void SetShowState(bool show) override;
+  void SetIcon(const gfx::VectorIcon& icon) override;
+
+  void SetIsShowingNudge(bool is_showing);
+  void SetDropToAttachIndicator(bool indicate);
+
+  // GetBoundsInScreen() gives a rect with some padding that extends beyond the
+  // visible edges of the button. This function returns a rect without that
+  // padding.
+  gfx::Rect GetBoundsWithInset() const;
 
  private:
   // Tab strip that contains this button.
-  // TODO(crbug.com/382768227): Remove DanglingUntriaged.
-  raw_ptr<TabStripController, AcrossTasksDanglingUntriaged>
-      tab_strip_controller_;
+  raw_ptr<TabStripController> tab_strip_controller_;
+
+  // Represents the show state of the button. Visibility of the button
+  // is reflected by the show state except when the nudge is showing.
+  bool show_state_ = true;
+
+  // Represents if a nudge is currently showing. The button is not visible
+  // while the nudge is showing.
+  bool is_showing_nudge_ = false;
 };
 
 }  // namespace glic

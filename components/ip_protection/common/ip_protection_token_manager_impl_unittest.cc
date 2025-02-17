@@ -4,6 +4,8 @@
 
 #include "components/ip_protection/common/ip_protection_token_manager_impl.h"
 
+#include <cstddef>
+#include <cstdint>
 #include <deque>
 #include <map>
 #include <memory>
@@ -13,9 +15,11 @@
 #include <vector>
 
 #include "base/strings/stringprintf.h"
+#include "base/strings/to_string.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
+#include "base/time/time.h"
 #include "components/ip_protection/common/ip_protection_core.h"
 #include "components/ip_protection/common/ip_protection_data_types.h"
 #include "components/ip_protection/common/ip_protection_telemetry.h"
@@ -164,7 +168,7 @@ class IpProtectionTokenManagerImplTest : public testing::Test {
     // Set token caching by geo param value.
     std::map<std::string, std::string> parameters;
     parameters[net::features::kIpPrivacyCacheTokensByGeo.name] =
-        enable_cache_by_geo ? "true" : "false";
+        base::ToString(enable_cache_by_geo);
     scoped_feature_list_.InitAndEnableFeatureWithParameters(
         net::features::kEnableIpProtectionProxy, std::move(parameters));
 

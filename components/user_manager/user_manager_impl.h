@@ -103,9 +103,6 @@ class USER_MANAGER_EXPORT UserManagerImpl : public UserManager {
     // Overrides the home directory path for the `primary_user`.
     virtual void OverrideDirHome(const User& primary_user) = 0;
 
-    // Returns whether user session restore is in progress.
-    virtual bool IsUserSessionRestoreInProgress() = 0;
-
     // Returns UserType for the DeviceLocalAccount of the given `email`.
     virtual std::optional<UserType> GetDeviceLocalAccountUserType(
         std::string_view email) = 0;
@@ -142,7 +139,7 @@ class USER_MANAGER_EXPORT UserManagerImpl : public UserManager {
 
   // UserManager implementation:
   void Shutdown() override;
-  const UserList& GetUsers() const override;
+  const UserList& GetPersistedUsers() const override;
   UserList GetUsersAllowedForMultiUserSignIn() const override;
   UserList FindLoginAllowedUsersFrom(const UserList& users) const final;
   const UserList& GetLoggedInUsers() const override;
@@ -157,6 +154,9 @@ class USER_MANAGER_EXPORT UserManagerImpl : public UserManager {
                     const std::string& user_id_hash,
                     bool browser_restart,
                     bool is_child) override;
+  bool EnsureUser(const AccountId& account_id,
+                  UserType user_type,
+                  bool is_ephemeral) override;
   bool OnUserProfileCreated(const AccountId& account_id,
                             PrefService* prefs) override;
   void OnUserProfileWillBeDestroyed(const AccountId& account_id) override;
@@ -194,6 +194,9 @@ class USER_MANAGER_EXPORT UserManagerImpl : public UserManager {
   void RecordOwner(const AccountId& owner) override;
   void UpdateUserAccountData(const AccountId& account_id,
                              const UserAccountData& account_data) override;
+  void UpdateUserAccountLocale(const AccountId& account_id,
+                               const std::string& locale) override;
+
   bool IsOwnerUser(const User* user) const override;
   bool IsPrimaryUser(const User* user) const override;
   bool IsEphemeralUser(const User* user) const override;
@@ -247,18 +250,12 @@ class USER_MANAGER_EXPORT UserManagerImpl : public UserManager {
       const AccountId& account_id) const override;
   bool IsDeviceLocalAccountMarkedForRemoval(
       const AccountId& account_id) const override;
-  void SetUserAffiliated(const AccountId& account_id,
-                         bool is_affiliated) override;
+  void SetUserPolicyStatus(const AccountId& account_id,
+                           bool is_managed,
+                           bool is_affiliated) override;
   bool HasBrowserRestarted() const final;
 
   void Initialize() override;
-
-  // Creates and adds a kiosk user for testing with a given `account_id`
-  // and `username_hash` to identify homedir mount point.
-  // Returns a pointer to the user.
-  // Note: call `UserLoggedIn` if the user needs to be logged-in.
-  const User* AddKioskAppUserForTesting(const AccountId& account_id,
-                                        const std::string& username_hash);
 
   // Helper function that converts users from |users_list| to |users_vector| and
   // |users_set|. Duplicates and users already present in |existing_users| are
@@ -351,9 +348,6 @@ class USER_MANAGER_EXPORT UserManagerImpl : public UserManager {
   virtual void ResetOwnerId();
   void SetOwnerId(const AccountId& owner_account_id) override;
 
-  // If there's pending user switch, processes it.
-  void ProcessPendingUserSwitchId();
-
   // TODO(b/278643115): Move to private, once we migrate fake implementation
   // closer enough to the production behavior.
   void RegularUserLoggedInAsEphemeral(const AccountId& account_id,
@@ -379,7 +373,7 @@ class USER_MANAGER_EXPORT UserManagerImpl : public UserManager {
   // List of all known users. User instances are owned by |this|. Regular users
   // are removed by |RemoveUserFromList|, device local accounts by
   // |UpdateAndCleanUpDeviceLocalAccounts|.
-  UserList users_;
+  UserList persisted_users_;
 
   // List of all users that are logged in current session. These point to User
   // instances in |users_|. Only one of them could be marked as active.
@@ -429,21 +423,26 @@ class USER_MANAGER_EXPORT UserManagerImpl : public UserManager {
   // Notifies observers that merge session state had changed.
   void NotifyMergeSessionStateChanged();
 
-  // Insert |user| at the front of the LRU user list.
-  void SetLRUUser(User* user);
+  // Handles the given user's log-in state update.
+  void OnUserLoggedIn(User& user, std::string_view username_hash);
 
-  // Updates num-users crash key.
-  void UpdateCrashKey(int num_users, std::optional<UserType> active_user_type);
+  // Handles the event that a Primary user session is created.
+  void OnPrimaryUserLoggedIn(User& user);
+
+  // Handles the active user switching.
+  void OnActiveUserSwitched(User& new_active_user);
+
+  // Updates "num-users" crash key.
+  static void UpdateNumLoggedInUsersCrashKey(size_t num_users);
+
+  // Updates "session-type" crash key.
+  static void UpdateSessionTypeCrashKey(UserType active_user_type);
 
   // Sends metrics in response to a user with gaia account (regular) logging in.
   void SendGaiaUserLoginMetrics(const AccountId& account_id);
 
   // Sends metrics for multi user sign-in.
   void SendMultiUserSignInMetrics();
-
-  // Sets account locale for user with id |account_id|.
-  virtual void UpdateUserAccountLocale(const AccountId& account_id,
-                                       const std::string& locale);
 
   // Updates user account after locale was resolved.
   void DoUpdateAccountLocale(const AccountId& account_id,
@@ -455,6 +454,9 @@ class USER_MANAGER_EXPORT UserManagerImpl : public UserManager {
   // TODO(b/355590943): Check if it is not used anymore and remove it.
   bool IsDeprecatedArcKioskAccountId(const AccountId& account_id) const;
   void RemoveDeprecatedArcKioskUser(const AccountId& account_id);
+
+  // Returns whether the device is enterprise managed.
+  bool IsEnterpriseManaged() const;
 
   std::unique_ptr<Delegate> delegate_;
 
@@ -495,10 +497,6 @@ class USER_MANAGER_EXPORT UserManagerImpl : public UserManager {
 
   // Time at which this object was created.
   base::TimeTicks manager_creation_time_ = base::TimeTicks::Now();
-
-  // ID of the user just added to the session that needs to be activated
-  // as soon as user's profile is loaded.
-  AccountId pending_user_switch_ = EmptyAccountId();
 
   // ID of the user that was active in the previous session.
   // Preference value is stored here before first user signs in

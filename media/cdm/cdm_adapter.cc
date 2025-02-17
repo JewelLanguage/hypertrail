@@ -20,6 +20,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/clamped_math.h"
@@ -28,6 +29,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
+#include "base/types/pass_key.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/callback_registry.h"
 #include "media/base/cdm_initialized_promise.h"
@@ -217,9 +219,10 @@ void CdmAdapter::Create(
   DCHECK(session_keys_change_cb);
   DCHECK(session_expiration_update_cb);
 
-  scoped_refptr<CdmAdapter> cdm = new CdmAdapter(
-      cdm_config, create_cdm_func, std::move(helper), session_message_cb,
-      session_closed_cb, session_keys_change_cb, session_expiration_update_cb);
+  auto cdm = base::MakeRefCounted<CdmAdapter>(
+      base::PassKey<CdmAdapter>(), cdm_config, create_cdm_func,
+      std::move(helper), session_message_cb, session_closed_cb,
+      session_keys_change_cb, session_expiration_update_cb);
 
   // |cdm| ownership passed to the promise.
   cdm->Initialize(
@@ -227,6 +230,7 @@ void CdmAdapter::Create(
 }
 
 CdmAdapter::CdmAdapter(
+    base::PassKey<CdmAdapter>,
     const CdmConfig& cdm_config,
     CreateCdmFunc create_cdm_func,
     std::unique_ptr<CdmAuxiliaryHelper> helper,
@@ -241,10 +245,10 @@ CdmAdapter::CdmAdapter(
       session_closed_cb_(session_closed_cb),
       session_keys_change_cb_(session_keys_change_cb),
       session_expiration_update_cb_(session_expiration_update_cb),
-      cdm_origin_(helper_->GetCdmOrigin().Serialize()),
-      scoped_crash_key_(&g_origin_crash_key, cdm_origin_),
+      scoped_crash_key_(&g_origin_crash_key,
+                        helper_->GetCdmOrigin().Serialize()),
       task_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()),
-      pool_(new AudioBufferMemoryPool()) {
+      pool_(base::MakeRefCounted<AudioBufferMemoryPool>()) {
   DVLOG(1) << __func__;
 
   DCHECK(!cdm_config.key_system.empty());
@@ -254,6 +258,8 @@ CdmAdapter::CdmAdapter(
   DCHECK(session_closed_cb_);
   DCHECK(session_keys_change_cb_);
   DCHECK(session_expiration_update_cb_);
+
+  cdm_metrics_data_.cdm_origin = helper_->GetCdmOrigin();
 
   helper_->SetFileReadCB(
       base::BindRepeating(&CdmAdapter::OnFileRead, weak_factory_.GetWeakPtr()));

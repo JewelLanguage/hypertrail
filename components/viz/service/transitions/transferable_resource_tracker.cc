@@ -4,8 +4,6 @@
 
 #include "components/viz/service/transitions/transferable_resource_tracker.h"
 
-#include <GLES2/gl2.h>
-
 #include <limits>
 #include <memory>
 #include <utility>
@@ -13,11 +11,11 @@
 #include "base/containers/contains.h"
 #include "components/viz/common/resources/release_callback.h"
 #include "components/viz/common/resources/resource_id.h"
-#include "components/viz/common/resources/shared_bitmap.h"
 #include "components/viz/common/resources/transferable_resource.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gl/gl_bindings.h"
 
 namespace viz {
 

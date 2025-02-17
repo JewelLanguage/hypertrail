@@ -13,8 +13,11 @@
 #include "base/gtest_prod_util.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "components/autofill/core/browser/autofill_type.h"
+#include "components/autofill/core/browser/data_model/autofill_structured_address_component.h"
 #include "components/autofill/core/browser/data_model/form_group.h"
 #include "components/autofill/core/browser/data_model/usage_history_information.h"
+#include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/suggestions/suggestion.h"
 #include "url/gurl.h"
 
@@ -212,15 +215,20 @@ class CreditCard : public FormGroup {
   bool IsDeletable() const;
 
   // FormGroup:
-  void GetMatchingTypesWithProfileSources(
-      const std::u16string& text,
-      const std::string& app_locale,
-      FieldTypeSet* matching_types,
-      PossibleProfileValueSources* profile_value_sources) const override;
+  void GetMatchingTypes(const std::u16string& text,
+                        const std::string& app_locale,
+                        FieldTypeSet* matching_types) const override;
+  std::u16string GetInfo(const AutofillType& type,
+                         const std::string& app_locale) const override;
   std::u16string GetRawInfo(FieldType type) const override;
   void SetRawInfoWithVerificationStatus(FieldType type,
                                         const std::u16string& value,
                                         VerificationStatus status) override;
+  bool SetInfoWithVerificationStatus(const AutofillType& type,
+                                     const std::u16string& value,
+                                     const std::string& app_locale,
+                                     VerificationStatus status) override;
+  VerificationStatus GetVerificationStatus(FieldType type) const override;
 
   // Special method to set value for HTML5 month input type.
   void SetInfoForMonthInputType(const std::u16string& value);
@@ -321,6 +329,9 @@ class CreditCard : public FormGroup {
 
   // Returns true if there are no values (field types) set.
   bool IsEmpty(const std::string& app_locale) const;
+
+  // Returns true if the card is enrolled in card info retrieval.
+  bool IsEnrolledInCardInfoRetrieval() const;
 
   // Returns true if credit card number is valid.
   // MASKED_SERVER_CARDs will never be valid because the number is
@@ -529,13 +540,7 @@ class CreditCard : public FormGroup {
   FRIEND_TEST_ALL_PREFIXES(CreditCardTest, SetExpirationYearFromString);
 
   // FormGroup:
-  void GetSupportedTypes(FieldTypeSet* supported_types) const override;
-  std::u16string GetInfoImpl(const AutofillType& type,
-                             const std::string& app_locale) const override;
-  bool SetInfoWithVerificationStatusImpl(const AutofillType& type,
-                                         const std::u16string& value,
-                                         const std::string& app_locale,
-                                         VerificationStatus status) override;
+  FieldTypeSet GetSupportedTypes() const override;
 
   // The issuer network of the card to fill in to the page, e.g. 'Mastercard'.
   std::u16string NetworkForFill() const;

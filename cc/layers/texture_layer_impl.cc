@@ -19,10 +19,10 @@
 #include "cc/trees/layer_tree_frame_sink.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/occlusion.h"
+#include "components/viz/client/client_resource_provider.h"
 #include "components/viz/common/features.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/common/quads/texture_draw_quad.h"
-#include "components/viz/common/resources/bitmap_allocation.h"
 #include "components/viz/common/resources/platform_color.h"
 
 namespace cc {
@@ -113,7 +113,8 @@ bool TextureLayerImpl::WillDraw(
   return resource_id_ != viz::kInvalidResourceId;
 }
 
-void TextureLayerImpl::AppendQuads(viz::CompositorRenderPass* render_pass,
+void TextureLayerImpl::AppendQuads(const AppendQuadsContext& context,
+                                   viz::CompositorRenderPass* render_pass,
                                    AppendQuadsData* append_quads_data) {
   DCHECK(resource_id_);
 
@@ -172,9 +173,6 @@ SimpleEnclosedRegion TextureLayerImpl::VisibleOpaqueRegion() const {
 
 void TextureLayerImpl::OnPurgeMemory() {
   // Do nothing here intentionally as the LayerTreeFrameSink isn't lost.
-  // Unregistering SharedBitmapIds with the LayerTreeFrameSink wouldn't free
-  // the shared memory, as the TextureLayer and/or TextureLayerClient will still
-  // have a reference to it.
 }
 
 void TextureLayerImpl::ReleaseResources() {

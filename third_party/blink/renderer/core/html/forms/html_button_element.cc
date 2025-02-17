@@ -136,7 +136,7 @@ void HTMLButtonElement::ParseAttribute(
 }
 
 Element* HTMLButtonElement::commandForElement() {
-  if (!RuntimeEnabledFeatures::HTMLInvokeTargetAttributeEnabled()) {
+  if (!RuntimeEnabledFeatures::HTMLCommandAttributesEnabled()) {
     return nullptr;
   }
 
@@ -145,24 +145,35 @@ Element* HTMLButtonElement::commandForElement() {
     return nullptr;
   }
 
-  return GetElementAttribute(html_names::kCommandforAttr);
+  return GetElementAttributeResolvingReferenceTarget(
+      html_names::kCommandforAttr);
+}
+
+void HTMLButtonElement::setCommand(const AtomicString& type) {
+  setAttribute(html_names::kCommandAttr, type);
 }
 
 AtomicString HTMLButtonElement::command() const {
-  CHECK(RuntimeEnabledFeatures::HTMLInvokeTargetAttributeEnabled());
-  const AtomicString& attribute_value =
-      FastGetAttribute(html_names::kCommandAttr);
-  if (attribute_value && !attribute_value.empty()) {
-    return attribute_value;
+  CHECK(RuntimeEnabledFeatures::HTMLCommandAttributesEnabled());
+  const AtomicString& action = FastGetAttribute(html_names::kCommandAttr);
+  CommandEventType type = GetCommandEventType(action);
+  switch (type) {
+    case CommandEventType::kNone:
+      return g_empty_atom;
+    case CommandEventType::kCustom:
+      return action;
+    default: {
+      const AtomicString& lower_action = action.LowerASCII();
+      DCHECK_EQ(GetCommandEventType(lower_action), type);
+      return lower_action;
+    }
   }
-  return g_empty_atom;
+  NOTREACHED();
 }
 
-CommandEventType HTMLButtonElement::GetCommandEventType() const {
-  auto action = command();
-  DCHECK(!action.IsNull());
-
-  if (action.empty()) {
+CommandEventType HTMLButtonElement::GetCommandEventType(
+    const AtomicString& action) const {
+  if (action.IsNull() || action.empty()) {
     return CommandEventType::kNone;
   }
 
@@ -192,8 +203,12 @@ CommandEventType HTMLButtonElement::GetCommandEventType() const {
 
   // V2 commands go below this point
 
-  if (!RuntimeEnabledFeatures::HTMLInvokeActionsV2Enabled()) {
+  if (!RuntimeEnabledFeatures::HTMLCommandActionsV2Enabled()) {
     return CommandEventType::kNone;
+  }
+
+  if (EqualIgnoringASCIICase(action, keywords::kRequestClose)) {
+    return CommandEventType::kRequestClose;
   }
 
   // Input/Select Cases
@@ -299,7 +314,8 @@ void HTMLButtonElement::DefaultEventHandler(Event& event) {
             "popovertarget is ignored on elements with commandfor.");
       }
 
-      auto action = GetCommandEventType();
+      auto action =
+          GetCommandEventType(FastGetAttribute(html_names::kCommandAttr));
       bool is_valid_builtin =
           command_target->IsValidBuiltinCommand(*this, action);
       bool should_dispatch =
@@ -411,7 +427,7 @@ void HTMLButtonElement::DispatchBlurEvent(
 }
 
 HTMLSelectElement* HTMLButtonElement::OwnerSelect() const {
-  if (!RuntimeEnabledFeatures::CustomizableSelectEnabled()) {
+  if (!HTMLSelectElement::CustomizableSelectEnabled(this)) {
     return nullptr;
   }
   if (auto* select = DynamicTo<HTMLSelectElement>(parentNode())) {
@@ -423,7 +439,7 @@ HTMLSelectElement* HTMLButtonElement::OwnerSelect() const {
 }
 
 bool HTMLButtonElement::IsInertRoot() const {
-  if (OwnerSelect()) {
+  if (OwnerSelect() && !RuntimeEnabledFeatures::CSSInertEnabled()) {
     return true;
   }
   return HTMLFormControlElement::IsInertRoot();

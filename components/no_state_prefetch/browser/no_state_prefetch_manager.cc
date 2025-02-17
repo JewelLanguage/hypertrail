@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <functional>
 #include <optional>
 #include <string>
@@ -25,7 +26,6 @@
 #include "base/metrics/field_trial.h"
 #include "base/not_fatal_until.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/system/sys_info.h"
 #include "base/task/single_thread_task_runner.h"
@@ -258,7 +258,6 @@ NoStatePrefetchManager::StartPrefetchingFromLinkRelPrerender(
     attempt = preloading_data->AddPreloadingAttempt(
         content::preloading_predictor::kLinkRel,
         content::PreloadingType::kNoStatePrefetch, same_url_matcher,
-        /*planned_max_preloading_type=*/std::nullopt,
         triggered_primary_page_source_id);
   }
   return StartPrefetchingWithPreconnectFallback(

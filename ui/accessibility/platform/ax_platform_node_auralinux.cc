@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "ui/accessibility/platform/ax_platform_node_auralinux.h"
 
 #include <stdint.h>
@@ -21,7 +26,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/not_fatal_until.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
@@ -686,7 +690,7 @@ const gchar* GetName(AtkAction* atk_action, gint index) {
   if (html_id.empty()) {
     ATK_AURALINUX_RETURN_STRING(AXPlatformNodeBase::kAriaActionsPrefix);
   }
-  ATK_AURALINUX_RETURN_STRING(AXPlatformNodeBase::kAriaActionsPrefix + "#" +
+  ATK_AURALINUX_RETURN_STRING(AXPlatformNodeBase::kAriaActionsPrefix + "_" +
                               html_id);
 }
 
@@ -4120,14 +4124,14 @@ void AXPlatformNodeAuraLinux::NotifyAccessibilityEvent(
 
 std::optional<std::pair<int, int>>
 AXPlatformNodeAuraLinux::GetEmbeddedObjectIndicesForId(int id) {
-  auto iterator = base::ranges::find(hypertext_.hyperlinks, id);
+  auto iterator = std::ranges::find(hypertext_.hyperlinks, id);
   if (iterator == hypertext_.hyperlinks.end())
     return std::nullopt;
   int hyperlink_index = std::distance(hypertext_.hyperlinks.begin(), iterator);
 
   auto offset =
-      base::ranges::find(hypertext_.hyperlink_offset_to_index, hyperlink_index,
-                         &AXLegacyHypertext::OffsetToIndex::value_type::second);
+      std::ranges::find(hypertext_.hyperlink_offset_to_index, hyperlink_index,
+                        &AXLegacyHypertext::OffsetToIndex::value_type::second);
   if (offset == hypertext_.hyperlink_offset_to_index.end())
     return std::nullopt;
 

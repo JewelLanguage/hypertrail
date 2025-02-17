@@ -171,6 +171,10 @@ BASE_FEATURE(kTrackingProtectionUserBypassPwa,
 BASE_FEATURE(kTrackingProtectionUserBypassPwaTrigger,
              "TrackingProtectionUserBypassPwaTrigger",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kDisplayWildcardInContentSettings,
+             "DisplayWildcardInContentSettings",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_ANDROID)
 
 BASE_FEATURE(kPsDualWritePrefsToNoticeStorage,
@@ -207,8 +211,8 @@ const base::FeatureParam<bool>
         &kPrivacySandboxActivityTypeStorage,
         kPrivacySandboxActivityTypeStorageSkipPreFirstTabName, false};
 
-BASE_FEATURE(kPrivacySandboxPrivacyGuideAdTopics,
-             "PrivacySandboxPrivacyGuideAdTopics",
+BASE_FEATURE(kPrivacySandboxAdTopicsContentParity,
+             "PrivacySandboxAdTopicsContentParity",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kPrivacySandboxMigratePrefsToNoticeConsentDataModel,
@@ -217,7 +221,7 @@ BASE_FEATURE(kPrivacySandboxMigratePrefsToNoticeConsentDataModel,
 
 BASE_FEATURE(kPrivacySandboxPrivacyPolicy,
              "PrivacySandboxPrivacyPolicy",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kPrivacySandboxNoticeQueue,
              "PrivacySandboxNoticeQueue",
@@ -264,12 +268,19 @@ const base::FeatureParam<double>
         &kPrivacySandboxCctAdsNoticeSurvey, "decline-trigger-rate", 0.0};
 
 const base::FeatureParam<std::string> kPrivacySandboxCctAdsNoticeSurveyAppId{
-    &kPrivacySandboxCctAdsNoticeSurvey, "app-id", ""};
+    &kPrivacySandboxCctAdsNoticeSurvey, "survey-app-id", ""};
 
 const base::FeatureParam<int>
     kPrivacySandboxCctAdsNoticeSurveyDelaysMilliseconds{
-        &kPrivacySandboxCctAdsNoticeSurvey, "survey-delay",
+        &kPrivacySandboxCctAdsNoticeSurvey, "survey-delay-ms",
         /*20 seconds*/ 20000};
+
+BASE_FEATURE(kPrivacySandboxNoticeActionDebouncingAndroid,
+             "PrivacySandboxNoticeActionDebouncingAndroid",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+const base::FeatureParam<int> kPrivacySandboxDebouncingDelayMilliseconds{
+    &kPrivacySandboxNoticeActionDebouncingAndroid, "debouncing-delay-ms", 100};
 
 #endif  // BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kPrivacySandboxAdsApiUxEnhancements,

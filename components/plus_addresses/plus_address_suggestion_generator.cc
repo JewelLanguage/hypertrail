@@ -111,14 +111,10 @@ bool ShouldOfferPlusAddressCreationOnForm(
     case PasswordFormClassification::Type::kSignupForm:
       return true;
     case PasswordFormClassification::Type::kLoginForm:
-      if (base::FeatureList::IsEnabled(
-              features::kPlusAddressOfferCreationIfPasswordFieldIsNotVisible) &&
-          !IsPasswordFieldVisible(focused_form, form_classification)) {
+      if (!IsPasswordFieldVisible(focused_form, form_classification)) {
         return true;
       }
-      return base::FeatureList::IsEnabled(
-                 features::kPlusAddressRefinedPasswordFormClassification) &&
-             form_has_unexpected_field_types_for_login_form();
+      return form_has_unexpected_field_types_for_login_form();
     case PasswordFormClassification::Type::kChangePasswordForm:
     case PasswordFormClassification::Type::kResetPasswordForm:
       return false;
@@ -313,29 +309,21 @@ PlusAddressSuggestionGenerator::CreateNewPlusAddressSuggestion() {
       l10n_util::GetStringUTF16(IDS_PLUS_ADDRESS_CREATE_SUGGESTION_MAIN_TEXT),
       SuggestionType::kCreateNewPlusAddress);
 
-  suggestion.labels = CreateLabelsForCreateSuggestion(
-      !base::FeatureList::IsEnabled(
-          features::kPlusAddressUserOnboardingEnabled) ||
-      setting_service_->GetHasAcceptedNotice());
+  suggestion.labels =
+      CreateLabelsForCreateSuggestion(setting_service_->GetHasAcceptedNotice());
   suggestion.icon = Suggestion::Icon::kPlusAddress;
   suggestion.feature_for_new_badge = &features::kPlusAddressesEnabled;
   suggestion.iph_metadata = Suggestion::IPHMetadata(
       &feature_engagement::kIPHPlusAddressCreateSuggestionFeature);
-#if BUILDFLAG(IS_ANDROID)
-  suggestion.iph_description_text =
-      l10n_util::GetStringUTF16(IDS_PLUS_ADDRESS_CREATE_SUGGESTION_IPH_ANDROID);
-#endif  // BUILDFLAG(IS_ANDROID)
   return suggestion;
 }
 
 bool PlusAddressSuggestionGenerator::IsInlineGenerationEnabled() const {
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-  if (base::FeatureList::IsEnabled(
-          features::kPlusAddressUserOnboardingEnabled) &&
-      !setting_service_->GetHasAcceptedNotice()) {
+  if (!setting_service_->GetHasAcceptedNotice()) {
     return false;
   }
-  return base::FeatureList::IsEnabled(features::kPlusAddressInlineCreation);
+  return true;
 #else
   return false;
 #endif
@@ -369,10 +357,8 @@ PlusAddressSuggestionGenerator::CreateNewPlusAddressInlineSuggestion(
     SetLoadingStateForSuggestion(/*is_loading=*/true, suggestion);
   }
   suggestion.icon = Suggestion::Icon::kPlusAddress;
-  suggestion.labels = CreateLabelsForCreateSuggestion(
-      !base::FeatureList::IsEnabled(
-          features::kPlusAddressUserOnboardingEnabled) ||
-      setting_service_->GetHasAcceptedNotice());
+  suggestion.labels =
+      CreateLabelsForCreateSuggestion(setting_service_->GetHasAcceptedNotice());
   return suggestion;
 }
 

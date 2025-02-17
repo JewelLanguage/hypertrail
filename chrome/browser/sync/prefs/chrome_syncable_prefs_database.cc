@@ -1377,7 +1377,9 @@ constexpr auto kChromeSyncablePrefsAllowlist = base::MakeFixedFlatMap<
       sync_preferences::MergeBehavior::kNone}},
     {prefs::kRestoreOnStartup,
      {syncable_prefs_ids::kRestoreOnStartup, syncer::PREFERENCES,
-      sync_preferences::PrefSensitivity::kNone,
+      // This is behind history opt-in to be consistent with the
+      // `kURLsToRestoreOnStartup` pref.
+      sync_preferences::PrefSensitivity::kSensitiveRequiresHistory,
       sync_preferences::MergeBehavior::kNone}},
     {prefs::kSearchSuggestEnabled,
      {syncable_prefs_ids::kSearchSuggestEnabled, syncer::PREFERENCES,
@@ -1664,9 +1666,9 @@ std::map<std::string_view, sync_preferences::SyncablePrefMetadata>
 ChromeSyncablePrefsDatabase::GetAllSyncablePrefsForTest() const {
   std::map<std::string_view, sync_preferences::SyncablePrefMetadata>
       syncable_prefs;
-  base::ranges::copy(kChromeSyncablePrefsAllowlist,
-                     std::inserter(syncable_prefs, syncable_prefs.end()));
-  base::ranges::move(
+  std::ranges::copy(kChromeSyncablePrefsAllowlist,
+                    std::inserter(syncable_prefs, syncable_prefs.end()));
+  std::ranges::move(
       common_syncable_prefs_database_.GetAllSyncablePrefsForTest(),  // IN-TEST
       std::inserter(syncable_prefs, syncable_prefs.end()));
   return syncable_prefs;

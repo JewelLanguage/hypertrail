@@ -112,7 +112,7 @@ class TestBrowserWindow : public BrowserWindow {
   void Maximize() override {}
   void Minimize() override {}
   void Restore() override {}
-  void OnCanResizeFromWebAPIChanged() override {}
+  void OnWebApiWindowResizableChanged() override {}
   bool GetCanResize() override;
   ui::mojom::WindowShowState GetWindowShowState() const override;
   bool ShouldHideUIForFullscreen() const override;
@@ -129,6 +129,7 @@ class TestBrowserWindow : public BrowserWindow {
   void UpdateToolbar(content::WebContents* contents) override {}
   bool UpdateToolbarSecurityState() override;
   void UpdateCustomTabBarVisibility(bool visible, bool animate) override {}
+  void SetContentScrimVisibility(bool visible) override {}
   void ResetToolbarTabState(content::WebContents* contents) override {}
   void FocusToolbar() override {}
   ExtensionsContainer* GetExtensionsContainer() override;
@@ -175,9 +176,6 @@ class TestBrowserWindow : public BrowserWindow {
       const std::optional<url::Origin>& initiating_origin,
       IntentPickerResponse callback) override {}
 #endif  //  !define(OS_ANDROID)
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  void VerifyUserEligibilityIOSPasswordPromoBubble() override;
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
   send_tab_to_self::SendTabToSelfBubbleView*
   ShowSendTabToSelfDevicePickerBubble(content::WebContents* contents) override;
   send_tab_to_self::SendTabToSelfBubbleView* ShowSendTabToSelfPromoBubble(

@@ -4,11 +4,12 @@
 
 #include "third_party/blink/renderer/platform/widget/widget_base.h"
 
+#include <algorithm>
+
 #include "base/command_line.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/ranges/algorithm.h"
 #include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -519,7 +520,7 @@ void WidgetBase::UpdateVisualProperties(
       visual_properties.browser_controls_params);
 
   LayerTreeHost()->SetVisualDeviceViewportSize(
-      gfx::ScaleToCeiledSize(visual_properties.visible_viewport_size,
+      gfx::ScaleToCeiledSize(visual_properties.visible_viewport_size_device_px,
                              screen_info.device_scale_factor));
 
   client_->UpdateVisualProperties(visual_properties);
@@ -873,8 +874,6 @@ void WidgetBase::FinishRequestNewLayerTreeFrameSink(
 
   constexpr bool automatic_flushes = false;
   constexpr bool support_locking = false;
-  gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager =
-      Platform::Current()->GetGpuMemoryBufferManager();
 
   auto context_provider =
       base::MakeRefCounted<viz::ContextProviderCommandBuffer>(
@@ -899,7 +898,7 @@ void WidgetBase::FinishRequestNewLayerTreeFrameSink(
             std::move(context_provider),
             std::move(worker_context_provider_wrapper),
             Platform::Current()->CompositorThreadTaskRunner(),
-            gpu_memory_buffer_manager, g_next_layer_tree_frame_sink_id++,
+            g_next_layer_tree_frame_sink_id++,
             std::move(params->synthetic_begin_frame_source),
             widget_input_handler_manager_->GetSynchronousCompositorRegistry(),
             CrossVariantMojoRemote<
@@ -917,7 +916,6 @@ void WidgetBase::FinishRequestNewLayerTreeFrameSink(
   widget_host_->RegisterRenderFrameMetadataObserver(
       std::move(render_frame_metadata_observer_client_receiver),
       std::move(render_frame_metadata_observer_remote));
-  params->gpu_memory_buffer_manager = gpu_memory_buffer_manager;
   std::move(callback).Run(
       std::make_unique<cc::mojo_embedder::AsyncLayerTreeFrameSink>(
           std::move(context_provider),
@@ -1149,7 +1147,6 @@ void WidgetBase::UpdateTextInputStateInternal(bool show_virtual_keyboard,
   blink::WebTextInputInfo new_info;
   ui::mojom::VirtualKeyboardVisibilityRequest last_vk_visibility_request =
       ui::mojom::VirtualKeyboardVisibilityRequest::NONE;
-  bool always_hide_ime = false;
   std::optional<gfx::Rect> control_bounds;
   std::optional<gfx::Rect> selection_bounds;
   if (frame_widget) {
@@ -1161,7 +1158,6 @@ void WidgetBase::UpdateTextInputStateInternal(bool show_virtual_keyboard,
 
     // Check whether the keyboard should always be hidden for the currently
     // focused element.
-    always_hide_ime = frame_widget->ShouldSuppressKeyboardForFocusedElement();
     frame_widget->GetEditContextBoundsInWindow(&control_bounds,
                                                &selection_bounds);
   }
@@ -1177,7 +1173,7 @@ void WidgetBase::UpdateTextInputStateInternal(bool show_virtual_keyboard,
       text_input_type_ != new_type || text_input_mode_ != new_mode ||
       text_input_info_ != new_info || !new_info.ime_text_spans.empty() ||
       can_compose_inline_ != new_can_compose_inline ||
-      always_hide_ime_ != always_hide_ime || vk_policy_ != new_vk_policy ||
+      vk_policy_ != new_vk_policy ||
       (new_vk_policy == ui::mojom::VirtualKeyboardPolicy::MANUAL &&
        (last_vk_visibility_request !=
         ui::mojom::VirtualKeyboardVisibilityRequest::NONE)) ||
@@ -1229,7 +1225,6 @@ void WidgetBase::UpdateTextInputStateInternal(bool show_virtual_keyboard,
     // TODO(changwan): change instances of show_ime_if_needed to
     // show_virtual_keyboard.
     params->show_ime_if_needed = show_virtual_keyboard;
-    params->always_hide_ime = always_hide_ime;
     params->reply_to_request = reply_to_request;
     widget_host_->TextInputStateChanged(std::move(params));
 
@@ -1238,7 +1233,6 @@ void WidgetBase::UpdateTextInputStateInternal(bool show_virtual_keyboard,
     text_input_mode_ = new_mode;
     vk_policy_ = new_vk_policy;
     can_compose_inline_ = new_can_compose_inline;
-    always_hide_ime_ = always_hide_ime;
     text_input_flags_ = new_info.flags;
     frame_control_bounds_ = control_bounds.value_or(gfx::Rect());
     // Selection bounds are not populated in non-EditContext scenarios.

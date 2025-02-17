@@ -32,6 +32,10 @@ namespace drive {
 class DriveService;
 }  // namespace drive
 
+namespace feature_engagement {
+class FeatureActivation;
+}  // namespace feature_engagement
+
 namespace policy {
 class ConfigurationPolicyProvider;
 }  // namespace policy
@@ -108,9 +112,20 @@ bool DisableUpdateService();
 // can start before checking if the promo appears.
 bool DelayAppLaunchPromos();
 
+// Returns true if the data for discarded session should never be deleted.
+// This is a workaround because during EG tests, the application delegate
+// method -application:didDiscardSceneSessions: may be called with a list
+// of identifiers that contains identifiers of UIScene that are active.
+bool NeverPurgeDiscardedSessionsData();
+
 // Returns a policy provider that should be installed as the platform policy
 // provider when testing. May return nullptr.
 policy::ConfigurationPolicyProvider* GetOverriddenPlatformPolicyProvider();
+
+// Whether a phone backup/restore state should be simulated for testing purpose.
+// Uses`experimental_flags::SimulatePostDeviceRestore()` to check whether this
+// feature should be enabled due to experimental feature.
+bool SimulatePostDeviceRestore();
 
 // Allows overriding the SystemIdentityManager factory. The real factory will
 // be used if this hook returns null.
@@ -177,10 +192,7 @@ base::TimeDelta GetOverriddenSnackbarDuration();
 std::unique_ptr<drive::DriveService> GetOverriddenDriveService();
 
 // Override the Feature Engagement Tracker used in tests with a demo version.
-// Returning std::nullopt will not do any override. Returning any string will
-// override with a demo tracker that only enables that feature (use empty string
-// for a demo tracker that enables all features).
-std::optional<std::string> FETDemoModeOverride();
+feature_engagement::FeatureActivation FETDemoModeOverride();
 
 // If the given argv contains `-EGTestWipeProfile`, deletes the
 // contents of the `Library` directory at the start of `main()`. This

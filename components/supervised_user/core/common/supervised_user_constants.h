@@ -16,10 +16,16 @@ namespace supervised_user {
 // renumbered and numeric values should never be reused.
 // LINT.IfChange(LocalApprovalResult)
 enum class LocalApprovalResult {
+  // The parent has locally approved the website.
   kApproved = 0,
+  // The parent has explicitly declined the approval.
   kDeclined = 1,
+  // The local web approval is canceled without user intervention.
   kCanceled = 2,
+  // The local web approval is interrupted due to an error, e.g. parsing error
+  // or unexpected `result` from the server.
   kError = 3,
+  // Deprecated kMalformedPacpResult = 4,
   kMaxValue = kError
 };
 // LINT.ThenChange(//tools/metrics/histograms/metadata/families/enums.xml:FamilyLinkUserLocalWebApprovalResult)
@@ -208,10 +214,6 @@ extern const char kClassifyUrlThrottleStatusHistogramName[];
 
 // Histogram name to track the final throttle verdict.
 extern const char kClassifyUrlThrottleFinalStatusHistogramName[];
-
-// Returns the URL of the PACP widget for the iOS local web approval flow.
-GURL GetParentAccessURLForIOS();
-
 }  // namespace supervised_user
 
 #endif  // COMPONENTS_SUPERVISED_USER_CORE_COMMON_SUPERVISED_USER_CONSTANTS_H_

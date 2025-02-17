@@ -103,8 +103,9 @@ bool SaveCardOfferBubbleViews::Accept() {
 
   if (controller()) {
     controller()->OnSaveButton(
-        {cardholder_name_textfield_ ? cardholder_name_textfield_->GetText()
-                                    : std::u16string(),
+        {cardholder_name_textfield_
+             ? std::u16string(cardholder_name_textfield_->GetText())
+             : std::u16string(),
          month_input_dropdown_
              ? month_input_dropdown_->GetModel()->GetItemAt(
                    month_input_dropdown_->GetSelectedIndex().value())
@@ -190,7 +191,7 @@ void SaveCardOfferBubbleViews::AddedToWidget() {
   auto image_view = std::make_unique<ThemeTrackingNonAccessibleImageView>(
       *bundle.GetImageSkiaNamed(light_mode_banner_id),
       *bundle.GetImageSkiaNamed(dark_mode_banner_id),
-      base::BindRepeating(&views::BubbleDialogDelegate::GetBackgroundColor,
+      base::BindRepeating(&views::BubbleDialogDelegate::background_color,
                           base::Unretained(this)));
   GetBubbleFrameView()->SetHeaderView(std::move(image_view));
 }

@@ -5,12 +5,7 @@
 import {sendWithPromise} from 'chrome://resources/js/cr.js';
 
 import type {Cdd} from './data/cdd.js';
-// <if expr="not is_chromeos">
 import type {PrinterType} from './data/destination.js';
-// </if>
-// <if expr="is_chromeos">
-import type {PrinterType} from './data/destination_cros.js';
-// </if>
 import type {LocalDestinationInfo} from './data/local_parsers.js';
 import type {MeasurementSystemUnitType} from './data/measurement_system.js';
 
@@ -50,19 +45,6 @@ export enum DuplexModeRestriction {
   DUPLEX = 0x6,
 }
 
-// <if expr="is_chromeos">
-/**
- * Enumeration of PIN printing mode restrictions used by Chromium.
- * This has to coincide with |printing::PinModeRestriction| as defined in
- * printing/backend/printing_restrictions.h
- */
-export enum PinModeRestriction {
-  UNSET = 0,
-  PIN = 1,
-  NO_PIN = 2,
-}
-// </if>
-
 /**
  * Policies affecting print settings values and availability.
  */
@@ -73,18 +55,6 @@ export interface Policies {
     defaultMode?: BackgroundGraphicsModeRestriction,
   };
   mediaSize?: {defaultMode?: {width: number, height: number}};
-  sheets?: {value?: number};
-  color?: {
-    allowedMode?: ColorModeRestriction,
-    defaultMode?: ColorModeRestriction,
-  };
-  duplex?: {
-    allowedMode?: DuplexModeRestriction,
-    defaultMode?: DuplexModeRestriction,
-  };
-  // <if expr="is_chromeos">
-  pin?: {allowedMode?: PinModeRestriction, defaultMode?: PinModeRestriction};
-  // </if>
   printPdfAsImage?: {defaultMode?: boolean};
   printPdfAsImageAvailability?: {allowedMode?: boolean};
 }
@@ -110,7 +80,6 @@ export interface NativeInitialSettings {
   serializedDefaultDestinationSelectionRulesStr: string|null;
   pdfPrinterDisabled: boolean;
   destinationsManaged: boolean;
-  isDriveMounted?: boolean;
 }
 
 export interface CapabilitiesResponse {
@@ -178,7 +147,7 @@ export interface NativeLayer {
    */
   saveAppState(appStateStr: string): void;
 
-  // <if expr="not is_chromeos and not is_win">
+  // <if expr="not is_win">
   /** Shows the system's native printing dialog. */
   showSystemDialog(): void;
   // </if>
@@ -244,7 +213,7 @@ export class NativeLayerImpl implements NativeLayer {
     chrome.send('saveAppState', [appStateStr]);
   }
 
-  // <if expr="not chromeos_ash and not is_win">
+  // <if expr="not is_win">
   showSystemDialog() {
     chrome.send('showSystemDialog');
   }

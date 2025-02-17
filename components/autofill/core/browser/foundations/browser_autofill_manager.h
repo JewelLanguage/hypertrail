@@ -43,6 +43,7 @@
 #include "components/autofill/core/browser/metrics/form_events/address_form_event_logger.h"
 #include "components/autofill/core/browser/metrics/form_events/credit_card_form_event_logger.h"
 #include "components/autofill/core/browser/metrics/log_event.h"
+#include "components/autofill/core/browser/payments/amount_extraction_manager.h"
 #include "components/autofill/core/browser/payments/autofill_offer_manager.h"
 #include "components/autofill/core/browser/payments/card_unmask_delegate.h"
 #include "components/autofill/core/browser/payments/full_card_request.h"
@@ -79,6 +80,10 @@ class CreditCardFormEventLogger;
 struct SuggestionRankingContext;
 
 }  // namespace autofill_metrics
+
+namespace payments {
+class AmountExtractionManager;
+}  // namespace payments
 
 // Enum for the value patterns metric. Don't renumerate existing value. They are
 // used for metrics.
@@ -199,7 +204,6 @@ class BrowserAutofillManager : public AutofillManager {
   // TODO(crbug.com/40227071): Clean up the API and remove this function.
   void FillOrPreviewFormWithAutofillAiData(
       mojom::ActionPersistence action_persistence,
-      const DenseSet<FieldFillingSkipReason>& ignorable_skip_reasons,
       const FormData& form,
       const FormFieldData& trigger_field,
       const base::flat_map<FieldGlobalId, std::u16string>& values_to_fill);
@@ -308,11 +312,6 @@ class BrowserAutofillManager : public AutofillManager {
       const FormData& form,
       const FormFieldData& field) const;
 
-  // Notifies the `BrowserAutofillManager` that `credit_card` has been fetched
-  // from the server. Opens a manual filling dialog for virtual credit cards.
-  // Caches the credit card data for server and virtual credit cards.
-  void OnCreditCardFetchedSuccessfully(const CreditCard& credit_card);
-
   autofill_metrics::CreditCardFormEventLogger& GetCreditCardFormEventLogger() {
     return metrics_->credit_card_form_event_logger;
   }
@@ -391,26 +390,6 @@ class BrowserAutofillManager : public AutofillManager {
   // Emits all metrics that should be recorded at submission time.
   void LogSubmissionMetrics(const FormStructure* submitted_form,
                             const base::TimeTicks& form_submitted_timestamp);
-
-  // See `BrowserAutofillManager::FillOrPreviewCreditCardForm()` for initial
-  // documentation. `require_card_fetching` denotes whether we need to fetch the
-  // full card represented by `credit_card`.
-  void FillOrPreviewCreditCardFormImpl(
-      bool require_card_fetching,
-      mojom::ActionPersistence action_persistence,
-      const FormData& form,
-      const FieldGlobalId& field_id,
-      const CreditCard& credit_card,
-      AutofillTriggerSource trigger_source);
-
-  // When `AuthenticateThenFillCreditCardForm()` fetches a credit card, this
-  // gets called once the fetching has finished. If successful, the
-  // `credit_card` is filled.
-  void OnCreditCardFetched(
-      const FormData& form,
-      const FieldGlobalId& field_id,
-      AutofillTriggerSource fetched_credit_card_trigger_source,
-      const CreditCard& credit_card);
 
   // Updates event loggers with information about data stored for Autofill.
   void UpdateLoggersReadinessData();
@@ -535,12 +514,12 @@ class BrowserAutofillManager : public AutofillManager {
       AutofillSuggestionTriggerSource trigger_source,
       SuggestionsContext context,
       OnGenerateSuggestionsCallback callback,
-      AutofillAiDelegate::HasData has_autofill_ai_data);
+      std::vector<Suggestion> autofill_ai_suggestions);
   void GenerateSuggestionsAndMaybeShowUIPhase2(
       const FormData& form,
       const FormFieldData& field,
       AutofillSuggestionTriggerSource trigger_source,
-      AutofillAiDelegate::HasData has_autofill_ai_data,
+      std::vector<Suggestion> autofill_ai_suggestions,
       SuggestionsContext context,
       OnGenerateSuggestionsCallback callback,
       std::vector<std::string> plus_addresses);
@@ -671,6 +650,12 @@ class BrowserAutofillManager : public AutofillManager {
   // The credit card access manager, used to access local and server cards.
   // Lazily initialized: access only through GetCreditCardAccessManager().
   std::unique_ptr<CreditCardAccessManager> credit_card_access_manager_;
+
+  // The amount extraction manager, used to trigger the final checkout
+  // amount from merchant websites.
+  std::unique_ptr<payments::AmountExtractionManager>
+      amount_extraction_manager_ =
+          std::make_unique<payments::AmountExtractionManager>(this);
 
   // Helper class to autofill forms and fields. Do not use directly, use
   // form_filler() instead, because tests inject test objects.

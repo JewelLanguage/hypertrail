@@ -1,6 +1,7 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="am">
+<translation id="1000127192436081677">ፈጣን ማጋራትን ይቀያይሩ። ፈጣን ማጋራት <ph name="QUICK_SHARE_STATE" /> ነው</translation>
 <translation id="1012876632442809908">USB-C መሣሪያ (የፊት ወደብ)</translation>
 <translation id="1013923882670373915">የብሉቱዝ መሣሪያ «<ph name="DEVICE_NAME" />» ለመጣመር ፍቃድ ይፈልጋል። እባክዎ ይህን የፒን ኮድ በዚህ መሣሪያ ላይ ያስገቡ፦ <ph name="PINCODE" /></translation>
 <translation id="1014722676793506285">ይህ <ph name="APP_NAME" />ን እና የአካባቢ ፈቃድ እና ChromeOS ያላቸው ሁሉም መተግበሪያዎች እና ድር ጣቢያዎች Wi-Fi እና የተንቀሳቃሽ ስልክ አውታረ መረቦች አካባቢን እንዲጠቀሙ ያስችላቸዋል።</translation>
@@ -114,7 +115,6 @@
 <translation id="132346741904777634">ካሜራ ላይኛው ግራ ጥግ ላይ ገጥሟል። ከስርዓት ወለል ጋር ግጭት።</translation>
 <translation id="132415371743256095"><ph name="DESK_NAME" /> እና መስኮቶችን ዝጋ</translation>
 <translation id="1333308631814936910"><ph name="DISPLAY_NAME" /> ተገናኝቷል</translation>
-<translation id="1337081488893096731">የትምህርት ቤት መለያ ውሂብዎን ወደ የግል መለያዎ ለማንቀሳቀስ Content Transfer መተግበሪያን ይጠቀሙ</translation>
 <translation id="1340378040547539434">በገጽ ላይ ያሳንሡ</translation>
 <translation id="1341651618736211726">ትርፍ ፍሰት</translation>
 <translation id="1341926407152459446">ለኦዲዮ ግብዓት እና ውፅዓት «<ph name="DEVICE_NAME" />»ን ተጠቀም</translation>
@@ -140,6 +140,7 @@
 <translation id="1415846719612499304">የአውታረ መረብ ዝርዝርን አሳይ። <ph name="STATE_TEXT" />።</translation>
 <translation id="1419738280318246476">የማሳወቅ እርምጃውን ለማከናወን መሣሪያን ይክፈቱ</translation>
 <translation id="1420408895951708260">የምሽት ብርሃንን ቀያይር። <ph name="STATE_TEXT" /></translation>
+<translation id="1421166164855200062">የተጠቆመ ቡድን</translation>
 <translation id="1426410128494586442">አዎ</translation>
 <translation id="1435537621343861112">በቃል ማስጻፍ መጀመር አልተቻለም። ማይክሮፎንዎ ጠፍቷል።</translation>
 <translation id="1445031758921122223">የመልክ መቆጣጠሪያ ፋይሎች ወርደዋል</translation>
@@ -154,6 +155,7 @@
 <translation id="1469148162491666137">ይህ ለ<ph name="APP1_NAME" />፣ <ph name="APP2_NAME" /> እና የካሜራ እና የማይክሮፎን ፈቃዶች ላሏቸው ሁሉም መተግበሪያዎች እና ድር ጣቢያዎች መዳረሻ ይፈቅዳል። ድረ-ገጹን ማደስ ወይም መተግበሪያውን እንደገና ማስጀመር ሊኖርብዎት ይችላል።</translation>
 <translation id="147310119694673958">የስልክ ባትሪ <ph name="BATTERY_PERCENTAGE" />%</translation>
 <translation id="1475340220124222168">መገናኛ ነጥብ ይቀያይሩ። መገናኛ ነጥብ በርቷል፣ 1 መሣሪያ ተገናኝቷል።</translation>
+<translation id="1479685784053141667">ዕውቂያ ፍጠር</translation>
 <translation id="1479909375538722835">የተንሳፋፊ ተደራሽነት ምናሌ</translation>
 <translation id="1483493594462132177">ላክ</translation>
 <translation id="1484102317210609525"><ph name="DEVICE_NAME" /> (HDMI/DP)</translation>
@@ -178,7 +180,6 @@
 <translation id="1550523713251050646">ለተጨማሪ አማራጮች ጠቅ ያድርጉ</translation>
 <translation id="1555130319947370107">ሰማያዊ</translation>
 <translation id="1557622599341396706">የዴስክ ስምን አሳይ</translation>
-<translation id="1567138500090284106">የመዳፊት ቁልፎች አዘራር</translation>
 <translation id="1569384531973824928">ይህ የካሜራ እና የማይክሮፎን ፈቃዶች ላሏቸው ለሁሉም መተግበሪያዎች እና ድር ጣቢያዎች መዳረሻ ይፈቅዳል። ድረ-ገጹን ማደስ ወይም መተግበሪያውን እንደገና ማስጀመር ሊኖርብዎት ይችላል።</translation>
 <translation id="1571697193564730395">አትረብሽን ቀያይር። <ph name="STATE_TEXT" /></translation>
 <translation id="1576623706766186887">ማጉያ ሲበራ አሳንሥ</translation>
@@ -192,6 +193,7 @@
 <translation id="1607312127821884567">የስልክዎን መተግበሪያዎች ዕይታ ማዋቀርን ያሰናብቱ</translation>
 <translation id="1610778689852195798">«ቀልብስ»</translation>
 <translation id="1611993646327628135">አብራ</translation>
+<translation id="1612679292338846734">እነዚህን ባህሪያት ሲያበሩ የግብዓት ጽሑፍ፣ የሰነድ ይዘት እና የድረ-ገፅ ዩአርኤል ወደ Google ሰው ሠራሽ አስተውሎት አገልጋዮች ሊላኩ ይችላል። ይህ መረጃ የመጻፍ ጥቆማዎችን ለማመንጨት፣ ማጠቃለያዎች ለማመንጨት፣ ጥያቄዎችን ለመመለስ፣ እና ለ<ph name="LINK_TO_SERVICE_TERMS" /> ተገዥ የሆነውን ምርት ለማሻሻል ጥቅም ላይ ይውላል። የግል፣ ልዩ ጥንቃቄ የሚያስፈልገው ወይም ምስጢራዊ የሆነ ነገር አያካትቱ።</translation>
 <translation id="1620510694547887537">ካሜራ</translation>
 <translation id="1623768535032616219">Google የትምህርት ክፍልን ሰብስብ</translation>
 <translation id="163032029566320584"><ph name="UNAVAILABLE_DLC" /> አይገኝም።</translation>
@@ -243,12 +245,13 @@
 <translation id="17722141032474077">የሒሳብ ስሌቶች</translation>
 <translation id="1774796056689732716">ቀን መቁጠሪያ፣ <ph name="CURRENT_MONTH_YEAR" />፣ በአሁኑ ጊዜ <ph name="DATE" /> ተመርጧል።</translation>
 <translation id="178347895271755507">የስልክዎን የቅርብ ጊዜ ፎቶዎች፣ ሚዲያ እና ማሳወቂያዎች ዕይታን ያዋቅሩ</translation>
+<translation id="1785317913592722944">ንጥልን ከተጠቆመ ቡድን ላይ አስወግድ</translation>
 <translation id="1786487376942610288">የሥዕል-ላይ-ሥዕል መስኮቱ በፍተኛው ወይም በአሁኑ መጠን መካከል ይቀያይሩ</translation>
 <translation id="1787955149152357925">አጥፋ</translation>
 <translation id="1796561540704213354">የጎበኟቸውን ገፆች እና የተከፈቱ ገፆችን የሚያካትቱ ድር ጣቢያዎች</translation>
-<translation id="179842970735685253">የGoogle የአገልግሎት ውል</translation>
 <translation id="1805407494113167797">የትኩረት ድምፆችን ማጫወት አልተቻለም</translation>
 <translation id="181103072419391116">የሲግናል ጥንካሬ <ph name="SIGNAL_STRENGTH" />፣ በየእርስዎ አስተዳዳሪ የሚተዳደር</translation>
+<translation id="1815039896005206046">ደባሪ ነው ይህን የተጠቆመ ቡድን እንዳልወደዱ ግብረመልስ ያስገባል</translation>
 <translation id="1816896987747843206">ይህ የካሜራ ፈቃድ ላላቸው ሁሉም መተግበሪያዎች እና ድር ጣቢያዎች የካሜራ መዳረሻ ይፈቅዳል</translation>
 <translation id="1823873187264960516">ኤተርኔት፦ <ph name="ADDRESS" /></translation>
 <translation id="1824922790784036530">የመገኛ አካባቢ መዳረሻን አብራ</translation>
@@ -279,6 +282,7 @@
 <translation id="1925320505152357008">ከ1 ደቂቃ ያነሰ</translation>
 <translation id="1928739107511554905">ዝማኔውን ለማግኘት የእርስዎን Chromebook ከተያያዘው የቁልፍ ሰሌዳ ጋር እንደገና ለማስጀመር የንኪ ማያ ገጹን ይጠቀሙ።</translation>
 <translation id="1929331825127010451">ወደ ጥያቄ ተመለስ</translation>
+<translation id="1946615340060705561">ለመልቀቅ «c» ይጫኑ</translation>
 <translation id="1948405482892809935">ወደ ቀጣይ ተጠቃሚ ቀይር</translation>
 <translation id="1951012854035635156">ረዳት</translation>
 <translation id="1954252331066828794">የማያ ገፅ ቀረጻ ተጠናቅቋል</translation>
@@ -390,6 +394,7 @@
 <translation id="2369165858548251131">«Hello» በቻይንኛ</translation>
 <translation id="2370971919968699910">ይህ የውሂብ ወጪን ሊያስከትል ይችላል።
 <ph name="DEVICECOUNT" /> መሣሪያዎች ተገናኝተዋል።</translation>
+<translation id="2383521554963939360">የመተግበሪያ እና ትር ቡድኖች</translation>
 <translation id="2386292613071805067">በገጹ ላይ ሁሉንም ይምረጡ</translation>
 <translation id="2389423187722941333">Geminiን ይቀያይሩ</translation>
 <translation id="2392659840443812875">ምንም መገናኛ ነጥብ የለም። ስልከዎ በአቅራቢያ መሆኑን እና ብሉቱዝ መብራቱን ያረጋግጡ።</translation>
@@ -462,6 +467,7 @@
 <translation id="2598725286293895280">በዴስክ ውስጥ የማይደገፉ መተግበሪያዎች</translation>
 <translation id="2607678425161541573">በመስመር ላይ መግባት ያስፈልጋል</translation>
 <translation id="2612072250312279703">የእንቅስቃሴ መከታተያ</translation>
+<translation id="261210853165551493">በቅርጸት ከመስራት ጋር ቅዳ</translation>
 <translation id="2612614436418177118">የመተግበሪያ አዶን የመተግበሪያ ፍርግርግ ውስጥ ያንቀሳቅሳል</translation>
 <translation id="2619052155095999743">አስገባ</translation>
 <translation id="2619326010008283367">የጉብኝት እርምጃ <ph name="STEP" /> ከ<ph name="TOTAL_STEPS" />። የእርስዎን የመሣሪያ ቅንብሮች በማስጀመሪያ ውስጥ ማግኘት ይችላሉ። እንደ ልጣፍዎን መቀየር ወይም ማያ ገጽ ቆጣቢን ማቀናበር ባሉ ቅንብሮች ውስጥ የእርስዎን <ph name="PRODUCT_NAME" /> ለማበጀት ይሞክሩ።</translation>
@@ -486,6 +492,7 @@
 <translation id="2689613560355655046">ዴስክ 8</translation>
 <translation id="2695305337569143674">ድር</translation>
 <translation id="2697697418792422688">የቁልፍ ሰሌዳ ቅንብሮችን አሳይ። <ph name="KEYBOARD_NAME" /> ተመርጧል።</translation>
+<translation id="2699913284398121653">የትምህርት ቤት መለያ ውሂብዎን ወደ የግል መለያዎ ለማንቀሳቀስ የይዘት ማስተላለፍ መተግበሪያን ይጠቀሙ</translation>
 <translation id="2700493154570097719">የእርስዎን ቁልፍ ሰሌዳ ያቀናብሩ</translation>
 <translation id="2701576323154693023">መገናኛ ነጥብ በርቷል (Wi-Fi ጠፍቷል)</translation>
 <translation id="2704781753052663061">ሌላ Wi-Fi አውታረ መረቦችን ይቀላቀሉ</translation>
@@ -553,11 +560,13 @@
 <translation id="2932487126591186298">10 ደቂቃዎች ተጨምረዋል። <ph name="REMAINING_TIME" /> ቀርቷል።</translation>
 <translation id="2935225303485967257">መገለጫዎችን ያቀናብሩ</translation>
 <translation id="2941112035454246133">ዝቅተኛ</translation>
+<translation id="2941232201846070406">በይነመረብዎን ይፈትሹ እና እንደገና ይሞክሩ</translation>
 <translation id="2942350706960889382">የተተከለ ማጉያ</translation>
 <translation id="2942516765047364088">የመደርደሪያ አቀማመጥ</translation>
 <translation id="2946119680249604491">ግንኑነት ያክሉ</translation>
 <translation id="2947835478872237115">የአሁን ባትሪ ደረጃ <ph name="BATTERY_PERCENTAGE" />%፣ እስኪሞላ ድረስ <ph name="TIME" /></translation>
 <translation id="2949420361496057765"><ph name="MODIFIER" />ን ይጫኑ እና አገናኝ ላይ ጠቅ ያድርጉ</translation>
+<translation id="2957159466053076448">እነዚህን ባህሪያት በማንኛውም ጊዜ ቅንብሮች ውስጥ ማጥፋት ይችላሉ። <ph name="LINK_TO_LEARN_MORE" /></translation>
 <translation id="295852781144570696">የመሣሪያ ኦዲዮ</translation>
 <translation id="2960314608273155470">የቀረጻ ሁነታ፣ ነባሪው <ph name="SOURCE" /> <ph name="TYPE" /> ነው። ለቁልፍ ሰሌዳ አሰሳ ትርን ይጫኑ።</translation>
 <translation id="2961963223658824723">የሆነ ስህተት ተከስቷል። በጥቂት ሰከንዶች ውስጥ እንደገና ይሞክሩ።</translation>
@@ -637,6 +646,7 @@
 <translation id="3206735939915734551">Caps Lock ያብሩ/ያጥፉ</translation>
 <translation id="3207953481422525583">የተጠቃሚ ቅንብሮች</translation>
 <translation id="3208321278970793882">መተግበሪያ</translation>
+<translation id="3212221635583599601">ተጨማሪ ለማግኘት ከበይነመረብ ጋር ይገናኙ</translation>
 <translation id="3213571860604332401">አገናኝን እንደ ዕልባት ያስቀምጡ</translation>
 <translation id="3217205077783620295">ድምፅ መጠን በርቷል፣ መቀያየር ኦዲዮን ድምፀ ከል ያደርገዋል።</translation>
 <translation id="3226991577105957773">+<ph name="COUNT" /> ተጨማሪ</translation>
@@ -726,6 +736,7 @@
 <translation id="3522979239100719575">የሚገኙ መገለጫዎችን በመፈለግ ላይ። ይህ ጥቂት ደቂቃዎችን ሊወስድ ይችላል።</translation>
 <translation id="3526440770046466733">አገናኝን በአዲስ ትር ውስጥ ይክፈቱ እና በአሁኑ ትር ውስጥ ይቆዩ</translation>
 <translation id="353086728817903341">ከ<ph name="NUM_DEVICES" /> መሣሪያዎች ጋር ተገናኝቷል</translation>
+<translation id="3532247131850366052">Google ሉህ መፍጠር አልተቻለም</translation>
 <translation id="3533126039236445965">በመደርደሪያ ውስጥ የሚገኙ መተግበሪያዎች</translation>
 <translation id="3539957339480430241"><ph name="DEVICE_NAME" /> መገናኛ ነጥብ</translation>
 <translation id="3540893133818942399">የስልክዎን የቅርብ ጊዜ ፎቶዎች እና ሚዲያ ዕይታ ማዋቀርን ያሰናብቱ</translation>
@@ -824,6 +835,7 @@
 <translation id="380165613292957338">ጤና ይስጥልኝ፣ እንዴት ልርዳዎት?</translation>
 <translation id="3804737937830804242">ካሜራ ሰብስብ</translation>
 <translation id="3808558065322073119">{NUM_RESULTS,plural, =1{1 ስሜት ገላጭ ምስል። ምንም ሌሎች ውጤቶች የሉም።}one{# ስሜት ገላጭ ምስሎች። ምንም ሌሎች ውጤቶች የሉም።}other{# ስሜት ገላጭ ምስሎች። ምንም ሌሎች ውጤቶች የሉም።}}</translation>
+<translation id="3822403841174077928">ከቅርጸት ጋር መቅዳት አልተቻለም</translation>
 <translation id="3824784079442479685">ይህ ለ<ph name="APP_NAME" /> እና የካሜራ ፈቃድ ላላቸው ሁሉም መተግበሪያዎች እና ድር ጣቢያዎች የካሜራ መዳረሻ ይፈቅዳል። ድረ-ገጹን ማደስ ወይም መተግበሪያውን እንደገና ማስጀመር ሊኖርብዎት ይችላል።</translation>
 <translation id="3826099427150913765">ወደ የይለፍ ቃል ቀይር</translation>
 <translation id="383058930331066723">የባትሪ ኃይል ቆጣቢ ሁነታ በርቷል</translation>
@@ -841,6 +853,7 @@
 <translation id="3870197372373144624">መሣሪያዎን ለማጥፋት ይሞክሩ።</translation>
 <translation id="3886872229787704059">ዛሬ የተከፈተ</translation>
 <translation id="3891340733213178823">ዘግተው ለመውጣት Ctrl+Shift+Qን ሁለቴ ይጫኑ።</translation>
+<translation id="3892148308691398805">ጽሁፍ ቅዳ</translation>
 <translation id="3893630138897523026">ChromeVox (የሚነገር ግብረመልስ)</translation>
 <translation id="3897533311200664389">የጽሑፍ ጥያቄ ይጀምሩ</translation>
 <translation id="3898464793473355515">ማያገ ጽን 90 ዲግሪ በሰዓት አቅጣጫ አሽከርክር</translation>
@@ -920,6 +933,7 @@
 <translation id="4151054805501931758">የቁም ፎቶ ማሳመሪያ</translation>
 <translation id="4156293514828496577"><ph name="PERCENTAGE" />% ባትሪ ይቀራል (<ph name="TIME_LEFT" /> አካባቢ)።
 የባትሪ ዕድሜን ለመጨመር አንዳንድ ባህሪዎች ተገድበዋል።</translation>
+<translation id="4158003972857765638">በአዲስ ዴስክ ውስጥ አደራጅ</translation>
 <translation id="4160919062868802509">በርካታ የኦዲዮ ምንጮች ተገኝተዋል</translation>
 <translation id="416245495747357243">አልቋል እና ተጠናቅቋል!</translation>
 <translation id="4165275524535002941">ገመድ ማሳያዎችን ላይደግፍ ይችላል</translation>
@@ -964,10 +978,12 @@
 <translation id="4275663329226226506">ማህደረ መረጃ</translation>
 <translation id="4279490309300973883">በማንጸባረቅ ላይ</translation>
 <translation id="4280601795273309128">የደህንነት ዝማኔዎች አብተዋል። መሣሪያዎን ያዘምኑ።</translation>
+<translation id="4281739221820540368">Google ሰነዶች ፍጠር</translation>
 <translation id="4283888303416325161">ለበለጠ ደህንነት የይለፍ ቃል ያስገቡ</translation>
 <translation id="4285498937028063278">ይንቀሉ</translation>
 <translation id="428715201724021596">ከመገለጫ ጋር በመገናኘት ላይ። ይህ ጥቂት ደቂቃዎችን ሊወስድ ይችላል።</translation>
 <translation id="4287250812980588583">Chrome መስኮት</translation>
+<translation id="4291322857434980285">{NUM_APPS,plural, =1{የማይክሮፎን የድምፅ መጠን በ<ph name="APP_NAME" /> ቁጥጥር ይደረግበታል}one{የማይክሮፎን የድምፅ መጠን በ# መተግበሪያ ቁጥጥር ይደረግበታል}other{የማይክሮፎን የድምፅ መጠን በ# መተግበሪያዎች ቁጥጥር ይደረግበታል}}</translation>
 <translation id="4294319844246081198">ደህና አደሩ <ph name="GIVEN_NAME" />፣</translation>
 <translation id="4296136865091727875">ሁሉንም <ph name="COUNT" /> ማሳወቂያዎች አጽዳ</translation>
 <translation id="4300272766492248925">መተግበሪያ ክፈት</translation>
@@ -984,6 +1000,7 @@
 <translation id="4322742403972824594">የCtrl + Alt + የላይ ቀስት ቁልፍ ሰሌዳ አቋራጭ ተለውጧል። የመነሻ ቁልፍ ለመጠቀም የ<ph name="LAUNCHER_KEY_NAME" /> ቁልፍ + የግራ ቀስት ይጫኑ።</translation>
 <translation id="4324840740119394760">ይህ የካሜራ ፈቃድ ላላቸው ለ<ph name="APP_NAME" /> እና ሁሉም መተግበሪያዎች እና ድር ጣቢያዎች የካሜራ መዳረሻ ይፈቅዳል</translation>
 <translation id="4327147325944669226">ጨዋታን ቅረጽ</translation>
+<translation id="4329076911374908740">ከፍተኛ የተቀመጡ ቡድኖች ብዛት ላይ ተደርሷል።</translation>
 <translation id="4338109981321384717">ማጉያ መነጽር</translation>
 <translation id="4348580496249286403"><ph name="VOLUME_LEVEL" />፣ ድምፀ-ከል ተደርጓል</translation>
 <translation id="4351244548802238354">መገናኛ ዝጋ</translation>
@@ -1034,6 +1051,7 @@
 <translation id="4513044611477939680">ፈጣን ማጋራት</translation>
 <translation id="4513946894732546136">ግብረ መልስ</translation>
 <translation id="4518404433291145981">የእርስዎን Chromebook ለመክፈት መጀመሪያ ስልክዎን ይክፈቱ</translation>
+<translation id="4525887279712865285">የፈጣነ ማጋሪያ ቅንብሮች አሳይ</translation>
 <translation id="4527045527269911712">የብሉቱዝ መሣሪያ «<ph name="DEVICE_NAME" />» ለመጣመር ፍቃድ ይፈልጋል።</translation>
 <translation id="4531536770443562276">የሚገኘው ሙሉ ማያ ብቻ ነው</translation>
 <translation id="4533343294786968049">የእርስዎን የባትሪ ዕድሜ በማራዘም ላይ። ባትሪ እስከ <ph name="FULLY_CHARGE_TIME" /> ድረስ ሙሉ ኃይል ይሞላል።</translation>
@@ -1207,6 +1225,7 @@
 <translation id="5043679421800073804">በመደርደሪያ ላይ የመጨረሻ አዶን ጠቅ ወይም መታ አድርግ</translation>
 <translation id="504465286040788597">ቀዳሚ አንቀጽ</translation>
 <translation id="5045550434625856497">ትክክል ያልሆነ የይለፍ ቃል</translation>
+<translation id="5058794129231928255">Google ሰነድ መፍጠር አልተቻለም</translation>
 <translation id="5062496344832867502">ራም</translation>
 <translation id="5068762093486106012">ድምፀ-ከል ሆነው ሳለ ካወሩ ማሳወቂያ ይደርስዎታል። ኦዲዮ ከመሣሪያዎ በጭራሽ አይወጣም።</translation>
 <translation id="5077416371682039027">የስልክዎን የቅርብ ጊዜ ፎቶዎች፣ ሚዲያ፣ ማሳወቂያዎች እና መተግበሪያዎች ዕይታን ያዋቅሩ</translation>
@@ -1231,7 +1250,6 @@
 <translation id="5121628974188116412">ወደ ገጹ ግርጌ ይሂዱ</translation>
 <translation id="5122517996953421795"><ph name="DESK_NAME" /> ቅድመ ዕይታ። የቦዘነ ዴስክ።</translation>
 <translation id="5136175204352732067">የተለየ የቁልፍ ሰሌዳ ተገናኝቷል</translation>
-<translation id="5140105873789567560">እንድጽፍ እርዳኝ እና እንዳነብ እርዳኝን ለመጠቀም ቢያንስ 18 ዓመት የሞላዎት መሆን አለብዎት።</translation>
 <translation id="5144005092084035179">የኦዲዮ ግብዓት ይቀየር?</translation>
 <translation id="5147567197700016471">ተከፍቷል</translation>
 <translation id="5150070631291639005">የግላዊነት ቅንብሮች</translation>
@@ -1264,6 +1282,7 @@
 <translation id="5245201184978705914">ትራንስክሪፕት መፍጠር አልተቻለም</translation>
 <translation id="5251174953851719648">ይዘትን አድስ</translation>
 <translation id="5253783950165989294"><ph name="DEVICE_NAME" /> ከተሰኘ መሣሪያ ጋር ተገናኝቷል፣ <ph name="BATTERY_PERCENTAGE" />% ባትሪ</translation>
+<translation id="5256939106029293271">ማይክሮፎንዎን ይፈትሹ</translation>
 <translation id="5258528442992323769">ምንም የተቀመጡ ዴስኮች የሉም</translation>
 <translation id="5260676007519551770">ዴስክ 4</translation>
 <translation id="5265391159779542051">ውጤቶች ተጭነዋል</translation>
@@ -1385,7 +1404,6 @@
 <translation id="5625955975703555628">LTE+</translation>
 <translation id="5627392655516693966">የይለፍ ቃልዎ ሊረጋገጥ አልቻለም። እንደገና ይሞክሩ።</translation>
 <translation id="5632485077360054581">እንዴት እንደሆነ አሳየኝ</translation>
-<translation id="5633826232582408011">እንድጽፍ እርዳኝ እና እንዳነብ እርዳኝን ሲያበሩ ግብዓት ጽሁፍ፣ የሰነድ ይዘት እና የድረ-ገፅ ዩአርኤል የጽሁፍ ጥቆማዎች ለማመንጨት፣ ማጠቃለያዎች ለማመንጨት፣ ለጥያቄዎች ለመመለስ እና ምርቱን ለማሻሻል ለ<ph name="LINK_TO_SERVICE_TERMS" /> ተገዢ በመሆን ወደ Google ሰው ሠራሽ አስተውሎት ይላካሉ። የግል፣ ልዩ ጥንቃቄ የሚያስፈልገው ወይም ምሥጢራዊ የሆነ ነገር አያካትቱ።</translation>
 <translation id="5648021990716966815">የማይክሮፎን መሰኪያ</translation>
 <translation id="5652575806481723716"><ph name="FOCUSED_APP_NAME" /> የእርስዎን ትኩረት ይፈልጋል።</translation>
 <translation id="5662075790140998213">ዴስክ 10</translation>
@@ -1421,6 +1439,7 @@
 <translation id="5745612484876805746">የሌሊት ብርሃን በፀሐይ መጥለቅ ጊዜ በራስሰር ይበራል</translation>
 <translation id="5750765938512549687">ብሉቱዝ ጠፍቷል</translation>
 <translation id="5758114525425072423">ትኩረት ጀምር። ሰዓት ቆጣሪ ወደ <ph name="FOCUS_DURATION" /> ተቀናብሯል።</translation>
+<translation id="5759522586053040964">የእርስዎ ድምፅ ለሌሎች እንዴት እንደሚሰማ ይስሙ። ለማቆም፣ የፈትሽ አዶን ጠቅ ያድርጉ ወይም የቪድዮ ጥሪ ፓነሉን ይዝጉ።</translation>
 <translation id="5760866832697883462">የእርስዎን <ph name="NAME" /> ያገናኙ</translation>
 <translation id="5762420912707163638">ምልክት ማድረጊያን ይቀያይሩ። <ph name="STATE_TEXT" /> ማገ ገፅ ላይ ለመሳል የመከታተያ ፓድን፣ መነካት የሚችል ማያን ወይም ብሮስፌ ይጠቀሙ።</translation>
 <translation id="576341972084747908">አደገኛ <ph name="FILENAME" /> አውርድ</translation>
@@ -1468,7 +1487,6 @@
 <translation id="589817443623831496">ነጥብ መቃኘት</translation>
 <translation id="5901316534475909376">Shift+Esc</translation>
 <translation id="5901630391730855834">ቢጫ</translation>
-<translation id="5911231045062997865">የLacros መስኮቶች በአሁኑ ጊዜ አይደገፉም። ሌሎች መተግበሪያዎች ይቀመጣሉ።</translation>
 <translation id="5911909173233110115"><ph name="USERNAME" /> (<ph name="MAIL" />)</translation>
 <translation id="5916646100036936191">አዲስ ማሳወቂያ፣ በአጠቃላይ <ph name="NOTIFICATION_COUNT" /></translation>
 <translation id="5916664084637901428">በርቷል</translation>
@@ -1589,6 +1607,7 @@
 <translation id="6274202259872570803">ማያ ገፅ መቅርጽ</translation>
 <translation id="6276708887952587684">የገጽ ምንጭን ይመልከቱ</translation>
 <translation id="6284232397434400372">ጥራቱ ተቀይሯል</translation>
+<translation id="6285871695023807425">ወደ ቀን መቁጠሪያ አክል</translation>
 <translation id="6288235558961782912"><ph name="USER_EMAIL_ADDRESS" /> ከወላጅ ፈቃድ ጋር እንደገና ሊታከል ይችላል።</translation>
 <translation id="6291221004442998378">ባትሪ እየሞላ አይደለም</translation>
 <translation id="6298183524022479114">ይህን መሣሪያ በመተግበሪያ ውስጥ ያብጁ</translation>
@@ -1638,6 +1657,7 @@
 <translation id="6468406072297048412">{0,plural, =1{በ1 ደቂቃ ውስጥ መሣሪያውን ወደ ቀዳሚው ስሪት ያዘምኑ}one{በ# ደቂቃ ውስጥ መሣሪያውን ወደ ቀዳሚው ስሪት ያዘምኑ}other{በ# ደቂቃዎች ውስጥ መሣሪያዎቹን ወደ ቀዳሚው ስሪት ያዘምኑ}}</translation>
 <translation id="6469104339369989396">መገናኛ ነጥብን ቀያይር</translation>
 <translation id="6477681113376365978">ፋይል ማውረድ አልተቻለም</translation>
+<translation id="648135757200234041">ዕውቂያ መፍጠር አልተቻለም</translation>
 <translation id="6482559668224714696">የሙሉ ማያ ገፅ ማጉያ</translation>
 <translation id="6485086611007560630">የአየር ሁኔታ (አይገኝም)</translation>
 <translation id="6490471652906364588">USB-C መሣሪያ (የቀኝ ወደብ)</translation>
@@ -1684,6 +1704,7 @@
 <translation id="6612889377159412215">ንዑስ ተግባር</translation>
 <translation id="6613765291890844037">ማከማቻ <ph name="STORAGE_IN_USE_SIZE" /> በጥቅም ላይ | <ph name="STORAGE_TOTAL_SIZE" /> ጠቅላላ</translation>
 <translation id="6614169507485700968">የግላዊነት ማያ ገፅ በርቷል</translation>
+<translation id="6618277154885124991">Google ሉሆች ፍጠር</translation>
 <translation id="6622679827379792051">የስልክዎን መተግበሪያዎች ዕይታ ያዋቅሩ</translation>
 <translation id="662279009180869175">የተከፈለ ማያ ገጽ መጠን ለመቀየር የግራ እና ቀኝ ቀስቶችን ይጠቀሙ</translation>
 <translation id="6624493541160101248">የአሁኑ ዴስክ፦ <ph name="DESK_NAME" />። <ph name="DESK_INDEX" /> ዴስክ ከ<ph name="DESK_COUNT" />።</translation>
@@ -1693,6 +1714,7 @@
 <translation id="6637729079642709226">ጊዜን ለውጥ</translation>
 <translation id="6641720045729354415">የቀጥታ መግለጫ ጽሑፍን ይቀያይሩ። <ph name="STATE_TEXT" /></translation>
 <translation id="6643169293433369663">በስም የተደረደረበት ቅደም-ተከተል ቀልብስ</translation>
+<translation id="664793810957802384">በተጠቆመው ቡድን ውስጥ ያሉ ንጥሎች</translation>
 <translation id="6649641931981131786">የማያ ገጹ መሃል ላይ እንዲያደርግዎ ካሜራውን ያስተካክሉ።</translation>
 <translation id="6650072551060208490"><ph name="ORIGIN_NAME" /> እርስዎ እንደሆኑ ማረጋገጥ ይፈልጋል</translation>
 <translation id="6650742588569439432">ንጥሎችን መጫን አልተቻለም።</translation>
@@ -1886,6 +1908,7 @@
 <translation id="735745346212279324">የቪ ፒ ኤን ግንኙነት ተቋርጧል</translation>
 <translation id="7360036564632145207">ለተቀጥላ ክፍሎች ቅንብሮች የውሂብ መዳረሻ ጥበቃን መለወጥ አፈጻጸሙን ሊያተባ ይችላል</translation>
 <translation id="736045644501761622">ልጣፍ እና ቅጥ አቀናብር</translation>
+<translation id="7368041336688136012">እንዳነብ እርዳኝን እና እንድጽፍ እርዳኝን ለመጠቀም እና ምስሎችን በሰው ሠራሽ አስተውሎት ለመፍጠር ቢያንስ 18 ዓመት ሊሆንዎት ይገባል።</translation>
 <translation id="7371404428569700291">መስኮትን ቅዳ</translation>
 <translation id="7372069265635026568">ከ<ph name="TOTAL_MEMORY" /> አጠቃላይ <ph name="AVAILABLE_MEMORY" /> ማከማቻ ይገኛል</translation>
 <translation id="737315737514430195">ይህ የማይክሮፎን ፈቃድ ላላቸው መተግበሪያዎች እና ድር ጣቢያዎች በሙሉ የማይክሮፎን መዳረሻን ይፈቅዳል</translation>
@@ -1940,6 +1963,7 @@
 <translation id="7524043547948122239">Google ተግባሮች</translation>
 <translation id="7525067979554623046">ፍጠር</translation>
 <translation id="7526573455193969409">አውታረ መረብ ክትትል የሚደረግበት ሊሆን ይችላል</translation>
+<translation id="7534543072325030705">አሪፍ ይህን የተጠቆመ ቡድን እንደወደዱ ግብረመልስ ያስገባል</translation>
 <translation id="7536035074519304529">የአይፒ አድራሻ፦ <ph name="ADDRESS" /></translation>
 <translation id="7536832381700852123">የግራ መስኮቱን ያዘምኑ</translation>
 <translation id="7543399541175347147">የሊኑክስ መተግበሪያዎች እና ማንነት የማያሳውቁ መስኮቶች በአሁኑ ጊዜ አይደገፉም። ሌሎች መተግበሪያዎች ይቀመጣሉ።</translation>
@@ -1967,6 +1991,7 @@
 <translation id="7611213136657090146">ካሜራ እንደገና ተገናኝቷል።</translation>
 <translation id="7613620083300976559">የጨዋታ መቆጣጠሪያዎችን ያብሩ</translation>
 <translation id="761736749114493194">የካሜራ ክፈፍን ይቀያይሩ። <ph name="STATE_TEXT" /></translation>
+<translation id="7621008024906456933">የፈጣን ማጋራት ቅንብሮች</translation>
 <translation id="7624117708979618027"><ph name="TEMPERATURE_F" />° ፋ</translation>
 <translation id="7627303771480696593">ጥያቄ ይጠይቁ</translation>
 <translation id="7634648064048557203">ካሜራ ታችኛው ቀኝ ጥግ ላይ ገጥሟል</translation>
@@ -2009,7 +2034,7 @@
 <translation id="7749443890790263709">የተደረሰባቸው የዴስኮች ከፍተኛ ብዛት።</translation>
 <translation id="7749958366403230681">ExpressKey 4</translation>
 <translation id="7751260505918304024">ሁሉንም አሳይ</translation>
-<translation id="7759183637555564029">በማንኛውም ጊዜ በቅንብሮች ውስጥ እንድጽፍ እርዳኝ እና እንዳነብ እርዳኝን ማጥፋት ይችላሉ። <ph name="LINK_TO_LEARN_MORE" /></translation>
+<translation id="7762664108390426952">የGoogle አገልግሎት ውል እና የግላዊነት መመሪያ</translation>
 <translation id="7768784765476638775">ለመናገር-ይምረጡ</translation>
 <translation id="7769299611924763557">የእርስዎ GIF በቅርቡ ዝግጁ ይሆናል</translation>
 <translation id="7773536009433685931">በምትኩ WiFiን ያብሩ</translation>
@@ -2019,7 +2044,6 @@
 <translation id="7781829728241885113">ትናንት</translation>
 <translation id="7787212146956232129">የግብዓት እና የውጽዓት መሣሪያዎች ተቀናብረዋል። ለመቀየር ወደ ቅንብሮች ይሂዱ።</translation>
 <translation id="7792590255364786396">የሚታይ</translation>
-<translation id="7793389284006812057">ሰው ሠራሽ አስተውሎት አመንጪ በሙከራ ደረጃ ላይ ያለ፣ በቅድመ ልማት ላይ ያለ እና በአሁኑ ጊዜ ውስን ተደራሽነት ያለው ነው።</translation>
 <translation id="7796735576426975947">አዲስ ማሳወቂያ ተደብቋል</translation>
 <translation id="7798302898096527229">ለመሰረዝ Search ወይም Shift ይጫኑ።</translation>
 <translation id="780301667611848630">አይ፣ አመሰግናለሁ</translation>
@@ -2104,6 +2128,7 @@
 <translation id="8004512796067398576">ጭማሬ</translation>
 <translation id="8005527720597583355">የትኩረት ክፍለ ጊዜን አስጀምር</translation>
 <translation id="8015361438441228492">ተግባርን ማርትዕ አልተቻለም።</translation>
+<translation id="8027187124910699148">የተጠቆመ ቡድንን ከቆመበት ቀጥል</translation>
 <translation id="802782383769312836">ቀዳሚው ዴስክ፦ <ph name="DESK_NAME" />። <ph name="DESK_INDEX" /> ዴስክ ከ<ph name="DESK_COUNT" />።</translation>
 <translation id="8029247720646289474">የመገናኛ ነጥብ ግንኙነት አልተሳካም</translation>
 <translation id="8029629653277878342">ለበለጠ ደህንነት ፒን ወይም የይለፍ ቃል ያስፈልጋል</translation>
@@ -2212,6 +2237,7 @@
 <translation id="8426708595819210923">ደህን አመሹ <ph name="GIVEN_NAME" />፣</translation>
 <translation id="8428213095426709021">ቅንብሮች</translation>
 <translation id="8428810263141909179"><ph name="MODIFIER_ONE" /><ph name="MODIFIER_TWO" /><ph name="DELIMITER" /><ph name="KEY_ONE" /> በ<ph name="KEY_TWO" /> በኩል</translation>
+<translation id="8429547770382807369">ቡድንን ለበኋላ አስቀምጥ</translation>
 <translation id="8433186206711564395">የአውታረ መረብ ቅንብሮች</translation>
 <translation id="8433977262951327081">በመደርደሪያው ውስጥ የግቤት አማራጮች ምናሌ አረፋን ለማሳየት የሚሆነው አቋራጭ ተለውጧል። እባክዎ በ<ph name="OLD_SHORTCUT" /> ምትክ <ph name="NEW_SHORTCUT" />ን ይጠቀሙ።</translation>
 <translation id="8437311513256731931">የግብረመልስ መሣሪያን ክፈት</translation>
@@ -2220,6 +2246,7 @@
 <translation id="8446884382197647889">ተጨማሪ ለመረዳት</translation>
 <translation id="8456543082656546101"><ph name="SHORTCUT_KEY_NAME" /> + V</translation>
 <translation id="8462305545768648477">ለመናገር ምረጥን ይዝጉ</translation>
+<translation id="8466665972451889002"><ph name="GROUP_NAME" /> ውስጥ ያሉ ንጥሎችን አሳይ</translation>
 <translation id="8468806060683421065">የሚገባበት ቀን <ph name="DUE_DATE_AND_TIME" /></translation>
 <translation id="847056008324733326">የልኬት ቅንብሮችን አሳይ</translation>
 <translation id="8473301994082929012"><ph name="ORGANIZATION_NAME" /> <ph name="FEATURE_STATE" /> <ph name="FEATURE_NAME" /> አለው።</translation>
@@ -2236,12 +2263,14 @@
 <translation id="851660987304951246">ይዘቱን በፍጥነት ለማጠቃለል ወይም ጥያቄዎችን ለመጠየቅ እንዳነብ አግዘኝን ይጠቀሙ</translation>
 <translation id="8517041960877371778">የእርሰዎ <ph name="DEVICE_TYPE" /> እንደበራ ኃይል መሙላት አይችሉ ይሆናል።</translation>
 <translation id="8535393432370007982">በቀለም የተደረደረበት ቅደም-ተከተል ቀልብስ</translation>
+<translation id="8539803091108018926">ጽሑፍ ወደ ቅንጥብ ሰሌዳ ተቀድቷል</translation>
 <translation id="8541078764854166027">የካሜራ ክፈፍ በመስራት ላይ</translation>
 <translation id="8542053257095774575">ምንም የተቀመጡ ዴስኮች ወይም ቅንብር ደንቦች የሉም</translation>
 <translation id="8546059259582788728">ድርደራም መቀልበስ ተሳክቷል</translation>
 <translation id="8551588720239073785">የቀን እና የጊዜ ቅንብሮች</translation>
 <translation id="8553395910833293175">ለሁሉም ዴስኮች ቀድሞውኑ ተመድቧል።</translation>
 <translation id="8555757996376137129">የአሁኑን ዴስክ አስወግድ</translation>
+<translation id="8558521694042102707">ሰው ሠራሽ አስተውሎት አመንጪ ስሕተቶችን ሊሠራ ይችላል፣ ስለዚህ በድጋሚ ያረጋግጡት።</translation>
 <translation id="8559845965695780508"><ph name="USER" /> አርትዖት አድርገዋል</translation>
 <translation id="8569146227972631631">°ፋ</translation>
 <translation id="8569751806372591456">የመሞከሪያ ጥቂት ጥቆማዎች እነሆ</translation>
@@ -2264,6 +2293,7 @@
 <translation id="8637598503828012618"><ph name="CONNECTION_STATUS" />፣ የሲግናል ጥንካሬ <ph name="SIGNAL_STRENGTH" />፣ በአስተዳዳሪዎ የሚቀናበር</translation>
 <translation id="8638637208069328956">ማይክሮፎንን አብራ/አጥፋ</translation>
 <translation id="8639760480004882931"><ph name="PERCENTAGE" /> ይቀራል</translation>
+<translation id="8640470573049727749">ሁሉንም የቡድን ጥቆማዎች ደብቅ</translation>
 <translation id="8641510901370802679"><ph name="ANSWER_TYPE" /> መረጃ በማሳየት ላይ</translation>
 <translation id="8646417893960517480"><ph name="TOTAL_TIME" /> ሰዓት ቆጣሪ</translation>
 <translation id="8647931990447795414">ሰው ለማከል የእርስዎን Family Link የወላጅ መዳረሻ ኮድ ያስገቡ</translation>
@@ -2272,6 +2302,7 @@
 <translation id="8653151467777939995">የማሳወቂያ ቅንብሮችን አሳይ። ማሳወቂያዎች በርተዋል</translation>
 <translation id="8657066291275741003">ንዑስ ሆሄ</translation>
 <translation id="8660331759611631213">የ71 ካሬ ሥር</translation>
+<translation id="8662921061190671299">ወደ ቀን መቁጠሪያ ማከል አልተቻለም</translation>
 <translation id="8663756353922886599"><ph name="CONNECTION_STATUS" />፣ የሲግናል ጥንካሬ <ph name="SIGNAL_STRENGTH" /></translation>
 <translation id="8664282223139913403">ከፊል ቅጽበታዊ ገፅ እይታን ለመቅረጽ አስገባን ይጫኑ</translation>
 <translation id="8676770494376880701">አነስተኛ ኃይል ያለው ባትሪ መሙያ ተገናኝቷል</translation>
@@ -2347,6 +2378,7 @@
 <translation id="8905919797434099235">(ርዕስ የለም)</translation>
 <translation id="890616557918890486">ምንጭ ይለውጡ</translation>
 <translation id="8909138438987180327">ባትሪ <ph name="PERCENTAGE" /> መቶኛ ላይ።</translation>
+<translation id="8916866375277139011"><ph name="GROUP_NAME" /> ውስጥ ያሉ ንጥሎችን ደብቅ</translation>
 <translation id="8921554779039049422">ኤች+</translation>
 <translation id="8921624153894383499">የGoogle ረዳቱ ይህን ቋንቋ አይናገርም።</translation>
 <translation id="8926951137623668982">መደርደሪያ ሁልጊዜ ይደበቃል</translation>
@@ -2363,6 +2395,7 @@
 <translation id="8956420987536947088">የእርስዎን ቀዳሚ መስኮቶች እና መተግበሪያዎች ይክፈቱ</translation>
 <translation id="8959380109429710384">የሙሉ ማያ ገጽ ማጉያ የሆነውን የቁልፍ ሰሌዳ አቋራጭ ተጭነዋል። በጎላው እይታ ውስጥ ለመንቀሳቀስ Ctrl + alt + የአቅጣጫ ቁልፎችን ይጠቀሙ።</translation>
 <translation id="8964525410783593407">1 ሰዓት</translation>
+<translation id="8970887620466824814">የሆነ ችግር ተፈጥሯል።</translation>
 <translation id="8973885907461690937">በምናሌ አዶው ላይ ያተኩሩ</translation>
 <translation id="8980862970816311842">የመተግበሪያ አዶን በመተግበሪያ ፍርግርግ ውስጥ ከአቃፊ ወደ ውስጥ/ውጭ ያንቀሳቅሳል</translation>
 <translation id="8982906748181120328">በአቅራቢያ ያለ ታይነት</translation>

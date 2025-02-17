@@ -28,6 +28,7 @@
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/time/time.h"
 #include "base/trace_event/base_tracing.h"
+#include "base/trace_event/named_trigger.h"  // no-presubmit-check
 
 namespace base::android {
 namespace {
@@ -221,7 +222,7 @@ void PreFreezeBackgroundMemoryTrimmer::RecordMetrics() {
   // determine the current process, which is used for the names of metrics
   // below.
   CHECK(base::CommandLine::InitializedForCurrentProcess());
-  base::AutoLock locker(lock_);
+  base::AutoLock locker(lock());
   if (metrics_.size() != values_before_.size()) {
     UmaHistogramEnumeration("Memory.PreFreeze2.RecordMetricsFailureType",
                             MetricsFailure::kSizeMismatch);
@@ -402,7 +403,7 @@ void PreFreezeBackgroundMemoryTrimmer::PostDelayedBackgroundTaskModern(
     return;
   }
 
-  base::AutoLock locker(lock_);
+  base::AutoLock locker(lock());
   PostDelayedBackgroundTaskModernHelper(std::move(task_runner), from_here,
                                         std::move(task), delay);
 }
@@ -423,7 +424,7 @@ PreFreezeBackgroundMemoryTrimmer::PostDelayedBackgroundTaskModernHelper(
 // static
 void PreFreezeBackgroundMemoryTrimmer::RegisterMemoryMetric(
     const PreFreezeMetric* metric) {
-  base::AutoLock locker(Instance().lock_);
+  base::AutoLock locker(lock());
   Instance().RegisterMemoryMetricInternal(metric);
 }
 
@@ -441,7 +442,7 @@ void PreFreezeBackgroundMemoryTrimmer::RegisterMemoryMetricInternal(
 // static
 void PreFreezeBackgroundMemoryTrimmer::UnregisterMemoryMetric(
     const PreFreezeMetric* metric) {
-  base::AutoLock locker(Instance().lock_);
+  base::AutoLock locker(lock());
   Instance().UnregisterMemoryMetricInternal(metric);
 }
 
@@ -457,6 +458,12 @@ void PreFreezeBackgroundMemoryTrimmer::UnregisterMemoryMetricInternal(
   metrics_.erase(metrics_.begin() + index);
 }
 
+void PreFreezeBackgroundMemoryTrimmer::SetOnStartSelfCompactionCallback(
+    base::RepeatingCallback<void(void)> callback) {
+  base::AutoLock locker(lock());
+  Instance().on_self_compact_callback_ = callback;
+}
+
 // static
 bool PreFreezeBackgroundMemoryTrimmer::SelfCompactionIsSupported() {
   return IsMadvisePageoutSupported();
@@ -465,7 +472,7 @@ bool PreFreezeBackgroundMemoryTrimmer::SelfCompactionIsSupported() {
 // static
 bool PreFreezeBackgroundMemoryTrimmer::ShouldContinueSelfCompaction(
     base::TimeTicks self_compaction_started_at) {
-  base::AutoLock locker(Instance().lock_);
+  base::AutoLock locker(lock());
   return Instance().self_compaction_last_cancelled_ <
          self_compaction_started_at;
 }
@@ -516,6 +523,16 @@ void PreFreezeBackgroundMemoryTrimmer::StartSelfCompaction(
     uint64_t max_bytes,
     base::TimeTicks started_at) {
   TRACE_EVENT0("base", "StartSelfCompaction");
+  base::trace_event::EmitNamedTrigger("start-self-compaction");
+  {
+    base::AutoLock locker(lock());
+    process_compacted_metadata_.emplace(
+        "PreFreezeBackgroundMemoryTrimmer.ProcessCompacted",
+        /*is_compacted=*/1, base::SampleMetadataScope::kProcess);
+    if (on_self_compact_callback_) {
+      on_self_compact_callback_.Run();
+    }
+  }
   metric->RecordBeforeMetrics();
   MaybePostSelfCompactionTask(std::move(task_runner), std::move(regions),
                               std::move(metric), max_bytes, started_at);
@@ -527,6 +544,10 @@ void PreFreezeBackgroundMemoryTrimmer::FinishSelfCompaction(
   TRACE_EVENT0("base", "FinishSelfCompaction");
   if (ShouldContinueSelfCompaction(started_at)) {
     metric->RecordDelayedMetrics();
+    base::AutoLock locker(lock());
+    UmaHistogramMediumTimes(
+        "Memory.SelfCompact2.Renderer.TimeSinceLastCancel",
+        base::TimeTicks::Now() - self_compaction_last_cancelled_);
   }
 }
 
@@ -544,7 +565,8 @@ void PreFreezeBackgroundMemoryTrimmer::MaybeCancelSelfCompaction() {
 }
 
 void PreFreezeBackgroundMemoryTrimmer::MaybeCancelSelfCompactionInternal() {
-  base::AutoLock locker(lock_);
+  base::AutoLock locker(lock());
+  process_compacted_metadata_.reset();
   self_compaction_last_cancelled_ = base::TimeTicks::Now();
 }
 
@@ -656,7 +678,7 @@ void PreFreezeBackgroundMemoryTrimmer::OnSelfFreeze() {
 }
 
 void PreFreezeBackgroundMemoryTrimmer::OnSelfFreezeInternal() {
-  base::AutoLock locker(lock_);
+  base::AutoLock locker(lock());
   if (base::FeatureList::IsEnabled(kShouldFreezeSelf)) {
     RunPreFreezeTasks();
   }
@@ -698,13 +720,13 @@ void PreFreezeBackgroundMemoryTrimmer::RunPreFreezeTasks() {
     // (1) To avoid holding it too long while running all the background tasks.
     // (2) To prevent a deadlock if the |background_task| needs to acquire the
     //     lock (e.g. to post another task).
-    base::AutoUnlock unlocker(lock_);
+    base::AutoUnlock unlocker(lock());
     BackgroundTask::RunNow(std::move(background_task));
   }
 }
 
 void PreFreezeBackgroundMemoryTrimmer::OnPreFreezeInternal() {
-  base::AutoLock locker(lock_);
+  base::AutoLock locker(lock());
   PostMetricsTasksIfModern();
 
   if (!ShouldUseModernTrim()) {
@@ -722,13 +744,13 @@ void PreFreezeBackgroundMemoryTrimmer::UnregisterBackgroundTask(
 
 void PreFreezeBackgroundMemoryTrimmer::UnregisterBackgroundTaskInternal(
     BackgroundTask* timer) {
-  base::AutoLock locker(lock_);
+  base::AutoLock locker(lock());
   std::erase_if(background_tasks_, [&](auto& t) { return t.get() == timer; });
 }
 
 // static
 void PreFreezeBackgroundMemoryTrimmer::RegisterPrivateMemoryFootprintMetric() {
-  base::AutoLock locker(Instance().lock_);
+  base::AutoLock locker(lock());
   static base::NoDestructor<PrivateMemoryFootprintMetric> pmf_metric;
   if (!PrivateMemoryFootprintMetric::did_register_) {
     PrivateMemoryFootprintMetric::did_register_ = true;
@@ -759,39 +781,39 @@ void PreFreezeBackgroundMemoryTrimmer::SetSupportsModernTrimForTesting(
 
 // static
 void PreFreezeBackgroundMemoryTrimmer::ClearMetricsForTesting() {
-  base::AutoLock locker(Instance().lock_);
+  base::AutoLock locker(lock());
   Instance().metrics_.clear();
   PrivateMemoryFootprintMetric::did_register_ = false;
 }
 
 bool PreFreezeBackgroundMemoryTrimmer::DidRegisterTasksForTesting() const {
-  base::AutoLock locker(lock_);
+  base::AutoLock locker(lock());
   return metrics_.size() != 0;
 }
 
 size_t
 PreFreezeBackgroundMemoryTrimmer::GetNumberOfPendingBackgroundTasksForTesting()
     const {
-  base::AutoLock locker(lock_);
+  base::AutoLock locker(lock());
   return background_tasks_.size();
 }
 
 size_t PreFreezeBackgroundMemoryTrimmer::GetNumberOfKnownMetricsForTesting()
     const {
-  base::AutoLock locker(lock_);
+  base::AutoLock locker(lock());
   return metrics_.size();
 }
 
 size_t PreFreezeBackgroundMemoryTrimmer::GetNumberOfValuesBeforeForTesting()
     const {
-  base::AutoLock locker(lock_);
+  base::AutoLock locker(lock());
   return values_before_.size();
 }
 
 // static
 void PreFreezeBackgroundMemoryTrimmer::
     ResetSelfCompactionLastCancelledForTesting() {
-  base::AutoLock locker(Instance().lock_);
+  base::AutoLock locker(lock());
   Instance().self_compaction_last_cancelled_ = base::TimeTicks::Min();
 }
 

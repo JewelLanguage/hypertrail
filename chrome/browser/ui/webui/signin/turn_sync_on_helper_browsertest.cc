@@ -195,17 +195,13 @@ class Delegate : public TurnSyncOnHelper::Delegate {
 // Test params:
 // - TurnSyncOnHelper::SigninAbortedMode: abort mode.
 // - bool: should_remove_initial_account
-// - bool: Explicit browser signin feature
 class TurnSyncOnHelperBrowserTestWithParam
     : public SigninBrowserTestBase,
       public testing::WithParamInterface<
-          std::tuple<TurnSyncOnHelper::SigninAbortedMode, bool, bool>> {
+          std::tuple<TurnSyncOnHelper::SigninAbortedMode, bool>> {
  public:
   TurnSyncOnHelperBrowserTestWithParam()
       : SigninBrowserTestBase(/*use_main_profile=*/false) {
-    scoped_feature_list_.InitWithFeatureState(
-        switches::kExplicitBrowserSigninUIOnDesktop,
-        is_explicit_browser_signin_enabled());
   }
 
  protected:
@@ -214,13 +210,6 @@ class TurnSyncOnHelperBrowserTestWithParam
   TurnSyncOnHelper::SigninAbortedMode aborted_mode() const {
     return std::get<TurnSyncOnHelper::SigninAbortedMode>(GetParam());
   }
-
-  bool is_explicit_browser_signin_enabled() const {
-    return std::get<2>(GetParam());
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 // Tests that aborting a Sync opt-in flow started with a secondary account
@@ -251,7 +240,7 @@ IN_PROC_BROWSER_TEST_P(TurnSyncOnHelperBrowserTestWithParam,
   auto owned_delegate = std::make_unique<Delegate>(choices);
   base::WeakPtr<Delegate> delegate = owned_delegate->GetWeakPtr();
   new TurnSyncOnHelper(
-      profile, signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN,
+      profile, signin_metrics::AccessPoint::kUnknown,
       signin_metrics::PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO,
       second_account_id, aborted_mode(), std::move(owned_delegate),
       run_loop.QuitClosure());
@@ -302,17 +291,12 @@ IN_PROC_BROWSER_TEST_P(TurnSyncOnHelperBrowserTestWithParam,
         // primary account isn't set implicitly based on cookies but by explicit
         // user action, therefore it is also not removed when cookies change.
         // The account should remain and Chrome still signed in.
-        if (is_explicit_browser_signin_enabled()) {
-          EXPECT_FALSE(
-              identity_manager()->GetAccountsWithRefreshTokens().empty());
-          EXPECT_TRUE(identity_manager()->HasPrimaryAccount(
-              signin::ConsentLevel::kSignin));
-        } else {
-          EXPECT_TRUE(
-              identity_manager()->GetAccountsWithRefreshTokens().empty());
-          EXPECT_FALSE(identity_manager()->HasPrimaryAccount(
-              signin::ConsentLevel::kSignin));
-        }
+
+        EXPECT_FALSE(
+            identity_manager()->GetAccountsWithRefreshTokens().empty());
+        EXPECT_TRUE(identity_manager()->HasPrimaryAccount(
+            signin::ConsentLevel::kSignin));
+
       } else {
         // First account is still primary, second account was not removed.
         EXPECT_THAT(
@@ -339,7 +323,6 @@ INSTANTIATE_TEST_SUITE_P(
         testing::Values(TurnSyncOnHelper::SigninAbortedMode::REMOVE_ACCOUNT,
                         TurnSyncOnHelper::SigninAbortedMode::KEEP_ACCOUNT),
         // Whether the initial account should be removed during the flow.
-        testing::Bool(),
         testing::Bool()));
 
 class TurnSyncOnHelperBrowserTest : public SigninBrowserTestBase {
@@ -365,7 +348,7 @@ IN_PROC_BROWSER_TEST_F(TurnSyncOnHelperBrowserTest, UndoSyncRemoveAccount) {
   auto owned_delegate = std::make_unique<Delegate>(choices);
   base::WeakPtr<Delegate> delegate = owned_delegate->GetWeakPtr();
   new TurnSyncOnHelper(
-      profile, signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN,
+      profile, signin_metrics::AccessPoint::kUnknown,
       signin_metrics::PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO, account_id,
       TurnSyncOnHelper::SigninAbortedMode::REMOVE_ACCOUNT,
       std::move(owned_delegate), run_loop.QuitClosure());
@@ -404,16 +387,9 @@ IN_PROC_BROWSER_TEST_F(TurnSyncOnHelperBrowserTest, UndoSyncRemoveAccount) {
 }
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-class TurnSyncOnHelperBrowserTestWithUnoDesktop
-    : public TurnSyncOnHelperBrowserTest {
- private:
-  base::test::ScopedFeatureList feature_list_{
-      switches::kExplicitBrowserSigninUIOnDesktop};
-};
-
 // Tests that aborting a Sync opt-in flow started with a web only signed in
 // account reverts the account to the initial web only signed in state.
-IN_PROC_BROWSER_TEST_F(TurnSyncOnHelperBrowserTestWithUnoDesktop,
+IN_PROC_BROWSER_TEST_F(TurnSyncOnHelperBrowserTest,
                        WebOnlyAccountResetAfterSyncOptInFlowAborted) {
   Profile* profile = GetProfile();
   // Set up first account.
@@ -432,7 +408,7 @@ IN_PROC_BROWSER_TEST_F(TurnSyncOnHelperBrowserTestWithUnoDesktop,
   auto owned_delegate = std::make_unique<Delegate>(choices);
   base::WeakPtr<Delegate> delegate = owned_delegate->GetWeakPtr();
   new TurnSyncOnHelper(
-      profile, signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN,
+      profile, signin_metrics::AccessPoint::kUnknown,
       signin_metrics::PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO,
       first_account_id,
       TurnSyncOnHelper::SigninAbortedMode::KEEP_ACCOUNT_ON_WEB_ONLY,
@@ -463,7 +439,7 @@ IN_PROC_BROWSER_TEST_F(TurnSyncOnHelperBrowserTestWithUnoDesktop,
 // Tests that aborting a Sync opt-in flow started with a secondary account
 // reverts the primary account to the initial one.
 IN_PROC_BROWSER_TEST_F(
-    TurnSyncOnHelperBrowserTestWithUnoDesktop,
+    TurnSyncOnHelperBrowserTest,
     PrimaryAccountResetAfterSyncOptInFlowAbortedForSecondaryAccount) {
   Profile* profile = GetProfile();
   // Set up the primary account.
@@ -490,7 +466,7 @@ IN_PROC_BROWSER_TEST_F(
   auto owned_delegate = std::make_unique<Delegate>(choices);
   base::WeakPtr<Delegate> delegate = owned_delegate->GetWeakPtr();
   new TurnSyncOnHelper(
-      profile, signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN,
+      profile, signin_metrics::AccessPoint::kUnknown,
       signin_metrics::PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO,
       second_account_id,
       TurnSyncOnHelper::SigninAbortedMode::KEEP_ACCOUNT_ON_WEB_ONLY,
@@ -524,7 +500,7 @@ IN_PROC_BROWSER_TEST_F(
 // Tests that aborting a Sync opt-in flow started with a new secondary account
 // reverts the primary account to the initial one and removes the new account.
 IN_PROC_BROWSER_TEST_F(
-    TurnSyncOnHelperBrowserTestWithUnoDesktop,
+    TurnSyncOnHelperBrowserTest,
     PrimaryAccountResetAfterSyncOptInFlowAbortedForNewAccount) {
   Profile* profile = GetProfile();
 
@@ -551,7 +527,7 @@ IN_PROC_BROWSER_TEST_F(
   auto owned_delegate = std::make_unique<Delegate>(choices);
   base::WeakPtr<Delegate> delegate = owned_delegate->GetWeakPtr();
   new TurnSyncOnHelper(
-      profile, signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN,
+      profile, signin_metrics::AccessPoint::kUnknown,
       signin_metrics::PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO,
       second_account_id, TurnSyncOnHelper::SigninAbortedMode::REMOVE_ACCOUNT,
       std::move(owned_delegate), run_loop.QuitClosure());

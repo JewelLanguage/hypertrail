@@ -841,8 +841,9 @@ inline constexpr char kAccessibilitySelectToSpeakWordHighlight[] =
 inline constexpr char kAccessibilityReducedAnimationsEnabled[] =
     "settings.a11y.reduced_animations.enabled";
 
-// A boolean pref which determines whether overlay scrollbars is enabled.
-inline constexpr char kAccessibilityOverlayScrollbarEnabled[] =
+// A boolean pref which determines whether the always show scrollbars feature is
+// enabled.
+inline constexpr char kAccessibilityAlwaysShowScrollbarsEnabled[] =
     "settings.a11y.overlay_scrollbar.enabled";
 
 // A boolean pref which determines whether FaceGaze is enabled.
@@ -2456,6 +2457,27 @@ inline constexpr char kCaptureModePolicySavePath[] =
 // not.
 inline constexpr char kSunfishEnabled[] = "ash.capture_mode.sunfish_enabled";
 
+// The name of a boolean pref that records whether the sunfish consent
+// disclaimer has been accepted.
+inline constexpr char kSunfishConsentDisclaimerAccepted[] =
+    "ash.capture_mode.sunfish_consent_disclaimer_accepted";
+
+// A boolean pref that records whether the Scanner feature is enabled by the
+// user, and *will NEVER be enforced by an administrator*. This is true by
+// default, but the feature will not be usable until the user explicitly accepts
+// a consent disclaimer.
+inline constexpr char kScannerEnabled[] = "ash.scanner.enabled";
+
+// An integer pref that records whether the feature is allowed by enterprise
+// policy.
+// This integer has three valid values:
+// - 0: Allowed with model improvement.
+// - 1: Allowed without model improvement.
+// - 2: Disallowed.
+// Any other value outside of the range should behave identically to 1.
+inline constexpr char kScannerEnterprisePolicyAllowed[] =
+    "ash.scanner.enterprise_policy_allowed";
+
 // A dictionary that stores app icons' light vibrant colors.
 inline constexpr char kAshAppIconLightVibrantColorCache[] =
     "ash.app_icon_light_vibrant_color_cache";
@@ -2570,6 +2592,16 @@ inline constexpr char kBirchUseCoral[] = "ash.birch.use_coral";
 inline constexpr char kClassManagementToolsAvailabilitySetting[] =
     "ash.class_management_tools.availability_setting";
 
+// A dict pref indicating user's recent selection for web page navigation rule
+// in class management tools.
+inline constexpr char kClassManagementToolsNavRuleSetting[] =
+    "ash.class_management_tools.nav_rule_setting";
+
+// A boolean pref indicating user's default caption enablement setting in class
+// management tools.
+inline constexpr char kClassManagementToolsCaptionEnablementSetting[] =
+    "ash.class_management_tools.caption_enablement_setting";
+
 // A boolean pref that holds whether the user dismissed the extended updates
 // notification.
 inline constexpr char kExtendedUpdatesNotificationDismissed[] =
@@ -2622,6 +2654,11 @@ inline constexpr char kSunfishLauncherNudgeLastShown[] =
 // completed.
 inline constexpr char kQuickInsertFeatureTourCompletedPref[] =
     "ash.picker.feature_tour.completed";
+
+// A string preference indicating the name of the OS level task scheduler
+// configuration to use.
+inline constexpr char kSchedulerConfiguration[] =
+    "chromeos.scheduler_configuration";
 
 //-----------------------------------------------------------------------------
 // Language related Prefs

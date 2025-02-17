@@ -201,6 +201,12 @@ void TabStripModelObserver::OnTabWillBeAdded() {}
 void TabStripModelObserver::OnTabWillBeRemoved(content::WebContents* contents,
                                                int index) {}
 
+void TabStripModelObserver::OnTabGroupDetached(TabStripModel* model,
+                                               const TabGroup& group) {}
+
+void TabStripModelObserver::OnTabGroupAttached(TabStripModel* model,
+                                               const TabGroup& group) {}
+
 void TabStripModelObserver::OnTabGroupChanged(const TabGroupChange& change) {}
 
 void TabStripModelObserver::OnTabGroupAdded(
@@ -208,6 +214,9 @@ void TabStripModelObserver::OnTabGroupAdded(
 
 void TabStripModelObserver::OnTabGroupWillBeRemoved(
     const tab_groups::TabGroupId& group_id) {}
+
+void TabStripModelObserver::OnSplitViewAdded(
+    std::vector<tabs::TabInterface*> tabs) {}
 
 void TabStripModelObserver::TabChangedAt(WebContents* contents,
                                          int index,
@@ -222,7 +231,9 @@ void TabStripModelObserver::TabBlockedStateChanged(WebContents* contents,
                                                    int index) {}
 
 void TabStripModelObserver::TabGroupedStateChanged(
-    std::optional<tab_groups::TabGroupId> group,
+    TabStripModel* tab_strip_model,
+    std::optional<tab_groups::TabGroupId> old_group,
+    std::optional<tab_groups::TabGroupId> new_group,
     tabs::TabInterface* tab,
     int index) {}
 

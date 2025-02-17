@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include <stdint.h>
 
 #include <memory>
@@ -24,7 +19,6 @@
 #include "base/test/test_future.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_features.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/notifications/metrics/mock_notification_metrics_logger.h"
@@ -117,9 +111,6 @@ class PlatformNotificationServiceTest : public testing::Test {
     scoped_feature_list_.InitAndDisableFeature(
         safe_browsing::kOnDeviceNotificationContentDetectionModel);
     TestingProfile::Builder profile_builder;
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-    profile_builder.SetIsMainProfile(true);
-#endif
     profile_builder.AddTestingFactory(
         HistoryServiceFactory::GetInstance(),
         HistoryServiceFactory::GetDefaultFactory());
@@ -223,9 +214,8 @@ TEST_F(PlatformNotificationServiceTest, DisplayPersistentThenClose) {
 }
 
 TEST_F(PlatformNotificationServiceTest, DisplayNonPersistentPropertiesMatch) {
-  std::vector<int> vibration_pattern(
-      kNotificationVibrationPattern,
-      kNotificationVibrationPattern + std::size(kNotificationVibrationPattern));
+  std::vector<int> vibration_pattern(std::begin(kNotificationVibrationPattern),
+                                     std::end(kNotificationVibrationPattern));
 
   PlatformNotificationData data;
   data.title = u"My notification's title";
@@ -255,9 +245,8 @@ TEST_F(PlatformNotificationServiceTest, DisplayNonPersistentPropertiesMatch) {
 }
 
 TEST_F(PlatformNotificationServiceTest, DisplayPersistentPropertiesMatch) {
-  std::vector<int> vibration_pattern(
-      kNotificationVibrationPattern,
-      kNotificationVibrationPattern + std::size(kNotificationVibrationPattern));
+  std::vector<int> vibration_pattern(std::begin(kNotificationVibrationPattern),
+                                     std::end(kNotificationVibrationPattern));
   PlatformNotificationData data;
   data.title = u"My notification's title";
   data.body = u"Hello, world!";
@@ -653,9 +642,6 @@ class PlatformNotificationServiceTest_NotificationContentDetection
  public:
   void SetUp() override {
     TestingProfile::Builder profile_builder;
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-    profile_builder.SetIsMainProfile(true);
-#endif
     profile_builder.AddTestingFactory(
         HistoryServiceFactory::GetInstance(),
         HistoryServiceFactory::GetDefaultFactory());

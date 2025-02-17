@@ -32,7 +32,6 @@
 #include "base/location.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/numerics/clamped_math.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -86,10 +85,10 @@
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/storage_partition.h"
+#include "services/network/public/cpp/permissions_policy/origin_with_possible_wildcards.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
-#include "third_party/blink/public/common/permissions_policy/origin_with_possible_wildcards.h"
 #include "third_party/blink/public/common/permissions_policy/permissions_policy_declaration.h"
 #include "third_party/blink/public/common/permissions_policy/policy_helper_public.h"
 #include "third_party/blink/public/common/safe_url_pattern.h"
@@ -261,7 +260,7 @@ blink::ParsedPermissionsPolicy CreateRandomPermissionsPolicy(
       const auto origin =
           url::Origin::Create(GURL("https://app-" + suffix_str + ".com/"));
       permissions_policy[i].allowed_origins.emplace_back(
-          *blink::OriginWithPossibleWildcards::FromOrigin(origin));
+          *network::OriginWithPossibleWildcards::FromOrigin(origin));
     }
   }
   return permissions_policy;
@@ -567,7 +566,7 @@ std::optional<IsolatedWebAppIntegrityBlockData> CreateIntegrityBlockData(
   auto signatures = CreateSignatures();
 
   std::mt19937 rng(random.next_uint());
-  base::ranges::shuffle(signatures, rng);
+  std::ranges::shuffle(signatures, rng);
 
   size_t signatures_count = random.next_uint(signatures.size()) + 1;
   signatures.erase(signatures.begin() + signatures_count, signatures.end());
@@ -609,6 +608,7 @@ std::unique_ptr<WebApp> CreateWebApp(const GURL& start_url,
 
   auto web_app = std::make_unique<WebApp>(app_id);
   web_app->SetStartUrl(start_url);
+  web_app->SetScope(start_url.GetWithoutFilename());
   web_app->AddSource(source_type);
   web_app->SetDisplayMode(blink::mojom::DisplayMode::kStandalone);
   web_app->SetUserDisplayMode(mojom::UserDisplayMode::kStandalone);
@@ -868,12 +868,12 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
       CreateRandomScopeExtensions(random.next_uint(), random));
 
   ScopeExtensions validated_scope_extensions;
-  base::ranges::copy_if(app->scope_extensions(),
-                        std::inserter(validated_scope_extensions,
-                                      validated_scope_extensions.begin()),
-                        [&random](const ScopeExtensionInfo& extension) {
-                          return random.next_bool();
-                        });
+  std::ranges::copy_if(app->scope_extensions(),
+                       std::inserter(validated_scope_extensions,
+                                     validated_scope_extensions.begin()),
+                       [&random](const ScopeExtensionInfo& extension) {
+                         return random.next_bool();
+                       });
   app->SetValidatedScopeExtensions(validated_scope_extensions);
 
   if (random.next_bool()) {

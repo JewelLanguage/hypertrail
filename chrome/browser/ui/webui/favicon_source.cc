@@ -50,12 +50,21 @@ GURL GetUnsafeRequestOrigin(const content::WebContents::Getter& wc_getter) {
   return web_contents ? web_contents->GetLastCommittedURL() : GURL();
 }
 
-bool IsHistoryUiOrigin(const GURL& url) {
+bool IsOriginAllowedServerFallback(const GURL& url) {
+  // Allow chrome-untrusted://data-sharing to use Google server fallback.
+  if (url.scheme() == content::kChromeUIUntrustedScheme &&
+      url.host() == chrome::kChromeUIUntrustedDataSharingHost) {
+    return true;
+  }
   GURL history_url(chrome::kChromeUIHistoryURL);
   if (url == history_url) {
     return true;
   }
   if (url == history_url.Resolve(chrome::kChromeUIHistorySyncedTabs)) {
+    return true;
+  }
+  if (url == GURL(chrome::kChromeUINewTabURL) ||
+      url == GURL(chrome::kChromeUINewTabPageURL)) {
     return true;
   }
   return false;
@@ -64,8 +73,11 @@ bool IsHistoryUiOrigin(const GURL& url) {
 }  // namespace
 
 FaviconSource::FaviconSource(Profile* profile,
-                             chrome::FaviconUrlFormat url_format)
-    : profile_(profile->GetOriginalProfile()), url_format_(url_format) {}
+                             chrome::FaviconUrlFormat url_format,
+                             bool serve_untrusted)
+    : profile_(profile->GetOriginalProfile()),
+      url_format_(url_format),
+      serve_untrusted_(serve_untrusted) {}
 
 FaviconSource::~FaviconSource() = default;
 
@@ -74,8 +86,10 @@ std::string FaviconSource::GetSource() {
     case chrome::FaviconUrlFormat::kFaviconLegacy:
       return chrome::kChromeUIFaviconHost;
     case chrome::FaviconUrlFormat::kFavicon2:
-      return chrome::kChromeUIFavicon2Host;
+      return serve_untrusted_ ? chrome::kChromeUIUntrustedFavicon2URL
+                              : chrome::kChromeUIFavicon2Host;
   }
+
   NOTREACHED();
 }
 
@@ -147,8 +161,8 @@ void FaviconSource::StartDataRequest(
       }
     }
 
-    if (!parsed.allow_favicon_server_fallback ||
-        !IsHistoryUiOrigin(GetUnsafeRequestOrigin(wc_getter))) {
+    if (!(parsed.allow_favicon_server_fallback &&
+          IsOriginAllowedServerFallback(GetUnsafeRequestOrigin(wc_getter)))) {
       // Request from local storage only.
       const bool fallback_to_host = true;
       favicon_service->GetRawFaviconForPageURL(
@@ -172,7 +186,7 @@ void FaviconSource::StartDataRequest(
       return;
     }
     history_ui_favicon_request_handler->GetRawFaviconForPageURL(
-        page_url, desired_size_in_pixel,
+        page_url, desired_size_in_pixel, parsed.fallback_to_host,
         base::BindOnce(&FaviconSource::OnFaviconDataAvailable,
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback),
                        parsed, wc_getter));

@@ -13,17 +13,14 @@ export function getHtml(this: ProfilePickerMainViewElement) {
   <div class="title-container">
     <div id="images-container">
       <img id="product-logo" @click="${this.onProductLogoClick_}"
-          srcset="chrome://theme/current-channel-logo@1x 1x,
-                  chrome://theme/current-channel-logo@2x 2x"
-          role="presentation">
+          src="product_logo.svg" role="presentation">
       <img id="glic-logo" ?hidden="${!isGlicVersion()}" role="presentation">
     </div>
-    <h1 class="title">$i18nRaw{mainViewTitle}</h1>
-    <div class="subtitle">$i18n{mainViewSubtitle}</div>
+    <h1 class="title" .innerHTML="${this.getTitle_()}"></h1>
+    <div class="subtitle" .innerHTML="${this.getSubtitle_()}"></div>
   </div>
-  <div id="wrapper">
-    <div id="profilesContainer" class="custom-scrollbar"
-        ?hidden="${!this.profilesListLoaded_}">
+  <div id="profilesWrapper" ?hidden="${(this.shouldHideProfilesWrapper_())}">
+    <div id="profilesContainer" class="custom-scrollbar">
       ${this.profilesList_.map((item, index) => html`
         <profile-card class="profile-item" .profileState="${item}"
             data-index="${index}">
@@ -41,9 +38,10 @@ export function getHtml(this: ProfilePickerMainViewElement) {
       </cr-button>
     </div>
   </div>
-</div>
-<div id="footer-text" ?hidden="${!isGlicVersion()}">
-  $i18nRaw{glicAddProfileHelper}
+  <div id="footer-text" class="subtitle"
+      ?hidden="${this.shouldHideFooterText_()}">
+    $i18nRaw{glicAddProfileHelper}
+  </div>
 </div>
 <div class="footer">
   <cr-button id="browseAsGuestButton"

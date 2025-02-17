@@ -15,6 +15,7 @@
 #include "ash/constants/web_app_id_constants.h"
 #include "ash/public/cpp/capture_mode/capture_mode_api.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "base/cancelable_callback.h"
 #include "base/check.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -63,8 +64,10 @@
 #include "content/public/browser/audio_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_manager.h"
+#include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/service_process_host.h"
 #include "content/public/browser/video_capture_service.h"
+#include "services/network/public/cpp/network_connection_tracker.h"
 #include "services/screen_ai/public/mojom/screen_ai_service.mojom.h"
 #include "services/video_capture/public/mojom/video_capture_service.mojom.h"
 #include "storage/browser/file_system/file_system_context.h"
@@ -515,18 +518,21 @@ void ChromeCaptureModeDelegate::DetectTextInImage(
   pending_ocr_request_callback_ = std::move(callback);
 
   if (!optical_character_recognizer_) {
+    ocr_service_initialized_callback_.Reset(
+        base::BindOnce(&ChromeCaptureModeDelegate::OnOcrServiceInitialized,
+                       weak_ptr_factory_.GetWeakPtr()));
     optical_character_recognizer_ =
         screen_ai::OpticalCharacterRecognizer::CreateWithStatusCallback(
             profile, screen_ai::mojom::OcrClientType::kScreenshotTextDetection,
-            base::BindOnce(&ChromeCaptureModeDelegate::OnOcrServiceInitialized,
-                           weak_ptr_factory_.GetWeakPtr()));
+            ocr_service_initialized_callback_.callback());
   }
 }
 
 void ChromeCaptureModeDelegate::SendRegionSearch(
     const SkBitmap& image,
     const gfx::Rect& region,
-    ash::OnSearchUrlFetchedCallback callback) {
+    ash::OnSearchUrlFetchedCallback search_callback,
+    ash::OnTextDetectionComplete text_callback) {
   Profile* profile = ProfileManager::GetActiveUserProfile();
   if (!profile || image.empty() || region.IsEmpty()) {
     return;
@@ -551,7 +557,10 @@ void ChromeCaptureModeDelegate::SendRegionSearch(
             profile, lens::LensOverlayInvocationSource(),
             /*use_dark_mode=*/false);
   }
-  on_search_url_fetched_callback_ = std::move(callback);
+
+  on_search_url_fetched_callback_ = std::move(search_callback);
+  on_text_detection_complete_callback_ = std::move(text_callback);
+
   lens_overlay_query_controller_->StartQueryFlow(
       /*screenshot=*/image,
       /*page_url=*/GURL(),
@@ -592,6 +601,10 @@ void ChromeCaptureModeDelegate::SendMultimodalSearch(
       /*region_bytes=*/image);
 }
 
+bool ChromeCaptureModeDelegate::IsNetworkConnectionOffline() const {
+  return content::GetNetworkConnectionTracker()->IsOffline();
+}
+
 void ChromeCaptureModeDelegate::DeleteRemoteFile(
     const base::FilePath& path,
     base::OnceCallback<void(bool)> callback) {
@@ -603,7 +616,47 @@ void ChromeCaptureModeDelegate::DeleteRemoteFile(
 void ChromeCaptureModeDelegate::HandleStartQueryResponse(
     std::vector<lens::OverlayObject> objects,
     lens::Text text,
-    bool is_error) {}
+    bool is_error) {
+  if (is_error || !on_text_detection_complete_callback_ ||
+      !text.has_text_layout()) {
+    return;
+  }
+
+  std::string extracted_text;
+  const lens::TextLayout& text_layout = text.text_layout();
+
+  for (int i = 0; i < text_layout.paragraphs_size(); i++) {
+    const auto& paragraph = text_layout.paragraphs()[i];
+
+    // Add an extra newline between each paragraph (i.e., before each
+    // paragraph after the first).
+    if (i > 0) {
+      extracted_text += "\n";
+    }
+
+    for (int j = 0; j < paragraph.lines().size(); j++) {
+      const auto& line = paragraph.lines()[j];
+
+      // Add a newline between each line (i.e., before each line after the
+      // first).
+      if (j > 0) {
+        extracted_text += "\n";
+      }
+
+      for (const auto& word : line.words()) {
+        extracted_text += word.plain_text();
+
+        // Add the text separator if it exists.
+        if (word.has_text_separator()) {
+          extracted_text += word.text_separator();
+        }
+      }
+    }
+  }
+
+  std::move(on_text_detection_complete_callback_)
+      .Run(std::move(extracted_text));
+}
 
 void ChromeCaptureModeDelegate::HandleInteractionURLResponse(
     lens::proto::LensOverlayUrlResponse response) {
@@ -637,6 +690,7 @@ void ChromeCaptureModeDelegate::SetOdfsTempDir(base::ScopedTempDir temp_dir) {
 }
 
 void ChromeCaptureModeDelegate::OnOcrServiceInitialized(bool is_successful) {
+  CHECK(optical_character_recognizer_);
   if (is_successful) {
     PerformOcrOnPendingRequest();
   } else {
@@ -687,6 +741,7 @@ void ChromeCaptureModeDelegate::OnOcrPerformed(
 
 void ChromeCaptureModeDelegate::ResetOcr() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  ocr_service_initialized_callback_.Cancel();
   optical_character_recognizer_ = nullptr;
   pending_ocr_request_image_.reset();
   if (!pending_ocr_request_callback_.is_null()) {

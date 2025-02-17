@@ -31,8 +31,8 @@ class RenderFrameHost;
 
 namespace dips {
 
-// Should match BtmDirectNavigationSource in tools/metrics/histograms/enums.xml
-enum DirectNavigationSource {
+// Should match DIPSDirectNavigationSource in tools/metrics/histograms/enums.xml
+enum class DirectNavigationSource {
   kUnknown = 0,
   kOmnibar = 1,
   kBookmark = 2,
@@ -70,10 +70,10 @@ struct EntrypointInfo {
   bool was_referral_client_redirect;
 };
 
-enum FlowStatus {
-  kFlowInvalidated = 0,
-  kFlowOngoing,
-  kFlowEnded,
+enum class FlowStatus {
+  kInvalidated = 0,
+  kOngoing,
+  kEnded,
 };
 
 class InFlowSuccessorInteractionState {
@@ -107,12 +107,12 @@ class InFlowSuccessorInteractionState {
 // distinguish user-interest navigation flows from navigational tracking.
 // Currently only reports UKM to inform how we might identify possible
 // navigational tracking by sites that also perform user-interest activity.
-class CONTENT_EXPORT DipsNavigationFlowDetector
+class CONTENT_EXPORT BtmNavigationFlowDetector
     : public RedirectChainDetector::Observer,
       public WebContentsObserver,
-      public WebContentsUserData<DipsNavigationFlowDetector> {
+      public WebContentsUserData<BtmNavigationFlowDetector> {
  public:
-  ~DipsNavigationFlowDetector() override;
+  ~BtmNavigationFlowDetector() override;
 
   void SetClockForTesting(base::Clock* clock) {
     CHECK(clock);
@@ -120,7 +120,7 @@ class CONTENT_EXPORT DipsNavigationFlowDetector
   }
 
  protected:
-  explicit DipsNavigationFlowDetector(WebContents* web_contents);
+  explicit BtmNavigationFlowDetector(WebContents* web_contents);
 
   void MaybeEmitNavFlowNodeUkmForPreviousPage();
   bool CanEmitNavFlowNodeUkmForPreviousPage() const;
@@ -143,7 +143,7 @@ class CONTENT_EXPORT DipsNavigationFlowDetector
 
  private:
   // So WebContentsUserData::CreateForWebContents can call the constructor.
-  friend class WebContentsUserData<DipsNavigationFlowDetector>;
+  friend class WebContentsUserData<BtmNavigationFlowDetector>;
 
   dips::FlowStatus FlowStatusAfterNavigation(
       bool did_most_recent_navigation_start_new_flow) const;
@@ -180,7 +180,7 @@ class CONTENT_EXPORT DipsNavigationFlowDetector
 
   // The status of a flow for the purposes of InFlowSuccessorInteraction, after
   // the most recent primary page change.
-  dips::FlowStatus flow_status_ = dips::FlowStatus::kFlowInvalidated;
+  dips::FlowStatus flow_status_ = dips::FlowStatus::kInvalidated;
   // Data needed for emitting DIPS.TrustIndicator.InFlowSuccessorInteraction.
   // Set only when there's an ongoing flow that's possibly valid (we can't know
   // for sure until it ends or is invalidated).
@@ -200,7 +200,7 @@ class CONTENT_EXPORT DipsNavigationFlowDetector
 
   raw_ref<base::Clock> clock_{*base::DefaultClock::GetInstance()};
 
-  base::WeakPtrFactory<DipsNavigationFlowDetector> weak_factory_{this};
+  base::WeakPtrFactory<BtmNavigationFlowDetector> weak_factory_{this};
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 };

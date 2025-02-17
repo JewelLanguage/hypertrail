@@ -1183,8 +1183,7 @@ void AppListControllerImpl::SetKeyboardTraversalMode(bool engaged) {
     // TODO(https://crbug.com/1262236): class name comparision and static cast
     // should be avoided in the production code. Find a better way to guarantee
     // the item's selection status.
-    if (std::string_view(focused_view->GetClassName()) ==
-        std::string_view(AppListItemView::kViewClassName)) {
+    if (focused_view->GetClassName() == AppListItemView::kViewClassName) {
       static_cast<AppListItemView*>(focused_view)->EnsureSelected();
     }
 
@@ -1800,7 +1799,7 @@ SearchModel* AppListControllerImpl::GetSearchModel() {
 void AppListControllerImpl::UpdateSearchBoxUiVisibilities() {
   SearchBoxModel* search_box_model = GetSearchModel()->search_box();
   search_box_model->SetShowAssistantButton(IsAssistantAllowedAndEnabled());
-  search_box_model->SetShowSunfishButton(IsSunfishAllowedAndEnabled());
+  search_box_model->SetShowSunfishButton(IsSunfishSessionAllowed());
 
   if (!client_) {
     return;
@@ -2122,7 +2121,7 @@ void AppListControllerImpl::MaybeShowSunfishLauncherNudge(
     return;
   }
 
-  if (!IsSunfishAllowedAndEnabled()) {
+  if (!IsSunfishSessionAllowed()) {
     return;
   }
 

@@ -24,6 +24,7 @@
 #include "content/browser/renderer_host/text_input_manager.h"
 #include "content/common/content_switches_internal.h"
 #include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
 #include "ui/accelerated_widget_mac/display_ca_layer_tree.h"
 #include "ui/base/ime/text_input_mode.h"
@@ -85,21 +86,18 @@ RenderWidgetHostViewIOS::RenderWidgetHostViewIOS(RenderWidgetHost* widget)
       gesture_provider_(
           ui::GetGestureProviderConfig(
               ui::GestureProviderConfigType::CURRENT_PLATFORM,
-              content::GetUIThreadTaskRunner({BrowserTaskType::kUserInput})),
+              GetUIThreadTaskRunner({BrowserTaskType::kUserInput})),
           this) {
   ui_view_ = std::make_unique<UIViewHolder>();
   ui_view_->view_ =
       [[RenderWidgetUIView alloc] initWithWidget:weak_factory_.GetWeakPtr()];
-
-  display_tree_ =
-      std::make_unique<ui::DisplayCALayerTree>([ui_view_->view_ layer]);
 
   auto* screen = display::Screen::GetScreen();
   screen_infos_ =
       screen->GetScreenInfosNearestDisplay(screen->GetPrimaryDisplay().id());
 
   browser_compositor_ = std::make_unique<BrowserCompositorIOS>(
-      (uint64_t)(__bridge void*)ui_view_->view_, this, host()->is_hidden(),
+      [ui_view_->view_ viewHandle], this, host()->is_hidden(),
       host()->GetFrameSinkId());
 
   if (IsTesting()) {
@@ -406,10 +404,7 @@ void RenderWidgetHostViewIOS::OnSynchronizedDisplayPropertiesChanged(
 }
 
 void RenderWidgetHostViewIOS::UpdateCALayerTree(
-    const gfx::CALayerParams& ca_layer_params) {
-  DCHECK(display_tree_);
-  display_tree_->UpdateCALayerTree(ca_layer_params);
-}
+    const gfx::CALayerParams& ca_layer_params) {}
 
 void RenderWidgetHostViewIOS::OnOldViewDidNavigatePreCommit() {
   CHECK(browser_compositor_) << "Shouldn't be called during destruction!";
@@ -436,6 +431,10 @@ void RenderWidgetHostViewIOS::DidEnterBackForwardCache() {
   //
   // Called after to prevent prematurely evict the BFCached surface.
   host()->ForceFirstFrameAfterNavigationTimeout();
+}
+
+void RenderWidgetHostViewIOS::ActivatedOrEvictedFromBackForwardCache() {
+  browser_compositor_->ActivatedOrEvictedFromBackForwardCache();
 }
 
 void RenderWidgetHostViewIOS::DidNavigate() {

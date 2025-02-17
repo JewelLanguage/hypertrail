@@ -306,6 +306,7 @@ export function createDummyExtensionInfo():
     chrome.developerPrivate.ExtensionInfo {
   return {
     commands: [],
+    isCommandRegistrationHandledExternally: false,
     dependentExtensions: [],
     description: '',
     disableReasons: {
@@ -326,6 +327,7 @@ export function createDummyExtensionInfo():
     iconUrl: '',
     id: '',
     incognitoAccess: {isEnabled: false, isActive: false},
+    userScriptsAccess: {isEnabled: false, isActive: false},
     installWarnings: [],
     location: chrome.developerPrivate.Location.UNKNOWN,
     manifestErrors: [],

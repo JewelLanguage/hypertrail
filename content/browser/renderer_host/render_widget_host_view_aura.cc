@@ -874,6 +874,13 @@ gfx::Size RenderWidgetHostViewAura::GetVisibleViewportSize() {
   return requested_rect.size();
 }
 
+gfx::Size RenderWidgetHostViewAura::GetVisibleViewportSizeDevicePx() {
+  gfx::Rect requested_rect(GetRequestedRendererSizeDevicePx());
+  auto scaled_insets = ScaleToCeiledInsets(insets_, GetDeviceScaleFactor());
+  requested_rect.Inset(scaled_insets);
+  return requested_rect.size();
+}
+
 void RenderWidgetHostViewAura::SetInsets(const gfx::Insets& insets) {
   TRACE_EVENT0("vk", "RenderWidgetHostViewAura::SetInsets");
   if (insets != insets_) {
@@ -2110,7 +2117,7 @@ gfx::Size RenderWidgetHostViewAura::GetMinimumSize() const {
 }
 
 std::optional<gfx::Size> RenderWidgetHostViewAura::GetMaximumSize() const {
-  return gfx::Size();
+  return std::nullopt;
 }
 
 void RenderWidgetHostViewAura::OnBoundsChanged(const gfx::Rect& old_bounds,
@@ -2539,6 +2546,12 @@ void RenderWidgetHostViewAura::OnHostMovedInPixels(aura::WindowTreeHost* host) {
   TRACE_EVENT0("ui", "RenderWidgetHostViewAura::OnHostMovedInPixels");
 
   UpdateScreenInfo();
+
+  // Close the child popup window if the browser window moves (e.g. due to
+  // moving the window with the keyboard.)
+  if (popup_child_host_view_) {
+    popup_child_host_view_->Shutdown();
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3081,6 +3094,10 @@ void RenderWidgetHostViewAura::DidEnterBackForwardCache() {
   //
   // Called after to prevent prematurely evict the BFCached surface.
   host()->ForceFirstFrameAfterNavigationTimeout();
+}
+
+void RenderWidgetHostViewAura::ActivatedOrEvictedFromBackForwardCache() {
+  delegated_frame_host_->ActivatedOrEvictedFromBackForwardCache();
 }
 
 const viz::FrameSinkId& RenderWidgetHostViewAura::GetFrameSinkId() const {

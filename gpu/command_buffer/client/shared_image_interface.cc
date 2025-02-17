@@ -60,7 +60,7 @@ void SharedImageInterface::CreateSharedMemoryRegionFromSIInfo(
   handle.offset = 0;
   handle.stride = static_cast<int32_t>(
       gfx::RowSizeForBufferFormat(si_info.meta.size.width(), buffer_format, 0));
-  handle.region = std::move(shared_memory_region);
+  handle.set_region(std::move(shared_memory_region));
 }
 
 SharedImageInterface::SwapChainSharedImages::SwapChainSharedImages(
@@ -82,24 +82,6 @@ scoped_refptr<ClientSharedImage> SharedImageInterface::CreateSharedImage(
     gfx::BufferUsage buffer_usage,
     std::optional<SharedImagePoolId> pool_id) {
   NOTREACHED();
-}
-
-scoped_refptr<ClientSharedImage>
-SharedImageInterface::AddReferenceToSharedImage(
-    const SyncToken& sync_token,
-    const Mailbox& mailbox,
-    viz::SharedImageFormat format,
-    const gfx::Size& size,
-    const gfx::ColorSpace& color_space,
-    GrSurfaceOrigin surface_origin,
-    SkAlphaType alpha_type,
-    SharedImageUsageSet usage,
-    uint32_t texture_target) {
-  return ImportSharedImage(ExportedSharedImage(
-      mailbox,
-      SharedImageMetadata{format, size, color_space, surface_origin, alpha_type,
-                          usage},
-      sync_token, texture_target));
 }
 
 scoped_refptr<ClientSharedImage> SharedImageInterface::NotifyMailboxAdded(

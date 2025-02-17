@@ -290,11 +290,14 @@ class StreamingResponder final
 
  private:
   void OnAborted() {
-    // TODO(crbug.com/374879795): fix the abort handling for streaming
-    // responder.
-    Controller()->Error(DOMException::Create(
-        kExceptionMessageRequestAborted,
-        DOMException::GetErrorName(DOMExceptionCode::kAbortError)));
+    auto reason = abort_signal_->reason(script_state_);
+    if (reason.IsEmpty()) {
+      Controller()->Error(DOMException::Create(
+          kExceptionMessageRequestAborted,
+          DOMException::GetErrorName(DOMExceptionCode::kAbortError)));
+    } else {
+      Controller()->Error(reason.V8Value());
+    }
     Cleanup();
   }
 
@@ -373,6 +376,19 @@ CreateModelExecutionStreamingResponder(
   return std::make_tuple(
       streaming_responder->CreateReadableStream(),
       streaming_responder->BindNewPipeAndPassRemote(task_runner));
+}
+
+ReadableStream* CreateEmptyReadableStream(
+    ScriptState* script_state,
+    AIMetrics::AISessionType session_type) {
+  StreamingResponder* streaming_responder =
+      MakeGarbageCollected<StreamingResponder>(
+          script_state, /*AbortSignal=*/nullptr, session_type,
+          /*complete_callback=*/base::DoNothing(),
+          /*overflow_callback=*/base::DoNothing());
+  ReadableStream* readable_stream = streaming_responder->CreateReadableStream();
+  streaming_responder->OnCompletion(/*context_info=*/nullptr);
+  return readable_stream;
 }
 
 }  // namespace blink

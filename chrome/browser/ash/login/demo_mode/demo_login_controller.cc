@@ -5,9 +5,12 @@
 #include "chrome/browser/ash/login/demo_mode/demo_login_controller.h"
 
 #include <optional>
+#include <utility>
 
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
+#include "base/check_is_test.h"
 #include "base/command_line.h"
 #include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
@@ -15,20 +18,22 @@
 #include "base/logging.h"
 #include "base/uuid.h"
 #include "base/values.h"
-#include "chrome/browser/ash/login/existing_user_controller.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/ui/ash/login/login_display_host.h"
-#include "chrome/browser/ui/ash/login/login_screen_client_impl.h"
 #include "chrome/browser/ui/webui/ash/login/online_login_utils.h"
 #include "chromeos/ash/components/demo_mode/utils/demo_session_utils.h"
+#include "chromeos/ash/components/growth/campaigns_manager.h"
+#include "chromeos/ash/components/growth/campaigns_model.h"
 #include "chromeos/ash/components/login/auth/public/user_context.h"
+#include "chromeos/ash/components/settings/user_login_permission_tracker.h"
 #include "chromeos/ash/components/system/statistics_provider.h"
 #include "components/account_id/account_id.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_type.h"
+#include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/gaia_id.h"
 #include "google_apis/google_api_keys.h"
 #include "net/base/url_util.h"
@@ -67,6 +72,12 @@ const char kClientID[] = "client_id";
 
 // Maximum accepted size of an ItemSuggest response. 1MB.
 constexpr int kMaxResponseSize = 1024 * 1024;
+
+const char kErrorCodePath[] = "error.code";
+const char kErrorMessagePath[] = "error.message";
+const char kErrorStatusPath[] = "error.status";
+
+constexpr char kDemoModeSignInEnabledPath[] = "forceEnabled";
 
 constexpr net::NetworkTrafficAnnotationTag kSetupAccountTrafficAnnotation =
     net::DefineNetworkTrafficAnnotation("demo_login_controller", R"(
@@ -171,8 +182,6 @@ void LoginDemoAccount(const std::string& email,
                       const GaiaId& gaia_id,
                       const std::string& auth_code,
                       const std::string& sign_in_scoped_device_id) {
-  // TODO(crbug.com/364195755): Allow list this user in CrosSetting when the
-  // request is success.
   const AccountId account_id =
       AccountId::FromNonCanonicalEmail(email, gaia_id, AccountType::GOOGLE);
   // The user type is known to be regular. The unicorn flow transitions to the
@@ -227,6 +236,29 @@ void SendDemoAccountRequest(
                                kMaxResponseSize);
 }
 
+void LogServerResponseError(std::string error_response, bool is_setup) {
+  if (error_response.empty()) {
+    return;
+  }
+
+  std::optional<base::Value::Dict> error(
+      base::JSONReader::ReadDict(error_response));
+  const std::string response_name =
+      base::StringPrintf("%s response error:", is_setup ? "Setup" : "Clean up");
+  if (!error) {
+    LOG(ERROR) << base::StringPrintf("%s Cannot parse response.",
+                                     response_name);
+    return;
+  }
+  const std::optional<int> code = error->FindIntByDottedPath(kErrorCodePath);
+  const auto* msg = error->FindStringByDottedPath(kErrorMessagePath);
+  const auto* status = error->FindStringByDottedPath(kErrorStatusPath);
+
+  LOG(ERROR) << base::StringPrintf(
+      "%s error code: %d; message: %s; status: %s.", response_name,
+      code ? *code : -1, msg ? *msg : "", status ? *status : "");
+}
+
 DemoLoginController::ResultCode GetDemoAccountRequestResult(
     network::SimpleURLLoader* url_loader,
     const std::string& response_body) {
@@ -253,13 +285,6 @@ DemoLoginController::ResultCode GetDemoAccountRequestResult(
                     : DemoLoginController::ResultCode::kRequestFailed;
 }
 
-void OnCleanUpDemoAccountError(
-    const DemoLoginController::ResultCode result_code) {
-  // TODO(crbug.com/364214790): Record metric for the failure.
-  LOG(ERROR) << "Failed to clean up demo account. Result code: "
-             << static_cast<int>(result_code);
-}
-
 std::string_view GetMachineID() {
   return (system::StatisticsProvider::GetInstance()->GetMachineID())
       .value_or(std::string_view());
@@ -272,7 +297,7 @@ void RemoveGaiaUsersOnDevice() {
   }
   // Make a copy of the list since we'll be removing users and the list would
   // change underneath.
-  const user_manager::UserList user_list = user_manager->GetUsers();
+  const user_manager::UserList user_list = user_manager->GetPersistedUsers();
   for (const user_manager::User* user : user_list) {
     // Skip if it is ephemeral user since the user will be removed by policy.
     // Should not remove device local account.
@@ -286,28 +311,68 @@ void RemoveGaiaUsersOnDevice() {
   }
 }
 
+policy::DeviceCloudPolicyManagerAsh* GetDeviceCloudPolicyManager() {
+  auto* platform_part = g_browser_process->platform_part();
+  if (!platform_part) {
+    LOG(ERROR) << "platform_part is null.";
+    return nullptr;
+  }
+  auto* policy_connector_ash = platform_part->browser_policy_connector_ash();
+  if (!policy_connector_ash) {
+    LOG(ERROR) << "browser_policy_connector_ash is null.";
+    return nullptr;
+  }
+
+  return policy_connector_ash->GetDeviceCloudPolicyManager();
+}
+
 }  // namespace
 
 DemoLoginController::DemoLoginController(
-    LoginScreenClientImpl* login_screen_client) {
-  CHECK(login_screen_client);
-  scoped_observation_.Observe(login_screen_client);
+    base::RepeatingClosure configure_auto_login_callback)
+    : configure_auto_login_callback_(std::move(configure_auto_login_callback)) {
+  state_ = State::kLoadingAvailibility;
+
+  auto* cloud_policy_manager = GetDeviceCloudPolicyManager();
+  if (!cloud_policy_manager) {
+    CHECK_IS_TEST();
+    state_ = State::kReadyForLoginWithDemoAccount;
+    return;
+  }
+
+  is_policy_manager_connected_ = cloud_policy_manager->IsConnected();
+
+  // Sign in experience relies on DM Token for device verification. DM Token is
+  // fetched using policy client, so we need to wait for policy manager to be
+  // connected.
+  if (!is_policy_manager_connected_) {
+    observation_.Observe(cloud_policy_manager);
+  }
+
+  is_feature_eligiblity_loaded_ = features::IsDemoModeSignInEnabled();
+
+  if (is_feature_eligiblity_loaded_ && is_policy_manager_connected_) {
+    // Do not call `MaybeTriggerAutoLogin` since `DemoLoginController` is not
+    // finished construction here.
+    state_ = State::kReadyForLoginWithDemoAccount;
+    return;
+  }
+
+  if (!is_feature_eligiblity_loaded_) {
+    // If `DemoModeSignIn` is not enabled with feature flag, we fallback to
+    // check if the feature is enabled by Growth Framework. This is used when we
+    // are running pilot.
+    LoadFeatureEligibilityFromGrowth();
+  }
 }
 
 DemoLoginController::~DemoLoginController() = default;
 
-void DemoLoginController::OnLoginScreenShown() {
-  // Stop observe login screen since it may get invoked in session. Demo account
-  // should be setup only once for each session. Follow up response will
-  // instruct retry or fall back to public account.
-  scoped_observation_.Reset();
-
-  if (!demo_mode::IsDeviceInDemoMode()) {
-    return;
-  }
+void DemoLoginController::TriggerDemoAccountLoginFlow() {
+  DCHECK_EQ(State::kReadyForLoginWithDemoAccount, state_);
   // Try demo account login first by disable auto-login to managed guest
   // session.
-  demo_mode::SetShouldFallBackMGS(false);
+  state_ = State::kSetupDemoAccountInProgress;
   // TODO(crbug.com/387572263): figure out whether should ignore the power idle
   // policy when fallback to MGS when sign in is enable.
   demo_mode::SetDoNothingWhenPowerIdle();
@@ -316,12 +381,12 @@ void DemoLoginController::OnLoginScreenShown() {
 }
 
 void DemoLoginController::SetSetupFailedCallbackForTest(
-    base::OnceCallback<void(const ResultCode result_code)> callback) {
+    FailedRequestCallback callback) {
   setup_failed_callback_for_testing_ = std::move(callback);
 }
 
 void DemoLoginController::SetCleanUpFailedCallbackForTest(
-    base::OnceCallback<void(const ResultCode result_code)> callback) {
+    FailedRequestCallback callback) {
   clean_up_failed_callback_for_testing_ = std::move(callback);
 }
 
@@ -360,11 +425,13 @@ void DemoLoginController::OnSetupDemoAccountComplete(
     std::unique_ptr<std::string> response_body) {
   auto result = GetDemoAccountRequestResult(url_loader_.get(), *response_body);
   url_loader_.reset();
+
   if (result == ResultCode::kSuccess) {
     HandleSetupDemoAcountResponse(sign_in_scoped_device_id,
                                   std::move(response_body));
   } else {
     OnSetupDemoAccountError(result);
+    LogServerResponseError(*response_body, /*is_setup*/ true);
   }
 }
 
@@ -386,6 +453,15 @@ void DemoLoginController::HandleSetupDemoAcountResponse(
     return;
   }
 
+  // Report success to the metrics.
+  DemoSessionMetricsRecorder::Get()->ReportDemoAccountSetupResult(
+      ResultCode::kSuccess);
+
+  UserLoginPermissionTracker::Get()->SetDemoUser(
+      gaia::CanonicalizeEmail(*email));
+  DCHECK_EQ(State::kSetupDemoAccountInProgress, state_);
+  state_ = State::kLoginDemoAccount;
+
   auto* local_state = g_browser_process->local_state();
   local_state->SetString(prefs::kDemoAccountGaiaId, *gaia_id);
   local_state->SetString(prefs::kDemoModeSessionIdentifier,
@@ -397,18 +473,45 @@ void DemoLoginController::HandleSetupDemoAcountResponse(
 }
 
 void DemoLoginController::OnSetupDemoAccountError(
-    const DemoLoginController::ResultCode result_code) {
+    const ResultCode result_code) {
   // TODO(crbug.com/372333479): Instruct how to do retry on failed according to
   // the error code.
-  if (setup_failed_callback_for_testing_) {
-    std::move(setup_failed_callback_for_testing_).Run(result_code);
-  }
+
+  LOG(ERROR) << "Failed to set up demo account. Result code: "
+             << static_cast<int>(result_code);
+
+  DCHECK_EQ(State::kSetupDemoAccountInProgress, state_);
+
+  // Report error to the metrics.
+  DemoSessionMetricsRecorder::Get()->ReportDemoAccountSetupResult(result_code);
 
   // Login public account session when set up failed.
-  demo_mode::SetShouldFallBackMGS(true);
-  auto* existing_user_controller =
-      ash::ExistingUserController::current_controller();
-  existing_user_controller->ConfigureAutoLogin();
+  state_ = State::kLoginToMGS;
+  configure_auto_login_callback_.Run();
+
+  if (setup_failed_callback_for_testing_) {
+    std::move(setup_failed_callback_for_testing_).Run();
+  }
+}
+
+void DemoLoginController::OnDeviceCloudPolicyManagerConnected() {
+  is_policy_manager_connected_ = true;
+  observation_.Reset();
+
+  MaybeTriggerAutoLogin();
+}
+
+void DemoLoginController::OnDeviceCloudPolicyManagerGotRegistry() {
+  // Do nothing.
+}
+
+void DemoLoginController::LoadFeatureEligibilityFromGrowth() {
+  // Start loading growth campaign to check whether the feature is enabled.
+  auto* campaigns_manager = growth::CampaignsManager::Get();
+  campaigns_manager->LoadCampaigns(
+      base::BindOnce(&DemoLoginController::OnCampaignsLoaded,
+                     weak_ptr_factory_.GetWeakPtr()),
+      /*in_oobe=*/false);
 }
 
 void DemoLoginController::MaybeCleanupPreviousDemoAccount() {
@@ -436,7 +539,9 @@ void DemoLoginController::MaybeCleanupPreviousDemoAccount() {
   std::optional<base::Value::Dict> device_identifier =
       GetDeviceIdentifier(login_scope_device_id);
   if (!device_identifier) {
-    OnSetupDemoAccountError(ResultCode::kCannotObtainDMTokenAndClientID);
+    OnCleanUpDemoAccountError(ResultCode::kCannotObtainDMTokenAndClientID);
+    // Try request for new demo account regardless of the cleanup result.
+    SendSetupDemoAccountRequest();
     return;
   }
 
@@ -456,38 +561,42 @@ void DemoLoginController::MaybeCleanupPreviousDemoAccount() {
 void DemoLoginController::OnCleanUpDemoAccountComplete(
     std::unique_ptr<std::string> response_body) {
   auto result = GetDemoAccountRequestResult(url_loader_.get(), *response_body);
-  if (result != ResultCode::kSuccess) {
-    if (clean_up_failed_callback_for_testing_) {
-      std::move(clean_up_failed_callback_for_testing_).Run(result);
-    } else {
-      OnCleanUpDemoAccountError(result);
-    }
-  }
 
+  if (result == ResultCode::kSuccess) {
+    // Report success to the metrics.
+    DemoSessionMetricsRecorder::Get()->ReportDemoAccountCleanupResult(result);
+  } else {
+    LogServerResponseError(*response_body, /*is_setup*/ false);
+    OnCleanUpDemoAccountError(result);
+  }
   url_loader_.reset();
-  // Try request for new demo account regardless clean up result.
+  // Try request for new demo account regardless of the cleanup result.
   SendSetupDemoAccountRequest();
+}
+
+void DemoLoginController::OnCleanUpDemoAccountError(
+    const ResultCode result_code) {
+  // Report error to the metrics.
+  DemoSessionMetricsRecorder::Get()->ReportDemoAccountCleanupResult(
+      result_code);
+
+  LOG(ERROR) << "Failed to clean up demo account. Result code: "
+             << static_cast<int>(result_code);
+
+  if (clean_up_failed_callback_for_testing_) {
+    std::move(clean_up_failed_callback_for_testing_).Run();
+  }
 }
 
 std::optional<base::Value::Dict> DemoLoginController::GetDeviceIdentifier(
     const std::string& login_scope_device_id) {
-  auto* platform_part = g_browser_process->platform_part();
-  if (!platform_part) {
-    LOG(ERROR) << "platform_part is null.";
-    return std::nullopt;
-  }
-  auto* policy_connector_ash = platform_part->browser_policy_connector_ash();
-  if (!policy_connector_ash) {
-    LOG(ERROR) << "browser_policy_connector_ash is null.";
-    return std::nullopt;
-  }
   // The class member `policy_manager_for_testing_` is set during testing.
   // If it's not set, it means we're not in the testing environment, so we
   // can get the real policy manager from `policy_connector_ash`.
   policy::CloudPolicyManager* policy_manager =
-      policy_manager_for_testing_
-          ? policy_manager_for_testing_
-          : policy_connector_ash->GetDeviceCloudPolicyManager();
+      policy_manager_for_testing_ ? policy_manager_for_testing_
+                                  : GetDeviceCloudPolicyManager();
+
   if (!policy_manager) {
     LOG(ERROR)
         << "device_cloud_policy_manager is null, or it's not set for testing.";
@@ -510,6 +619,55 @@ std::optional<base::Value::Dict> DemoLoginController::GetDeviceIdentifier(
       .Set(kClientID, client_id)
       .Set(kDeviceMachineId, GetMachineID())
       .Set(kLoginScopeDeviceId, login_scope_device_id);
+}
+
+void DemoLoginController::HandleFeatureEligibility(bool is_sign_in_enable) {
+  // Enable sign in demo account globally:
+  demo_mode::SetForceEnableDemoAccountSignIn(is_sign_in_enable);
+
+  is_feature_eligiblity_loaded_ = true;
+  MaybeTriggerAutoLogin();
+}
+
+void DemoLoginController::OnCampaignsLoaded() {
+  auto* campaigns_manager = growth::CampaignsManager::Get();
+  CHECK(campaigns_manager);
+
+  auto* campaign = campaigns_manager->GetCampaignBySlot(
+      growth::Slot::kDemoModeSignInExperience);
+
+  // TODO(crbug.com/364214790): Record metric for the campaigns loading failure.
+  if (!campaign) {
+    VLOG(1) << "No campaign matched. Fallback to login as MGS.";
+    HandleFeatureEligibility(/*is_sign_in_enable=*/false);
+    return;
+  }
+
+  auto* payload =
+      GetPayloadBySlot(campaign, growth::Slot::kDemoModeSignInExperience);
+  if (!payload) {
+    VLOG(1) << "No valid payload found.Fallback to login as MGS.";
+    HandleFeatureEligibility(/*is_sign_in_enable=*/false);
+    return;
+  }
+  std::optional<bool> enabled = payload->FindBool(kDemoModeSignInEnabledPath);
+
+  bool force_demo_sign_in_by_growth = enabled.has_value() && *enabled;
+  HandleFeatureEligibility(/*is_sign_in_enable=*/force_demo_sign_in_by_growth);
+}
+
+void DemoLoginController::MaybeTriggerAutoLogin() {
+  CHECK_EQ(State::kLoadingAvailibility, state_);
+  bool is_loading_finished =
+      is_policy_manager_connected_ && is_feature_eligiblity_loaded_;
+  if (!is_loading_finished) {
+    return;
+  }
+  bool is_sign_in_enable = demo_mode::IsDemoAccountSignInEnabled();
+  state_ = is_sign_in_enable ? State::kReadyForLoginWithDemoAccount
+                             : State::kLoginToMGS;
+
+  configure_auto_login_callback_.Run();
 }
 
 }  // namespace ash

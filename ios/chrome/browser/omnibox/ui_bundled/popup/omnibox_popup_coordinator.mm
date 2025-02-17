@@ -21,7 +21,8 @@
 #import "ios/chrome/browser/history/model/top_sites_factory.h"
 #import "ios/chrome/browser/menu/ui_bundled/browser_action_factory.h"
 #import "ios/chrome/browser/net/model/crurl.h"
-#import "ios/chrome/browser/omnibox/ui_bundled/omnibox_ui_features.h"
+#import "ios/chrome/browser/omnibox/model/omnibox_popup_controller.h"
+#import "ios/chrome/browser/omnibox/public/omnibox_ui_features.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/popup/carousel/carousel_item.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/popup/carousel/carousel_item_menu_provider.h"
 #import "ios/chrome/browser/omnibox/ui_bundled/popup/content_providing.h"
@@ -65,7 +66,9 @@
 
 @end
 
-@implementation OmniboxPopupCoordinator
+@implementation OmniboxPopupCoordinator {
+  __weak OmniboxPopupController* _omniboxPopupController;
+}
 
 #pragma mark - Public
 
@@ -73,7 +76,8 @@
     initWithBaseViewController:(UIViewController*)viewController
                        browser:(Browser*)browser
         autocompleteController:(AutocompleteController*)autocompleteController
-                     popupView:(std::unique_ptr<OmniboxPopupViewIOS>)popupView {
+                     popupView:(std::unique_ptr<OmniboxPopupViewIOS>)popupView
+               popupController:(OmniboxPopupController*)popupController {
   self = [super initWithBaseViewController:nil browser:browser];
   if (self) {
     DCHECK(autocompleteController);
@@ -82,6 +86,7 @@
     _popupViewController = [[OmniboxPopupViewController alloc] init];
     _popupReturnDelegate = _popupViewController;
     _KeyboardDelegate = _popupViewController;
+    _omniboxPopupController = popupController;
   }
   return self;
 }
@@ -103,7 +108,6 @@
                                    self.browser->GetProfile())
         autocompleteController:self.autocompleteController
       remoteSuggestionsService:remoteSuggestionsService
-                      delegate:_popupView.get()
                        tracker:feature_engagement::TrackerFactory::
                                    GetForProfile(self.browser->GetProfile())];
 
@@ -164,7 +168,9 @@
                    layoutGuideCenter:LayoutGuideCenterForBrowser(self.browser)
                            incognito:isIncognito];
 
-  _popupView->SetMediator(self.mediator);
+  self.mediator.popupController = _omniboxPopupController;
+
+  _omniboxPopupController.delegate = self.mediator;
 
   if (experimental_flags::IsOmniboxDebuggingEnabled()) {
     [self setupDebug];
@@ -176,11 +182,12 @@
 
   [self.sharingCoordinator stop];
   self.sharingCoordinator = nil;
+  _omniboxPopupController.delegate = nil;
   _popupView.reset();
 }
 
 - (BOOL)isOpen {
-  return self.mediator.isOpen;
+  return _omniboxPopupController.hasSuggestions;
 }
 
 - (id<ToolbarOmniboxConsumer>)toolbarOmniboxConsumer {
@@ -195,7 +202,7 @@
 #pragma mark - Property accessor
 
 - (BOOL)hasResults {
-  return self.mediator.hasResults;
+  return _omniboxPopupController.hasSuggestions;
 }
 
 #pragma mark - OmniboxPopupMediatorProtocolProvider

@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
@@ -25,7 +26,6 @@
 #include "base/logging.h"
 #include "base/memory/raw_ref.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/ranges/algorithm.h"
 #include "base/sequence_checker.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
@@ -74,7 +74,6 @@
 #include "content/test/test_content_browser_client.h"
 #include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
 #include "services/network/network_service.h"
-#include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/public/mojom/attribution.mojom.h"
 #include "services/network/test/test_url_loader_factory.h"
@@ -404,8 +403,8 @@ void FastForwardUntilReportsConsumed(AttributionManager& manager,
     manager.GetPendingReportsForInternalUse(
         /*limit=*/-1,
         base::BindLambdaForTesting([&](std::vector<AttributionReport> reports) {
-          auto it = base::ranges::max_element(reports, /*comp=*/{},
-                                              &AttributionReport::report_time);
+          auto it = std::ranges::max_element(reports, /*comp=*/{},
+                                             &AttributionReport::report_time);
           if (it != reports.end()) {
             delta = it->report_time() - base::Time::Now();
           }
@@ -431,8 +430,8 @@ RunAttributionInteropSimulation(
     return AttributionInteropOutput();
   }
 
-  DCHECK(base::ranges::is_sorted(run.events, /*comp=*/{},
-                                 &AttributionSimulationEvent::time));
+  DCHECK(std::ranges::is_sorted(run.events, /*comp=*/{},
+                                &AttributionSimulationEvent::time));
 
   std::vector<base::test::FeatureRef> enabled_features(
       {blink::features::kKeepAliveInBrowserMigration,
@@ -441,8 +440,6 @@ RunAttributionInteropSimulation(
   std::optional<AttributionOsLevelManager::ScopedApiStateForTesting>
       scoped_api_state;
   if (run.config.needs_cross_app_web) {
-    enabled_features.emplace_back(
-        network::features::kAttributionReportingCrossAppWeb);
     scoped_api_state.emplace(AttributionOsLevelManager::ApiState::kEnabled);
   }
 

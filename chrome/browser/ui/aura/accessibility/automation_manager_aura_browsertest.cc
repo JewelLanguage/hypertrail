@@ -23,8 +23,10 @@
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_mode.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/accessibility/ax_tree.h"
 #include "ui/views/accessibility/ax_aura_obj_wrapper.h"
 #include "ui/views/accessibility/ax_tree_source_views.h"
+#include "ui/views/accessibility/ax_virtual_view.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/radio_button.h"
@@ -210,7 +212,7 @@ IN_PROC_BROWSER_TEST_F(AutomationManagerAuraBrowserTest, WebAppearsOnce) {
 
   AutomationManagerAura* manager = AutomationManagerAura::GetInstance();
   manager->Enable();
-  auto* tree = manager->tree_.get();
+  auto* tree = manager->GetTreeSource();
 
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(),
@@ -323,7 +325,7 @@ IN_PROC_BROWSER_TEST_F(AutomationManagerAuraBrowserTest, MAYBE_ScrollView) {
   manager->send_window_state_on_enable_ = false;
   manager->Enable();
   AutomationEventWaiter waiter;
-  auto* tree = manager->tree_.get();
+  auto* tree = manager->GetTreeSource();
 
   // Create a widget with size 200, 200.
   views::Widget* widget = new views::Widget;
@@ -572,7 +574,7 @@ IN_PROC_BROWSER_TEST_F(AutomationManagerAuraBrowserTest, EventFromAction) {
   // accessibility event that shows this view is focused.
   ui::AXActionData action_data;
   action_data.action = ax::mojom::Action::kFocus;
-  action_data.target_tree_id = manager->tree_.get()->tree_id();
+  action_data.target_tree_id = manager->GetTreeSource()->tree_id();
   action_data.target_node_id = wrapper2->GetUniqueId();
 
   manager->PerformAction(action_data);

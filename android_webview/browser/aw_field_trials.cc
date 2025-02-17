@@ -28,8 +28,15 @@
 #include "third_party/blink/public/common/features_generated.h"
 #include "ui/android/ui_android_features.h"
 #include "ui/gl/gl_features.h"
+#include "ui/gl/gl_switches.h"
 
 namespace internal {
+
+// Duplicated from content/browser/file_system_access/features.cc to allow
+// WebView-only override.
+BASE_FEATURE(kFileSystemAccessDirectoryIterationBlocklistCheck,
+             "FileSystemAccessDirectoryIterationBlocklistCheck",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 AwFeatureOverrides::AwFeatureOverrides(base::FeatureList& feature_list)
     : feature_list_(feature_list) {}
@@ -88,6 +95,8 @@ void AwFieldTrials::RegisterFeatureOverrides(base::FeatureList* feature_list) {
     return;
   }
   internal::AwFeatureOverrides aw_feature_overrides(*feature_list);
+
+  aw_feature_overrides.EnableFeature(::features::kWebViewFrameRateHints);
 
   // Disable third-party storage partitioning on WebView.
   aw_feature_overrides.DisableFeature(
@@ -233,6 +242,10 @@ void AwFieldTrials::RegisterFeatureOverrides(base::FeatureList* feature_list) {
   aw_feature_overrides.DisableFeature(
       ::features::kFocusRenderWidgetHostViewAndroidOnActionDown);
 
+  // Disabling the permission element as it needs embedder support in order to
+  // function and the webview permission manager cannot support it.
+  aw_feature_overrides.DisableFeature(blink::features::kPermissionElement);
+
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kDebugBsa)) {
     // Feature parameters can only be set via a field trial.
     const char kTrialName[] = "StudyDebugBsa";
@@ -294,4 +307,12 @@ void AwFieldTrials::RegisterFeatureOverrides(base::FeatureList* feature_list) {
 
   // Disable Topics on WebView.
   aw_feature_overrides.DisableFeature(blink::features::kBrowsingTopics);
+
+  // Sharing ANGLE's Vulkan queue is not supported on WebView.
+  aw_feature_overrides.DisableFeature(::features::kVulkanFromANGLE);
+
+  // Temporarily turn off kFileSystemAccessDirectoryIterationBlocklistCheck for
+  // a kill switch. https://crbug.com/393606977
+  aw_feature_overrides.DisableFeature(
+      internal::kFileSystemAccessDirectoryIterationBlocklistCheck);
 }

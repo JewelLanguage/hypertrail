@@ -19,7 +19,7 @@ class UrlFormatter;
 }  // namespace supervised_user
 
 class ParentAccessView;
-class ParentAccessDialogWebContentsObserver;
+class ParentAccessDialogResultObserver;
 
 // Windows / Mac / Linux implementation of web content handler, which
 // forces unsupported methods to fail.
@@ -36,10 +36,13 @@ class SupervisedUserWebContentHandlerImpl
   ~SupervisedUserWebContentHandlerImpl() override;
 
   // ChromeSupervisedUserWebContentHandlerBase implementation:
-  void RequestLocalApproval(const GURL& url,
-                            const std::u16string& child_display_name,
-                            const supervised_user::UrlFormatter& url_formatter,
-                            ApprovalRequestInitiatedCallback callback) override;
+  void RequestLocalApproval(
+      const GURL& url,
+      const std::u16string& child_display_name,
+      const supervised_user::UrlFormatter& url_formatter,
+      const supervised_user::FilteringBehaviorReason& filtering_reason,
+      ApprovalRequestInitiatedCallback callback) override;
+  void MaybeCloseLocalApproval() override;
 
  private:
   void CreateObserverFromContents(base::TimeTicks start_time,
@@ -51,7 +54,13 @@ class SupervisedUserWebContentHandlerImpl
       base::TimeTicks start_time,
       supervised_user::LocalApprovalResult result);
 
-  std::unique_ptr<ParentAccessDialogWebContentsObserver>
+  void CloseDialog();
+
+  // Aborts the local web approval flow with an Error result and closes any open
+  // parent approval dialog.
+  void AbortUrlApprovalDialog();
+
+  std::unique_ptr<ParentAccessDialogResultObserver>
       dialog_web_contents_observer_;
   base::WeakPtr<ParentAccessView> weak_parent_access_view_;
   base::WeakPtrFactory<SupervisedUserWebContentHandlerImpl> weak_ptr_factory_{

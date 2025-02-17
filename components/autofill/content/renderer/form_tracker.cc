@@ -158,7 +158,7 @@ void FormTracker::TextFieldValueChanged(const WebFormControlElement& element) {
   weak_ptr_factory_.InvalidateWeakPtrs();
   unsafe_render_frame()
       ->GetWebFrame()
-      ->GetTaskRunner(blink::TaskType::kInternalUserInteraction)
+      ->GetTaskRunner(blink::TaskType::kInternalAutofill)
       ->PostTask(FROM_HERE,
                  base::BindRepeating(&FormTracker::FormControlDidChangeImpl,
                                      weak_ptr_factory_.GetWeakPtr(),
@@ -176,7 +176,7 @@ void FormTracker::SelectControlSelectionChanged(
   weak_ptr_factory_.InvalidateWeakPtrs();
   unsafe_render_frame()
       ->GetWebFrame()
-      ->GetTaskRunner(blink::TaskType::kInternalUserInteraction)
+      ->GetTaskRunner(blink::TaskType::kInternalAutofill)
       ->PostTask(FROM_HERE,
                  base::BindRepeating(&FormTracker::FormControlDidChangeImpl,
                                      weak_ptr_factory_.GetWeakPtr(),
@@ -239,6 +239,42 @@ void FormTracker::TrackAutofilledElement(const WebFormControlElement& element) {
   }
   submission_triggering_events_.tracked_element_autofilled = true;
   TrackElement(mojom::SubmissionSource::DOM_MUTATION_AFTER_AUTOFILL);
+}
+
+void FormTracker::TrackAutofilledElement(
+    const base::flat_map<FieldRendererId, FormRendererId>&
+        filled_fields_and_forms) {
+  auto field_is_owned =
+      [](const std::pair<FieldRendererId, FormRendererId>&
+             filled_field_and_form) {
+        return !form_util::GetFormByRendererId(filled_field_and_form.second)
+                    .IsNull();
+      };
+  if (auto it = std::ranges::find_if(filled_fields_and_forms, field_is_owned);
+      it != filled_fields_and_forms.end()) {
+    const auto& [filled_field_id, filled_form_id] = *it;
+    if (base::FeatureList::IsEnabled(
+            features::kAutofillAcceptDomMutationAfterAutofillSubmission)) {
+      TrackAutofilledElement(
+          form_util::GetFormControlByRendererId(filled_field_id));
+    } else {
+      UpdateLastInteractedElement(filled_form_id);
+    }
+  } else {
+    for (const auto& [filled_field_id, filled_form_id] :
+         filled_fields_and_forms) {
+      WebFormControlElement control_element =
+          form_util::GetFormControlByRendererId(filled_field_id);
+      CHECK(control_element);
+      if (base::FeatureList::IsEnabled(
+              features::kAutofillAcceptDomMutationAfterAutofillSubmission)) {
+        TrackAutofilledElement(control_element);
+      } else {
+        UpdateLastInteractedElement(
+            form_util::GetFieldRendererId(control_element));
+      }
+    }
+  }
 }
 
 void FormTracker::FormControlDidChangeImpl(FieldRendererId element_id,
@@ -399,15 +435,14 @@ bool FormTracker::CanInferFormSubmitted() {
     return !last_interacted_form ||
            std::ranges::none_of(
                last_interacted_form.GetFormControlElements(),  // nocheck
-               &form_util::IsWebElementFocusableForAutofill);
+               &WebElement::IsFocusable);
   }
   if (last_interacted_.formless_element.GetId()) {
     WebFormControlElement last_interacted_formless_element =
         last_interacted_.formless_element.GetField();
     // Infer submission if the field was removed or it's hidden.
     return !last_interacted_formless_element ||
-           !form_util::IsWebElementFocusableForAutofill(
-               last_interacted_formless_element);
+           !last_interacted_formless_element.IsFocusable();
   }
   return false;
 }

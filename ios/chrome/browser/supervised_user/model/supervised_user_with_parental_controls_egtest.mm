@@ -8,6 +8,7 @@
 #import "components/signin/internal/identity_manager/account_capabilities_constants.h"
 #import "components/supervised_user/core/browser/supervised_user_url_filter.h"
 #import "components/supervised_user/core/common/features.h"
+#import "components/supervised_user/core/common/supervised_user_constants.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey_ui_test_util.h"
 #import "ios/chrome/browser/metrics/model/metrics_app_interface.h"
@@ -20,6 +21,7 @@
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/capabilities_types.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity.h"
+#import "ios/chrome/browser/supervised_user/ui/constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -60,6 +62,16 @@ static const char* kInterstitialDetails = "Details";
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration config = [super appConfigurationForTestCase];
   config.features_enabled.push_back(kIOSQuickDelete);
+
+  if ([self isRunningTest:@selector
+            (testSupervisedUserInterstitialCanRequestLocalWebApproval)] ||
+      [self
+          isRunningTest:@selector
+          (testSupervisedUserInterstitialCanRequestLocalWebApprovalWithOrientationChanges
+              )]) {
+    config.features_enabled.push_back(supervised_user::kLocalWebApprovals);
+  }
+
   // Makes sure the MVT is the top ranking magic stack module.
   config.additional_args.push_back("--test-ios-module-ranker=mvt");
   return config;
@@ -223,7 +235,7 @@ static const char* kInterstitialDetails = "Details";
   config.relaunch_policy = ForceRelaunchByCleanShutdown;
   // Add the switch to make sure that the user stays signed in in the restart.
   config.additional_args.push_back(std::string("-") +
-                                   test_switches::kSignInAtStartup);
+                                   test_switches::kAddFakeIdentitiesAtStartup);
   [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
 
   // Check the previously used tabs are maintained.
@@ -686,6 +698,108 @@ static const char* kInterstitialDetails = "Details";
       onElementWithMatcher:chrome_test_util::ToolsMenuView()]
       assertWithMatcher:grey_not(grey_accessibilityTrait(
                             UIAccessibilityTraitNotEnabled))];
+}
+
+// Tests that users can initiate the local web approval flow.
+- (void)testSupervisedUserInterstitialCanRequestLocalWebApproval {
+  // Set up histogram tracking.
+  chrome_test_util::GREYAssertErrorNil(
+      [MetricsAppInterface setupHistogramTester]);
+
+  [self signInSupervisedUser];
+  [SupervisedUserSettingsAppInterface setFakePermissionCreator];
+  [SupervisedUserSettingsAppInterface setFilteringToAllowApprovedSites];
+
+  GURL blockedURL = self.testServer->GetURL(kHost, kEchoPath);
+  [ChromeEarlGrey loadURL:blockedURL];
+
+  [self checkInterstitalIsShown];
+
+  // On clicking "Ask in person" button, the local web approval bottom sheet is
+  // displayed.
+  [ChromeEarlGrey tapWebStateElementWithID:@"local-approvals-button"];
+
+  // Wait for the bottom sheet to be visible.
+  [ChromeEarlGrey
+      waitForSufficientlyVisibleElementWithMatcher:
+          grey_accessibilityID(kParentAccessViewAccessibilityIdentifier)];
+
+  // Tap outside to dimiss the bottom sheet.
+  [[EarlGrey selectElementWithMatcher:grey_keyWindow()]
+      performAction:grey_tap()];
+  [ChromeEarlGrey
+      waitForUIElementToDisappearWithMatcher:
+          grey_accessibilityID(kParentAccessViewAccessibilityIdentifier)];
+
+  // Verify that metrics are recorded on bottom sheet dismissal.
+  GREYAssertNil(
+      [MetricsAppInterface
+          expectUniqueSampleWithCount:1
+                            forBucket:static_cast<int>(
+                                          supervised_user::LocalApprovalResult::
+                                              kDeclined)
+                         forHistogram:@"FamilyLinkUser.LocalWebApprovalResult"],
+      @"Unexpected value for local web approval result histogram.");
+  GREYAssertNil(
+      [MetricsAppInterface
+          expectTotalCount:1
+              forHistogram:@"FamilyLinkUser.LocalWebApprovalResult"],
+      @"Unexpected total count for local web approval result histogram.");
+  GREYAssertNil(
+      [MetricsAppInterface
+          expectTotalCount:1
+              forHistogram:@"FamilyLinkUser."
+                           @"LocalWebApprovalCompleteRequestTotalDuration"],
+      @"Unexpected total count for local web approval duration histogram.");
+}
+
+// Tests that users can initiate the local web approval flow, and ensures the UI
+// correctly adapts to orientation changes.
+- (void)
+    testSupervisedUserInterstitialCanRequestLocalWebApprovalWithOrientationChanges {
+  [self signInSupervisedUser];
+  [SupervisedUserSettingsAppInterface setFakePermissionCreator];
+  [SupervisedUserSettingsAppInterface setFilteringToAllowApprovedSites];
+
+  GURL blockedURL = self.testServer->GetURL(kHost, kEchoPath);
+  [ChromeEarlGrey loadURL:blockedURL];
+
+  [self checkInterstitalIsShown];
+
+  // On clicking "Ask in person" button, the local web approval bottom sheet is
+  // displayed.
+  [ChromeEarlGrey tapWebStateElementWithID:@"local-approvals-button"];
+
+  // Wait for the bottom sheet to be visible.
+  [ChromeEarlGrey
+      waitForSufficientlyVisibleElementWithMatcher:
+          grey_accessibilityID(kParentAccessViewAccessibilityIdentifier)];
+
+  // Switch to landscape and check visibility.
+  GREYAssert(
+      [EarlGrey rotateDeviceToOrientation:UIDeviceOrientationLandscapeLeft
+                                    error:nil],
+      @"Could not rotate device to Landscape Left");
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityID(
+                                   kParentAccessViewAccessibilityIdentifier)]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  // Switch back to portrait and check visibility.
+  GREYAssert([EarlGrey rotateDeviceToOrientation:UIDeviceOrientationPortrait
+                                           error:nil],
+             @"Could not rotate device to Portrait");
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityID(
+                                   kParentAccessViewAccessibilityIdentifier)]
+      assertWithMatcher:grey_sufficientlyVisible()];
+
+  // Tap outside to dimiss the bottom sheet.
+  [[EarlGrey selectElementWithMatcher:grey_keyWindow()]
+      performAction:grey_tap()];
+  [ChromeEarlGrey
+      waitForUIElementToDisappearWithMatcher:
+          grey_accessibilityID(kParentAccessViewAccessibilityIdentifier)];
 }
 
 #pragma mark - Clear Content Behaviour

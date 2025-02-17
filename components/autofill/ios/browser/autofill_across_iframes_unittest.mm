@@ -72,23 +72,23 @@ namespace {
 FormFieldData* GetFieldWithPlaceholder(const std::u16string& placeholder,
                                        std::vector<FormFieldData>* fields) {
   auto it =
-      base::ranges::find(*fields, placeholder, &FormFieldData::placeholder);
+      std::ranges::find(*fields, placeholder, &FormFieldData::placeholder);
   return it != fields->end() ? &(*it) : nullptr;
 }
 
 // Gets a mutable pointer to the first field with `id_attr` among `fields`.
 FormFieldData* GetMutableFieldWithId(const std::string& id_attr,
                                      std::vector<FormFieldData>* fields) {
-  auto it = base::ranges::find(*fields, base::UTF8ToUTF16(id_attr),
-                               &FormFieldData::id_attribute);
+  auto it = std::ranges::find(*fields, base::UTF8ToUTF16(id_attr),
+                              &FormFieldData::id_attribute);
   return it != fields->end() ? &*it : nullptr;
 }
 
 // Gets a const pointer to the first field with `id_attr` among `fields`.
 const FormFieldData* GetFieldWithId(const std::string& id_attr,
                                     const std::vector<FormFieldData>& fields) {
-  auto it = base::ranges::find(fields, base::UTF8ToUTF16(id_attr),
-                               &FormFieldData::id_attribute);
+  auto it = std::ranges::find(fields, base::UTF8ToUTF16(id_attr),
+                              &FormFieldData::id_attribute);
   return it != fields.end() ? &(*it) : nullptr;
 }
 
@@ -1201,7 +1201,7 @@ TEST_F(AutofillAcrossIframesTest, SubmitMultiFrameForm) {
   ASSERT_EQ(form.fields().size(), 2u);
 
   std::vector<FieldGlobalId> field_global_ids(form.fields().size());
-  base::ranges::transform(
+  std::ranges::transform(
       form.fields(), field_global_ids.begin(),
       [](const FormFieldData& field) { return field.global_id(); });
 
@@ -1250,7 +1250,7 @@ TEST_F(AutofillAcrossIframesTest, AskForFillDataOnMultiFrameForm) {
   ASSERT_EQ(form.fields().size(), 2u);
 
   std::vector<FieldGlobalId> field_global_ids(form.fields().size());
-  base::ranges::transform(
+  std::ranges::transform(
       form.fields(), field_global_ids.begin(),
       [](const FormFieldData& field) { return field.global_id(); });
 
@@ -1303,7 +1303,7 @@ TEST_F(AutofillAcrossIframesTest, TextChangeOnMultiFrameForm) {
   ASSERT_EQ(form.fields().size(), 2u);
 
   std::vector<FieldGlobalId> field_global_ids(form.fields().size());
-  base::ranges::transform(
+  std::ranges::transform(
       form.fields(), field_global_ids.begin(),
       [](const FormFieldData& field) { return field.global_id(); });
 
@@ -1614,10 +1614,11 @@ TEST_F(AutofillAcrossIframesTest, FrameDoubleRegistration_Notify) {
 
   {
     const std::u16string script = base::StrCat(
-        {u"__gCrWeb.common.sendWebKitMessage('FrameRegistrationMessage', "
-         u"{'command': 'registerAsChildFrame', 'local_frame_id': "
+        {u"window.webkit.messageHandlers['FrameRegistrationMessage']."
+         u"postMessage({'command': 'registerAsChildFrame', 'local_frame_id': "
          u"__gCrWeb.frameId, 'remote_frame_id':'",
-         base::UTF8ToUTF16(stolen_remote_token.ToString()), u"'});"});
+         base::UTF8ToUTF16(stolen_remote_token.ToString()),
+         u"'}); true;"});
     ASSERT_TRUE(ExecuteJavaScriptInFrame(spoofy_frame, script));
   }
 }

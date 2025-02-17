@@ -9,6 +9,7 @@
 
 #include "base/task/sequence_manager/sequence_manager_impl.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <optional>
@@ -29,7 +30,6 @@
 #include "base/notreached.h"
 #include "base/observer_list.h"
 #include "base/rand_util.h"
-#include "base/ranges/algorithm.h"
 #include "base/task/sequence_manager/enqueue_order.h"
 #include "base/task/sequence_manager/task_queue_impl.h"
 #include "base/task/sequence_manager/task_time_observer.h"
@@ -44,6 +44,7 @@
 #include "base/time/default_tick_clock.h"
 #include "base/time/tick_clock.h"
 #include "base/trace_event/base_tracing.h"
+#include "build/blink_buildflags.h"
 #include "build/build_config.h"
 
 namespace base::sequence_manager {
@@ -306,6 +307,11 @@ void SequenceManagerImpl::BindToMessagePump(std::unique_ptr<MessagePump> pump) {
   if (settings_.message_loop_type == MessagePumpType::UI) {
     controller_->AttachToMessagePump();
   }
+#if BUILDFLAG(USE_BLINK)
+  if (settings_.message_loop_type == MessagePumpType::IO) {
+    controller_->AttachToMessagePump();
+  }
+#endif
 #endif
 }
 
@@ -541,7 +547,7 @@ void SequenceManagerImpl::LogTaskDebugInfo(
     case Settings::TaskLogging::kEnabledWithBacktrace: {
       std::array<const void*, PendingTask::kTaskBacktraceLength + 1> task_trace;
       task_trace[0] = task->posted_from.program_counter();
-      ranges::copy(task->task_backtrace, task_trace.begin() + 1);
+      std::ranges::copy(task->task_backtrace, task_trace.begin() + 1);
       size_t length = 0;
       while (length < task_trace.size() && task_trace[length]) {
         ++length;
@@ -1141,11 +1147,6 @@ std::string SequenceManagerImpl::DescribeAllPendingTasks() const {
   std::string result;
   JSONWriter::Write(value, &result);
   return result;
-}
-
-void SequenceManagerImpl::PrioritizeYieldingToNative(
-    base::TimeTicks prioritize_until) {
-  controller_->PrioritizeYieldingToNative(prioritize_until);
 }
 
 void SequenceManagerImpl::AddDestructionObserver(

@@ -220,9 +220,7 @@ void AutoEnrollmentCheckScreen::ShowErrorScreen(
       NetworkHandler::Get()->network_state_handler()->DefaultNetwork();
   error_screen_->SetUIState(NetworkError::UI_STATE_AUTO_ENROLLMENT_ERROR);
   error_screen_->AllowGuestSignin(
-      auto_enrollment_controller_->auto_enrollment_check_type() !=
-      policy::AutoEnrollmentTypeChecker::CheckType::
-          kForcedReEnrollmentExplicitlyRequired);
+      auto_enrollment_controller_->IsGuestSigninAllowed());
 
   error_screen_->SetErrorState(error_state,
                                network ? network->name() : std::string());
@@ -287,6 +285,7 @@ bool AutoEnrollmentCheckScreen::IsBlockingError(
       base::Overloaded{
           [](policy::AutoEnrollmentSafeguardTimeoutError) { return true; },
           [](policy::AutoEnrollmentSystemClockSyncError) { return true; },
+          [](policy::AutoEnrollmentMachineInfoRetrievalError) { return true; },
           [](policy::AutoEnrollmentStateKeysRetrievalError) { return true; },
           [this](const policy::AutoEnrollmentDMServerError& error) {
             return error.network_error.has_value() ? true

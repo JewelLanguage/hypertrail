@@ -13,6 +13,7 @@
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -29,7 +30,6 @@
 #include "components/history_embeddings/core/search_strings_update_listener.h"
 #include "components/history_embeddings/history_embeddings_features.h"
 #include "components/history_embeddings/mock_answerer.h"
-#include "components/history_embeddings/mock_embedder.h"
 #include "components/history_embeddings/mock_intent_classifier.h"
 #include "components/history_embeddings/vector_database.h"
 #include "components/optimization_guide/core/test_model_info_builder.h"
@@ -38,11 +38,16 @@
 #include "components/os_crypt/async/browser/test_utils.h"
 #include "components/page_content_annotations/core/test_page_content_annotations_service.h"
 #include "components/page_content_annotations/core/test_page_content_annotator.h"
+#include "components/passage_embeddings/embedder.h"
+#include "components/passage_embeddings/mock_embedder.h"
+#include "components/passage_embeddings/passage_embeddings_service_controller.h"
+#include "components/passage_embeddings/scheduling_embedder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace history_embeddings {
 
 using passage_embeddings::ComputeEmbeddingsStatus;
+using passage_embeddings::Embedding;
 
 namespace {
 
@@ -63,13 +68,16 @@ class HistoryEmbeddingsServicePublic : public HistoryEmbeddingsService {
       page_content_annotations::PageContentAnnotationsService*
           page_content_annotations_service,
       optimization_guide::OptimizationGuideDecider* optimization_guide_decider,
-      std::unique_ptr<Embedder> embedder,
+      passage_embeddings::PassageEmbeddingsServiceController*
+          service_controller,
+      std::unique_ptr<passage_embeddings::Embedder> embedder,
       std::unique_ptr<Answerer> answerer,
       std::unique_ptr<IntentClassifier> intent_classfier)
       : HistoryEmbeddingsService(os_crypt_async,
                                  history_service,
                                  page_content_annotations_service,
                                  optimization_guide_decider,
+                                 service_controller,
                                  std::move(embedder),
                                  std::move(answerer),
                                  std::move(intent_classfier)) {}
@@ -79,8 +87,10 @@ class HistoryEmbeddingsServicePublic : public HistoryEmbeddingsService {
   using HistoryEmbeddingsService::OnPassagesEmbeddingsComputed;
   using HistoryEmbeddingsService::OnSearchCompleted;
   using HistoryEmbeddingsService::QueryIsFiltered;
+  using HistoryEmbeddingsService::RebuildAbsentEmbeddings;
 
   using HistoryEmbeddingsService::answerer_;
+  using HistoryEmbeddingsService::embedder_;
   using HistoryEmbeddingsService::embedder_metadata_;
   using HistoryEmbeddingsService::intent_classifier_;
   using HistoryEmbeddingsService::storage_;
@@ -116,8 +126,11 @@ class HistoryEmbeddingsServiceTest : public testing::Test {
         os_crypt_.get(), history_service_.get(),
         page_content_annotations_service_.get(),
         /*optimization_guide_decider=*/nullptr,
-        std::make_unique<MockEmbedder>(), std::make_unique<MockAnswerer>(),
+        /*service_controller=*/nullptr,
+        std::make_unique<passage_embeddings::MockEmbedder>(),
+        std::make_unique<MockAnswerer>(),
         std::make_unique<MockIntentClassifier>());
+    service_->EmbedderMetadataUpdated({1, 768});
 
     ASSERT_TRUE(listener()->filter_words_hashes().empty());
     listener()->OnSearchStringsUpdate(
@@ -177,14 +190,16 @@ class HistoryEmbeddingsServiceTest : public testing::Test {
                                     ComputeEmbeddingsStatus status) {
     for (const std::string& passage : passages) {
       url_passages.passages.add_passages(passage);
+      url_passages.embeddings.emplace_back(std::vector<float>{});
     }
     service_->OnPassagesEmbeddingsComputed(
-        /*embedding_cache=*/{}, std::move(url_passages), std::move(passages),
-        std::move(passages_embeddings), status);
+        std::move(url_passages), std::move(passages),
+        std::move(passages_embeddings),
+        passage_embeddings::SchedulingEmbedder::kInvalidTaskId, status);
   }
 
   void SetMetadataScoreThreshold(double threshold) {
-    service_->embedder_metadata_->search_score_threshold = threshold;
+    service_->embedder_metadata_.search_score_threshold = threshold;
   }
 
   Answerer* GetAnswerer() { return service_->answerer_.get(); }
@@ -204,7 +219,8 @@ class HistoryEmbeddingsServiceTest : public testing::Test {
                               false);
   }
 
-  base::test::TaskEnvironment task_environment_;
+  base::test::TaskEnvironment task_environment_{
+      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
 
   base::ScopedTempDir history_dir_;
   std::unique_ptr<os_crypt_async::OSCryptAsync> os_crypt_;
@@ -1016,7 +1032,6 @@ class AddSyncedVisitTask : public history::HistoryDBTask {
     history::VisitID visit_id = backend->AddSyncedVisit(
         url_, u"Title", /*hidden=*/false, visit_, std::nullopt, std::nullopt);
     EXPECT_NE(visit_id, history::kInvalidVisitID);
-    LOG(ERROR) << "Added visit!";
     return true;
   }
 
@@ -1078,6 +1093,181 @@ TEST_F(HistoryEmbeddingsServiceTest, SearchGetsIfUrlIsKnownToSync) {
   EXPECT_EQ(result.scored_url_rows[0].is_url_known_to_sync, false);
   EXPECT_EQ(result.scored_url_rows[1].scored_url.url_id, 2);
   EXPECT_EQ(result.scored_url_rows[1].is_url_known_to_sync, true);
+}
+
+TEST_F(HistoryEmbeddingsServiceTest, CancelPreviousSearches) {
+  base::Time now = base::Time::Now();
+  AddTestHistoryPage("http://test1.com");
+  OnPassagesEmbeddingsComputed(UrlData(1, 1, now),
+                               {"test passage 1", "test passage 2"},
+                               {Embedding(std::vector<float>(768, 1.0f)),
+                                Embedding(std::vector<float>(768, 1.0f))},
+                               ComputeEmbeddingsStatus::kSuccess);
+  OverrideVisibilityScoresForTesting({
+      {"test passage 1", 0.99},
+      {"test passage 2", 0.99},
+  });
+  // Service uses the default .9 score threshold when neither the feature param
+  // nor the metadata thresholds are set.
+  SetMetadataScoreThreshold(0.01);
+
+  base::test::TestFuture<SearchResult> future1;
+  service_->Search(nullptr, "passage", {}, 3, /*skip_answering=*/true,
+                   future1.GetRepeatingCallback());
+
+  base::test::TestFuture<SearchResult> future2;
+  service_->Search(nullptr, "passage", {}, 3, /*skip_answering=*/true,
+                   future2.GetRepeatingCallback());
+
+  base::test::TestFuture<SearchResult> future3;
+  service_->Search(nullptr, "passage", {}, 3, /*skip_answering=*/true,
+                   future3.GetRepeatingCallback());
+
+  base::test::TestFuture<SearchResult> future4;
+  service_->Search(nullptr, "passage", {}, 3, /*skip_answering=*/true,
+                   future4.GetRepeatingCallback());
+
+  // The first query is skipped.
+  SearchResult result1 = future1.Take();
+  EXPECT_FALSE(result1.session_id.empty());
+  EXPECT_EQ(result1.query, "passage");
+  ASSERT_EQ(result1.scored_url_rows.size(), 0u);
+
+  // The second query is skipped.
+  SearchResult result2 = future2.Take();
+  EXPECT_FALSE(result2.session_id.empty());
+  EXPECT_EQ(result2.query, "passage");
+  ASSERT_EQ(result2.scored_url_rows.size(), 0u);
+
+  // The third query is skipped.
+  SearchResult result3 = future3.Take();
+  EXPECT_FALSE(result3.session_id.empty());
+  EXPECT_EQ(result3.query, "passage");
+  ASSERT_EQ(result3.scored_url_rows.size(), 0u);
+
+  // The last query is processed.
+  SearchResult result4 = future4.Take();
+  EXPECT_FALSE(result4.session_id.empty());
+  EXPECT_EQ(result4.query, "passage");
+  ASSERT_EQ(result4.scored_url_rows.size(), 1u);
+  EXPECT_EQ(result4.scored_url_rows[0].scored_url.url_id, 1);
+  EXPECT_EQ(result4.scored_url_rows[0].scored_url.visit_id, 1);
+  EXPECT_EQ(result4.scored_url_rows[0].scored_url.visit_time, now);
+}
+
+TEST_F(HistoryEmbeddingsServiceTest, UseDatabaseBeforeEmbedder) {
+  base::test::TestFuture<UrlData> store_future;
+  service_->SetPassagesStoredCallbackForTesting(
+      store_future.GetRepeatingCallback());
+
+  base::Time now = base::Time::Now();
+  AddTestHistoryPage("http://test1.com");
+
+  FeatureParameters feature_parameters = GetFeatureParameters();
+  feature_parameters.erase_non_ascii_characters = true;
+  SetFeatureParametersForTesting(feature_parameters);
+
+  {
+    base::HistogramTester histogram_tester;
+    service_->ComputeAndStorePassageEmbeddings(
+        /*url_id=*/1,
+        /*visit_id=*/1,
+        /*visit_time=*/now + base::Seconds(1),
+        {
+            "test passage 1",
+            "test passage ß",
+            "ßßß",
+            "",
+        });
+
+    UrlData url_data = store_future.Take();
+    ASSERT_EQ(url_data.passages.passages_size(), 4);
+    ASSERT_EQ(url_data.embeddings.size(), 4u);
+    ASSERT_EQ(url_data.passages.passages(0), "test passage 1");
+    ASSERT_EQ(url_data.embeddings[0].Dimensions(), 768u);
+    ASSERT_EQ(url_data.passages.passages(1), "test passage ß");
+    ASSERT_EQ(url_data.embeddings[1].Dimensions(), 768u);
+    ASSERT_EQ(url_data.passages.passages(2), "ßßß");
+    ASSERT_EQ(url_data.embeddings[2].Dimensions(), 768u);
+    ASSERT_EQ(url_data.passages.passages(3), "");
+    ASSERT_EQ(url_data.embeddings[3].Dimensions(), 768u);
+
+    // The cache wasn't used because there was no existing data.
+    histogram_tester.ExpectTotalCount(
+        "History.Embeddings.DatabaseCachedPassageTryCount", 1);
+    histogram_tester.ExpectBucketCount(
+        "History.Embeddings.DatabaseCachedPassageTryCount", 4, 1);
+    histogram_tester.ExpectTotalCount(
+        "History.Embeddings.DatabaseCachedPassageHitCount", 1);
+    histogram_tester.ExpectBucketCount(
+        "History.Embeddings.DatabaseCachedPassageHitCount", 0, 1);
+  }
+  {
+    base::HistogramTester histogram_tester;
+    service_->ComputeAndStorePassageEmbeddings(
+        /*url_id=*/1,
+        /*visit_id=*/2,
+        /*visit_time=*/now + base::Minutes(1),
+        {
+            "test passage 1",
+            "test passage ßßß",
+            "ßßß",
+            "",
+        });
+
+    UrlData url_data = store_future.Take();
+    ASSERT_EQ(url_data.passages.passages_size(), 4);
+    ASSERT_EQ(url_data.embeddings.size(), 4u);
+    ASSERT_EQ(url_data.passages.passages(0), "test passage 1");
+    ASSERT_EQ(url_data.embeddings[0].Dimensions(), 768u);
+    ASSERT_EQ(url_data.passages.passages(1), "test passage ßßß");
+    ASSERT_EQ(url_data.embeddings[1].Dimensions(), 768u);
+    ASSERT_EQ(url_data.passages.passages(2), "ßßß");
+    ASSERT_EQ(url_data.embeddings[2].Dimensions(), 768u);
+    ASSERT_EQ(url_data.passages.passages(3), "");
+    ASSERT_EQ(url_data.embeddings[3].Dimensions(), 768u);
+
+    // The cache was used because there was existing data.
+    histogram_tester.ExpectTotalCount(
+        "History.Embeddings.DatabaseCachedPassageTryCount", 1);
+    histogram_tester.ExpectBucketCount(
+        "History.Embeddings.DatabaseCachedPassageTryCount", 4, 1);
+    histogram_tester.ExpectTotalCount(
+        "History.Embeddings.DatabaseCachedPassageHitCount", 1);
+    histogram_tester.ExpectBucketCount(
+        "History.Embeddings.DatabaseCachedPassageHitCount", 3, 1);
+  }
+}
+
+TEST_F(HistoryEmbeddingsServiceTest, RebuildAbsentEmbeddings) {
+  base::HistogramTester histogram_tester;
+
+  base::test::TestFuture<UrlData> store_future;
+  service_->SetPassagesStoredCallbackForTesting(
+      store_future.GetRepeatingCallback());
+
+  FeatureParameters feature_parameters = GetFeatureParameters();
+  feature_parameters.erase_non_ascii_characters = true;
+  SetFeatureParametersForTesting(feature_parameters);
+
+  UrlData existing_url_data_1(1, 1, base::Time::Now());
+  existing_url_data_1.passages.add_passages("test passage 1");
+  existing_url_data_1.passages.add_passages("test passage ßßß");
+  existing_url_data_1.passages.add_passages("ßßß");
+  existing_url_data_1.passages.add_passages("");
+  service_->RebuildAbsentEmbeddings({existing_url_data_1});
+
+  UrlData url_data = store_future.Take();
+  ASSERT_EQ(url_data.passages.passages_size(), 4);
+  ASSERT_EQ(url_data.embeddings.size(), 4u);
+  ASSERT_EQ(url_data.passages.passages(0), "test passage 1");
+  ASSERT_EQ(url_data.embeddings[0].Dimensions(), 768u);
+  ASSERT_EQ(url_data.passages.passages(1), "test passage ßßß");
+  ASSERT_EQ(url_data.embeddings[1].Dimensions(), 768u);
+  ASSERT_EQ(url_data.passages.passages(2), "ßßß");
+  ASSERT_EQ(url_data.embeddings[2].Dimensions(), 768u);
+  ASSERT_EQ(url_data.passages.passages(3), "");
+  ASSERT_EQ(url_data.embeddings[3].Dimensions(), 768u);
 }
 
 }  // namespace history_embeddings

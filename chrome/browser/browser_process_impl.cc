@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "chrome/browser/browser_process_impl.h"
 
 #include <stddef.h>
@@ -24,6 +29,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notimplemented.h"
 #include "base/notreached.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
@@ -77,7 +83,7 @@
 #include "chrome/browser/printing/print_job_manager.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/resource_coordinator/resource_coordinator_parts.h"
-#include "chrome/browser/safe_browsing/safe_browsing_service.h"
+#include "chrome/browser/serial/serial_policy_allowed_ports.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/site_isolation/prefs_observer.h"
 #include "chrome/browser/ssl/secure_origin_prefs_observer.h"
@@ -185,7 +191,6 @@
 #include "chrome/browser/intranet_redirect_detector.h"
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/resource_coordinator/tab_manager.h"
-#include "chrome/browser/serial/serial_policy_allowed_ports.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/usb/usb_system_tray_icon.h"
@@ -259,6 +264,11 @@
 #include "components/os_crypt/async/browser/fallback_linux_key_provider.h"
 #include "components/os_crypt/async/browser/freedesktop_secret_key_provider.h"
 #include "components/os_crypt/async/browser/secret_portal_key_provider.h"
+#include "components/password_manager/core/browser/password_manager_switches.h"
+#endif
+
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+#include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #endif
 
 #if BUILDFLAG(IS_WIN) || (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
@@ -481,8 +491,10 @@ void BrowserProcessImpl::StartTearDown() {
 #endif
   metrics_services_manager_.reset();
   intranet_redirect_detector_.reset();
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   if (safe_browsing_service_.get())
     safe_browsing_service()->ShutDown();
+#endif
   network_time_tracker_.reset();
 
 #if !BUILDFLAG(IS_CHROMEOS)
@@ -1056,7 +1068,6 @@ BrowserProcessImpl::resource_coordinator_parts() {
   return resource_coordinator_parts_.get();
 }
 
-#if !BUILDFLAG(IS_ANDROID)
 SerialPolicyAllowedPorts* BrowserProcessImpl::serial_policy_allowed_ports() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!serial_policy_allowed_ports_) {
@@ -1066,6 +1077,7 @@ SerialPolicyAllowedPorts* BrowserProcessImpl::serial_policy_allowed_ports() {
   return serial_policy_allowed_ports_.get();
 }
 
+#if !BUILDFLAG(IS_ANDROID)
 HidSystemTrayIcon* BrowserProcessImpl::hid_system_tray_icon() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return hid_system_tray_icon_.get();
@@ -1133,6 +1145,10 @@ GlobalFeatures* BrowserProcessImpl::GetFeatures() {
   return features_.get();
 }
 
+void BrowserProcessImpl::CreateGlobalFeaturesForTesting() {
+  NOTIMPLEMENTED();
+}
+
 DownloadRequestLimiter* BrowserProcessImpl::download_request_limiter() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!download_request_limiter_.get()) {
@@ -1162,6 +1178,7 @@ StatusTray* BrowserProcessImpl::status_tray() {
   return status_tray_.get();
 }
 
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
 safe_browsing::SafeBrowsingService*
 BrowserProcessImpl::safe_browsing_service() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -1169,6 +1186,7 @@ BrowserProcessImpl::safe_browsing_service() {
     CreateSafeBrowsingService();
   return safe_browsing_service_.get();
 }
+#endif
 
 subresource_filter::RulesetService*
 BrowserProcessImpl::subresource_filter_ruleset_service() {
@@ -1250,7 +1268,7 @@ void BrowserProcessImpl::CreateProfileManager() {
 }
 
 void BrowserProcessImpl::PreCreateThreads() {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
   // chrome-extension:// URLs are safe to request anywhere, but may only
   // commit (including in iframes) in extension processes.
   ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeIsolatedScheme(
@@ -1385,34 +1403,36 @@ void BrowserProcessImpl::PreMainMessageLoopRun() {
       // one.
       /*precedence=*/15u,
       std::make_unique<os_crypt_async::AppBoundEncryptionProviderWin>(
-          local_state(),
-          base::FeatureList::IsEnabled(
-              features::kUseAppBoundEncryptionProviderForEncryption))));
+          local_state())));
 #endif  // BUILDFLAG(IS_WIN)
 
 #if BUILDFLAG(IS_LINUX)
-  if (base::FeatureList::IsEnabled(features::kDbusSecretPortal)) {
-    providers.emplace_back(
-        /*precedence=*/10u,
-        std::make_unique<os_crypt_async::SecretPortalKeyProvider>(
-            local_state(),
-            base::FeatureList::IsEnabled(
-                features::kSecretPortalKeyProviderUseForEncryption)));
-  }
-  if (base::FeatureList::IsEnabled(
-          features::kUseFreedesktopSecretKeyProvider)) {
-    // Use a higher priority than the SecretPortalKeyProvider.
-    providers.emplace_back(
-        /*precedence=*/15u,
-        std::make_unique<os_crypt_async::FreedesktopSecretKeyProvider>(
-            base::FeatureList::IsEnabled(
-                features::kUseFreedesktopSecretKeyProviderForEncryption),
-            l10n_util::GetStringUTF8(IDS_PRODUCT_NAME), nullptr));
-    providers.emplace_back(
-        /*precedence=*/15u,
-        std::make_unique<os_crypt_async::FallbackLinuxKeyProvider>(
-            base::FeatureList::IsEnabled(
-                features::kUseFreedesktopSecretKeyProviderForEncryption)));
+  base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
+  if (cmd_line->GetSwitchValueASCII(password_manager::kPasswordStore) !=
+      "basic") {
+    if (base::FeatureList::IsEnabled(features::kDbusSecretPortal)) {
+      providers.emplace_back(
+          /*precedence=*/10u,
+          std::make_unique<os_crypt_async::SecretPortalKeyProvider>(
+              local_state(),
+              base::FeatureList::IsEnabled(
+                  features::kSecretPortalKeyProviderUseForEncryption)));
+    }
+    if (base::FeatureList::IsEnabled(
+            features::kUseFreedesktopSecretKeyProvider)) {
+      // Use a higher priority than the SecretPortalKeyProvider.
+      providers.emplace_back(
+          /*precedence=*/15u,
+          std::make_unique<os_crypt_async::FreedesktopSecretKeyProvider>(
+              base::FeatureList::IsEnabled(
+                  features::kUseFreedesktopSecretKeyProviderForEncryption),
+              l10n_util::GetStringUTF8(IDS_PRODUCT_NAME), nullptr));
+      providers.emplace_back(
+          /*precedence=*/5u,
+          std::make_unique<os_crypt_async::FallbackLinuxKeyProvider>(
+              base::FeatureList::IsEnabled(
+                  features::kUseFreedesktopSecretKeyProviderForEncryption)));
+    }
   }
 #endif  // BUILDFLAG(IS_LINUX)
 
@@ -1486,6 +1506,7 @@ void BrowserProcessImpl::CreateBackgroundPrintingManager() {
 #endif
 }
 
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
 void BrowserProcessImpl::CreateSafeBrowsingService() {
   DCHECK(!safe_browsing_service_);
   // Set this flag to true so that we don't retry indefinitely to
@@ -1505,6 +1526,7 @@ void BrowserProcessImpl::CreateSafeBrowsingService() {
   if (safe_browsing_service_)
     safe_browsing_service_->Initialize();
 }
+#endif
 
 void BrowserProcessImpl::CreateSubresourceFilterRulesetService() {
   DCHECK(!subresource_filter_ruleset_service_);

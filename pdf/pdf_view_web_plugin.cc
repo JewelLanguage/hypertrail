@@ -124,6 +124,7 @@
 #if BUILDFLAG(ENABLE_PDF_INK2)
 #include "base/memory/raw_ref.h"
 #include "pdf/pdf_ink_ids.h"
+#include "pdf/pdf_ink_metrics_handler.h"
 #include "pdf/pdf_ink_module.h"
 #include "pdf/pdf_ink_module_client.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -512,13 +513,13 @@ void PdfViewWebPlugin::SendSetSmoothScrolling() {
 }
 
 void PdfViewWebPlugin::DidOpen(std::unique_ptr<UrlLoader> loader,
-                               int32_t result) {
-  if (result == kSuccess) {
+                               Result result) {
+  if (result == Result::kSuccess) {
     if (!engine_->HandleDocumentLoad(std::move(loader), url_)) {
       document_load_state_ = DocumentLoadState::kLoading;
       DocumentLoadFailed();
     }
-  } else if (result != kErrorAborted) {
+  } else if (result != Result::kErrorAborted) {
     DocumentLoadFailed();
   }
 }
@@ -595,7 +596,7 @@ void PdfViewWebPlugin::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
   canvas->drawImage(snapshot_, 0, 0);
 
 #if BUILDFLAG(ENABLE_PDF_INK2)
-  if (ink_module_) {
+  if (ink_module_ && ink_module_->HasInputsToDraw()) {
     SkBitmap sk_bitmap;
     sk_bitmap.allocPixels(
         SkImageInfo::MakeN32Premul(rect.width(), rect.height()));
@@ -1201,9 +1202,9 @@ void PdfViewWebPlugin::SubmitForm(const std::string& url,
                                              weak_factory_.GetWeakPtr()));
 }
 
-void PdfViewWebPlugin::DidFormOpen(int32_t result) {
+void PdfViewWebPlugin::DidFormOpen(Result result) {
   // TODO(crbug.com/41317525): Process response.
-  LOG_IF(ERROR, result != kSuccess) << "DidFormOpen failed: " << result;
+  LOG_IF(ERROR, result != Result::kSuccess) << "DidFormOpen failed: " << result;
   form_loader_.reset();
 }
 
@@ -1308,6 +1309,7 @@ void PdfViewWebPlugin::DocumentLoadComplete() {
     return;
 
   DidStopLoading();
+  pdf_host_->OnDocumentLoadComplete();
   pdf_host_->UpdateContentRestrictions(GetContentRestrictions());
 }
 
@@ -1329,14 +1331,9 @@ void PdfViewWebPlugin::DocumentHasUnsupportedFeature(
     const std::string& feature) {
   DCHECK(!feature.empty());
   std::string metric = base::StrCat({"PDF_Unsupported_", feature});
-  if (unsupported_features_reported_.insert(metric).second)
+  if (unsupported_features_reported_.insert(metric).second) {
     client_->RecordComputedAction(metric);
-
-  if (!full_frame_ || notified_browser_about_unsupported_feature_)
-    return;
-
-  notified_browser_about_unsupported_feature_ = true;
-  pdf_host_->HasUnsupportedFeature();
+  }
 }
 
 void PdfViewWebPlugin::DocumentLoadProgress(uint32_t available,
@@ -2334,17 +2331,11 @@ void PdfViewWebPlugin::OnViewportChanged(
   const gfx::Size new_image_size =
       PaintManager::GetNewContextSize(old_image_size, plugin_rect_.size());
   if (new_image_size != old_image_size) {
-    SkAlphaType alpha_type;
-    if (base::FeatureList::IsEnabled(
-            features::kPdfPaintManagerDrawsBackground)) {
-      alpha_type = kUnpremul_SkAlphaType;
-    } else {
-      alpha_type = kPremul_SkAlphaType;
-    }
     // Ignore the result. If the allocation fails, the image data buffer will be
     // empty and the code below will handle that.
-    (void)image_data_.tryAllocPixels(SkImageInfo::MakeN32(
-        new_image_size.width(), new_image_size.height(), alpha_type));
+    (void)image_data_.tryAllocPixels(
+        SkImageInfo::MakeN32(new_image_size.width(), new_image_size.height(),
+                             kUnpremul_SkAlphaType));
     first_paint_ = true;
   }
 
@@ -2472,6 +2463,17 @@ void PdfViewWebPlugin::RecordDocumentMetrics() {
     return;
 
   metrics_handler_->RecordDocumentMetrics(engine_->GetDocumentMetadata());
+
+#if BUILDFLAG(ENABLE_PDF_INK2)
+  // `metrics_handler_` is only initialized when not in Print Preview, so the
+  // V2 ink annotations load metric will not count Print Preview loads.
+  if (ink_module_) {
+    // Use a timeout limit of 100ms, which will capture over 90 percent of PDFs
+    // without increasing the PDF load time a significant amount.
+    RecordPdfLoadedWithV2InkAnnotations(
+        engine_->ContainsV2InkPath(base::Milliseconds(100)));
+  }
+#endif  // BUILDFLAG(ENABLE_PDF_INK2)
 }
 
 void PdfViewWebPlugin::SendAttachments() {
@@ -2669,8 +2671,8 @@ void PdfViewWebPlugin::LoadAvailablePreviewPage() {
 }
 
 void PdfViewWebPlugin::DidOpenPreview(std::unique_ptr<UrlLoader> loader,
-                                      int32_t result) {
-  DCHECK_EQ(result, kSuccess);
+                                      Result result) {
+  DCHECK_EQ(result, Result::kSuccess);
 
   // `preview_engine_` holds a `raw_ptr` to `preview_client_`.
   // We need to explicitly destroy it before clobbering
@@ -2877,10 +2879,10 @@ void PdfViewWebPlugin::PrepareAndSetAccessibilityViewportInfo() {
       static_cast<int32_t>(engine_->GetCurrentOrientation());
   viewport_info.focus_info = {FocusObjectType::kNone, 0, 0};
 
-  engine_->GetSelection(&viewport_info.selection_start_page_index,
-                        &viewport_info.selection_start_char_index,
-                        &viewport_info.selection_end_page_index,
-                        &viewport_info.selection_end_char_index);
+  std::optional<Selection> selection = engine_->GetSelection();
+  if (selection.has_value()) {
+    viewport_info.selection = *selection;
+  }
 
   pdf_accessibility_data_handler_->SetAccessibilityViewportInfo(
       std::move(viewport_info));

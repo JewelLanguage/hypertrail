@@ -28,6 +28,7 @@
 #include "net/base/net_error_details.h"
 #include "net/base/net_errors.h"
 #include "net/base/request_priority.h"
+#include "net/base/tracing.h"
 #include "net/http/http_cache.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_response_headers.h"
@@ -499,7 +500,7 @@ class NET_EXPORT_PRIVATE HttpCache::Transaction : public HttpTransaction {
   // resumed or not.
   void DoneWithEntry(bool entry_is_complete);
 
-  // Dooms the given entry so that it will not be re-used for other requests,
+  // Dooms the given entry so that it will not be reused for other requests,
   // then calls `DoneWithEntry()`.
   //
   // This happens when network conditions have changed since the entry was
@@ -533,7 +534,7 @@ class NET_EXPORT_PRIVATE HttpCache::Transaction : public HttpTransaction {
   // between the byte range request and the cached entry.
   int DoRestartPartialRequest();
 
-  // Resets the relavant internal state to remove traces of internal processing
+  // Resets the relevant internal state to remove traces of internal processing
   // related to range requests. Deletes |partial_| if |delete_object| is true.
   void ResetPartialState(bool delete_object);
 
@@ -618,6 +619,10 @@ class NET_EXPORT_PRIVATE HttpCache::Transaction : public HttpTransaction {
   // treatment.
   bool IsNoVarySearchApplicable() const;
 
+  // Returns true if the current transaction is using a URL that was rewritten
+  // by the NoVarySearchCache.
+  bool IsUsingURLFromNoVarySearchCache() const;
+
   // Checks for a matching entry in the NoVarySearchCache. If one is found, and
   // the URL is different, modifies `request_` to use the matching entry, and
   // returns kUsed. Otherwise returns kNoMatch or KURLUnchanged.
@@ -626,8 +631,16 @@ class NET_EXPORT_PRIVATE HttpCache::Transaction : public HttpTransaction {
   // Removes the used NoVarySearchCache entry from the NoVarySearchCache, sets
   // `use_no_vary_search_cache_` to false, and restarts the transaction from the
   // beginning.
-  int RestartWithoutNoVarySearchCache(RestartCacheEntryAction entry_action,
-                                      NoVarySearchUseResult restart_reason);
+  [[nodiscard]] int RestartWithoutNoVarySearchCache(
+      RestartCacheEntryAction entry_action,
+      NoVarySearchUseResult restart_reason);
+
+  static std::string_view NoVarySearchUseResultToString(
+      NoVarySearchUseResult result);
+
+  // If `mutable_request_` has not been initialized, initialize it by making a
+  // shallow copy of `request_`, and then modify `request_` to point to it.
+  void EnsureMutableRequest();
 
   State next_state_{STATE_NONE};
 
@@ -639,17 +652,20 @@ class NET_EXPORT_PRIVATE HttpCache::Transaction : public HttpTransaction {
   // the cache transaction completes (or times out).
   std::optional<int> pending_io_result_ = std::nullopt;
 
-  // Used for tracing.
-  const uint64_t trace_id_;
+  // Used for state change trace events.
+  const perfetto::Track track_for_state_change_;
 
   // Initial request with which Start() was invoked.
   raw_ptr<const HttpRequestInfo> initial_request_ = nullptr;
 
-  // `custom_request_` is assigned to `request_` after allocation. It must be
+  // `mutable_request_` is assigned to `request_` after allocation. It must be
   // declared before `request_` so that it will be destroyed afterwards to
   // prevent that pointer from dangling.
-  std::unique_ptr<HttpRequestInfo> custom_request_;
+  std::unique_ptr<HttpRequestInfo> mutable_request_;
 
+  // The request this transaction is currently processing. Always points either
+  // to `initial_request_` or `mutable_request_`. Is set back to
+  // `initial_request_` when the transaction is restarted.
   raw_ptr<const HttpRequestInfo> request_ = nullptr;
 
   std::string method_;

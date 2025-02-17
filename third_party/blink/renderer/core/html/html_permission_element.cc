@@ -99,6 +99,9 @@ constexpr int kMaxHorizontalPaddingToFontSizeRatio = 5;
 constexpr int kMinMargin = 4;
 constexpr float kIntersectionThreshold = 1.0f;
 
+constexpr float kDefaultSmallFontSize = 13;     // Default 'small' font size.
+constexpr float kDefaultXxxLargeFontSize = 48;  // Default 'xxxlarge' font size.
+
 PermissionDescriptorPtr CreatePermissionDescriptor(PermissionName name) {
   auto descriptor = PermissionDescriptor::New();
   descriptor->name = name;
@@ -218,15 +221,15 @@ uint16_t GetUntranslatedMessageIDMultiplePermissions(bool granted) {
 }
 
 // Helper to get `PermissionsPolicyFeature` from permission name
-mojom::blink::PermissionsPolicyFeature PermissionNameToPermissionsPolicyFeature(
-    PermissionName permission_name) {
+network::mojom::PermissionsPolicyFeature
+PermissionNameToPermissionsPolicyFeature(PermissionName permission_name) {
   switch (permission_name) {
     case PermissionName::AUDIO_CAPTURE:
-      return mojom::blink::PermissionsPolicyFeature::kMicrophone;
+      return network::mojom::PermissionsPolicyFeature::kMicrophone;
     case PermissionName::VIDEO_CAPTURE:
-      return mojom::blink::PermissionsPolicyFeature::kCamera;
+      return network::mojom::PermissionsPolicyFeature::kCamera;
     case PermissionName::GEOLOCATION:
-      return mojom::blink::PermissionsPolicyFeature::kGeolocation;
+      return network::mojom::PermissionsPolicyFeature::kGeolocation;
     default:
       NOTREACHED() << "Not supported permission " << permission_name;
   }
@@ -899,6 +902,19 @@ void HTMLPermissionElement::AdjustStyle(ComputedStyleBuilder& builder) {
     builder.ResetPaddingTop();
     builder.ResetPaddingBottom();
   }
+
+  if (builder.BorderBottomWidth() > builder.FontSize()) {
+    builder.SetBorderBottomWidth(builder.FontSize());
+  }
+  if (builder.BorderTopWidth() > builder.FontSize()) {
+    builder.SetBorderTopWidth(builder.FontSize());
+  }
+  if (builder.BorderLeftWidth() > builder.FontSize()) {
+    builder.SetBorderLeftWidth(builder.FontSize());
+  }
+  if (builder.BorderRightWidth() > builder.FontSize()) {
+    builder.SetBorderRightWidth(builder.FontSize());
+  }
 }
 
 void HTMLPermissionElement::DidRecalcStyle(const StyleRecalcChange change) {
@@ -1290,11 +1306,11 @@ void HTMLPermissionElement::RefreshDisableReasonsAndUpdateTimer() {
 }
 
 void HTMLPermissionElement::UpdatePermissionStatusAndAppearance() {
-  if (base::ranges::any_of(permission_status_map_, [](const auto& status) {
+  if (std::ranges::any_of(permission_status_map_, [](const auto& status) {
         return status.value == MojoPermissionStatus::DENIED;
       })) {
     aggregated_permission_status_ = MojoPermissionStatus::DENIED;
-  } else if (base::ranges::any_of(
+  } else if (std::ranges::any_of(
                  permission_status_map_, [](const auto& status) {
                    return status.value == MojoPermissionStatus::ASK;
                  })) {
@@ -1345,11 +1361,13 @@ void HTMLPermissionElement::UpdateText() {
 }
 
 void HTMLPermissionElement::AddConsoleError(String error) {
+  LOG(ERROR) << error;
   AddConsoleMessage(mojom::blink::ConsoleMessageSource::kRendering,
                     mojom::blink::ConsoleMessageLevel::kError, error);
 }
 
 void HTMLPermissionElement::AddConsoleWarning(String warning) {
+  LOG(WARNING) << warning;
   AddConsoleMessage(mojom::blink::ConsoleMessageSource::kRendering,
                     mojom::blink::ConsoleMessageLevel::kWarning, warning);
 }
@@ -1454,13 +1472,17 @@ bool HTMLPermissionElement::IsStyleValid() {
       GetComputedStyle()->EffectiveZoom() /
       GetDocument().GetFrame()->LocalFrameRoot().LayoutZoomFactor();
 
+  bool is_font_monospace =
+      GetComputedStyle()->GetFontDescription().IsMonospace();
+
   // The min size is what `font-size:small` looks like when rendered in the
   // document element of the local root frame, without any intervening CSS
   // zoom factors applied.
   float min_font_size_dip = FontSizeFunctions::FontSizeForKeyword(
       &GetDocument(), FontSizeFunctions::KeywordSize(CSSValueID::kSmall),
-      GetComputedStyle()->GetFontDescription().IsMonospace());
-  if (font_size_dip < min_font_size_dip / css_zoom_factor) {
+      is_font_monospace);
+  if (font_size_dip <
+      std::min(min_font_size_dip, kDefaultSmallFontSize) / css_zoom_factor) {
     AddConsoleWarning(
         String::Format("Font size of the permission element '%s' is too small",
                        GetType().Utf8().c_str()));
@@ -1474,8 +1496,9 @@ bool HTMLPermissionElement::IsStyleValid() {
   // zoom factors applied.
   float max_font_size_dip = FontSizeFunctions::FontSizeForKeyword(
       &GetDocument(), FontSizeFunctions::KeywordSize(CSSValueID::kXxxLarge),
-      GetComputedStyle()->GetFontDescription().IsMonospace());
-  if (font_size_dip > max_font_size_dip / css_zoom_factor) {
+      is_font_monospace);
+  if (font_size_dip >
+      std::max(max_font_size_dip, kDefaultXxxLargeFontSize) / css_zoom_factor) {
     AddConsoleWarning(
         String::Format("Font size of the permission element '%s' is too large",
                        GetType().Utf8().c_str()));

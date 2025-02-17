@@ -74,8 +74,6 @@ void SignInAndEnableHistorySync() {
 // Sign out and clear sync data.
 void SignOut() {
   [SigninEarlGrey signOut];
-  [ChromeEarlGrey waitForSyncEngineInitialized:NO
-                                   syncTimeout:kSyncOperationTimeout];
   [ChromeEarlGrey clearFakeSyncServerData];
 }
 
@@ -297,13 +295,7 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
   [[EarlGrey selectElementWithMatcher:PrimarySignInButton()]
       performAction:grey_tap()];
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
-  [SigninEarlGrey addFakeIdentityForSSOAuthAddAccountFlow:fakeIdentity];
-  [[EarlGrey
-      selectElementWithMatcher:grey_allOf(
-                                   grey_accessibilityID(
-                                       kFakeAuthAddAccountButtonIdentifier),
-                                   grey_sufficientlyVisible(), nil)]
-      performAction:grey_tap()];
+  [SigninEarlGreyUI addFakeAccountInFakeAddAccountMenu:fakeIdentity];
 
   // Verify that the History Sync Opt-In screen is shown.
   [[EarlGrey
@@ -311,11 +303,14 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
                                    kHistorySyncViewAccessibilityIdentifier)]
       assertWithMatcher:grey_sufficientlyVisible()];
   ExpectedSigninHistograms* expecteds = [[ExpectedSigninHistograms alloc]
-      initWithAccessPoint:signin_metrics::AccessPoint::
-                              ACCESS_POINT_RECENT_TABS];
-  // TODO(crbug.com/41493423) Should log Signin.SignIn.Offered, and
-  // Signin.SigninStartedAccessPoint
+      initWithAccessPoint:signin_metrics::AccessPoint::kRecentTabs];
+  // TODO(crbug.com/41493423) Should log Signin.SignIn.Offered.
   expecteds.signinSignInStarted = 1;
+  expecteds.signinSigninStartedAccessPoint = 1;
+  expecteds.signinSignStartedAccessPointNewAccountNoExistingAccount = 1;
+  expecteds.signinSignInCompleted = 1;
+  expecteds.signinSignInOffered = 1;
+  expecteds.signinSignInOfferedNewAccountNoExistingAccount = 1;
   [SigninEarlGrey assertExpectedSigninHistograms:expecteds];
 }
 

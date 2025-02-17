@@ -236,7 +236,7 @@ class TestWindowObserver : public aura::WindowObserver {
   raw_ptr<aura::Window> window_;
 
   // Was |window_| destroyed?
-  bool destroyed_;
+  bool destroyed_ = false;
 };
 
 class FakeWindowEventDispatcher : public aura::WindowEventDispatcher {
@@ -1314,6 +1314,31 @@ TEST_F(RenderWidgetHostViewAuraTest, PopupClosesWhenParentLosesFocus) {
   ASSERT_TRUE(wm::IsActiveWindow(dialog_window.get()));
   EXPECT_TRUE(observer.destroyed());
 }
+
+#if !BUILDFLAG(IS_FUCHSIA)
+// Test that select boxes close when their parent window position changes.
+// This test is not relevant for Fuchsia, as the window bounds on Fuchsia does
+// not contain an offset.
+TEST_F(RenderWidgetHostViewAuraTest, PopupClosesWhenParentMoves) {
+  parent_view_->SetBounds(gfx::Rect(10, 10, 400, 400));
+  parent_view_->Focus();
+  EXPECT_TRUE(parent_view_->HasFocus());
+
+  InitViewForPopup(parent_view_, gfx::Rect(10, 10, 100, 100));
+
+  aura::Window* popup_window = view_->GetNativeView();
+  TestWindowObserver observer(popup_window);
+  widget_host_ = nullptr;  // Owned by `view_`.
+  view_ = nullptr;         // Self destroying during `SetBounds` below:
+
+  aura::WindowTreeHost* host = parent_view_->GetNativeView()->GetHost();
+  gfx::Rect bounds = host->GetBoundsInPixels();
+  bounds.Offset(10, 10);
+  host->SetBoundsInPixels(bounds);
+
+  EXPECT_TRUE(observer.destroyed());
+}
+#endif
 
 // Checks that IME-composition-event state is maintained correctly.
 TEST_F(RenderWidgetHostViewAuraTest, SetCompositionText) {
@@ -3434,7 +3459,8 @@ TEST_F(RenderWidgetHostViewAuraTest, VisibleViewportTest) {
     blink::VisualProperties visual_properties =
         widget_host_->visual_properties().at(0);
     EXPECT_EQ(gfx::Size(100, 100), visual_properties.new_size_device_px);
-    EXPECT_EQ(gfx::Size(100, 100), visual_properties.visible_viewport_size);
+    EXPECT_EQ(gfx::Size(100, 100),
+              visual_properties.visible_viewport_size_device_px);
   }
 
   // Get back the UpdateVisualProperties ack.
@@ -3456,7 +3482,8 @@ TEST_F(RenderWidgetHostViewAuraTest, VisibleViewportTest) {
     blink::VisualProperties visual_properties =
         widget_host_->visual_properties().at(0);
     EXPECT_EQ(gfx::Size(100, 100), visual_properties.new_size_device_px);
-    EXPECT_EQ(gfx::Size(100, 60), visual_properties.visible_viewport_size);
+    EXPECT_EQ(gfx::Size(100, 60),
+              visual_properties.visible_viewport_size_device_px);
   }
 }
 
@@ -5648,7 +5675,7 @@ TEST_F(RenderWidgetHostViewAuraTest, MAYBE_NewContentRenderingTimeout) {
 
   InitViewForFrame(nullptr);
   ParentHostView(view_, parent_view_);
-  widget_host_->set_new_content_rendering_delay_for_testing(kTimeout);
+  widget_host_->SetNewContentRenderingTimeoutForTesting(kTimeout);
 
   viz::LocalSurfaceId id0 = view_->GetLocalSurfaceId();
   EXPECT_TRUE(id0.is_valid());

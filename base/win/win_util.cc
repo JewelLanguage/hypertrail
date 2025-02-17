@@ -361,6 +361,74 @@ bool IsWindows11TabletMode() {
          IsValidTabletDisplayConfig();
 }
 
+// Helper for getting the process power throttling state.
+ProcessPowerState GetProcessPowerThrottlingState(HANDLE process, ULONG flag) {
+  // Get the current explicitly set state of the process power throttling.
+  PROCESS_POWER_THROTTLING_STATE power_throttling{
+      .Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION};
+
+  if (!::GetProcessInformation(process, ProcessPowerThrottling,
+                               &power_throttling, sizeof(power_throttling))) {
+    return ProcessPowerState::kUnset;
+  }
+
+  if (power_throttling.ControlMask & flag) {
+    if (power_throttling.StateMask & flag) {
+      return ProcessPowerState::kEnabled;
+    }
+    return ProcessPowerState::kDisabled;
+  }
+  return ProcessPowerState::kUnset;
+}
+
+// Helper for setting the process power throttling state.
+bool SetProcessPowerThrottlingState(HANDLE process,
+                                    ULONG flag,
+                                    ProcessPowerState state) {
+  // Process power throttling is a Windows 11 feature, but before 22H2
+  // there was no way to query the current state using GetProcessInformation.
+  // Getting the current state is needed in Process::GetPriority to determine
+  // the process priority accurately, so calls to set the state are blocked
+  // before that release.
+  if (GetVersion() < Version::WIN11_22H2) {
+    return false;
+  }
+
+  PROCESS_POWER_THROTTLING_STATE power_throttling{
+      .Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION};
+
+  // Get the current state of the process power throttling so we do not clobber
+  // other previously set flags.
+  if (!::GetProcessInformation(process, ProcessPowerThrottling,
+                               &power_throttling, sizeof(power_throttling))) {
+    return false;
+  }
+
+  switch (state) {
+    case ProcessPowerState::kUnset:
+      // Clear the specified flag.  This results in the OS determining the
+      // throttling state.
+      power_throttling.ControlMask &= ~flag;
+      power_throttling.StateMask &= ~flag;
+      break;
+
+    case ProcessPowerState::kDisabled:
+      // Explicitly disable the specified flag.
+      power_throttling.ControlMask |= flag;
+      power_throttling.StateMask &= ~flag;
+      break;
+
+    case ProcessPowerState::kEnabled:
+      // Explicitly enable the specified flag.
+      power_throttling.ControlMask |= flag;
+      power_throttling.StateMask |= flag;
+      break;
+  }
+
+  return ::SetProcessInformation(process, ProcessPowerThrottling,
+                                 &power_throttling, sizeof(power_throttling));
+}
+
 }  // namespace
 
 // The device convertibility functions below return references to cached data
@@ -783,6 +851,22 @@ bool IsDeviceUsedAsATablet(std::string* reason) {
     }
   }
 
+  // If the device is not supporting rotation, it's unlikely to be a tablet,
+  // a convertible or a detachable.
+  // See
+  // https://msdn.microsoft.com/en-us/library/windows/desktop/dn629263(v=vs.85).aspx
+  using GetAutoRotationStateType = decltype(GetAutoRotationState)*;
+  static const auto get_auto_rotation_state_func =
+      reinterpret_cast<GetAutoRotationStateType>(
+          GetUser32FunctionPointer("GetAutoRotationState"));
+  if (get_auto_rotation_state_func) {
+    AR_STATE rotation_state = AR_ENABLED;
+    if (get_auto_rotation_state_func(&rotation_state) &&
+        (rotation_state & (AR_NOT_SUPPORTED | AR_LAPTOP | AR_NOSENSOR)) != 0) {
+      return ret.value_or(false);
+    }
+  }
+
   // PlatformRoleSlate was added in Windows 8+.
   POWER_PLATFORM_ROLE role = GetPlatformRole();
   bool is_tablet = false;
@@ -1103,6 +1187,26 @@ expected<ScopedHandle, NTSTATUS> TakeHandleOfType(
   base::debug::Alias(&handle);
   CHECK_EQ(*type_name, object_type_name);
   return ScopedHandle(handle);  // Ownership of `handle` goes to the caller.
+}
+
+ProcessPowerState GetProcessEcoQoSState(HANDLE process) {
+  return GetProcessPowerThrottlingState(
+      process, PROCESS_POWER_THROTTLING_EXECUTION_SPEED);
+}
+
+ProcessPowerState GetProcessTimerThrottleState(HANDLE process) {
+  return GetProcessPowerThrottlingState(
+      process, PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION);
+}
+
+bool SetProcessEcoQoSState(HANDLE process, ProcessPowerState state) {
+  return SetProcessPowerThrottlingState(
+      process, PROCESS_POWER_THROTTLING_EXECUTION_SPEED, state);
+}
+
+bool SetProcessTimerThrottleState(HANDLE process, ProcessPowerState state) {
+  return SetProcessPowerThrottlingState(
+      process, PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION, state);
 }
 
 ScopedDomainStateForTesting::ScopedDomainStateForTesting(bool state)

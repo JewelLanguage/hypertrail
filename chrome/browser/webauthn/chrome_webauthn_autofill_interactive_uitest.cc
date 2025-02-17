@@ -126,9 +126,9 @@ sync_pb::WebauthnCredentialSpecifics CreatePasskey() {
 syncer::DeviceInfo CreateDeviceInfo() {
   syncer::DeviceInfo::PhoneAsASecurityKeyInfo paask_info;
   paask_info.contact_id = std::vector<uint8_t>({1, 2, 3});
-  base::ranges::fill(paask_info.peer_public_key_x962, 0);
+  std::ranges::fill(paask_info.peer_public_key_x962, 0);
   paask_info.peer_public_key_x962[0] = 1;
-  base::ranges::fill(paask_info.secret, 0);
+  std::ranges::fill(paask_info.secret, 0);
   paask_info.secret[0] = 2;
   paask_info.id = device::cablev2::sync::IDNow();
   paask_info.tunnel_server_domain = 0;
@@ -154,20 +154,6 @@ syncer::DeviceInfo CreateDeviceInfo() {
       /*sharing_info=*/std::nullopt, std::move(paask_info),
       /*fcm_registration_token=*/"fcm_token", syncer::DataTypeSet(),
       /*floating_workspace_last_signin_timestamp=*/base::Time::Now());
-}
-
-std::u16string ExpectedPasskeyLabel() {
-  if (device::kWebAuthnGpmPin.Get()) {
-    // In this case GPM should be enabled by default.
-    return l10n_util::GetStringUTF16(
-        IDS_PASSWORD_MANAGER_PASSKEY_FROM_GOOGLE_PASSWORD_MANAGER_NEW);
-  }
-  // Otherwise the label will mention the priority phone.
-  return l10n_util::GetStringFUTF16(
-      base::FeatureList::IsEnabled(device::kWebAuthnEnclaveAuthenticator)
-          ? IDS_PASSWORD_MANAGER_PASSKEY_FROM_PHONE_NEW
-          : IDS_PASSWORD_MANAGER_PASSKEY_FROM_PHONE,
-      kPhoneName);
 }
 
 // Autofill integration tests. This file contains end-to-end tests for
@@ -631,7 +617,9 @@ IN_PROC_BROWSER_TEST_F(WebAuthnDevtoolsAutofillIntegrationTest,
   ASSERT_EQ(webauthn_entry_count, 1u);
   ASSERT_LT(suggestion_index, suggestions.size()) << "WebAuthn entry not found";
   EXPECT_EQ(webauthn_entry.main_text.value, u"flandre");
-  EXPECT_EQ(webauthn_entry.labels.at(0).at(0).value, ExpectedPasskeyLabel());
+  EXPECT_EQ(webauthn_entry.labels.at(0).at(0).value,
+            l10n_util::GetStringUTF16(
+                IDS_PASSWORD_MANAGER_PASSKEY_FROM_GOOGLE_PASSWORD_MANAGER_NEW));
   EXPECT_EQ(webauthn_entry.icon, autofill::Suggestion::Icon::kGlobe);
 
   // Click the credential.
@@ -686,9 +674,7 @@ class WebAuthnWindowsAutofillIntegrationTest
 
   std::u16string GetDeviceString() override {
     return l10n_util::GetStringUTF16(
-        base::FeatureList::IsEnabled(device::kWebAuthnEnclaveAuthenticator)
-            ? IDS_PASSWORD_MANAGER_PASSKEY_FROM_WINDOWS_HELLO_NEW
-            : IDS_PASSWORD_MANAGER_PASSKEY_FROM_WINDOWS_HELLO);
+        IDS_PASSWORD_MANAGER_PASSKEY_FROM_WINDOWS_HELLO_NEW);
   }
 
  protected:

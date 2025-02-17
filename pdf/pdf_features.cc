@@ -27,12 +27,6 @@ BASE_FEATURE(kPdfIncrementalLoading,
 
 BASE_FEATURE(kPdfOopif, "PdfOopif", base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Kill switch in case this goes horribly wrong.
-// TODO(crbug.com/40216952): Remove after this lands safely in a Stable release.
-BASE_FEATURE(kPdfPaintManagerDrawsBackground,
-             "PdfPaintManagerDrawsBackground",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // "Partial loading" refers to loading only specific parts of the PDF.
 // TODO(crbug.com/40123601): Remove this once partial loading is fixed.
 BASE_FEATURE(kPdfPartialLoading,
@@ -40,6 +34,17 @@ BASE_FEATURE(kPdfPartialLoading,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kPdfPortfolio, "PdfPortfolio", base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables PDF WebUI save to get PDF content from renderer in blocks.
+BASE_FEATURE(kPdfGetSaveDataInBlocks,
+             "PdfGetSaveDataInBlocks",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Saves original PDFs to disk from the in-memory copy instead of redownloading
+// them.
+BASE_FEATURE(kPdfSaveOriginalFromMemory,
+             "PdfSaveOriginalFromMemory",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kPdfSearchify, "PdfSearchify", base::FEATURE_DISABLED_BY_DEFAULT);
 

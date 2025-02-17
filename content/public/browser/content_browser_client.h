@@ -67,6 +67,7 @@
 #include "net/cookies/cookie_setting_override.h"
 #include "services/cert_verifier/public/mojom/cert_verifier_service_factory.mojom-forward.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
+#include "services/network/public/cpp/cross_origin_embedder_policy.h"
 #include "services/network/public/mojom/ip_address_space.mojom-forward.h"
 #include "services/network/public/mojom/network_context.mojom-forward.h"
 #include "services/network/public/mojom/proxy_config.mojom-forward.h"
@@ -87,7 +88,7 @@
 #include "third_party/blink/public/mojom/manifest/manifest.mojom-forward.h"
 #include "third_party/blink/public/mojom/on_device_translation/translation_manager.mojom-forward.h"
 #include "third_party/blink/public/mojom/origin_trials/origin_trials_settings.mojom-forward.h"
-#include "third_party/blink/public/mojom/payments/payment_credential.mojom-forward.h"
+#include "third_party/blink/public/mojom/payments/secure_payment_confirmation_service.mojom-forward.h"
 #include "third_party/blink/public/mojom/worker/shared_worker_info.mojom.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
@@ -205,7 +206,7 @@ struct ResourceRequest;
 }  // namespace network
 
 namespace sandbox {
-class SandboxCompiler;
+class SandboxSerializer;
 class TargetConfig;
 namespace mojom {
 enum class Sandbox;
@@ -233,7 +234,6 @@ namespace content {
 enum class SiteIsolationMode;
 enum class SmsFetchFailureType;
 class AnchorElementPreconnectDelegate;
-class AuthenticatorRequestClientDelegate;
 class BluetoothDelegate;
 class BrowserChildProcessHost;
 class BrowserContext;
@@ -275,7 +275,6 @@ class UsbDelegate;
 class VideoOverlayWindow;
 class VideoPictureInPictureWindowController;
 class VpnServiceProxy;
-class WebAuthenticationDelegate;
 class WebContents;
 class WebContentsViewDelegate;
 class WebUIBrowserInterfaceBrokerRegistry;
@@ -290,7 +289,10 @@ struct SocketPermissionRequest;
 
 #if BUILDFLAG(IS_ANDROID)
 class TtsEnvironmentAndroid;
-#endif
+#else
+class AuthenticatorRequestClientDelegate;
+class WebAuthenticationDelegate;
+#endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_CHROMEOS)
 class SmartCardDelegate;
@@ -567,6 +569,13 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual void GetAdditionalViewSourceSchemes(
       std::vector<std::string>* additional_schemes);
 
+  // Allow the embedder to return true for URLs with any additional schemes that
+  // should be considered as internal browser pages, beyond
+  // content::kChromeUIScheme. Unlike GetAdditionalWebUISchemes, this only needs
+  // to return true for pages that can be visible during back/forward
+  // navigations. Defaults to returning false.
+  virtual bool IsInternalScheme(const GURL& url);
+
   // Computes the IPAddressSpace of the given URL with embedder knowledge.
   // This is used to assign values to special schemes recognized only by the
   // embedders of content/. Returns kUnknown if no such scheme was found.
@@ -717,6 +726,10 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Note that for correctness, the same value should be consistently returned.
   virtual bool ShouldDisableSiteIsolation(
       SiteIsolationMode site_isolation_mode);
+
+  // Allows the embedder to programmatically control whether Origin Isolation
+  // should be disabled.
+  virtual bool ShouldDisableOriginIsolation();
 
   // Retrieves names of any additional site isolation modes from the embedder.
   virtual std::vector<std::string> GetAdditionalSiteIsolationModes();
@@ -881,6 +894,10 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Allows the embedder to control whether Compression Dictionary Transport
   // feature can be used. This is called on the UI thread.
   virtual bool AllowCompressionDictionaryTransport(BrowserContext* context);
+
+  // Allow to make ServiceWorker to control srcdoc iframe.
+  // https://github.com/w3c/ServiceWorker/issues/765
+  virtual bool AllowServiceWorkerToControlSrcdocIframe(BrowserContext* context);
 
   // Allow to apply the fix to make SharedWorker with a blob URL inherit a
   // ServiceWorker controller, which is aligned with the specification.
@@ -1774,10 +1791,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Returns true if the audio process should run with high priority. false
   // otherwise.
   virtual bool ShouldEnableAudioProcessHighPriority();
-
-  // Returns true if a site_url should launch a renderer that resolves
-  // fonts via the FontDataManager.
-  virtual bool ShouldUseFontDataManager(const GURL& site_url);
 #endif
 
   // Binds a new media remoter service to |receiver|, if supported by the
@@ -2273,14 +2286,13 @@ class CONTENT_EXPORT ContentBrowserClient {
       mojo::PendingReceiver<blink::mojom::ManagedConfigurationService>
           receiver);
 
-  virtual void CreatePaymentCredential(
+  virtual void CreateSecurePaymentConfirmationService(
       RenderFrameHost* render_frame_host,
-      mojo::PendingReceiver<payments::mojom::PaymentCredential> receiver);
+      mojo::PendingReceiver<payments::mojom::SecurePaymentConfirmationService>
+          receiver);
 
-#if !BUILDFLAG(IS_ANDROID)
   // Allows the embedder to provide an implementation of the Serial API.
   virtual SerialDelegate* GetSerialDelegate();
-#endif
 
   // Allows the embedder to provide an implementation of the WebHID API.
   virtual HidDelegate* GetHidDelegate();
@@ -2770,7 +2782,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   // parameters were set up.
   virtual bool SetupEmbedderSandboxParameters(
       sandbox::mojom::Sandbox sandbox_type,
-      sandbox::SandboxCompiler* compiler);
+      sandbox::SandboxSerializer* serializer);
 #endif  // BUILDFLAG(IS_MAC)
 
   virtual void GetHyphenationDictionary(
@@ -2995,11 +3007,11 @@ class CONTENT_EXPORT ContentBrowserClient {
 #if BUILDFLAG(ENABLE_VIDEO_EFFECTS)
   // Allows the embedder to correlate backend media services with profile-keyed
   // effect settings.
-  virtual void BindVideoEffectsManager(
+  virtual void BindReadonlyVideoEffectsManager(
       const std::string& device_id,
       BrowserContext* browser_context,
-      mojo::PendingReceiver<media::mojom::VideoEffectsManager>
-          video_effects_manager);
+      mojo::PendingReceiver<media::mojom::ReadonlyVideoEffectsManager>
+          readonly_video_effects_manager);
 
   // Allows the embedder to correlate backend media services with profile-keyed
   // effect settings.
@@ -3186,6 +3198,15 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual std::unique_ptr<WebUIController> OverrideForInternalWebUI(
       WebUI* web_ui,
       const GURL& url);
+
+  // Embedders can override the cross origin embedder policy of a local URL
+  // navigation. A local URL is a URL with a local scheme as defined in
+  // https://fetch.spec.whatwg.org/#local-scheme. Returns the cross origin
+  // embedder policy to use, or std::nullopt if the cross origin embedder policy
+  // should not be overridden.
+  virtual std::optional<network::CrossOriginEmbedderPolicy>
+  MaybeOverrideLocalURLCrossOriginEmbedderPolicy(
+      content::NavigationHandle* navigation_handle);
 };
 
 }  // namespace content

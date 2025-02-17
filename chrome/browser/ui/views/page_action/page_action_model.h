@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_PAGE_ACTION_PAGE_ACTION_MODEL_H_
 #define CHROME_BROWSER_UI_VIEWS_PAGE_ACTION_PAGE_ACTION_MODEL_H_
 
+#include <iterator>
+#include <memory>
 #include <string>
 
 #include "base/observer_list.h"
@@ -20,8 +22,8 @@ namespace page_actions {
 class PageActionController;
 class PageActionModelObserver;
 
-// Interface to PageActionModel, used for either the concrete implementation or
-// a mock for testing.
+// Interface to PageActionModel, used for either the concrete implementation
+// or a mock for testing.
 class PageActionModelInterface {
  public:
   PageActionModelInterface() = default;
@@ -35,11 +37,18 @@ class PageActionModelInterface {
       const actions::ActionItem* action_item) = 0;
   virtual void SetShowRequested(base::PassKey<PageActionController>,
                                 bool requested) = 0;
+  virtual void SetShowSuggestionChip(base::PassKey<PageActionController>,
+                                     bool show) = 0;
+  virtual void SetTabActive(base::PassKey<PageActionController>,
+                            bool is_active) = 0;
+  virtual void SetHasPinnedIcon(base::PassKey<PageActionController>,
+                                bool has_pinned_icon) = 0;
   virtual void SetOverrideText(
       base::PassKey<PageActionController>,
       const std::optional<std::u16string>& override_text) = 0;
 
   virtual bool GetVisible() const = 0;
+  virtual bool GetShowSuggestionChip() const = 0;
   virtual const ui::ImageModel& GetImage() const = 0;
   virtual const std::u16string GetText() const = 0;
   virtual const std::u16string GetTooltipText() const = 0;
@@ -62,12 +71,20 @@ class PageActionModel : public PageActionModelInterface {
                                const actions::ActionItem* action_item) override;
   void SetShowRequested(base::PassKey<PageActionController>,
                         bool requested) override;
+  void SetShowSuggestionChip(base::PassKey<PageActionController>,
+                             bool show) override;
+  void SetTabActive(base::PassKey<PageActionController>,
+                    bool is_active) override;
+  void SetHasPinnedIcon(base::PassKey<PageActionController>,
+                        bool has_pinned_icon) override;
+
   void SetOverrideText(
       base::PassKey<PageActionController>,
       const std::optional<std::u16string>& override_text) override;
 
   // The model distills all visibility properties into a single result.
   bool GetVisible() const override;
+  bool GetShowSuggestionChip() const override;
 
   const ui::ImageModel& GetImage() const override;
   const std::u16string GetText() const override;
@@ -77,8 +94,19 @@ class PageActionModel : public PageActionModelInterface {
   // Notifies observers of a model change.
   void NotifyChange();
 
+  // Represents whether the tab this model belongs to is active.
+  bool is_tab_active_ = false;
+
+  // Represents whether this page action has a corresponding pinned icon sharing
+  // the same action.
+  bool has_pinned_icon_ = false;
+
   // Represents whether a feature requested to show this page action.
   bool show_requested_ = false;
+
+  // Represents whether the page action associated with this model should show
+  // as suggestion chip.
+  bool show_suggestion_chip_ = false;
 
   // Properties taken from ActionItem.
   bool action_item_enabled_ = false;
@@ -89,7 +117,17 @@ class PageActionModel : public PageActionModelInterface {
   std::u16string tooltip_;
   ui::ImageModel action_item_image_;
 
+  // Flag used to disallow reentrant behaviour.
+  bool is_notifying_observers_ = false;
+
   base::ObserverList<PageActionModelObserver> observer_list_;
+};
+
+class PageActionModelFactory {
+ public:
+  virtual ~PageActionModelFactory() = default;
+
+  virtual std::unique_ptr<PageActionModelInterface> Create(int action_id) = 0;
 };
 
 }  // namespace page_actions

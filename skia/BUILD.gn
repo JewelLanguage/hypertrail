@@ -49,8 +49,8 @@ rust_static_library("bridge_rust_side") {
   deps = [
     ":path_bridge",
     "//third_party/rust/font_types/v0_8:lib",
-    "//third_party/rust/read_fonts/v0_25:lib",
-    "//third_party/rust/skrifa/v0_26:lib",
+    "//third_party/rust/read_fonts/v0_27:lib",
+    "//third_party/rust/skrifa/v0_28:lib",
   ]
   configs -= [ "//build/config/compiler:chromium_code" ]
   configs += [
@@ -130,7 +130,7 @@ config("skia_config") {
     defines += [
       "GR_GL_FUNCTION_TYPE=__stdcall",
       "SK_GAMMA_SRGB",
-      "SK_GAMMA_CONTRAST=0.5",
+      "SK_GAMMA_CONTRAST=1.0",
     ]
   }
 
@@ -418,6 +418,7 @@ component("skia") {
     }
     sources += skia_ports_typeface_proxy_sources
     sources += skia_ports_typeface_fontations_sources
+    sources += skia_ports_fontmgr_fontations_sources
 
     # Fontations Rust/C++ bridge interfaces.
     deps += [

@@ -36,6 +36,9 @@ import org.chromium.base.task.AsyncTask;
 import org.chromium.base.version_info.VersionConstants;
 import org.chromium.build.BuildConfig;
 import org.chromium.build.NativeLibraries;
+import org.chromium.build.annotations.Initializer;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.ProductConfig;
 import org.chromium.chrome.browser.crash.ApplicationStatusTracker;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -58,6 +61,7 @@ import org.chromium.ui.base.ResourceBundle;
  * This is the base class of all Chrome applications. Logic specific to isolated splits should go in
  * {@link SplitChromeApplication}.
  */
+@NullMarked
 public class SplitCompatApplication extends Application {
     public static final String CHROME_SPLIT_NAME = "chrome";
     private static final String TAG = "SplitCompatApp";
@@ -71,8 +75,12 @@ public class SplitCompatApplication extends Application {
             "org.chromium.chrome.browser.init.LaunchFailedActivity";
 
     private Supplier<Impl> mImplSupplier;
-    private Impl mImpl;
-    private ServiceTracingProxyProvider mServiceTracingProxyProvider;
+    private @Nullable Impl mImpl;
+    private @Nullable ServiceTracingProxyProvider mServiceTracingProxyProvider;
+    // This doesn't work in Monochrome, since we try to load the WebView library as well when
+    // loading Chrome's library, and WebView requires attachBaseContext to have finished before
+    // you may attempt to load it's library. See crbug.com/390730928.
+    protected boolean mPreloadLibraryAttachBaseContext = true;
 
     /**
      * Holds the implementation of application logic. Will be called by {@link
@@ -81,6 +89,7 @@ public class SplitCompatApplication extends Application {
     public static class Impl {
         private SplitCompatApplication mApplication;
 
+        @Initializer
         private final void setApplication(SplitCompatApplication application) {
             mApplication = application;
         }
@@ -90,7 +99,7 @@ public class SplitCompatApplication extends Application {
         }
 
         @CallSuper
-        public void startActivity(Intent intent, Bundle options) {
+        public void startActivity(Intent intent, @Nullable Bundle options) {
             mApplication.superStartActivity(intent, options);
         }
 
@@ -101,6 +110,7 @@ public class SplitCompatApplication extends Application {
         public void onConfigurationChanged(Configuration newConfig) {}
     }
 
+    @Initializer
     public final void setImplSupplier(Supplier<Impl> implSupplier) {
         assert mImpl == null;
         assert mImplSupplier == null;
@@ -119,7 +129,7 @@ public class SplitCompatApplication extends Application {
      * This exposes the super method so it can be called inside the Impl class code instead of just
      * at the start.
      */
-    private void superStartActivity(Intent intent, Bundle options) {
+    private void superStartActivity(Intent intent, @Nullable Bundle options) {
         super.startActivity(intent, options);
     }
 
@@ -268,11 +278,8 @@ public class SplitCompatApplication extends Application {
 
         // Skipping tests since some use "--disable-native-initialization", and some tests manually
         // test loading the native library themselves.
-        if (isBrowserProcess
-                && ChromeFeatureList.sSkipIsolatedSplitPreload.isEnabled()
-                && !BuildConfig.IS_FOR_TEST) {
-            new Thread(() -> LibraryLoader.getInstance().loadNow()).start();
-            performBrowserProcessPreloading(context, true);
+        if (mPreloadLibraryAttachBaseContext) {
+            maybeInitChromeSplitAndPreloadNativeLibrary();
         }
         TraceEvent.end(ATTACH_BASE_CONTEXT_EVENT);
     }
@@ -284,8 +291,19 @@ public class SplitCompatApplication extends Application {
         // they use under-the-hood) does not work until after it returns.
         FontPreloadingWorkaround.maybeInstallWorkaround(this);
         MemoryPressureMonitor.INSTANCE.registerComponentCallbacks();
-
+        if (!mPreloadLibraryAttachBaseContext) {
+            maybeInitChromeSplitAndPreloadNativeLibrary();
+        }
         getImpl().onCreate();
+    }
+
+    private void maybeInitChromeSplitAndPreloadNativeLibrary() {
+        if (isBrowserProcess()
+                && ChromeFeatureList.sSkipIsolatedSplitPreload.isEnabled()
+                && !BuildConfig.IS_FOR_TEST) {
+            new Thread(() -> LibraryLoader.getInstance().loadNow()).start();
+            performBrowserProcessPreloading(this, true);
+        }
     }
 
     @Override
@@ -301,7 +319,7 @@ public class SplitCompatApplication extends Application {
     }
 
     @Override
-    public void startActivity(Intent intent, Bundle options) {
+    public void startActivity(Intent intent, @Nullable Bundle options) {
         getImpl().startActivity(intent, options);
     }
 

@@ -69,13 +69,7 @@ FrameNodeImpl::FrameNodeImpl(
           process_node->GetRenderProcessHostId().value(),
           render_frame_id)),
       is_current_(is_current) {
-  // Nodes are created on the UI thread, then accessed on the PM sequence.
-  // `weak_this_` can be returned from GetWeakPtrOnUIThread() and dereferenced
-  // on the PM sequence.
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  DETACH_FROM_SEQUENCE(sequence_checker_);
-  weak_this_ = weak_factory_.GetWeakPtr();
-
   DCHECK(process_node);
   DCHECK(page_node);
   // A <fencedframe>, MPArch <webview> has no parent node.
@@ -589,6 +583,28 @@ void FrameNodeImpl::OnNavigationCommitted(
   document_.Reset(this, std::move(url), std::move(origin));
 }
 
+void FrameNodeImpl::OnPrimaryPageAboutToBeDiscarded() {
+  // When a page is discarded by the browser, it is immediately marked as
+  // discarded and kicks off an async process to install a new empty document,
+  // clearing the existing frame tree.
+  //
+  // Close `receiver_` to ensure that messages queued by the previous document
+  // before the discard are dropped.
+  receiver_.reset();
+
+  for (const Node* child_frame_node : child_frame_nodes_) {
+    FrameNodeImpl::FromNode(child_frame_node)
+        ->OnPrimaryPageAboutToBeDiscarded();
+  }
+
+  for (const Node* embedded_page_node : embedded_page_nodes_) {
+    if (FrameNodeImpl* main_frame_node =
+            PageNodeImpl::FromNode(embedded_page_node)->main_frame_node()) {
+      main_frame_node->OnPrimaryPageAboutToBeDiscarded();
+    }
+  }
+}
+
 void FrameNodeImpl::AddChildWorker(WorkerNodeImpl* worker_node) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   bool inserted = child_worker_nodes_.insert(worker_node).second;
@@ -613,11 +629,6 @@ void FrameNodeImpl::SetPriorityAndReason(
     return;
   }
   priority_and_reason_.SetAndMaybeNotify(this, priority_and_reason);
-}
-
-base::WeakPtr<FrameNodeImpl> FrameNodeImpl::GetWeakPtrOnUIThread() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  return weak_this_;
 }
 
 base::WeakPtr<FrameNodeImpl> FrameNodeImpl::GetWeakPtr() {
@@ -755,12 +766,6 @@ void FrameNodeImpl::RemoveChildFrame(FrameNodeImpl* child_frame_node) {
 
 void FrameNodeImpl::OnInitializingProperties() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  // Make sure all weak pointers, even `weak_this_` that was created on the UI
-  // thread in the constructor, can only be dereferenced on the graph sequence.
-  weak_factory_.BindToCurrentSequence(
-      base::subtle::BindWeakPtrFactoryPassKey());
-
   NodeAttachedDataStorage::Create(this);
   execution_context::FrameExecutionContext::Create(this, this);
 

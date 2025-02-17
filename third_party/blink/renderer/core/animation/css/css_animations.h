@@ -115,11 +115,13 @@ class CORE_EXPORT CSSAnimations final {
       const AtomicString& animation_name,
       const AnimationEffect::EventDelegate* old_event_delegate);
 
-  static void CalculateTransitionUpdate(CSSAnimationUpdate&,
-                                        Element& animating_element,
-                                        const ComputedStyleBuilder&,
-                                        const ComputedStyle* old_style,
-                                        bool can_trigger_animations);
+  static void CalculateTransitionUpdate(
+      CSSAnimationUpdate&,
+      Element& animating_element,
+      const ComputedStyleBuilder&,
+      const ComputedStyle* old_style,
+      const StyleRecalcContext& style_recalc_context,
+      bool can_trigger_animations);
 
   static void SnapshotCompositorKeyframes(Element&,
                                           CSSAnimationUpdate&,
@@ -299,6 +301,17 @@ class CORE_EXPORT CSSAnimations final {
     // convert any non-custom CSS properties in it to use CSSBitset instead.
     HashSet<PropertyHandle>* listed_properties;
     const CSSTransitionData* transition_data;
+    // The StyleRecalcContext passed to the style resolution for the element
+    // which we are considering transitions for. This contains necessary try-
+    // data for correct after-change style for anchored elements.
+    const StyleRecalcContext& style_recalc_context;
+    // @starting-style should inherited from the parent's after-change style. As
+    // for base_style, when old_style is the @starting-style it will have
+    // inherited from its ancestors with animation effects applied. So we need
+    // to compute the before-change style for the @starting-style case correctly
+    // by cascading after-change style for ancestors as necessary. This flag is
+    // set to true if before_change_style has been cascaded correctly.
+    bool before_change_style_is_accurate_for_starting_style = false;
   };
 
   static HeapHashSet<Member<const Animation>> CreateCancelledTransitionsSet(
@@ -415,9 +428,15 @@ class CORE_EXPORT CSSAnimations final {
   // on the element as of the previous style change event, except with any
   // styles derived from declarative animations updated to the current time.
   // https://drafts.csswg.org/css-transitions-1/#before-change-style
-  static const ComputedStyle* CalculateBeforeChangeStyle(
-      Element& animating_element,
-      const ComputedStyle& base_style);
+  static const ComputedStyle& CalculateBeforeChangeStyle(
+      TransitionUpdateState& state,
+      const PropertyHandle& transitioning_property);
+
+  static const ComputedStyle* EnsureAfterChangeStyleIfNecessary(
+      TransitionUpdateState& state,
+      const ComputedStyle& base_style,
+      const PropertyHandle& transitioning_property,
+      bool for_starting_style);
 
   // Compute the after-change style for animating_element. Used by
   // CalculateAfterChangeStyle if the base style can not be used for starting
@@ -425,9 +444,10 @@ class CORE_EXPORT CSSAnimations final {
   // a different computed value, for the property passed into
   // CalculateAfterChangeStyle, for the after-change style than for the base
   // style.
-  static const ComputedStyle& EnsureAfterChangeStyle(
-      Element& animating_element,
-      Element& after_change_root);
+  static const ComputedStyle& EnsureAfterChangeStyle(Element& animating_element,
+                                                     Element& after_change_root,
+                                                     const StyleRecalcContext&,
+                                                     bool for_starting_style);
 
   // The after-change style is defined as values of all properties on the
   // element based on the information known at the start of that style change

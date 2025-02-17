@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "net/cookies/cookie_util.h"
 
 #include <cstdio>
@@ -198,7 +203,7 @@ ComputeSameSiteContextResult ComputeSameSiteContext(
   // already checked it previously.)
   bool same_site_redirect_chain =
       url_chain.size() == 1u ||
-      base::ranges::all_of(url_chain, is_same_site_with_site_for_cookies);
+      std::ranges::all_of(url_chain, is_same_site_with_site_for_cookies);
 
   // Record what type of redirect was experienced.
 
@@ -353,10 +358,11 @@ std::optional<std::string> GetCookieDomainWithString(
   if (!base::IsStringASCII(domain_string)) {
     if (base::FeatureList::IsEnabled(features::kCookieDomainRejectNonASCII)) {
       status.AddExclusionReason(
-          CookieInclusionStatus::EXCLUDE_DOMAIN_NON_ASCII);
+          CookieInclusionStatus::ExclusionReason::EXCLUDE_DOMAIN_NON_ASCII);
       return std::nullopt;
     }
-    status.AddWarningReason(CookieInclusionStatus::WARN_DOMAIN_NON_ASCII);
+    status.AddWarningReason(
+        CookieInclusionStatus::WarningReason::WARN_DOMAIN_NON_ASCII);
   }
 
   const std::string url_host(url.host());
@@ -369,14 +375,17 @@ std::optional<std::string> GetCookieDomainWithString(
   if (url_host.ends_with("..")) {
     return std::nullopt;
   }
+
+  const bool is_host_ip = url.HostIsIPAddress();
+  const bool domain_matches_host =
+      base::EqualsCaseInsensitiveASCII(url_host, domain_string) ||
+      base::EqualsCaseInsensitiveASCII("." + url_host, domain_string);
+
   // If no domain was specified in the domain string, default to a host cookie.
   // We match IE/Firefox in allowing a domain=IPADDR if it matches (case
   // in-sensitive) the url ip address hostname and ignoring a leading dot if one
   // exists. It should be treated as a host cookie.
-  if (domain_string.empty() ||
-      (url.HostIsIPAddress() &&
-       (base::EqualsCaseInsensitiveASCII(url_host, domain_string) ||
-        base::EqualsCaseInsensitiveASCII("." + url_host, domain_string)))) {
+  if (domain_string.empty() || (is_host_ip && domain_matches_host)) {
     std::string result;
     if (url.SchemeIsHTTPOrHTTPS() || url.SchemeIsWSOrWSS()) {
       result = url_host;
@@ -391,6 +400,10 @@ std::optional<std::string> GetCookieDomainWithString(
     // generating too many crash reports and already know why this is failing.
     DCHECK(DomainIsHostOnly(result));
     return result;
+  } else if (is_host_ip) {
+    // IP address that don't have an empty or matching domain attribute are
+    // invalid.
+    return std::nullopt;
   }
 
   // Disallow domain names with %-escaped characters.
@@ -932,7 +945,7 @@ CookieOptions::SameSiteCookieContext ComputeSameSiteContextForResponse(
 
       bool same_site_redirect_chain =
           url_chain.size() == 1u ||
-          base::ranges::all_of(url_chain, is_same_site_with_site_for_cookies);
+          std::ranges::all_of(url_chain, is_same_site_with_site_for_cookies);
 
       CookieOptions::SameSiteCookieContext::ContextMetadata& result_metadata =
           compute_schemefully ? result.schemeful_metadata() : result.metadata();
@@ -998,11 +1011,6 @@ bool IsPortBoundCookiesEnabled() {
 
 bool IsSchemeBoundCookiesEnabled() {
   return base::FeatureList::IsEnabled(features::kEnableSchemeBoundCookies);
-}
-
-bool IsSchemeBoundCookiesBehaviorActive(CookieScopeSemantics scope_semantics) {
-  return scope_semantics != CookieScopeSemantics::LEGACY &&
-         IsSchemeBoundCookiesEnabled();
 }
 
 bool IsOriginBoundCookiesPartiallyEnabled() {
@@ -1098,18 +1106,18 @@ NET_EXPORT void DCheckIncludedAndExcludedCookieLists(
     const CookieAccessResultList& excluded_cookies) {
   // Check that all elements of `included_cookies` really should be included,
   // and that all elements of `excluded_cookies` really should be excluded.
-  DCHECK(base::ranges::all_of(included_cookies,
+  DCHECK(std::ranges::all_of(included_cookies,
+                             [](const net::CookieWithAccessResult& cookie) {
+                               return cookie.access_result.status.IsInclude();
+                             }));
+  DCHECK(std::ranges::none_of(excluded_cookies,
                               [](const net::CookieWithAccessResult& cookie) {
                                 return cookie.access_result.status.IsInclude();
                               }));
-  DCHECK(base::ranges::none_of(excluded_cookies,
-                               [](const net::CookieWithAccessResult& cookie) {
-                                 return cookie.access_result.status.IsInclude();
-                               }));
 
   // Check that the included cookies are still in the correct order.
   DCHECK(
-      base::ranges::is_sorted(included_cookies, CookieWithAccessResultSorter));
+      std::ranges::is_sorted(included_cookies, CookieWithAccessResultSorter));
 }
 
 NET_EXPORT bool IsForceThirdPartyCookieBlockingEnabled() {

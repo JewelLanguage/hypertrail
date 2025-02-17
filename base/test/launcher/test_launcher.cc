@@ -44,7 +44,6 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/process/kill.h"
 #include "base/process/launch.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/pattern.h"
 #include "base/strings/strcat.h"
@@ -71,7 +70,6 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(IS_POSIX)
@@ -1817,7 +1815,7 @@ bool TestLauncher::Init(CommandLine* command_line) {
   results_tracker_.AddGlobalTag("OS_LINUX");
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   results_tracker_.AddGlobalTag("OS_CHROMEOS");
 #endif
 
@@ -1935,7 +1933,7 @@ bool TestLauncher::ShuffleTests(CommandLine* command_line) {
 
     std::mt19937 randomizer;
     randomizer.seed(shuffle_seed);
-    ranges::shuffle(tests_, randomizer);
+    std::ranges::shuffle(tests_, randomizer);
 
     fprintf(stdout, "Randomizing with seed %u\n", shuffle_seed);
     fflush(stdout);

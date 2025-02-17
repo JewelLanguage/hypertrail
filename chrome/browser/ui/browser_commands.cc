@@ -22,7 +22,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -95,8 +94,6 @@
 #include "chrome/browser/ui/tabs/organization/tab_organization_service.h"
 #include "chrome/browser/ui/tabs/organization/tab_organization_service_factory.h"
 #include "chrome/browser/ui/tabs/organization/tab_organization_session.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_keyed_service.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_service_factory.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_group.h"
@@ -217,11 +214,6 @@
 
 #if BUILDFLAG(ENABLE_RLZ)
 #include "components/rlz/rlz_tracker.h"  // nogncheck
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chromeos/crosapi/mojom/task_manager.mojom.h"
-#include "chromeos/lacros/lacros_service.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -1749,9 +1741,7 @@ void Print(Browser* browser) {
   if (base::FeatureList::IsEnabled(::features::kPrintPreviewCrosPrimary)) {
     chromeos::printing::StartPrint(
         web_contents,
-#if BUILDFLAG(IS_CHROMEOS_ASH)
         /*print_renderer=*/mojo::NullAssociatedRemote(),
-#endif
         browser->profile()->GetPrefs()->GetBoolean(
             prefs::kPrintPreviewDisabled),
         /*has_selection=*/false);
@@ -1761,12 +1751,12 @@ void Print(Browser* browser) {
 
   printing::StartPrint(
       web_contents,
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
       /*print_renderer=*/mojo::NullAssociatedRemote(),
 #endif
       browser->profile()->GetPrefs()->GetBoolean(prefs::kPrintPreviewDisabled),
       /*has_selection=*/false);
-#endif
+#endif  // BUILDFLAG(ENABLE_PRINTING)
 }
 
 bool CanPrint(Browser* browser) {
@@ -1948,22 +1938,7 @@ bool CanOpenTaskManager() {
 }
 
 void OpenTaskManager(Browser* browser, task_manager::StartAction start_action) {
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  // Open linux version of task manager UI if ash TaskManager
-  // interface is in an old version.
-  if (chromeos::LacrosService::Get()
-          ->GetInterfaceVersion<crosapi::mojom::TaskManager>() < 1) {
-    base::RecordAction(UserMetricsAction("TaskManager"));
-    chrome::ShowTaskManager(browser);
-    return;
-  }
-  // Invoke task manager UI in ash, which will call chrome::OpenTaskManager()
-  // in ash to run through the code path in the next section
-  // (!BUILDFLAG(IS_ANDROID)).
-  chromeos::LacrosService::Get()
-      ->GetRemote<crosapi::mojom::TaskManager>()
-      ->ShowTaskManager();
-#elif !BUILDFLAG(IS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID)
   base::RecordAction(UserMetricsAction("TaskManager"));
   chrome::ShowTaskManager(browser, start_action);
 #else
@@ -2131,7 +2106,7 @@ bool CanCopyUrl(const Browser* browser) {
 
 bool IsWebAppOrCustomTab(const Browser* browser) {
   return
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
       browser->is_type_custom_tab() ||
 #endif
       web_app::AppBrowserController::IsWebApp(browser);

@@ -190,7 +190,9 @@ PatternAccountRestriction PatternAccountRestrictionFromPreference(
 ChromeAccountManagerService::ChromeAccountManagerService(
     PrefService* local_state,
     std::string_view profile_name)
-    : local_state_(local_state), profile_name_(profile_name) {
+    : local_state_(local_state),
+      profile_name_(profile_name),
+      weak_ptr_factory_(this) {
   // `local_state_` may be null in a test environment. In the prod environment,
   // `local_state_` comes from GetApplicationContext()->GetLocalState() and
   // couldn't be null.
@@ -330,9 +332,9 @@ ChromeAccountManagerService::GetAllIdentitiesOnDevice(
                                           SkipRestricted{restriction_});
 }
 
-void ChromeAccountManagerService::OnIdentityListChanged() {
+void ChromeAccountManagerService::OnIdentitiesInProfileChanged() {
   for (auto& observer : observer_list_) {
-    observer.OnIdentityListChanged();
+    observer.OnIdentitiesInProfileChanged();
   }
 }
 
@@ -342,13 +344,20 @@ void ChromeAccountManagerService::OnIdentitiesOnDeviceChanged() {
   }
 }
 
-void ChromeAccountManagerService::OnIdentityUpdated(
+void ChromeAccountManagerService::OnIdentityInProfileUpdated(
     id<SystemIdentity> identity) {
   if (!this->IsValidIdentity(identity)) {
     return;
   }
   for (auto& observer : observer_list_) {
-    observer.OnIdentityUpdated(identity);
+    observer.OnIdentityInProfileUpdated(identity);
+  }
+}
+
+void ChromeAccountManagerService::OnIdentityOnDeviceUpdated(
+    id<SystemIdentity> identity) {
+  for (auto& observer : observer_list_) {
+    observer.OnIdentityOnDeviceUpdated(identity);
   }
 }
 
@@ -373,9 +382,14 @@ void ChromeAccountManagerService::OnIdentityAccessTokenRefreshFailed(
   }
 }
 
+base::WeakPtr<ChromeAccountManagerService>
+ChromeAccountManagerService::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
+}
+
 void ChromeAccountManagerService::UpdateRestriction() {
   restriction_ = PatternAccountRestrictionFromPreference(local_state_);
-  OnIdentityListChanged();
+  OnIdentitiesInProfileChanged();
 }
 
 ResizedAvatarCache*

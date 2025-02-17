@@ -25,10 +25,12 @@
 <translation id="176485176228926164"><ph name="BEGIN_LINK1" />Толық ақпарат<ph name="END_LINK1" /></translation>
 <translation id="1828808367831369073"><ph name="TABS_COUNT_ONE" /> қойынды топтастырылды.</translation>
 <translation id="1869137256605757565">{TABS_COUNT,plural, =1{<ph name="TABS_COUNT_ONE" /> қойынды}other{<ph name="TABS_COUNT_MANY" /> қойынды}}</translation>
+<translation id="1909810060368225529">Ескерту: енгізілетін өзгерістерді барлық пайдаланушы көреді. Ортақ қойындылар топтарына барлығы өзгеріс енгізе алады</translation>
 <translation id="2050597508048557928">{TABS_COUNT,plural, =1{<ph name="TABS_COUNT_ONE" /> таңдалған қойындыға бетбелгі қою}other{<ph name="TABS_COUNT_MANY" /> таңдалған қойындыға бетбелгі қою}}</translation>
 <translation id="2118649612461486615">Дүкен туралы ақпарат</translation>
 <translation id="2123073051266141035">{INCOGNITO_TABS_COUNT,plural, =1{Жабылған қойындылар мен топтарды "Соңғы қойындылар" және "Қойындылар топтары" бөлімдерінен қайта ашуға болады. Инкогнито қойындыңыз қолжетімді болмайды.}other{Жабылған қойындылар мен топтарды "Соңғы қойындылар" және "Қойындылар топтары" бөлімдерінен қайта ашуға болады. # инкогнито қойындыңыз қолжетімді болмайды.}}</translation>
 <translation id="2162620598375156287"><ph name="SOURCE_WEBSITE" /> сайтындағы қазіргі бағасы – <ph name="CURRENT_PRICE" />.</translation>
+<translation id="2242907120821295124"><ph name="TAB_GROUP_NAME" /> қойындылар тобы енді қолжетімді емес.</translation>
 <translation id="22623456902492423">{TABS_COUNT,plural, =1{Қойындыны топтан шығару}other{Қойындыларды топтан шығару}}</translation>
 <translation id="2271452184061378400">Қойындылар топтары осы жерде сақталады.</translation>
 <translation id="2277224997687551299">Топтың атауын өзгерту</translation>
@@ -43,6 +45,7 @@
 <translation id="2671423594960767771">Топты бөлісу</translation>
 <translation id="2677748264148917807">Шығу</translation>
 <translation id="2753098591787393794">{NUMBER_OF_TABS_ADDED,plural, =1{<ph name="ONE_ADDED" /> қойынды қосылды, <ph name="ANY_CHANGED" /> өзгертілді, <ph name="ANY_CLOSED" /> жабылды.}other{<ph name="MANY_ADDED" /> қойынды қосылды, <ph name="ANY_CHANGED" /> өзгертілді, <ph name="ANY_CLOSED" /> жабылды.}}</translation>
+<translation id="2755485474385016903">Енгізілетін өзгерістерді топтағы барлық адам көреді.</translation>
 <translation id="2776817246640326047">{NUM_HOURS,plural, =1{<ph name="NUM_HOURS_ONE" /> сағат бұрын жасалды.}other{<ph name="NUM_HOURS_MANY" /> сағат бұрын жасалды.}}</translation>
 <translation id="2801787514987684416">Дүкен туралы ақпаратты көресіз бе?</translation>
 <translation id="2883875523421277445">{NUMBER_OF_TABS_CLOSED,plural, =1{<ph name="ONE_CLOSED" /> қойынды жабылды.}other{<ph name="MANY_CLOSED" /> қойынды жабылды.}}</translation>
@@ -60,6 +63,7 @@
 <translation id="3328308545011660196">Ұсыныс: <ph name="NUMBER_OF_TABS" /> қойынды өзара қатысты сияқты. Олар топтастырылсын ба?</translation>
 <translation id="3547352561153509682">Бұл жағдайда топ <ph name="USER_EMAIL" /> аккаунтына кірген барлық құрылғыдан жойылады.</translation>
 <translation id="3613492231657284463">"Әрекетсіз қойындылар" диалогтік терезесін жасыру</translation>
+<translation id="3619255692378312441">Кіру рұқсатын басқару</translation>
 <translation id="3652027618765638838"><ph name="CURRENT_RATING" />/<ph name="RATING_BASELINE" /></translation>
 <translation id="374923079891132274">Алғы көрінісі бар нобай.</translation>
 <translation id="3810973564298564668">Басқару</translation>
@@ -85,6 +89,8 @@
 <translation id="4783638485675352219">Бұл құрылғыдағы ашық қойындылардың атаулары мен URL мекенжайларын операциялық жүйемен бөлісу</translation>
 <translation id="4788280460033928884">{REVIEWS,plural, =1{(<ph name="REVIEWS_COUNT_ONE" /> пікір)}other{(<ph name="REVIEWS_COUNT_MANY" /> пікір)}}</translation>
 <translation id="4850886885716139402">Көрініс</translation>
+<translation id="4861611890274104875">Картаны жабады.</translation>
+<translation id="4861953997778766866">Ортақ қойындылар топтарына барлығы өзгеріс енгізе алады.</translation>
 <translation id="4870911314065352661">Барлық қойынды жабылсын ба?</translation>
 <translation id="4871719318659334896">Топты жабу</translation>
 <translation id="4881695831933465202">Ашу</translation>
@@ -124,11 +130,13 @@
 <translation id="6381032505162537930">Қойындылар топтарын осы жерден табуға болады</translation>
 <translation id="639823877092900621">{TABS_COUNT,plural, =1{Таңдалған <ph name="TABS_COUNT_ONE" /> қойындыны топтан шығару}other{Таңдалған <ph name="TABS_COUNT_MANY" /> қойындыны топтан шығару}}</translation>
 <translation id="6422650314852876533">{TABS_COUNT,plural, =1{<ph name="TABS_COUNT_ONE" /> қойынды}other{<ph name="TABS_COUNT_MANY" /> қойынды}}</translation>
+<translation id="6499296376514955580">Ортақ қойындылар тобының өзгерістері туралы ескерту жабылды.</translation>
 <translation id="6527303717912515753">Бөлісу</translation>
 <translation id="6542289363124393690">{DAY_COUNT,plural, =1{1 күннен кейін}other{<ph name="DAY_COUNT_MANY" /> күннен кейін}}</translation>
 <translation id="6549021453810473782">Дүкен туралы ақпаратты көру</translation>
 <translation id="6557858706263317126">+<ph name="HIDDEN_TABS_COUNT" /></translation>
 <translation id="6562820390860419811">Қойындыны солға жылжыту</translation>
+<translation id="6589356853295569750">Ортақ қойындылар тобының өзгерістері туралы ескерту толықтай ашылды.</translation>
 <translation id="6590332670428149473"><ph name="COLOR_NAME" /> түсті <ph name="TITLE_OF_GROUP" /> ортақ қойындылар тобының әрекеттер мәзірін ашыңыз.</translation>
 <translation id="6615455863669487791">Маған көрсету</translation>
 <translation id="6668311240800004911">{NUMBER_OF_TABS_CHANGED,plural, =1{<ph name="ONE_CHANGED" /> қойынды өзгертілді.}other{<ph name="MANY_CHANGED" /> қойынды өзгертілді.}}</translation>
@@ -155,6 +163,7 @@
 <translation id="7699041944097291312">{TABS_COUNT,plural, =1{Таңдалған <ph name="TABS_COUNT_ONE" /> қойындыны бөлісу}other{Таңдалған <ph name="TABS_COUNT_MANY" /> қойындыны бөлісу}}</translation>
 <translation id="7773714564112603605">Қойындыны өшіру және топты жою</translation>
 <translation id="7792771145871471484">Ұсыныстарды көріңіз.</translation>
+<translation id="7792860826279960128">Ортақ қойындылар тобының өзгерістері туралы ескерту жартылай ашылды.</translation>
 <translation id="7825973332242257878">Қойындылар топтары</translation>
 <translation id="7838146321400849846">{TABS_COUNT,plural, =1{<ph name="TABS_COUNT_ONE" /> таңдалған қойындыны топтау}other{<ph name="TABS_COUNT_MANY" /> таңдалған қойындыны топтау}}</translation>
 <translation id="7853202427316060426">Әрекет</translation>
@@ -178,6 +187,7 @@
 <translation id="8516612320289425423">{NUMBER_OF_TABS_ADDED,plural, =1{<ph name="ONE_ADDED" /> қойынды қосылды, <ph name="ANY_CLOSED" /> жабылды.}other{<ph name="MANY_ADDED" /> қойынды қосылды, <ph name="ANY_CLOSED" /> жабылды.}}</translation>
 <translation id="8633025649649592204">Соңғы іс-әрекеттер</translation>
 <translation id="870736955561925754">Қойындыны жауып, топты жою қажет пе?</translation>
+<translation id="8712637175834984815">Түсінікті</translation>
 <translation id="8714939927607906138">Арзанырақ</translation>
 <translation id="8730621377337864115">Дайын</translation>
 <translation id="8730999928494395583">Бұл инкогнито қойындыларындағы әрекетіңіз осы құрылғыдан өшіріледі.</translation>
@@ -192,6 +202,7 @@
 <translation id="9169594135889675189">Топқа жаңа қойынды енгізу</translation>
 <translation id="9216898458513705996">Қойындылар осы құрылғыда ашық қалады, бірақ топ <ph name="USER_EMAIL" /> аккаунтына кірген барлық құрылғыдан жойылады.</translation>
 <translation id="927441551066996669">{NUMBER_OF_TABS,plural, =1{<ph name="TABS_COUNT_ONE" /> қойындысы бар <ph name="COLOR_NAME" /> түсті қойындылар тобын жаю.}other{<ph name="TABS_COUNT_MANY" /> қойындысы бар <ph name="COLOR_NAME" /> түсті қойындылар тобын жаю.}}</translation>
+<translation id="945522503751344254">Пікір жіберу</translation>
 <translation id="94870150074703282">Топты жою қажет пе?</translation>
 <translation id="992256792861109788">Қызғылт</translation>
 </translationbundle>

@@ -487,15 +487,14 @@ TEST_F(SegmentationPlatformServiceFactoryTest, TabResupmtionRanker) {
 #endif  //! BUILDFLAG(IS_CHROMEOS)
 
 TEST_F(SegmentationPlatformServiceFactoryTest, MetricsClustering) {
-  InitServiceAndCacheResults(
-      segmentation_platform::MetricsClustering::kMetricsClusteringKey);
+  InitService();
 
   segmentation_platform::PredictionOptions prediction_options =
-      PredictionOptions::ForCached();
+      PredictionOptions::ForOnDemand();
 
   ExpectGetAnnotatedNumericResult(
       segmentation_platform::MetricsClustering::kMetricsClusteringKey,
-      prediction_options, nullptr, PredictionStatus::kSucceeded);
+      prediction_options, nullptr, PredictionStatus::kFailed);
 }
 
 #if BUILDFLAG(IS_ANDROID)
@@ -640,13 +639,9 @@ TEST_F(SegmentationPlatformServiceFactoryTest, TestAndroidHomeModuleRanker) {
   input_context->metadata_args.emplace(
       segmentation_platform::kSafetyHubFreshness,
       segmentation_platform::processing::ProcessedValue::FromFloat(-1));
-  input_context->metadata_args.emplace(
-      segmentation_platform::kAuxiliarySearchFreshness,
-      segmentation_platform::processing::ProcessedValue::FromFloat(-1));
 
   std::vector<std::string> result = {kPriceChange, kSingleTab,
-                                     kTabResumptionForAndroidHome, kSafetyHub,
-                                     kAuxiliarySearch};
+                                     kTabResumptionForAndroidHome, kSafetyHub};
   ExpectGetClassificationResult(
       segmentation_platform::kAndroidHomeModuleRankerKey, prediction_options,
       input_context,

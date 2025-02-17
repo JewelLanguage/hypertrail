@@ -56,7 +56,7 @@ namespace {
 using ::cryptohome::KeyLabel;
 
 constexpr char kTestAccount[] = "user@test.com";
-constexpr char kFakeGaia[] = "fake_gaia";
+constexpr GaiaId::Literal kFakeGaia("fake_gaia");
 constexpr char kExpectedPassword[] = "qwerty";
 constexpr char kExpectedPin[] = "150504";
 
@@ -85,8 +85,7 @@ class LocalAuthenticationRequestControllerImplTest : public LoginTestBase {
         FakeCryptohomeMiscClient::GetStubSystemSalt());
     UserDataAuthClient::InitializeFake();
     SystemSaltGetter::Initialize();
-    test_account_id_ =
-        AccountId::FromUserEmailGaiaId(kTestAccount, GaiaId(kFakeGaia));
+    test_account_id_ = AccountId::FromUserEmailGaiaId(kTestAccount, kFakeGaia);
 
     SetExpectedCredentialsWithDbusClient(test_account_id_, kExpectedPassword);
 
@@ -383,13 +382,11 @@ class AuthSubmissionCounter : public ActiveSessionAuthView::Observer,
   }
 
   // ActiveSessionAuthView::Observer:
-  void OnPasswordSubmit(const std::u16string& password) override {
+  void OnPasswordSubmit(std::u16string_view password) override {
     ++password_submit_counter_;
   }
 
-  void OnPinSubmit(const std::u16string& pin) override {
-    ++pin_submit_counter_;
-  }
+  void OnPinSubmit(std::u16string_view pin) override { ++pin_submit_counter_; }
 
   // views::ViewObserver:
   void OnViewRemovedFromWidget(views::View* observed_view) override {
@@ -434,8 +431,7 @@ class LocalAuthenticationWithPinControllerImplTest
         FakeCryptohomeMiscClient::GetStubSystemSalt());
     UserDataAuthClient::InitializeFake();
     SystemSaltGetter::Initialize();
-    test_account_id_ =
-        AccountId::FromUserEmailGaiaId(kTestAccount, GaiaId(kFakeGaia));
+    test_account_id_ = AccountId::FromUserEmailGaiaId(kTestAccount, kFakeGaia);
 
     SetExpectedCredentialsWithDbusClient();
     fake_user_manager_.Reset(

@@ -127,11 +127,12 @@ HandleRequestToPlusAddressWithSuccess(
   }
 
   bool is_refresh = [&]() {
-    std::optional<base::Value> body = base::JSONReader::Read(request.content);
-    if (!body || !body->is_dict() || !body->GetIfDict()) {
+    std::optional<base::Value::Dict> body =
+        base::JSONReader::ReadDict(request.content);
+    if (!body) {
       return false;
     }
-    return body->GetIfDict()->FindBool("refresh_email_address").value_or(false);
+    return body->FindBool("refresh_email_address").value_or(false);
   }();
   std::unique_ptr<net::test_server::BasicHttpResponse> http_response(
       new net::test_server::BasicHttpResponse);
@@ -172,18 +173,17 @@ Matcher<std::vector<Suggestion>> IsSingleCreatePlusAddressSuggestion() {
         IDS_PLUS_ADDRESS_CREATE_SUGGESTION_SECONDARY_TEXT))}};
   }
   return ElementsAre(AllOf(
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+      EqualsSuggestion(SuggestionType::kCreateNewPlusAddressInline),
+#else
       EqualsSuggestion(SuggestionType::kCreateNewPlusAddress,
                        /*main_text=*/l10n_util::GetStringUTF16(
                            IDS_PLUS_ADDRESS_CREATE_SUGGESTION_MAIN_TEXT)),
-      Field(&Suggestion::icon, Suggestion::Icon::kPlusAddress),
       Field(&Suggestion::iph_metadata,
             Suggestion::IPHMetadata(
                 &feature_engagement::kIPHPlusAddressCreateSuggestionFeature)),
-#if BUILDFLAG(IS_ANDROID)
-      Field(&Suggestion::iph_description_text,
-            l10n_util::GetStringUTF16(
-                IDS_PLUS_ADDRESS_CREATE_SUGGESTION_IPH_ANDROID)),
-#endif  // BUILDFLAG(IS_ANDROID)
+#endif
+      Field(&Suggestion::icon, Suggestion::Icon::kPlusAddress),
       Field(&Suggestion::labels, labels)));
 }
 

@@ -14,6 +14,10 @@
 
 // Returns whether the lens overlay is allowed by policy.
 bool IsLensOverlayAllowedByPolicy() {
+  // Local state can be null in tests.
+  if (!GetApplicationContext()->GetLocalState()) {
+    return true;
+  }
   int policyRawValue = GetApplicationContext()->GetLocalState()->GetInteger(
       lens::prefs::kLensOverlaySettings);
   return policyRawValue ==
@@ -32,11 +36,23 @@ bool IsLensOverlayAvailable() {
 }
 
 bool IsLensOverlaySameTabNavigationEnabled() {
-  return base::FeatureList::IsEnabled(kLensOverlayEnableSameTabNavigation);
+  return IsLensOverlayAvailable() &&
+         base::FeatureList::IsEnabled(kLensOverlayEnableSameTabNavigation);
 }
 
 bool IsLVFUnifiedExperienceEnabled() {
-  return base::FeatureList::IsEnabled(kEnableLensViewFinderUnifiedExperience);
+  return IsLensOverlayAvailable() &&
+         base::FeatureList::IsEnabled(kEnableLensViewFinderUnifiedExperience);
+}
+
+bool IsLensOverlayLandscapeOrientationEnabled() {
+  return IsLensOverlayAvailable() &&
+         base::FeatureList::IsEnabled(kLensOverlayEnableLandscapeCompatibility);
+}
+
+bool IsLVFEscapeHatchEnabled() {
+  return IsLensOverlayAvailable() &&
+         base::FeatureList::IsEnabled(kLensOverlayEnableLVFEscapeHatch);
 }
 
 LensOverlayOnboardingTreatment GetLensOverlayOnboardingTreatment() {

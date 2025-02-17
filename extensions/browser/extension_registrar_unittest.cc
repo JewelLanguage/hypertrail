@@ -24,7 +24,6 @@
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "base/test/scoped_feature_list.h"
-#include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/common/pref_names.h"  // nogncheck
 #include "components/account_id/account_id.h"  // nogncheck
 #include "components/prefs/pref_registry_simple.h"
@@ -147,9 +146,9 @@ class ExtensionRegistrarTest : public ExtensionsTest {
     ExpectInSet(ExtensionRegistry::ENABLED);
     EXPECT_TRUE(IsExtensionReady());
 
-    EXPECT_EQ(disable_reason::DISABLE_NONE,
-              ExtensionPrefs::Get(browser_context())
-                  ->GetDisableReasons(extension()->id()));
+    EXPECT_TRUE(ExtensionPrefs::Get(browser_context())
+                    ->GetDisableReasons(extension()->id())
+                    .empty());
 
     VerifyMock();
   }
@@ -159,7 +158,7 @@ class ExtensionRegistrarTest : public ExtensionsTest {
     SCOPED_TRACE("AddDisabledExtension");
     ExtensionPrefs::Get(browser_context())
         ->SetExtensionDisabled(extension_->id(),
-                               disable_reason::DISABLE_USER_ACTION);
+                               {disable_reason::DISABLE_USER_ACTION});
     registrar_->AddExtension(extension_);
     ExpectInSet(ExtensionRegistry::DISABLED);
     EXPECT_FALSE(IsExtensionReady());
@@ -250,7 +249,7 @@ class ExtensionRegistrarTest : public ExtensionsTest {
     SCOPED_TRACE("DisableEnabledExtension");
     EXPECT_CALL(delegate_, PostDeactivateExtension(extension_));
     registrar_->DisableExtension(extension_->id(),
-                                 disable_reason::DISABLE_USER_ACTION);
+                                 {disable_reason::DISABLE_USER_ACTION});
     ExpectInSet(ExtensionRegistry::DISABLED);
     EXPECT_FALSE(IsExtensionReady());
 
@@ -261,27 +260,9 @@ class ExtensionRegistrarTest : public ExtensionsTest {
     SCOPED_TRACE("DisableTerminatedExtension");
     // PostDeactivateExtension should not be called.
     registrar_->DisableExtension(extension_->id(),
-                                 disable_reason::DISABLE_USER_ACTION);
+                                 {disable_reason::DISABLE_USER_ACTION});
     ExpectInSet(ExtensionRegistry::DISABLED);
     EXPECT_FALSE(IsExtensionReady());
-  }
-
-  void TryDisablingNotAshKeeplistedExtension(bool expect_extension_disabled) {
-    if (expect_extension_disabled) {
-      EXPECT_CALL(delegate_, PostDeactivateExtension(extension_));
-    }
-
-    // Disable extension because it is not in the ash keep list.
-    registrar_->DisableExtension(extension_->id(),
-                                 disable_reason::DISABLE_NOT_ASH_KEEPLISTED);
-
-    ExtensionRegistry::IncludeFlag include_flag =
-        expect_extension_disabled ? ExtensionRegistry::DISABLED
-                                  : ExtensionRegistry::ENABLED;
-    ExpectInSet(include_flag);
-    EXPECT_NE(IsExtensionReady(), expect_extension_disabled);
-
-    VerifyMock();
   }
 
   void TerminateExtension() {
@@ -313,9 +294,9 @@ class ExtensionRegistrarTest : public ExtensionsTest {
     // ExtensionRegistrar should have disabled the extension in preparation for
     // a reload.
     ExpectInSet(ExtensionRegistry::DISABLED);
-    EXPECT_EQ(disable_reason::DISABLE_RELOAD,
-              ExtensionPrefs::Get(browser_context())
-                  ->GetDisableReasons(extension()->id()));
+    EXPECT_THAT(ExtensionPrefs::Get(browser_context())
+                    ->GetDisableReasons(extension()->id()),
+                testing::UnorderedElementsAre(disable_reason::DISABLE_RELOAD));
   }
 
   // Directs ExtensionRegistrar to reload the terminated extension and verifies
@@ -333,9 +314,9 @@ class ExtensionRegistrarTest : public ExtensionsTest {
     ExpectInSet(ExtensionRegistry::TERMINATED);
     // Unlike when reloading an enabled extension, the extension hasn't been
     // disabled and shouldn't have the DISABLE_RELOAD disable reason.
-    EXPECT_EQ(disable_reason::DISABLE_NONE,
-              ExtensionPrefs::Get(browser_context())
-                  ->GetDisableReasons(extension()->id()));
+    EXPECT_TRUE(ExtensionPrefs::Get(browser_context())
+                    ->GetDisableReasons(extension()->id())
+                    .empty());
   }
 
   // Verifies that the extension is in the given set in the ExtensionRegistry
@@ -435,7 +416,7 @@ TEST_F(ExtensionRegistrarTest, AddForceEnabled) {
 
   // Extension cannot be disabled.
   registrar()->DisableExtension(extension()->id(),
-                                disable_reason::DISABLE_USER_ACTION);
+                                {disable_reason::DISABLE_USER_ACTION});
   ExpectInSet(ExtensionRegistry::ENABLED);
 }
 
@@ -457,7 +438,7 @@ TEST_F(ExtensionRegistrarTest, AddBlocklisted) {
   registrar()->EnableExtension(extension()->id());
   ExpectInSet(ExtensionRegistry::BLOCKLISTED);
   registrar()->DisableExtension(extension()->id(),
-                                disable_reason::DISABLE_USER_ACTION);
+                                {disable_reason::DISABLE_USER_ACTION});
   ExpectInSet(ExtensionRegistry::BLOCKLISTED);
   registrar()->ReloadExtension(extension()->id(), LoadErrorBehavior::kQuiet);
   ExpectInSet(ExtensionRegistry::BLOCKLISTED);
@@ -477,7 +458,7 @@ TEST_F(ExtensionRegistrarTest, AddBlocked) {
   registrar()->EnableExtension(extension()->id());
   ExpectInSet(ExtensionRegistry::BLOCKED);
   registrar()->DisableExtension(extension()->id(),
-                                disable_reason::DISABLE_USER_ACTION);
+                                {disable_reason::DISABLE_USER_ACTION});
   ExpectInSet(ExtensionRegistry::BLOCKED);
 
   RemoveBlockedExtension();
@@ -543,16 +524,6 @@ TEST_F(ExtensionRegistrarTest, ReloadTerminatedExtension) {
   // enabled once re-added to the registrar, since ExtensionPrefs shouldn't say
   // it's disabled.
   AddEnabledExtension();
-}
-
-// Test that an extension which is not controlled (e.g. by policy) and which is
-// not on the ash keep-list can be disabled.
-TEST_F(ExtensionRegistrarTest, DisableNotAshKeeplistedExtension) {
-  ON_CALL(*delegate(), CanDisableExtension(extension().get()))
-      .WillByDefault(Return(true));
-  AddEnabledExtension();
-
-  TryDisablingNotAshKeeplistedExtension(/* expect_extension_disabled= */ true);
 }
 
 }  // namespace extensions

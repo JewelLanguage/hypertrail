@@ -4,6 +4,7 @@
 
 #include "base/threading/hang_watcher.h"
 
+#include <algorithm>
 #include <atomic>
 #include <utility>
 
@@ -18,7 +19,6 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/power_monitor/power_monitor.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
@@ -797,9 +797,9 @@ void HangWatcher::WatchStateSnapShot::Init(
                                                LoggingLevel::kUmaOnly)) {
         const PlatformThreadId thread_id = watch_state.get()->GetThreadID();
         const auto track = perfetto::Track::FromPointer(
-            this, perfetto::ThreadTrack::ForThread(thread_id));
+            this, perfetto::ThreadTrack::ForThread(thread_id.raw()));
         TRACE_EVENT_BEGIN("latency", "HangWatcher::ThreadHung", track,
-                          deadline);
+                          now - monitoring_period);
         TRACE_EVENT_END("latency", track, now);
       }
 #endif
@@ -814,8 +814,8 @@ void HangWatcher::WatchStateSnapShot::Init(
       // the next capture then they'll already be marked and will be included
       // in the capture at that time.
       if (thread_marked && all_threads_marked) {
-        hung_watch_state_copies_.push_back(WatchStateCopy{
-            deadline, watch_state.get()->GetSystemWideThreadID()});
+        hung_watch_state_copies_.push_back(
+            WatchStateCopy{deadline, watch_state.get()->GetThreadID()});
       } else {
         all_threads_marked = false;
       }
@@ -858,10 +858,10 @@ void HangWatcher::WatchStateSnapShot::Init(
 
   // Sort |hung_watch_state_copies_| by order of decreasing hang severity so the
   // most severe hang is first in the list.
-  ranges::sort(hung_watch_state_copies_,
-               [](const WatchStateCopy& lhs, const WatchStateCopy& rhs) {
-                 return lhs.deadline < rhs.deadline;
-               });
+  std::ranges::sort(hung_watch_state_copies_,
+                    [](const WatchStateCopy& lhs, const WatchStateCopy& rhs) {
+                      return lhs.deadline < rhs.deadline;
+                    });
 }
 
 void HangWatcher::WatchStateSnapShot::Clear() {
@@ -884,7 +884,8 @@ std::string HangWatcher::WatchStateSnapShot::PrepareHungThreadListCrashKey()
 
   // Add as many thread ids to the crash key as possible.
   for (const WatchStateCopy& copy : hung_watch_state_copies_) {
-    std::string fragment = base::NumberToString(copy.thread_id) + kSeparator;
+    std::string fragment =
+        base::NumberToString(copy.thread_id.raw()) + kSeparator;
     if (list_of_hung_thread_ids.size() + fragment.size() <
         static_cast<std::size_t>(debug::CrashKeySize::Size256)) {
       list_of_hung_thread_ids += fragment;
@@ -1041,7 +1042,7 @@ void HangWatcher::BlockIfCaptureInProgress() {
 void HangWatcher::UnregisterThread() {
   AutoLock auto_lock(watch_state_lock_);
 
-  auto it = ranges::find(
+  auto it = std::ranges::find(
       watch_states_,
       internal::HangWatchState::GetHangWatchStateForCurrentThread(),
       &std::unique_ptr<internal::HangWatchState>::get);
@@ -1223,9 +1224,6 @@ uint64_t HangWatchDeadline::SwitchBitsForTesting() {
 
 HangWatchState::HangWatchState(HangWatcher::ThreadType thread_type)
     : resetter_(&hang_watch_state, this, nullptr), thread_type_(thread_type) {
-#if BUILDFLAG(IS_MAC)
-  pthread_threadid_np(pthread_self(), &system_wide_thread_id_);
-#endif
   thread_id_ = PlatformThread::CurrentId();
 }
 
@@ -1327,15 +1325,6 @@ HangWatchState* HangWatchState::GetHangWatchStateForCurrentThread() {
 
 PlatformThreadId HangWatchState::GetThreadID() const {
   return thread_id_;
-}
-
-uint64_t HangWatchState::GetSystemWideThreadID() const {
-#if BUILDFLAG(IS_MAC)
-  return system_wide_thread_id_;
-#else
-  CHECK(thread_id_ > 0);
-  return static_cast<uint64_t>(thread_id_);
-#endif
 }
 
 }  // namespace internal

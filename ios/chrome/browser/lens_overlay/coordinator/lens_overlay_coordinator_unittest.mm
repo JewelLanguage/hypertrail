@@ -14,7 +14,7 @@
 #import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_controller.h"
 #import "ios/chrome/browser/lens_overlay/model/lens_overlay_tab_helper.h"
 #import "ios/chrome/browser/lens_overlay/ui/lens_overlay_consent_view_controller.h"
-#import "ios/chrome/browser/omnibox/model/omnibox_position_browser_agent.h"
+#import "ios/chrome/browser/omnibox/model/omnibox_position/omnibox_position_browser_agent.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
@@ -23,6 +23,7 @@
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_manager_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
+#import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/lens_commands.h"
 #import "ios/chrome/browser/shared/public/commands/lens_overlay_commands.h"
@@ -119,6 +120,13 @@ class LensOverlayCoordinatorTest : public PlatformTest {
         startDispatchingToTarget:load_query_handler_
                      forProtocol:@protocol(LoadQueryCommands)];
 
+    browser_coordinator_commands_handler_ =
+        OCMProtocolMock(@protocol(BrowserCoordinatorCommands));
+
+    [browser_->GetCommandDispatcher()
+        startDispatchingToTarget:browser_coordinator_commands_handler_
+                     forProtocol:@protocol(BrowserCoordinatorCommands)];
+
     // Tab helper
     web_state_ = std::make_unique<web::FakeWebState>();
     LensOverlayTabHelper::CreateForWebState(web_state_.get());
@@ -149,8 +157,8 @@ class LensOverlayCoordinatorTest : public PlatformTest {
         FakeSystemIdentityManager::FromSystemIdentityManager(
             GetApplicationContext()->GetSystemIdentityManager());
     fake_system_identity_manager->AddIdentity(identity);
-    authentication_service->SignIn(
-        identity, signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+    authentication_service->SignIn(identity,
+                                   signin_metrics::AccessPoint::kUnknown);
 
     // Wait for the base view controller to be presented.
     base_view_controller_.modalPresentationStyle =
@@ -203,6 +211,7 @@ class LensOverlayCoordinatorTest : public PlatformTest {
   id<ApplicationCommands> application_handler_;
   id<LoadQueryCommands> load_query_handler_;
   id<LensCommands> lens_commands_handler_;
+  id<BrowserCoordinatorCommands> browser_coordinator_commands_handler_;
   variations::ScopedVariationsIdsProvider scoped_variations_ids_provider_{
       variations::VariationsIdsProvider::Mode::kUseSignedInState};
 
@@ -494,8 +503,9 @@ TEST_F(LensOverlayCoordinatorTest, TimingMetricsRecorded) {
   run_loop_.Run();
 
   // Destroy Lens UI.
-  [lens_overlay_handler destroyLensUI:NO
-                               reason:lens::LensOverlayDismissalSource::kOverlayCloseButton];
+  [lens_overlay_handler
+      destroyLensUI:NO
+             reason:lens::LensOverlayDismissalSource::kOverlayCloseButton];
 
   histogram_tester.ExpectTotalCount("Lens.Overlay.SessionDuration",
                                     /*expected_count=*/1);

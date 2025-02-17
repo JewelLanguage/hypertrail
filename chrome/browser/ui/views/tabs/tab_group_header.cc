@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/views/tabs/tab_group_header.h"
 
 #include <memory>
+#include <string_view>
 #include <utility>
 
 #include "base/feature_list.h"
@@ -157,6 +158,7 @@ void TabGroupHeader::Init(const tab_groups::TabGroupId& group) {
   title_text_changed_subscription_ =
       title_->AddTextChangedCallback(base::BindRepeating(
           &TabGroupHeader::UpdateTooltipText, base::Unretained(this)));
+
   UpdateTooltipText();
 }
 
@@ -166,7 +168,7 @@ bool TabGroupHeader::OnKeyPressed(const ui::KeyEvent& event) {
       !editor_bubble_tracker_.is_open()) {
     tab_slot_controller_->ToggleTabGroupCollapsedState(
         group().value(), ToggleTabGroupCollapsedStateOrigin::kKeyboard);
-    NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
+    NotifyAccessibilityEventDeprecated(ax::mojom::Event::kSelection, true);
     return true;
   }
 
@@ -279,13 +281,27 @@ void TabGroupHeader::OnFocus() {
       nullptr, TabSlotController::HoverCardUpdateType::kFocus);
 }
 
+void TabGroupHeader::OnGroupContentsChanged() {
+  UpdateAccessibleName();
+  UpdateTooltipText();
+}
+
 void TabGroupHeader::UpdateTooltipText() {
+  if (!group().has_value()) {
+    return;
+  }
+
+  TabGroup* tab_group = tab_slot_controller_->GetTabGroup(group().value());
+  if (!tab_group || tab_group->IsEmpty() || tab_group->ListTabs().is_empty()) {
+    return;
+  }
+
   if (!title_->GetText().empty()) {
-    SetCachedTooltipText(l10n_util::GetStringFUTF16(
-        IDS_TAB_GROUPS_NAMED_GROUP_TOOLTIP, title_->GetText(),
+    SetTooltipText(l10n_util::GetStringFUTF16(
+        IDS_TAB_GROUPS_NAMED_GROUP_TOOLTIP, std::u16string(title_->GetText()),
         tab_slot_controller_->GetGroupContentString(group().value())));
   } else {
-    SetCachedTooltipText(l10n_util::GetStringFUTF16(
+    SetTooltipText(l10n_util::GetStringFUTF16(
         IDS_TAB_GROUPS_UNNAMED_GROUP_TOOLTIP,
         tab_slot_controller_->GetGroupContentString(group().value())));
   }
@@ -428,7 +444,7 @@ void TabGroupHeader::UpdateAccessibleName() {
     return;
   }
 
-  std::u16string title = tab_slot_controller_->GetGroupTitle(group().value());
+  std::u16string title(tab_slot_controller_->GetGroupTitle(group().value()));
   std::u16string contents =
       tab_slot_controller_->GetGroupContentString(group().value());
   std::u16string collapsed_state = std::u16string();
@@ -539,6 +555,11 @@ void TabGroupHeader::UpdateAttentionIndicatorView() {
         group_style_->GetAttentionIndicatorWidth(
             should_show_attention_indicator)));
   }
+}
+
+std::u16string_view TabGroupHeader::GetTitleTextForTesting() const {
+  CHECK(title_);
+  return title_->GetText();
 }
 
 void TabGroupHeader::CreateHeaderWithoutTitle() {
@@ -691,6 +712,7 @@ TabGroupHeader::EditorBubbleTracker::~EditorBubbleTracker() {
   if (is_open_ && widget_) {
     widget_->RemoveObserver(this);
     widget_->Close();
+    tab_slot_controller_->NotifyTabstripBubbleClosed();
   }
   CHECK(!IsInObserverList());
 }

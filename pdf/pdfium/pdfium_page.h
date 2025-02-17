@@ -32,10 +32,6 @@
 #include "ui/gfx/geometry/size.h"
 #endif
 
-#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
-#include "base/containers/span.h"
-#endif
-
 namespace gfx {
 class Point;
 class RectF;
@@ -85,7 +81,10 @@ class PDFiumPage {
   // Resets loaded text and loads it again.
   void ReloadTextPage();
 
-  // See definition of PDFiumEngine::GetTextRunInfo().
+  // Given a start char index, find the longest continuous run of text that's
+  // in a single direction and with the same text style. Return a filled out
+  // AccessibilityTextRunInfo on success or std::nullopt on failure. e.g. When
+  // `start_char_index` is out of bounds.
   std::optional<AccessibilityTextRunInfo> GetTextRunInfo(int start_char_index);
 
   // Get a unicode character from the page.
@@ -125,11 +124,12 @@ class PDFiumPage {
   SkBitmap GetImageForOcr(int page_object_index);
 
   // Called to inform PDFiumPage that OCR operations performed on this page
-  // added `text_objects` into the page.
-  // May be called several times if the page has more than one image.
-  void OnSearchifyGotOcrResult(base::span<FPDF_PAGEOBJECT> text_objects);
+  // added text into the page or not.
+  // May only be called once per PDFiumPage instance.
+  void OnSearchifyGotOcrResult(bool added_text);
 
-  // Returns if searchify has run on the page.
+  // Returns if Searchify has run on the page, regardless of whether it added
+  // any text to the page or not.
   bool IsPageSearchified() const;
 #endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
 
@@ -464,13 +464,10 @@ class PDFiumPage {
   void GenerateAndSendThumbnail(float device_pixel_ratio,
                                 SendThumbnailCallback send_callback);
 
-  // Helper that just create a `Thumbnail` for a given `device_pixel_ratio`
-  // using this page's size.
-  Thumbnail GetThumbnail(float device_pixel_ratio);
-
-#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
-  bool IsCharacterAddedBySearchify(int char_index);
-#endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+  // Creates a `Thumbnail` for a given `device_pixel_ratio` using this page's
+  // size. The caller is responsible for rendering the page content into the
+  // thumbnail.
+  Thumbnail CreateThumbnail(float device_pixel_ratio);
 
   raw_ptr<PDFiumEngine> engine_;
   ScopedFPDFPage page_;
@@ -496,13 +493,9 @@ class PDFiumPage {
   bool available_ = false;
 
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
-  // Indicates whether this page received any Searchify results. Note that it is
-  // possible to receive Searchify results, but the results list is empty.
-  bool got_searchify_results_ = false;
-
-  // The set of text objects added by running Searchify on this page.
-  // Used to help identify if text objects are created by Searchify or not.
-  std::set<FPDF_PAGEOBJECT> searchify_added_text_;
+  // Indicates whether Searchify added text to this page or not. Note that if
+  // this page has never been Searchified, then this is null.
+  std::optional<bool> has_searchify_added_text_;
 #endif
 };
 

@@ -62,6 +62,8 @@
 #include "components/search_engines/template_url_service.h"
 #include "components/variations/variations_associated_data.h"
 #include "components/version_info/version_info.h"
+#include "components/webui/chrome_urls/features.h"
+#include "components/webui/chrome_urls/pref_names.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
 #include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/navigation_controller.h"
@@ -140,6 +142,7 @@
 #include "chrome/common/webui_url_constants.h"
 #include "chromeos/ash/components/browser_context_helper/browser_context_types.h"
 #include "chromeos/components/kiosk/kiosk_test_utils.h"
+#include "chromeos/components/kiosk/kiosk_utils.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "content/public/test/scoped_web_ui_controller_factory_registration.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
@@ -354,13 +357,26 @@ TEST_F(ChromeContentBrowserClientWindowTest, AutomaticBeaconCredentials) {
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_CHROMEOS)
-TEST_F(ChromeContentBrowserClientWindowTest,
-       BackForwardCacheIsDisallowedForCacheControlNoStorePageWhenInKioskMode) {
-  // Enter Kiosk session.
-  user_manager::ScopedUserManager user_manager(
-      std::make_unique<user_manager::FakeUserManager>());
-  chromeos::SetUpFakeKioskSession();
 
+class ChromeContentBrowserClientWindowKioskTest
+    : public ChromeContentBrowserClientWindowTest {
+ public:
+  void SetUp() override {
+    ChromeContentBrowserClientWindowTest::SetUp();
+    ASSERT_TRUE(chromeos::IsKioskSession());
+  }
+
+  std::optional<std::string> GetDefaultProfileName() override {
+    return "test@kiosk-apps.device-local.localhost";
+  }
+
+  void LogIn(std::string_view email, const GaiaId& gaia_id) override {
+    chromeos::SetUpFakeKioskSession(email);
+  }
+};
+
+TEST_F(ChromeContentBrowserClientWindowKioskTest,
+       BackForwardCacheIsDisallowedForCacheControlNoStorePageWhenInKioskMode) {
   ChromeContentBrowserClient client;
   ASSERT_FALSE(client.ShouldAllowBackForwardCacheForCacheControlNoStorePage(
       browser()->profile()));
@@ -690,10 +706,10 @@ TEST_F(ChromeContentBrowserClientTest, HandleWebUIReverse) {
 }
 
 #if BUILDFLAG(ENABLE_VIDEO_EFFECTS)
-TEST_F(ChromeContentBrowserClientTest, BindVideoEffectsManager) {
+TEST_F(ChromeContentBrowserClientTest, BindReadonlyVideoEffectsManager) {
   TestChromeContentBrowserClient test_content_browser_client;
-  mojo::Remote<media::mojom::VideoEffectsManager> video_effects_manager;
-  test_content_browser_client.BindVideoEffectsManager(
+  mojo::Remote<media::mojom::ReadonlyVideoEffectsManager> video_effects_manager;
+  test_content_browser_client.BindReadonlyVideoEffectsManager(
       "test_device_id", &profile_,
       video_effects_manager.BindNewPipeAndPassReceiver());
 
@@ -1740,7 +1756,7 @@ class ChromeContentBrowserClientOverrideForInternalWebUITest
       public testing::WithParamInterface<bool> {
  protected:
   ChromeContentBrowserClientOverrideForInternalWebUITest() {
-    testing_local_state_.Get()->SetBoolean(prefs::kInternalOnlyUisEnabled,
+    testing_local_state_.Get()->SetBoolean(chrome_urls::kInternalOnlyUisEnabled,
                                            GetParam());
   }
 
@@ -1756,7 +1772,7 @@ class ChromeContentBrowserClientOverrideForInternalWebUITest
 
 TEST_P(ChromeContentBrowserClientOverrideForInternalWebUITest, FeatureOff) {
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(features::kInternalOnlyUisPref);
+  scoped_feature_list.InitAndDisableFeature(chrome_urls::kInternalOnlyUisPref);
 
   // When the feature flag is off, OverrideForInternalWebUI should return
   // null regardless of the state of the pref.
@@ -1773,7 +1789,7 @@ TEST_P(ChromeContentBrowserClientOverrideForInternalWebUITest, FeatureOff) {
 
 TEST_P(ChromeContentBrowserClientOverrideForInternalWebUITest, FeatureOn) {
   base::test::ScopedFeatureList scoped_feature_list(
-      features::kInternalOnlyUisPref);
+      chrome_urls::kInternalOnlyUisPref);
 
   // When the feature flag is on, OverrideForInternalWebUI should return
   // non-null if kInternalOnlyUisEnabled pref is turned off, and null

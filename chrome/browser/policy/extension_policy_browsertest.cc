@@ -20,7 +20,6 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/background/background_contents_service.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/chrome_content_verifier_delegate.h"
@@ -95,7 +94,7 @@
 #include "base/win/win_util.h"
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/constants/web_app_id_constants.h"
@@ -367,7 +366,7 @@ class ExtensionPolicyTest : public ExtensionPolicyTestBase {
 
 }  // namespace
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 // Check that component extension can't be blocklisted.
 IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
                        ExtensionInstallBlocklistComponentApps) {
@@ -390,7 +389,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
   ASSERT_TRUE(
       registry->enabled_extensions().GetByID(extensions::kWebStoreAppId));
 }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
                        ExtensionInstallBlocklistSelective) {
@@ -852,11 +851,11 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
       extension_cache()->GetExtension(kGoodCrxId, "", nullptr, nullptr));
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 // Verifies that if the cache entry contains inconsistent extension version,
 // the crx installation fails and download of a new crx file is attempted.
 //
-// TODO(crbug.com/40236711): Fix this test. It doesn't alway pass.
+// TODO(crbug.com/40236711): Fix this test. It doesn't always pass.
 IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
                        DISABLED_CrxVersionInconsistencyInCache) {
   base::ScopedAllowBlockingForTesting allow_io;
@@ -944,7 +943,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
   EXPECT_EQ(version, kGoodCrxVersion);
   EXPECT_NE(file_path, filename);
 }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 // Verifies that extensions that are force-installed by policies are
 // installed and can't be uninstalled.
@@ -2045,8 +2044,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest, ExtensionMinimumVersionRequired) {
   EXPECT_TRUE(update_extension_count.IsOne());
 
   EXPECT_TRUE(registry->disabled_extensions().Contains(kGoodCrxId));
-  EXPECT_EQ(extensions::disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY,
-            extension_prefs->GetDisableReasons(kGoodCrxId));
+  EXPECT_THAT(
+      extension_prefs->GetDisableReasons(kGoodCrxId),
+      testing::UnorderedElementsAre(
+          extensions::disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY));
 
   // Provide a new version (1.0.0.1) which is expected to be auto updated to
   // via the update URL in the manifest of the older version.
@@ -2098,8 +2099,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
   // Install the 1.0.0.0 version, it should be installed but disabled.
   EXPECT_TRUE(InstallExtension(kGoodV1CrxName));
   EXPECT_TRUE(registry->disabled_extensions().Contains(kGoodCrxId));
-  EXPECT_EQ(extensions::disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY,
-            extension_prefs->GetDisableReasons(kGoodCrxId));
+  EXPECT_THAT(
+      extension_prefs->GetDisableReasons(kGoodCrxId),
+      testing::UnorderedElementsAre(
+          extensions::disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY));
   EXPECT_EQ("1.0.0.0",
             registry->GetInstalledExtension(kGoodCrxId)->version().GetString());
 
@@ -2122,8 +2125,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
   EXPECT_EQ(kGoodCrxVersion,
             registry->GetInstalledExtension(kGoodCrxId)->version().GetString());
   EXPECT_TRUE(registry->disabled_extensions().Contains(kGoodCrxId));
-  EXPECT_EQ(extensions::disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY,
-            extension_prefs->GetDisableReasons(kGoodCrxId));
+  EXPECT_THAT(
+      extension_prefs->GetDisableReasons(kGoodCrxId),
+      testing::UnorderedElementsAre(
+          extensions::disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY));
 
   // Remove the minimum version requirement. The extension should be re-enabled.
   {
@@ -2180,8 +2185,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(registry->enabled_extensions().Contains(kGoodCrxId));
   EXPECT_TRUE(registry->disabled_extensions().Contains(kGoodCrxId));
-  EXPECT_EQ(extensions::disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY,
-            extension_prefs->GetDisableReasons(kGoodCrxId));
+  EXPECT_THAT(
+      extension_prefs->GetDisableReasons(kGoodCrxId),
+      testing::UnorderedElementsAre(
+          extensions::disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY));
 }
 
 // Verifies that policy host block/allow settings are applied even when
@@ -2264,14 +2271,9 @@ IN_PROC_BROWSER_TEST_F(WebAppInstallForceListPolicyTest, StartUpInstallation) {
       web_app::WebAppProvider::GetForTest(browser()->profile())
           ->registrar_unsafe();
   web_app::WebAppTestInstallObserver install_observer(browser()->profile());
-  // TODO(crbug.com/340952100): Evaluate call sites of FindBestAppWithUrlInScope
-  // for correctness.
   std::optional<webapps::AppId> app_id = registrar.FindBestAppWithUrlInScope(
       policy_app_url_,
-      {
-          web_app::proto::InstallState::INSTALLED_WITH_OS_INTEGRATION,
-          web_app::proto::InstallState::INSTALLED_WITHOUT_OS_INTEGRATION,
-      });
+      web_app::WebAppFilter::InstalledInOperatingSystemForTesting());
   if (!app_id) {
     app_id = install_observer.BeginListeningAndWait();
   }
@@ -2303,14 +2305,9 @@ IN_PROC_BROWSER_TEST_F(
       web_app::WebAppProvider::GetForTest(browser()->profile())
           ->registrar_unsafe();
   web_app::WebAppTestInstallObserver install_observer(browser()->profile());
-  // TODO(crbug.com/340952100): Evaluate call sites of FindBestAppWithUrlInScope
-  // for correctness.
   std::optional<webapps::AppId> app_id = registrar.FindBestAppWithUrlInScope(
       policy_app_url_,
-      {
-          web_app::proto::InstallState::INSTALLED_WITH_OS_INTEGRATION,
-          web_app::proto::InstallState::INSTALLED_WITHOUT_OS_INTEGRATION,
-      });
+      web_app::WebAppFilter::InstalledInOperatingSystemForTesting());
   if (!app_id) {
     app_id = install_observer.BeginListeningAndWait();
   }
@@ -2342,14 +2339,9 @@ IN_PROC_BROWSER_TEST_F(WebAppInstallForceListPolicySAATest,
       web_app::WebAppProvider::GetForTest(browser()->profile())
           ->registrar_unsafe();
   web_app::WebAppTestInstallObserver install_observer(browser()->profile());
-  // TODO(crbug.com/340952100): Evaluate call sites of FindBestAppWithUrlInScope
-  // for correctness.
   std::optional<webapps::AppId> app_id = registrar.FindBestAppWithUrlInScope(
       policy_app_url_,
-      {
-          web_app::proto::InstallState::INSTALLED_WITH_OS_INTEGRATION,
-          web_app::proto::InstallState::INSTALLED_WITHOUT_OS_INTEGRATION,
-      });
+      web_app::WebAppFilter::InstalledInOperatingSystemForTesting());
   if (!app_id) {
     app_id = install_observer.BeginListeningAndWait();
   }
@@ -2378,14 +2370,9 @@ IN_PROC_BROWSER_TEST_F(WebAppInstallForceListPolicyWithAppFallbackNameSAATest,
       web_app::WebAppProvider::GetForTest(browser()->profile())
           ->registrar_unsafe();
   web_app::WebAppTestInstallObserver install_observer(browser()->profile());
-  // TODO(crbug.com/340952100): Evaluate call sites of FindBestAppWithUrlInScope
-  // for correctness.
   std::optional<webapps::AppId> app_id = registrar.FindBestAppWithUrlInScope(
       policy_app_url_,
-      {
-          web_app::proto::InstallState::INSTALLED_WITH_OS_INTEGRATION,
-          web_app::proto::InstallState::INSTALLED_WITHOUT_OS_INTEGRATION,
-      });
+      web_app::WebAppFilter::InstalledInOperatingSystemForTesting());
   if (!app_id) {
     app_id = install_observer.BeginListeningAndWait();
   }
@@ -2419,14 +2406,9 @@ IN_PROC_BROWSER_TEST_F(
           ->registrar_unsafe();
   web_app::WebAppTestInstallWithOsHooksObserver install_observer(
       browser()->profile());
-  // TODO(crbug.com/340952100): Evaluate call sites of FindBestAppWithUrlInScope
-  // for correctness.
   std::optional<webapps::AppId> app_id = registrar.FindBestAppWithUrlInScope(
       policy_app_url_,
-      {
-          web_app::proto::InstallState::INSTALLED_WITH_OS_INTEGRATION,
-          web_app::proto::InstallState::INSTALLED_WITHOUT_OS_INTEGRATION,
-      });
+      web_app::WebAppFilter::InstalledInOperatingSystemForTesting());
   if (!app_id) {
     app_id = install_observer.BeginListeningAndWait();
   }
@@ -2448,7 +2430,7 @@ class ExtensionPolicyTest2Contexts : public PolicyTest {
 
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     command_line->AppendSwitch(
         ash::switches::kIgnoreUserProfileMappingForTests);
 #endif

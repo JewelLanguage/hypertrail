@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <iterator>
 #include <memory>
 #include <ostream>
@@ -36,7 +37,6 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/notreached.h"
 #include "base/one_shot_event.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -124,14 +124,13 @@
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/webui/projector_app/public/cpp/projector_app_constants.h"  // nogncheck
 #include "ash/webui/system_apps/public/system_web_app_type.h"
-#include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/ash/guest_os/guest_os_terminal.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_data.h"
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_delegate.h"
 #include "chrome/browser/chromeos/arc/arc_web_contents_data.h"  // nogncheck
 #include "chromeos/ash/components/file_manager/app_id.h"
+#include "chromeos/ash/experiences/system_web_apps/types/system_web_app_data.h"
+#include "chromeos/ash/experiences/system_web_apps/types/system_web_app_delegate.h"
 #include "components/app_restore/app_launch_info.h"
 #include "components/app_restore/full_restore_save_handler.h"
 #include "components/app_restore/full_restore_utils.h"
@@ -437,7 +436,7 @@ apps::IntentFilters CreateShareIntentFiltersFromShareTarget(
     for (const auto& file_type : files_entry.accept) {
       // Skip any file_type that is not a MIME type.
       if (file_type.empty() || file_type[0] == '.' ||
-          base::ranges::count(file_type, '/') != 1) {
+          std::ranges::count(file_type, '/') != 1) {
         continue;
       }
 
@@ -1730,8 +1729,8 @@ std::vector<std::string> WebAppPublisherHelper::GetPolicyIds(
   for (const auto& [source, external_config] :
        web_app.management_to_external_config_map()) {
     if (!external_config.additional_policy_ids.empty()) {
-      base::ranges::copy(external_config.additional_policy_ids,
-                         std::back_inserter(policy_ids));
+      std::ranges::copy(external_config.additional_policy_ids,
+                        std::back_inserter(policy_ids));
     }
   }
 
@@ -1837,13 +1836,8 @@ void WebAppPublisherHelper::MaybeAddWebPageNotifications(
                           ? non_persistent_metadata->document_url
                           : notification.origin_url();
 
-    // TODO(crbug.com/379916273): Evaluate call sites of
-    // FindBestAppWithUrlInScope for correctness.
     auto app_ids = registrar().FindAllAppsNestedInUrl(
-        url, {
-                 proto::InstallState::INSTALLED_WITH_OS_INTEGRATION,
-                 proto::InstallState::INSTALLED_WITHOUT_OS_INTEGRATION,
-             });
+        url, web_app::WebAppFilter::SupportsOsNotifications());
     for (const auto& app_id : app_ids) {
       MaybeAddNotification(app_id, notification.id());
     }

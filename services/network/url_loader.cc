@@ -28,7 +28,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/not_fatal_until.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "base/sequence_checker.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
@@ -333,20 +332,20 @@ bool ShouldNotifyAboutCookie(net::CookieInclusionStatus status) {
   // Filter out tentative secure source scheme warnings. They're used for netlog
   // debugging and not something we want to inform cookie observers about.
   status.RemoveWarningReason(
-      net::CookieInclusionStatus::
+      net::CookieInclusionStatus::WarningReason::
           WARN_TENTATIVELY_ALLOWING_SECURE_SOURCE_SCHEME);
 
   return status.IsInclude() || status.ShouldWarn() ||
-         status.HasExclusionReason(
-             net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES) ||
-         status.HasExclusionReason(
-             net::CookieInclusionStatus::EXCLUDE_THIRD_PARTY_PHASEOUT) ||
-         status.HasExclusionReason(
-             net::CookieInclusionStatus::EXCLUDE_DOMAIN_NON_ASCII) ||
-         status.HasExclusionReason(
-             net::CookieInclusionStatus::EXCLUDE_PORT_MISMATCH) ||
-         status.HasExclusionReason(
-             net::CookieInclusionStatus::EXCLUDE_SCHEME_MISMATCH);
+         status.HasExclusionReason(net::CookieInclusionStatus::ExclusionReason::
+                                       EXCLUDE_USER_PREFERENCES) ||
+         status.HasExclusionReason(net::CookieInclusionStatus::ExclusionReason::
+                                       EXCLUDE_THIRD_PARTY_PHASEOUT) ||
+         status.HasExclusionReason(net::CookieInclusionStatus::ExclusionReason::
+                                       EXCLUDE_DOMAIN_NON_ASCII) ||
+         status.HasExclusionReason(net::CookieInclusionStatus::ExclusionReason::
+                                       EXCLUDE_PORT_MISMATCH) ||
+         status.HasExclusionReason(net::CookieInclusionStatus::ExclusionReason::
+                                       EXCLUDE_SCHEME_MISMATCH);
 }
 
 // Parses AcceptCHFrame and removes client hints already in the headers.
@@ -1497,30 +1496,6 @@ void URLLoader::SetPriority(net::RequestPriority priority,
   }
 }
 
-void URLLoader::PauseReadingBodyFromNet() {
-  DVLOG(1) << "URLLoader pauses fetching response body for "
-           << (url_request_ ? url_request_->original_url().spec()
-                            : "a URL that has completed loading or failed.");
-
-  // Please note that we pause reading body in all cases. Even if the URL
-  // request indicates that the response was cached, there could still be
-  // network activity involved. For example, the response was only partially
-  // cached.
-  should_pause_reading_body_ = true;
-}
-
-void URLLoader::ResumeReadingBodyFromNet() {
-  DVLOG(1) << "URLLoader resumes fetching response body for "
-           << (url_request_ ? url_request_->original_url().spec()
-                            : "a URL that has completed loading or failed.");
-  should_pause_reading_body_ = false;
-
-  if (paused_reading_body_) {
-    paused_reading_body_ = false;
-    ReadMore();
-  }
-}
-
 PrivateNetworkAccessCheckResult URLLoader::PrivateNetworkAccessCheck(
     const net::TransportInfo& transport_info) {
   PrivateNetworkAccessCheckResult result =
@@ -1528,6 +1503,10 @@ PrivateNetworkAccessCheckResult URLLoader::PrivateNetworkAccessCheck(
 
   mojom::IPAddressSpace response_address_space =
       *private_network_access_checker_.ResponseAddressSpace();
+  mojom::IPAddressSpace client_address_space =
+      private_network_access_checker_.ClientAddressSpace();
+  mojom::IPAddressSpace target_address_space =
+      private_network_access_checker_.TargetAddressSpace();
 
   url_request_->net_log().AddEvent(
       net::NetLogEventType::PRIVATE_NETWORK_ACCESS_CHECK, [&] {
@@ -1540,6 +1519,15 @@ PrivateNetworkAccessCheckResult URLLoader::PrivateNetworkAccessCheck(
             .Set("result",
                  PrivateNetworkAccessCheckResultToStringPiece(result));
       });
+
+  if (url_loader_network_observer_) {
+    if (response_address_space == mojom::IPAddressSpace::kLocal ||
+        response_address_space == mojom::IPAddressSpace::kPrivate) {
+      url_loader_network_observer_->OnUrlLoaderConnectedToPrivateNetwork(
+          url_request_->url(), response_address_space, client_address_space,
+          target_address_space);
+    }
+  }
 
   bool is_warning = false;
   switch (result) {
@@ -1695,8 +1683,8 @@ mojom::URLResponseHeadPtr URLLoader::BuildResponseHead() const {
   response->has_range_requested =
       url_request_->extra_request_headers().HasHeader(
           net::HttpRequestHeaders::kRange);
-  base::ranges::copy(url_request_->response_info().dns_aliases,
-                     std::back_inserter(response->dns_aliases));
+  std::ranges::copy(url_request_->response_info().dns_aliases,
+                    std::back_inserter(response->dns_aliases));
   // [spec]: https://fetch.spec.whatwg.org/#http-network-or-cache-fetch
   // 13. Set response’s request-includes-credentials to includeCredentials.
   response->request_include_credentials = url_request_->allow_credentials();
@@ -2185,8 +2173,10 @@ void URLLoader::ContinueOnResponseStartedImmediately() {
   //
   // https://wicg.github.io/signature-based-sri/
   if (std::optional<mojom::BlockedByResponseReason> blocked_reason =
-          MaybeBlockResponseForSRIMessageSignature(url_request_->url(),
-                                                   *response_)) {
+          MaybeBlockResponseForSRIMessageSignature(
+              url_request_->url(), *response_,
+              /*checks_forced_by_initiator=*/!expected_signatures_.empty(),
+              devtools_observer_, devtools_request_id().value_or(""))) {
     CompleteBlockedResponse(net::ERR_BLOCKED_BY_RESPONSE, false,
                             blocked_reason);
     // Close the socket associated with the request, to prevent leaking
@@ -2256,11 +2246,6 @@ void URLLoader::ReadMore() {
   // Once the MIME type is sniffed, all data is sent as soon as it is read from
   // the network.
   DCHECK(consumer_handle_.is_valid() || !pending_write_);
-
-  if (should_pause_reading_body_) {
-    paused_reading_body_ = true;
-    return;
-  }
 
   // TODO(ricea): Refactor this method and DidRead() to reduce duplication.
   if (options_ & mojom::kURLLoadOptionReadAndDiscardBody) {

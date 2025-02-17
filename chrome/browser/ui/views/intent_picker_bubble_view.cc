@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/intent_picker_bubble_view.h"
 
+#include <algorithm>
 #include <string_view>
 #include <utility>
 
@@ -13,11 +14,8 @@
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
-#include "chrome/browser/apps/link_capturing/link_capturing_features.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/sharing/click_to_call/click_to_call_ui_controller.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
@@ -25,6 +23,7 @@
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/controls/hover_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+#include "chrome/browser/web_applications/link_capturing_features.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
@@ -178,7 +177,7 @@ class IntentPickerAppGridButton : public views::Button {
     }
 
     Views siblings = parent()->children();
-    auto it = base::ranges::find_if(siblings, [](views::View* v) {
+    auto it = std::ranges::find_if(siblings, [](views::View* v) {
       return views::AsViewClass<IntentPickerAppGridButton>(v)->selected_;
     });
 
@@ -225,7 +224,7 @@ class IntentPickerAppGridButton : public views::Button {
   // Updates the accessible name of the bubble in the ViewsAX cache.
   void UpdateAccessibleName() {
     CHECK(name_label_);
-    GetViewAccessibility().SetName(name_label_->GetText());
+    GetViewAccessibility().SetName(std::u16string(name_label_->GetText()));
   }
 
   bool selected_ = false;

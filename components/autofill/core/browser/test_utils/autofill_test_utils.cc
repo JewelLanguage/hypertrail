@@ -4,6 +4,7 @@
 
 #include "components/autofill/core/browser/test_utils/autofill_test_utils.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <iterator>
 #include <string>
@@ -11,7 +12,6 @@
 #include "base/functional/overloaded.h"
 #include "base/memory/raw_ptr.h"
 #include "base/rand_util.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -773,6 +773,24 @@ void SetProfileInfo(AutofillProfile* profile,
   }
 }
 
+void SetProfileInfo(AutofillProfile* profile,
+                    const char* first_name,
+                    const char* middle_name,
+                    const char* last_name,
+                    const char* country,
+                    bool finalize,
+                    VerificationStatus status) {
+  // Set the country first to ensure that the proper address model is used.
+  check_and_set(profile, ADDRESS_HOME_COUNTRY, country, status);
+  check_and_set(profile, NAME_FIRST, first_name, status);
+  check_and_set(profile, NAME_MIDDLE, middle_name, status);
+  check_and_set(profile, NAME_LAST, last_name, status);
+
+  if (finalize) {
+    profile->FinalizeAfterImport();
+  }
+}
+
 void SetProfileInfoWithGuid(AutofillProfile* profile,
                             const char* guid,
                             const char* first_name,
@@ -856,11 +874,6 @@ EntityInstance GetPassportEntityInstance(PassportEntityOptions options) {
   if (options.issue_date) {
     attributes.emplace_back(AttributeType(kPassportIssueDate),
                             options.issue_date, AttributeInstance::Context{});
-  }
-  if (options.place_of_birth) {
-    attributes.emplace_back(AttributeType(kPassportPlaceOfBirth),
-                            options.place_of_birth,
-                            AttributeInstance::Context{});
   }
   return EntityInstance(
       EntityType(EntityTypeName::kPassport), std::move(attributes),
@@ -1036,7 +1049,7 @@ void AddFieldPredictionsToForm(
     AutofillQueryResponse_FormSuggestion* form_suggestion) {
   std::vector<FieldPrediction> field_predictions;
   field_predictions.reserve(field_types.size());
-  base::ranges::transform(
+  std::ranges::transform(
       field_types, std::back_inserter(field_predictions),
       [](FieldType field_type) { return CreateFieldPrediction(field_type); });
   return AddFieldPredictionsToForm(field_data, field_predictions,
@@ -1156,13 +1169,23 @@ sync_pb::PaymentInstrument CreatePaymentInstrumentWithLinkedBnplIssuer(
   return payment_instrument;
 }
 
-BnplIssuer GetTestBnplIssuer() {
+BnplIssuer GetTestLinkedBnplIssuer() {
   std::vector<BnplIssuer::EligiblePriceRange> eligible_price_ranges;
   // Currency: USD, price lower bound: $50, price upper bound: $200.
   eligible_price_ranges.emplace_back(/*currency=*/"USD",
-                                     /*price_lower_bound=*/50000000,
-                                     /*price_upper_bound=*/200000000);
-  return BnplIssuer(12345, /*issuer_id=*/"test_issuer_id",
+                                     /*price_lower_bound=*/50'000'000,
+                                     /*price_upper_bound=*/200'000'000);
+  return BnplIssuer(12345, /*issuer_id=*/"test_issuer_id1",
+                    std::move(eligible_price_ranges));
+}
+
+BnplIssuer GetTestUnlinkedBnplIssuer() {
+  std::vector<BnplIssuer::EligiblePriceRange> eligible_price_ranges;
+  // Currency: USD, price lower bound: $35, price upper bound: $100.
+  eligible_price_ranges.emplace_back(/*currency=*/"USD",
+                                     /*price_lower_bound=*/35'000'000,
+                                     /*price_upper_bound=*/100'000'000);
+  return BnplIssuer(std::nullopt, /*issuer_id=*/"test_issuer_id2",
                     std::move(eligible_price_ranges));
 }
 
@@ -1171,7 +1194,7 @@ CreatePaymentInstrumentCreationOptionWithBnplIssuer(const std::string& id) {
   sync_pb::PaymentInstrumentCreationOption payment_instrument_creation_option;
   payment_instrument_creation_option.set_id(id);
 
-  sync_pb::BnplIssuerDetails* bnpl_option =
+  sync_pb::BnplCreationOption* bnpl_option =
       payment_instrument_creation_option.mutable_buy_now_pay_later_option();
   bnpl_option->set_issuer_id("issuer_id");
 

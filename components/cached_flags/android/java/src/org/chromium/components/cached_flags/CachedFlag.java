@@ -13,6 +13,8 @@ import org.chromium.base.cached_flags.ValuesReturned;
 import org.chromium.base.shared_preferences.SharedPreferencesManager;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.build.BuildConfig;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.List;
@@ -41,10 +43,11 @@ import java.util.Map;
  * experiment is enabled despite the experimental behavior not yet taking effect. This will be
  * remedied on the next process restart.
  */
+@NullMarked
 public class CachedFlag extends Flag {
     private final boolean mDefaultValue;
-    private String mPreferenceKey;
-    private Supplier<Boolean> mValueSupplier;
+    private @Nullable String mPreferenceKey;
+    private @Nullable Supplier<Boolean> mValueSupplier;
 
     public CachedFlag(FeatureMap featureMap, String featureName, boolean defaultValue) {
         super(featureMap, featureName);
@@ -140,7 +143,16 @@ public class CachedFlag extends Flag {
      */
     void writeCacheValueToEditor(final SharedPreferences.Editor editor) {
         final boolean isEnabledInNative = mFeatureMap.isEnabledInNative(mFeatureName);
-        editor.putBoolean(getSharedPreferenceKey(), isEnabledInNative);
+        writeCacheValueToEditor(editor, isEnabledInNative);
+    }
+
+    /**
+     * Assumes the parameter featureValue is the value of the feature and writes it to the provided
+     * SharedPrefs Editor for caching. Does not apply or commit the change - that is left up to the
+     * caller to perform.
+     */
+    void writeCacheValueToEditor(final SharedPreferences.Editor editor, boolean featureValue) {
+        editor.putBoolean(getSharedPreferenceKey(), featureValue);
     }
 
     String getSharedPreferenceKey() {

@@ -217,18 +217,27 @@ CookieControlsController::Status CookieControlsController::GetStatus(
   }
 
   SettingInfo info;
-  bool is_allowed = cookie_settings_->IsThirdPartyAccessAllowed(url, &info);
+  bool cookies_allowed =
+      cookie_settings_->IsThirdPartyAccessAllowed(url, &info);
   CookieControlsEnforcement enforcement =
       GetEnforcementForThirdPartyCookieBlocking(blocking_status, url, info,
-                                                is_allowed);
+                                                cookies_allowed);
+
+  // If 3PC blocking is the only protection controllable on a site, reflect
+  // that state. If ACT features are controllable, reflect ACT state.
+  bool protections_disabled =
+      ShowActFeatures()
+          ? tracking_protection_settings_->HasTrackingProtectionException(url,
+                                                                          &info)
+          : cookies_allowed;
 
   std::vector<TrackingProtectionFeature> features =
       CreateTrackingProtectionFeatureList(
-          enforcement, is_allowed,
+          enforcement, cookies_allowed,
           tracking_protection_settings_->HasTrackingProtectionException(url));
   return {// Hide controls if the exception is from a metadata grant.
           enforcement != CookieControlsEnforcement::kEnforcedByTpcdGrant,
-          /*protections_on=*/!is_allowed,
+          /*protections_on=*/!protections_disabled,
           enforcement,
           blocking_status,
           info.metadata.expiration(),
@@ -237,6 +246,7 @@ CookieControlsController::Status CookieControlsController::GetStatus(
 
 bool CookieControlsController::ShowActFeatures() {
   return base::FeatureList::IsEnabled(privacy_sandbox::kActUserBypassUx) &&
+         ShouldUpdateTpContentSetting() &&
          (tracking_protection_settings_->IsIpProtectionEnabled() ||
           tracking_protection_settings_->IsFpProtectionEnabled());
 }
@@ -261,21 +271,22 @@ CookieControlsController::CreateTrackingProtectionFeatureList(
 
   std::vector<TrackingProtectionFeature> features = {
       {FeatureType::kThirdPartyCookies, enforcement, status_label}};
-
-  if (tracking_protection_settings_->IsIpProtectionEnabled()) {
-    features.push_back(
-        {FeatureType::kIpProtection, CookieControlsEnforcement::kNoEnforcement,
-         act_exception ? TrackingProtectionBlockingStatus::kVisible
-                       : TrackingProtectionBlockingStatus::kHidden});
+  if (ShowActFeatures()) {
+    if (tracking_protection_settings_->IsIpProtectionEnabled()) {
+      features.push_back({FeatureType::kIpProtection,
+                          CookieControlsEnforcement::kNoEnforcement,
+                          act_exception
+                              ? TrackingProtectionBlockingStatus::kVisible
+                              : TrackingProtectionBlockingStatus::kHidden});
+    }
+    if (tracking_protection_settings_->IsFpProtectionEnabled()) {
+      features.push_back({FeatureType::kFingerprintingProtection,
+                          CookieControlsEnforcement::kNoEnforcement,
+                          act_exception
+                              ? TrackingProtectionBlockingStatus::kAllowed
+                              : TrackingProtectionBlockingStatus::kLimited});
+    }
   }
-  if (tracking_protection_settings_->IsFpProtectionEnabled()) {
-    features.push_back({FeatureType::kFingerprintingProtection,
-                        CookieControlsEnforcement::kNoEnforcement,
-                        act_exception
-                            ? TrackingProtectionBlockingStatus::kAllowed
-                            : TrackingProtectionBlockingStatus::kLimited});
-  }
-
   return features;
 }
 
@@ -346,19 +357,22 @@ void CookieControlsController::OnCookieBlockingEnabledForSite(
   should_reload_ = true;
   if (block_third_party_cookies) {
     base::RecordAction(UserMetricsAction("CookieControls.Bubble.TurnOn"));
-    cookie_settings_->ResetThirdPartyCookieSetting(url);
+    // Update TRACKING_PROTECTION content setting first since the COOKIES
+    // content setting observer updates the UI for both settings.
     if (ShouldUpdateTpContentSetting()) {
       tracking_protection_settings_->RemoveTrackingProtectionException(url);
     }
+    cookie_settings_->ResetThirdPartyCookieSetting(url);
+
     return;
   }
 
   CHECK(!block_third_party_cookies);
   base::RecordAction(UserMetricsAction("CookieControls.Bubble.TurnOff"));
-  cookie_settings_->SetCookieSettingForUserBypass(url);
   if (ShouldUpdateTpContentSetting()) {
     tracking_protection_settings_->AddTrackingProtectionException(url);
   }
+  cookie_settings_->SetCookieSettingForUserBypass(url);
   // Record expiration metadata for the newly created exception, and increased
   // the activation count.
   base::Value::Dict metadata = GetMetadata(settings_map_, url);

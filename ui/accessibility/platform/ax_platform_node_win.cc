@@ -12,6 +12,7 @@
 #include <wrl/client.h>
 #include <wrl/implements.h>
 
+#include <algorithm>
 #include <map>
 #include <set>
 #include <string>
@@ -23,7 +24,6 @@
 #include "base/lazy_instance.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_number_conversions_win.h"
 #include "base/strings/string_util.h"
@@ -333,6 +333,8 @@ AXPlatformNode* AXPlatformNode::FromNativeViewAccessible(
 AXPlatformNodeWin::AXPlatformNodeWin() = default;
 
 AXPlatformNodeWin::~AXPlatformNodeWin() {
+  TRACE_EVENT("accessibility", "~AXPlatformNodeWin",
+              perfetto::TerminatingFlow::FromPointer(this));
   ClearOwnRelations();
 }
 
@@ -498,7 +500,7 @@ SAFEARRAY* AXPlatformNodeWin::CreateUIAElementsArrayForReverseRelation(
       GetDelegate()->GetSourceNodesForReverseRelations(attribute);
 
   std::vector<int32_t> id_list;
-  base::ranges::transform(
+  std::ranges::transform(
       reverse_relations, std::back_inserter(id_list),
       [](AXPlatformNode* platform_node) {
         return static_cast<AXPlatformNodeWin*>(platform_node)->GetData().id;
@@ -597,6 +599,7 @@ gfx::Vector2d AXPlatformNodeWin::CalculateUIAScrollPoint(
 //
 
 void AXPlatformNodeWin::Dispose() {
+  TRACE_EVENT("accessibility", "Dispose", perfetto::Flow::FromPointer(this));
   Release();
 }
 
@@ -7691,10 +7694,12 @@ ULONG AXPlatformNodeWin::InternalAddRef() {
 
 ULONG AXPlatformNodeWin::InternalRelease() {
   // As above, infer that the instance is no longer being used for some COM-ish
-  // purpose when the refcount drops back down to 1 (if it has yet to be
-  // disposed) or 0 (if it has been).
+  // purpose when the refcount drops back down to 1 if it has yet to be
+  // disposed. For cases where the instance was disposed while there were
+  // outstanding references, `OnDereferenced()` will not be called before
+  // destruction.
   const auto ref_count = SequenceAffineComObjectRoot::InternalRelease();
-  if (ref_count == (delegate_ ? 1 : 0)) {
+  if (delegate_ && ref_count == 1) {
     OnDereferenced();
   }
   return ref_count;
@@ -7708,7 +7713,7 @@ void AXPlatformNodeWin::OnReferenced() {
 
 void AXPlatformNodeWin::OnDereferenced() {
   TRACE_EVENT("accessibility", "OnDereferenced",
-              perfetto::TerminatingFlow::FromPointer(this));
+              perfetto::Flow::FromPointer(this));
 }
 
 bool AXPlatformNodeWin::IsPlatformCheckable() const {

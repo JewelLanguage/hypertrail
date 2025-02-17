@@ -17,11 +17,12 @@
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_features.h"
 #include "chrome/browser/buildflags.h"
 #include "chrome/browser/new_tab_page/feature_promo_helper/new_tab_page_feature_promo_helper.h"
+#include "chrome/browser/new_tab_page/modules/file_suggestion/drive_service.h"
 #include "chrome/browser/new_tab_page/modules/file_suggestion/drive_suggestion_handler.h"
+#include "chrome/browser/new_tab_page/modules/file_suggestion/microsoft_files_page_handler.h"
 #include "chrome/browser/new_tab_page/modules/v2/authentication/microsoft_auth_page_handler.h"
 #include "chrome/browser/new_tab_page/modules/v2/calendar/google_calendar_page_handler.h"
 #include "chrome/browser/new_tab_page/modules/v2/calendar/outlook_calendar_page_handler.h"
@@ -336,18 +337,18 @@ content::WebUIDataSource* CreateAndAddNewTabPageUiHtmlSource(Profile* profile) {
        IDS_NTP_MODULES_DRIVE_DISABLE_BUTTON_TEXT},
       {"modulesDriveDisableButtonTextV2",
        IDS_NTP_MODULES_DRIVE_DISABLE_BUTTON_TEXT_V2},
-      {"modulesDriveDismissButtonText",
-       IDS_NTP_MODULES_DRIVE_DISMISS_BUTTON_TEXT},
       {"modulesDriveMoreActionsButtonText",
        IDS_NTP_MODULES_DRIVE_MORE_ACTIONS_BUTTON_TEXT},
       {"modulesDriveSentence", IDS_NTP_MODULES_DRIVE_NAME},
-      {"modulesDriveFilesSentence", IDS_NTP_MODULES_DRIVE_FILES_SENTENCE},
+      {"modulesFilesSentence", IDS_NTP_MODULES_FILES_SENTENCE},
       {"modulesDummyLower", IDS_NTP_MODULES_DUMMY_LOWER},
       {"modulesDriveTitle", IDS_NTP_MODULES_DRIVE_NAME},
       {"modulesDriveTitleV2", IDS_NTP_MODULES_DRIVE_NAME},
       {"modulesDriveInfo", IDS_NTP_MODULES_DRIVE_INFO},
-      {"modulesSharepointInfo", IDS_NTP_MODULES_SHAREPOINT_INFO},
-      {"modulesSharepointName", IDS_NTP_MODULES_SHAREPOINT_NAME},
+      {"modulesMicrosoftFilesInfo", IDS_NTP_MODULES_MICROSOFT_FILES_INFO},
+      {"modulesMicrosoftFilesName", IDS_NTP_MODULES_MICROSOFT_FILES_NAME},
+      {"modulesMicrosoftFilesDisableButtonText",
+       IDS_NTP_MODULES_MICROSOFT_FILES_DISABLE_BUTTON_TEXT},
       {"modulesDummyTitle", IDS_NTP_MODULES_DUMMY_TITLE},
       {"modulesDismissForHoursButtonText",
        IDS_NTP_MODULES_DISMISS_FOR_HOURS_BUTTON_TEXT},
@@ -361,11 +362,14 @@ content::WebUIDataSource* CreateAndAddNewTabPageUiHtmlSource(Profile* profile) {
       {"modulesGoogleCalendarTitle", IDS_NTP_MODULES_GOOGLE_CALENDAR_TITLE},
       {"modulesGoogleCalendarDisableButtonText",
        IDS_NTP_MODULES_GOOGLE_CALENDAR_DISABLE_BUTTON_TEXT},
+      {"modulesMicrosoftSignOutButtonText",
+       IDS_NTP_MODULES_MICROSOFT_SIGN_OUT_BUTTON_TEXT},
       {"modulesOutlookCalendarTitle", IDS_NTP_MODULES_OUTLOOK_CALENDAR_TITLE},
       {"modulesOutlookCalendarDisableButtonText",
        IDS_NTP_MODULES_OUTLOOK_CALENDAR_DISABLE_BUTTON_TEXT},
       {"modulesOutlookCalendarDismissToastMessage",
        IDS_NTP_MODULES_OUTLOOK_CALENDAR_DISMISS_TOAST_MESSAGE},
+      {"modulesOutlookCalendarInfo", IDS_NTP_MODULES_OUTLOOK_CALENDAR_INFO},
       {"modulesCalendarJoinMeetingButtonText",
        IDS_NTP_MODULES_CALENDAR_JOIN_MEETING_BUTTON_TEXT},
       {"modulesCalendarInProgress", IDS_NTP_MODULES_CALENDAR_IN_PROGRESS},
@@ -450,16 +454,14 @@ content::WebUIDataSource* CreateAndAddNewTabPageUiHtmlSource(Profile* profile) {
       "calendarModuleDismissHours",
       base::NumberToString(
           ntp_features::kNtpCalendarModuleWindowEndDeltaParam.Get().InHours()));
+  source->AddString(
+      "fileSuggestionDismissHours",
+      base::NumberToString(DriveService::kDismissDuration.InHours()));
 
-  // TODO(crbug.com/372722777): Add equivalent to IsOutlookCalendarModuleEnabled
-  // call for Sharepoint, once created.
-  source->AddBoolean(
-      "microsoftAuthEnabled",
-      base::FeatureList::IsEnabled(
-          ntp_features::kNtpMicrosoftAuthenticationModule) &&
-          (IsOutlookCalendarModuleEnabled(
-               NewTabPageUI::IsManagedProfile(profile)) ||
-           base::FeatureList::IsEnabled(ntp_features::kNtpSharepointModule)));
+  bool microsoft_module_enabled = IsMicrosoftModuleEnabledForProfile(profile);
+  source->AddBoolean("microsoftModuleEnabled", microsoft_module_enabled);
+  source->AddBoolean("modulesReloadable", microsoft_module_enabled);
+  source->AddBoolean("waitToLoadModules", microsoft_module_enabled);
 
   SearchboxHandler::SetupWebUIDataSource(
       source, profile,
@@ -542,14 +544,14 @@ NewTabPageUI::NewTabPageUI(content::WebUI* web_ui)
 
 // Give OGB 3P Cookie Permissions. Only necessary on non-Ash builds. Granting
 // 3P cookies on Ash causes b/314326552.
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
   WebUIAllowlist::GetOrCreate(profile_)->RegisterAutoGrantedThirdPartyCookies(
       url::Origin::Create(GURL(chrome::kChromeUIUntrustedNewTabPageUrl)),
       {
           ContentSettingsPattern::FromURL(GURL("https://ogs.google.com")),
           ContentSettingsPattern::FromURL(GURL("https://corp.google.com")),
       });
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
   pref_change_registrar_.Init(profile_->GetPrefs());
   pref_change_registrar_.Add(
@@ -706,6 +708,13 @@ void NewTabPageUI::BindInterface(
     mojo::PendingReceiver<ntp::authentication::mojom::MicrosoftAuthPageHandler>
         pending_page_handler) {
   microsoft_auth_handler_ = std::make_unique<MicrosoftAuthPageHandler>(
+      std::move(pending_page_handler), profile_);
+}
+
+void NewTabPageUI::BindInterface(
+    mojo::PendingReceiver<file_suggestion::mojom::MicrosoftFilesPageHandler>
+        pending_page_handler) {
+  microsoft_files_handler_ = std::make_unique<MicrosoftFilesPageHandler>(
       std::move(pending_page_handler), profile_);
 }
 

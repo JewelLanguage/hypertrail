@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/strings/escape.h"
 #include "components/unexportable_keys/unexportable_key_id.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/cookies/canonical_cookie.h"
@@ -15,6 +16,7 @@
 #include "net/cookies/cookie_util.h"
 #include "net/device_bound_sessions/cookie_craving.h"
 #include "net/device_bound_sessions/proto/storage.pb.h"
+#include "net/device_bound_sessions/session_binding_utils.h"
 #include "net/device_bound_sessions/session_inclusion_rules.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
@@ -49,28 +51,41 @@ Session::~Session() = default;
 
 // static
 std::unique_ptr<Session> Session::CreateIfValid(const SessionParams& params,
-                                                GURL url) {
-  GURL refresh(params.refresh_url);
-  if (!refresh.is_valid()) {
+                                                const GURL& fetcher_url) {
+  if (!fetcher_url.is_valid() || params.session_id.empty() ||
+      params.refresh_url.empty()) {
     return nullptr;
   }
 
-  if (params.session_id.empty()) {
-    return nullptr;
-  }
-
-  if (!params.scope.origin.empty() && !url.host().empty() &&
-      url.host() != params.scope.origin &&
+  if (!params.scope.origin.empty() && !fetcher_url.host().empty() &&
+      fetcher_url.host() != params.scope.origin &&
       net::registry_controlled_domains::GetDomainAndRegistry(
-          url, net::registry_controlled_domains::EXCLUDE_PRIVATE_REGISTRIES) !=
+          fetcher_url,
+          net::registry_controlled_domains::EXCLUDE_PRIVATE_REGISTRIES) !=
           net::registry_controlled_domains::GetDomainAndRegistry(
               params.scope.origin,
               net::registry_controlled_domains::EXCLUDE_PRIVATE_REGISTRIES)) {
     return nullptr;
   }
 
+  // The refresh endpoint can be a full URL (samesite with request origin)
+  // or a relative URL, starting with a "/" to make it origin-relative,
+  // and starting with anything else making it current-path-relative to
+  // request URL.
+  std::string unescaped_path = base::UnescapeURLComponent(
+      params.refresh_url,
+      base::UnescapeRule::PATH_SEPARATORS |
+          base::UnescapeRule::URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS);
+  GURL candidate_refresh_endpoint = fetcher_url.Resolve(unescaped_path);
+  if (!candidate_refresh_endpoint.is_valid() ||
+      !IsSecure(candidate_refresh_endpoint) ||
+      net::SchemefulSite(candidate_refresh_endpoint) !=
+          net::SchemefulSite(fetcher_url)) {
+    return nullptr;
+  }
   std::unique_ptr<Session> session(
-      new Session(Id(params.session_id), url::Origin::Create(url), refresh));
+      new Session(Id(params.session_id), url::Origin::Create(fetcher_url),
+                  std::move(candidate_refresh_endpoint)));
   for (const auto& spec : params.scope.specifications) {
     if (!spec.domain.empty() && !spec.path.empty()) {
       const auto inclusion_result =
@@ -84,8 +99,9 @@ std::unique_ptr<Session> Session::CreateIfValid(const SessionParams& params,
 
   for (const auto& cred : params.credentials) {
     if (!cred.name.empty() && !cred.attributes.empty()) {
-      std::optional<CookieCraving> craving = CookieCraving::Create(
-          url, cred.name, cred.attributes, base::Time::Now(), std::nullopt);
+      std::optional<CookieCraving> craving =
+          CookieCraving::Create(fetcher_url, cred.name, cred.attributes,
+                                base::Time::Now(), std::nullopt);
       if (craving) {
         session->cookie_cravings_.push_back(*craving);
       }
@@ -171,8 +187,7 @@ proto::Session Session::ToProto() const {
 }
 
 bool Session::ShouldDeferRequest(URLRequest* request) const {
-  if (inclusion_rules_.EvaluateRequestUrl(request->url()) ==
-      SessionInclusionRules::kExclude) {
+  if (!IncludesUrl(request->url())) {
     // Request is not in scope for this session.
     return false;
   }
@@ -292,7 +307,7 @@ bool Session::ShouldDeferRequest(URLRequest* request) const {
 }
 
 bool Session::IsEqualForTesting(const Session& other) const {
-  if (!base::ranges::equal(
+  if (!std::ranges::equal(
           cookie_cravings_, other.cookie_cravings_,
           [](const CookieCraving& lhs, const CookieCraving& rhs) {
             return lhs.IsEqualForTesting(rhs);  // IN-TEST
@@ -311,6 +326,11 @@ bool Session::IsEqualForTesting(const Session& other) const {
 
 void Session::RecordAccess() {
   expiry_date_ = base::Time::Now() + kSessionTtl;
+}
+
+bool Session::IncludesUrl(const GURL& url) const {
+  return inclusion_rules_.EvaluateRequestUrl(url) ==
+         SessionInclusionRules::kInclude;
 }
 
 }  // namespace net::device_bound_sessions

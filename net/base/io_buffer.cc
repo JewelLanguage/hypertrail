@@ -49,6 +49,21 @@ IOBufferWithSize::~IOBufferWithSize() {
   data_ = nullptr;
 }
 
+VectorIOBuffer::VectorIOBuffer(std::vector<uint8_t> vector)
+    : vector_(std::move(vector)) {
+  AssertValidBufferSize(vector_.size());
+  data_ = reinterpret_cast<char*>(vector_.data());
+  size_ = vector_.size();
+}
+
+VectorIOBuffer::VectorIOBuffer(base::span<uint8_t> span)
+    : VectorIOBuffer(std::vector(span.begin(), span.end())) {}
+
+VectorIOBuffer::~VectorIOBuffer() {
+  // Clear pointer before this destructor makes it dangle.
+  data_ = nullptr;
+}
+
 StringIOBuffer::StringIOBuffer(std::string s) : string_data_(std::move(s)) {
   // Can't pass `s.data()` directly to IOBuffer constructor since moving
   // from `s` may invalidate it. This is especially true for libc++ short
@@ -72,7 +87,7 @@ void DrainableIOBuffer::DidConsume(int bytes) {
 }
 
 int DrainableIOBuffer::BytesRemaining() const {
-  return size_ - used_;
+  return size_;
 }
 
 // Returns the number of consumed bytes.
@@ -82,8 +97,12 @@ int DrainableIOBuffer::BytesConsumed() const {
 
 void DrainableIOBuffer::SetOffset(int bytes) {
   CHECK_GE(bytes, 0);
-  CHECK_LE(bytes, size_);
+  // Length from the start of `base_` to the end of the buffer passed in to the
+  // constructor isn't stored anywhere, so need to calculate it.
+  int length = size_ + used_;
+  CHECK_LE(bytes, length);
   used_ = bytes;
+  size_ = length - bytes;
   data_ = UNSAFE_TODO(base_->data() + used_);
 }
 
@@ -119,8 +138,14 @@ void GrowableIOBuffer::set_offset(int offset) {
   size_ = capacity_ - offset;
 }
 
+void GrowableIOBuffer::DidConsume(int bytes) {
+  CHECK_LE(0, bytes);
+  CHECK_LE(bytes, size_);
+  set_offset(offset_ + bytes);
+}
+
 int GrowableIOBuffer::RemainingCapacity() {
-  return capacity_ - offset_;
+  return size_;
 }
 
 base::span<uint8_t> GrowableIOBuffer::everything() {

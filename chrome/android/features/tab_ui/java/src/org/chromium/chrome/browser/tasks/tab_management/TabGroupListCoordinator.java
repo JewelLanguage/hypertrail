@@ -16,18 +16,18 @@ import android.view.View;
 import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.VisibleForTesting;
 import androidx.core.util.Consumer;
 
 import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.chrome.browser.collaboration.CollaborationServiceFactory;
+import org.chromium.chrome.browser.collaboration.messaging.MessagingBackendServiceFactory;
 import org.chromium.chrome.browser.data_sharing.DataSharingServiceFactory;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.hub.PaneManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileProvider;
-import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.sync.SyncServiceFactory;
+import org.chromium.chrome.browser.tab.TabFavicon;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncFeatures;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncServiceFactory;
 import org.chromium.chrome.browser.tab_ui.TabListFaviconProvider;
@@ -39,9 +39,10 @@ import org.chromium.chrome.browser.ui.favicon.FaviconHelper;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper.FaviconImageCallback;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgePadAdjuster;
+import org.chromium.components.collaboration.CollaborationService;
+import org.chromium.components.collaboration.messaging.MessagingBackendService;
 import org.chromium.components.data_sharing.DataSharingService;
 import org.chromium.components.embedder_support.util.UrlUtilities;
-import org.chromium.components.signin.identitymanager.IdentityManager;
 import org.chromium.components.sync.SyncService;
 import org.chromium.components.tab_group_sync.TabGroupSyncService;
 import org.chromium.components.tab_group_sync.TabGroupUiActionHandler;
@@ -60,15 +61,17 @@ import java.lang.annotation.RetentionPolicy;
 
 /** Orchestrates the displaying of a list of interactable tab groups. */
 public class TabGroupListCoordinator {
-    @IntDef({RowType.TAB_GROUP})
+    @IntDef({RowType.TAB_GROUP, RowType.TAB_GROUP_REMOVED_CARD})
     @Retention(RetentionPolicy.SOURCE)
     public @interface RowType {
         int TAB_GROUP = 0;
+        int TAB_GROUP_REMOVED_CARD = 1;
     }
 
     private final TabGroupListView mView;
-
     private final SimpleRecyclerViewAdapter mSimpleRecyclerViewAdapter;
+    private final TabListFaviconProvider mTabListFaviconProvider;
+
     private TabGroupListMediator mTabGroupListMediator;
     private @Nullable EdgeToEdgePadAdjuster mEdgeToEdgePadAdjuster;
 
@@ -92,12 +95,6 @@ public class TabGroupListCoordinator {
             Consumer<Boolean> onIsScrolledChanged,
             @NonNull ObservableSupplier<EdgeToEdgeController> edgeToEdgeSupplier) {
         ModelList modelList = new ModelList();
-        PropertyModel.Builder builder = new PropertyModel.Builder(TabGroupListProperties.ALL_KEYS);
-        builder.with(ON_IS_SCROLLED_CHANGED, onIsScrolledChanged);
-        PropertyModel propertyModel = builder.build();
-
-        ViewBuilder<TabGroupRowView> layoutBuilder =
-                new LayoutViewBuilder<>(R.layout.tab_group_row);
         mSimpleRecyclerViewAdapter =
                 new SimpleRecyclerViewAdapter(modelList) {
                     @Override
@@ -108,8 +105,22 @@ public class TabGroupListCoordinator {
                         super.onViewRecycled(holder);
                     }
                 };
+
+        PropertyModel.Builder builder = new PropertyModel.Builder(TabGroupListProperties.ALL_KEYS);
+        builder.with(ON_IS_SCROLLED_CHANGED, onIsScrolledChanged);
+        PropertyModel propertyModel = builder.build();
+
+        ViewBuilder<TabGroupRowView> tabGroupRowLayoutBuilder =
+                new LayoutViewBuilder<>(R.layout.tab_group_row);
         mSimpleRecyclerViewAdapter.registerType(
-                RowType.TAB_GROUP, layoutBuilder, TabGroupRowViewBinder::bind);
+                RowType.TAB_GROUP, tabGroupRowLayoutBuilder, TabGroupRowViewBinder::bind);
+
+        ViewBuilder<MessageCardView> tabGroupMessageCardLayoutBuilder =
+                new LayoutViewBuilder<>(R.layout.tab_grid_message_card_item);
+        mSimpleRecyclerViewAdapter.registerType(
+                RowType.TAB_GROUP_REMOVED_CARD,
+                tabGroupMessageCardLayoutBuilder,
+                MessageCardViewBinder::bind);
 
         mView =
                 (TabGroupListView)
@@ -119,20 +130,30 @@ public class TabGroupListCoordinator {
         mView.setRecyclerViewAdapter(mSimpleRecyclerViewAdapter);
 
         Profile profile = profileProvider.getOriginalProfile();
-        FaviconResolver faviconResolver = buildFaviconResolver(context, profile);
+        mTabListFaviconProvider =
+                new TabListFaviconProvider(
+                        context,
+                        /* isTabStrip= */ false,
+                        R.dimen.default_favicon_corner_radius,
+                        TabFavicon::getBitmap);
+        FaviconResolver faviconResolver =
+                buildFaviconResolver(context, profile, mTabListFaviconProvider);
         @Nullable TabGroupSyncService tabGroupSyncService = null;
         if (TabGroupSyncFeatures.isTabGroupSyncEnabled(profile)) {
             tabGroupSyncService = TabGroupSyncServiceFactory.getForProfile(profile);
         }
 
-        @Nullable
-        DataSharingService dataSharingService =
-                ChromeFeatureList.isEnabled(ChromeFeatureList.DATA_SHARING)
-                        ? DataSharingServiceFactory.getForProfile(profile)
-                        : null;
+        @NonNull
+        CollaborationService collaborationService =
+                CollaborationServiceFactory.getForProfile(profile);
 
-        IdentityManager identityManager =
-                IdentityServicesProvider.get().getIdentityManager(profile);
+        @NonNull
+        DataSharingService dataSharingService = DataSharingServiceFactory.getForProfile(profile);
+
+        @NonNull
+        MessagingBackendService messagingBackendService =
+                MessagingBackendServiceFactory.getForProfile(profile);
+
         ActionConfirmationManager actionConfirmationManager =
                 new ActionConfirmationManager(profile, context, modalDialogManager);
         SyncService syncService = SyncServiceFactory.getForProfile(profile);
@@ -146,7 +167,8 @@ public class TabGroupListCoordinator {
                         faviconResolver,
                         tabGroupSyncService,
                         dataSharingService,
-                        identityManager,
+                        collaborationService,
+                        messagingBackendService,
                         paneManager,
                         tabGroupUiActionHandler,
                         actionConfirmationManager,
@@ -160,11 +182,9 @@ public class TabGroupListCoordinator {
         }
     }
 
-    @VisibleForTesting
-    static FaviconResolver buildFaviconResolver(Context context, Profile profile) {
-        TabListFaviconProvider fallbackProvider =
-                new TabListFaviconProvider(
-                        context, /* isTabStrip= */ false, R.dimen.default_favicon_corner_radius);
+    /** TODO(crbug.com)394154545: Move to a better location. */
+    public static FaviconResolver buildFaviconResolver(
+            Context context, Profile profile, TabListFaviconProvider fallbackProvider) {
         return (GURL url, Callback<Drawable> callback) -> {
             if (UrlUtilities.isInternalScheme(url)) {
                 callback.onResult(
@@ -228,5 +248,6 @@ public class TabGroupListCoordinator {
             mEdgeToEdgePadAdjuster.destroy();
             mEdgeToEdgePadAdjuster = null;
         }
+        mTabListFaviconProvider.destroy();
     }
 }

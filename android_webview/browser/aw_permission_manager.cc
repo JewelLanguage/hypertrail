@@ -608,15 +608,16 @@ PermissionStatus AwPermissionManager::GetGeolocationPermission(
   }
 
   AwSettings* settings = AwSettings::FromWebContents(web_contents);
+  if (!settings) {
+    // If we don't have a settings, we can't determine if we have
+    // permission.
+    return PermissionStatus::ASK;
+  }
+
   if (!settings->geolocation_enabled()) {
     return PermissionStatus::DENIED;
   }
-  AwContents* aw_contents = AwContents::FromWebContents(web_contents);
-  if (!aw_contents->UseLegacyGeolocationPermissionAPI()) {
-    // The new geolocation API does not have a cache for permission decisions,
-    // so if that's in use, we will need to ask the app.
-    return PermissionStatus::ASK;
-  }
+
   return context_delegate_->GetGeolocationPermission(requesting_origin);
 }
 

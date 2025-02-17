@@ -12,7 +12,6 @@
 #include "base/notreached.h"
 #include "base/task/single_thread_task_runner.h"
 #include "components/viz/common/resources/release_callback.h"
-#include "components/viz/common/resources/shared_bitmap.h"
 #include "components/viz/common/resources/shared_image_format.h"
 #include "components/viz/common/resources/transferable_resource.h"
 #include "gpu/command_buffer/client/client_shared_image.h"
@@ -94,6 +93,10 @@ class PLATFORM_EXPORT CanvasResource
   // outstanding references).
   virtual bool IsRecycleable() const = 0;
 
+  // Uploads the contents of |sk_surface| to the resource's backing memory.
+  // Should be called only if the resource is using software raster.
+  void UploadSoftwareRenderingResults(SkSurface* sk_surface);
+
   // Returns true if this instance creates TransferableResources for usage with
   // GPU compositing.
   virtual bool CreatesAcceleratedTransferableResources() const = 0;
@@ -172,8 +175,6 @@ class PLATFORM_EXPORT CanvasResource
     return base::PlatformThread::CurrentRef() != owning_thread_ref_;
   }
 
-  virtual bool HasDetailedMemoryDumpProvider() const { return false; }
-
  protected:
   CanvasResource(base::WeakPtr<CanvasResourceProvider>,
                  gfx::Size size,
@@ -181,14 +182,14 @@ class PLATFORM_EXPORT CanvasResource
                  SkAlphaType alpha_type,
                  const gfx::ColorSpace& color_space);
 
-  // Returns true if the resource is backed by memory such that it can be used
-  // for direct scanout by the display.
-  virtual bool IsOverlayCandidate() const { return false; }
   virtual gfx::HDRMetadata GetHDRMetadata() const { return gfx::HDRMetadata(); }
   virtual viz::TransferableResource::ResourceSource
   GetTransferableResourceSource() const {
     return viz::TransferableResource::ResourceSource::kCanvas;
   }
+
+  // Creates an unaccelerated bitmap from this resource's mappable SharedImage.
+  scoped_refptr<StaticBitmapImage> CreateUnacceleratedBitmap();
 
   gpu::InterfaceBase* InterfaceBase() const;
   gpu::gles2::GLES2Interface* ContextGL() const;
@@ -204,6 +205,9 @@ class PLATFORM_EXPORT CanvasResource
   const scoped_refptr<base::SingleThreadTaskRunner> owning_thread_task_runner_;
 
  private:
+  // Updates the resource's SyncToken to `sync_token`.
+  virtual void SetSyncToken(gpu::SyncToken sync_token) { NOTREACHED(); }
+
   // Returns true if the resource is rastered via the GPU.
   virtual bool UsesAcceleratedRaster() const = 0;
 
@@ -237,14 +241,19 @@ class PLATFORM_EXPORT CanvasResourceSharedBitmap final : public CanvasResource {
       base::WeakPtr<CanvasResourceProvider>,
       base::WeakPtr<WebGraphicsSharedImageInterfaceProvider>);
   ~CanvasResourceSharedBitmap() override;
-  bool IsRecycleable() const final { return IsValid(); }
+  bool IsRecycleable() const final { return !is_lost_; }
   bool IsValid() const final;
   bool CreatesAcceleratedTransferableResources() const final { return false; }
   scoped_refptr<gpu::ClientSharedImage> GetClientSharedImage() final {
     return shared_image_;
   }
+
   const gpu::SyncToken GetSyncTokenWithOptionalVerification(
       bool needs_verified_token) final {
+    // This class doesn't currently have a way of verifying the sync token
+    // within this call, so it instead ensures that it is verified at the time
+    // of generation.
+    CHECK(sync_token_.verified_flush());
     return sync_token_;
   }
 
@@ -252,9 +261,6 @@ class PLATFORM_EXPORT CanvasResourceSharedBitmap final : public CanvasResource {
       const override {
     return nullptr;
   }
-
-  // Uploads the contents of |sk_surface| to the resource's backing memory.
-  void UploadSoftwareRenderingResults(SkSurface* sk_surface);
 
   scoped_refptr<StaticBitmapImage> Bitmap() final;
   void NotifyResourceLost() override;
@@ -272,6 +278,7 @@ class PLATFORM_EXPORT CanvasResourceSharedBitmap final : public CanvasResource {
 
   scoped_refptr<gpu::ClientSharedImage> shared_image_;
   gpu::SyncToken sync_token_;
+  bool is_lost_ = false;
 };
 
 // Resource type for SharedImage
@@ -288,7 +295,7 @@ class PLATFORM_EXPORT CanvasResourceSharedImage final : public CanvasResource {
       gpu::SharedImageUsageSet shared_image_usage_flags);
   ~CanvasResourceSharedImage() override;
 
-  bool IsRecycleable() const final { return true; }
+  bool IsRecycleable() const final { return !IsLost(); }
   bool CreatesAcceleratedTransferableResources() const override { return true; }
   bool IsValid() const final;
   scoped_refptr<StaticBitmapImage> Bitmap() final;
@@ -309,17 +316,11 @@ class PLATFORM_EXPORT CanvasResourceSharedImage final : public CanvasResource {
   void WillDraw();
   bool IsLost() const { return owning_thread_data().is_lost; }
 
-  // Uploads the contents of |sk_surface| to the resource's backing memory.
-  void UploadSoftwareRenderingResults(SkSurface* sk_surface);
   scoped_refptr<gpu::ClientSharedImage> GetClientSharedImage() override;
   const scoped_refptr<gpu::ClientSharedImage>& GetClientSharedImage() const;
   void OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd,
                     const std::string& parent_path,
                     size_t bytes_per_pixel) const;
-  // Whether this type of CanvasResource can provide detailed memory data. If
-  // true, then the CanvasResourceProvider will not report data, to avoid
-  // double-countintg.
-  bool HasDetailedMemoryDumpProvider() const override { return true; }
 
   // Signals that an external write has completed, passing the token that should
   // be waited on to ensure that the service-side operations of the external
@@ -358,7 +359,6 @@ class PLATFORM_EXPORT CanvasResourceSharedImage final : public CanvasResource {
       const override;
   const gpu::SyncToken GetSyncTokenWithOptionalVerification(
       bool needs_verified_token) override;
-  bool IsOverlayCandidate() const final { return is_overlay_candidate_; }
   bool UsesAcceleratedRaster() const final { return is_accelerated_; }
 
   CanvasResourceSharedImage(gfx::Size size,
@@ -379,6 +379,11 @@ class PLATFORM_EXPORT CanvasResourceSharedImage final : public CanvasResource {
     return owning_thread_data_;
   }
 
+  void SetSyncToken(gpu::SyncToken sync_token) override {
+    DCHECK(!is_cross_thread());
+    owning_thread_data().sync_token = sync_token;
+  }
+
   // Can be read on any thread.
 
   bool mailbox_needs_new_sync_token() const {
@@ -394,8 +399,6 @@ class PLATFORM_EXPORT CanvasResourceSharedImage final : public CanvasResource {
 
   // Accessed on any thread.
   const bool is_accelerated_;
-  const bool is_overlay_candidate_;
-  const bool supports_display_compositing_;
   const bool use_oop_rasterization_;
   OwningThreadData owning_thread_data_;
 };
@@ -432,7 +435,6 @@ class PLATFORM_EXPORT ExternalCanvasResource final : public CanvasResource {
   }
 
  private:
-  bool IsOverlayCandidate() const final { return is_overlay_candidate_; }
   gfx::HDRMetadata GetHDRMetadata() const final { return hdr_metadata_; }
   viz::TransferableResource::ResourceSource GetTransferableResourceSource()
       const final {
@@ -459,7 +461,6 @@ class PLATFORM_EXPORT ExternalCanvasResource final : public CanvasResource {
   gpu::SyncToken sync_token_;
   viz::TransferableResource::ResourceSource resource_source_;
   gfx::HDRMetadata hdr_metadata_;
-  bool is_overlay_candidate_ = false;
   viz::ReleaseCallback release_callback_;
   bool resource_is_lost_ = false;
 };
@@ -493,7 +494,6 @@ class PLATFORM_EXPORT CanvasResourceSwapChain final : public CanvasResource {
   scoped_refptr<gpu::ClientSharedImage> GetClientSharedImage() override;
 
  private:
-  bool IsOverlayCandidate() const final { return true; }
   bool UsesAcceleratedRaster() const final { return true; }
   const gpu::SyncToken GetSyncTokenWithOptionalVerification(
       bool needs_verified_token) override;

@@ -59,7 +59,7 @@ using testing::StrictMock;
 namespace {
 
 constexpr char kEmail[] = "email@test";
-constexpr char kGaiaId[] = "gaia";
+constexpr GaiaId::Literal kGaiaId("gaia");
 
 const char kLaunchSamlUserSessionArguments[] =
     R"([{
@@ -111,9 +111,11 @@ class ScopedTestingProfile {
  public:
   ScopedTestingProfile(TestingProfile* profile,
                        TestingProfileManager* profile_manager,
+                       ash::TestPrefServiceProvider* pref_service_provider,
                        const AccountId& account_id)
       : profile_(profile),
         profile_manager_(profile_manager),
+        pref_service_provider_(pref_service_provider),
         account_id_(account_id) {
     user_manager::UserManager::Get()->OnUserProfileCreated(account_id,
                                                            profile->GetPrefs());
@@ -126,6 +128,8 @@ class ScopedTestingProfile {
   ~ScopedTestingProfile() {
     user_manager::UserManager::Get()->OnUserProfileWillBeDestroyed(account_id_);
     std::string user_name = profile_->GetProfileUserName();
+    pref_service_provider_->ClearUnownedUserPrefs(
+        AccountId::FromUserEmail(user_name));
     profile_ = nullptr;
     profile_manager_->DeleteTestingProfile(user_name);
   }
@@ -135,6 +139,7 @@ class ScopedTestingProfile {
  private:
   raw_ptr<TestingProfile> profile_;
   const raw_ptr<TestingProfileManager> profile_manager_;
+  const raw_ptr<ash::TestPrefServiceProvider> pref_service_provider_;
   const AccountId account_id_;
 };
 
@@ -191,6 +196,7 @@ class LoginApiUnittest : public ExtensionApiUnittest {
   }
 
   void TearDown() override {
+    mock_lock_handler_.reset();
     mock_existing_user_controller_.reset();
     mock_login_display_host_.reset();
     scoped_user_manager_.reset();
@@ -205,8 +211,9 @@ class LoginApiUnittest : public ExtensionApiUnittest {
         AccountId::FromUserEmail(email));
     TestingProfile* profile = profile_manager()->CreateTestingProfile(email);
 
-    return std::make_unique<ScopedTestingProfile>(profile, profile_manager(),
-                                                  user->GetAccountId());
+    return std::make_unique<ScopedTestingProfile>(
+        profile, profile_manager(), ash_test_helper()->prefs_provider(),
+        user->GetAccountId());
   }
 
   raw_ptr<ash::FakeChromeUserManager, DanglingUntriaged>
@@ -414,8 +421,7 @@ TEST_F(LoginApiUnittest, LockManagedGuestSessionNoActiveUser) {
 }
 
 TEST_F(LoginApiUnittest, LockManagedGuestSessionNotManagedGuestSession) {
-  AccountId account_id =
-      AccountId::FromUserEmailGaiaId(kEmail, GaiaId(kGaiaId));
+  AccountId account_id = AccountId::FromUserEmailGaiaId(kEmail, kGaiaId);
   fake_chrome_user_manager_->AddUser(account_id);
   fake_chrome_user_manager_->SwitchActiveUser(account_id);
 
@@ -529,8 +535,7 @@ TEST_F(LoginApiUnittest, UnlockManagedGuestSessionNoActiveUser) {
 }
 
 TEST_F(LoginApiUnittest, UnlockManagedGuestSessionNotManagedGuestSession) {
-  AccountId account_id =
-      AccountId::FromUserEmailGaiaId(kEmail, GaiaId(kGaiaId));
+  AccountId account_id = AccountId::FromUserEmailGaiaId(kEmail, kGaiaId);
   fake_chrome_user_manager_->AddUser(account_id);
   fake_chrome_user_manager_->SwitchActiveUser(account_id);
 
@@ -629,12 +634,13 @@ class LoginApiUserSessionUnittest : public LoginApiUnittest {
   std::unique_ptr<ScopedTestingProfile> AddRegularUser(
       const std::string& email) {
     auto* user = fake_chrome_user_manager_->AddUserWithAffiliation(
-        AccountId::FromUserEmailGaiaId(email, GaiaId(kGaiaId)),
+        AccountId::FromUserEmailGaiaId(email, kGaiaId),
         /* is_affiliated= */ true);
     TestingProfile* profile = profile_manager()->CreateTestingProfile(email);
 
-    return std::make_unique<ScopedTestingProfile>(profile, profile_manager(),
-                                                  user->GetAccountId());
+    return std::make_unique<ScopedTestingProfile>(
+        profile, profile_manager(), ash_test_helper()->prefs_provider(),
+        user->GetAccountId());
   }
 };
 
@@ -652,8 +658,7 @@ TEST_F(LoginApiUserSessionUnittest, LaunchSamlUserSession) {
   ui::UserActivityDetector::Get()->set_now_for_test(now);
 
   std::unique_ptr<ScopedTestingProfile> profile = AddRegularUser(kEmail);
-  ash::UserContext user_context =
-      GetRegularUserContext(kEmail, GaiaId(kGaiaId));
+  ash::UserContext user_context = GetRegularUserContext(kEmail, kGaiaId);
 
   ash::Key key("password");
   key.SetLabel(ash::kCryptohomeGaiaKeyLabel);

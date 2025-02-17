@@ -128,8 +128,8 @@ enum class PseudoPriority {
   kScrollMarker,
   kScrollButtonBlockStart,
   kScrollButtonInlineStart,
-  kScrollButtonBlockEnd,
   kScrollButtonInlineEnd,
+  kScrollButtonBlockEnd,
   kBefore,
   kOther,
   kAfter,
@@ -158,11 +158,11 @@ PseudoPriority ConvertPseudoIdtoPriority(const PseudoId& pseudo) {
   if (pseudo == kPseudoIdScrollButtonInlineStart) {
     return PseudoPriority::kScrollButtonInlineStart;
   }
-  if (pseudo == kPseudoIdScrollButtonBlockEnd) {
-    return PseudoPriority::kScrollButtonBlockEnd;
-  }
   if (pseudo == kPseudoIdScrollButtonInlineEnd) {
     return PseudoPriority::kScrollButtonInlineEnd;
+  }
+  if (pseudo == kPseudoIdScrollButtonBlockEnd) {
+    return PseudoPriority::kScrollButtonBlockEnd;
   }
   if (pseudo == kPseudoIdBefore)
     return PseudoPriority::kBefore;
@@ -679,9 +679,7 @@ bool Animation::PreCommit(
   bool hard_change =
       compositor_state_ && (compositor_state_->effect_changed ||
                             !compositor_state_->start_time || !start_time_ ||
-                            !TimingCalculations::IsWithinAnimationTimeEpsilon(
-                                compositor_state_->start_time.value(),
-                                start_time_.value().InSecondsF()));
+                            compositor_state_->start_time != start_time_);
 
   bool compositor_property_animations_had_no_effect =
       compositor_property_animations_have_no_effect_;
@@ -780,9 +778,7 @@ void Animation::PostCommit() {
 
   DCHECK_EQ(CompositorAction::kStart, compositor_state_->pending_action);
   if (compositor_state_->start_time) {
-    DCHECK(TimingCalculations::IsWithinAnimationTimeEpsilon(
-        start_time_.value().InSecondsF(),
-        compositor_state_->start_time.value()));
+    DCHECK_EQ(start_time_.value(), compositor_state_->start_time.value());
     compositor_state_->pending_action = CompositorAction::kNone;
   }
 }
@@ -894,9 +890,7 @@ void Animation::NotifyReady(AnimationTimeDelta ready_time) {
       compositor_state_->pending_action == CompositorAction::kStart) {
     DCHECK(!compositor_state_->start_time);
     compositor_state_->pending_action = CompositorAction::kNone;
-    compositor_state_->start_time =
-        start_time_ ? std::make_optional(start_time_.value().InSecondsF())
-                    : std::nullopt;
+    compositor_state_->start_time = start_time_;
   }
 
   // Notify of change to play state.
@@ -2274,10 +2268,35 @@ Animation::CheckCanStartAnimationOnCompositorInternal() const {
 
   // An Animation that is not playing will not produce a visual, so there is no
   // reason to composite it.
-  if (!Playing())
+  if (!EffectivelyPlaying()) {
     reasons |= CompositorAnimations::kInvalidAnimationOrEffect;
+  }
 
   return reasons;
+}
+
+bool Animation::EffectivelyPlaying() const {
+  if (!Playing()) {
+    return false;
+  }
+
+  if (timeline_ && !timeline_->IsMonotonicallyIncreasing()) {
+    return content_ && content_->IsInPlay();
+  }
+
+  return true;
+}
+
+void Animation::OnActivePhaseStateChange(bool in_active_phase) {
+  if (!timeline_ || timeline_->IsMonotonicallyIncreasing()) {
+    return;
+  }
+
+  if (in_active_phase) {
+    SetCompositorPending(CompositorPendingReason::kPendingRestart);
+  } else {
+    SetCompositorPending(CompositorPendingReason::kPendingCancel);
+  }
 }
 
 base::TimeDelta Animation::ComputeCompositorTimeOffset() const {
@@ -2500,11 +2519,7 @@ void Animation::SetCompositorPending(CompositorPendingReason reason) {
       compositor_state_->effect_changed ||
       compositor_state_->pending_action == CompositorAction::kCancel ||
       compositor_state_->playback_rate != EffectivePlaybackRate() ||
-      compositor_state_->start_time.has_value() != start_time_.has_value() ||
-      (compositor_state_->start_time && start_time_ &&
-       !TimingCalculations::IsWithinAnimationTimeEpsilon(
-           compositor_state_->start_time.value(),
-           start_time_.value().InSecondsF())) ||
+      compositor_state_->start_time != start_time_ ||
       !compositor_state_->start_time || !start_time_) {
     compositor_pending_ = true;
     document_->GetPendingAnimations().Add(this);

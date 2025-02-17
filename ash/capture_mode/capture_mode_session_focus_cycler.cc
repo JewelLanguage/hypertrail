@@ -4,6 +4,7 @@
 
 #include "ash/capture_mode/capture_mode_session_focus_cycler.h"
 
+#include <algorithm>
 #include <vector>
 
 #include "ash/accessibility/magnifier/magnifier_utils.h"
@@ -30,13 +31,18 @@
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/memory/raw_ptr.h"
-#include "base/ranges/algorithm.h"
 #include "chromeos/ui/base/chromeos_ui_constants.h"
 #include "ui/base/class_property.h"
+#include "ui/events/event.h"
+#include "ui/events/event_constants.h"
+#include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/events/types/event_type.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/controls/highlight_path_generator.h"
+#include "ui/views/controls/link.h"
 #include "ui/views/view.h"
+#include "ui/views/view_utils.h"
 #include "ui/wm/core/coordinate_conversion.h"
 
 DEFINE_UI_CLASS_PROPERTY_TYPE(
@@ -301,7 +307,7 @@ void CaptureModeSessionFocusCycler::HighlightableView::PseudoFocus() {
   focus_ring_->DeprecatedLayoutImmediately();
   focus_ring_->SchedulePaint();
 
-  view->NotifyAccessibilityEvent(ax::mojom::Event::kSelection, true);
+  view->NotifyAccessibilityEventDeprecated(ax::mojom::Event::kSelection, true);
 
   magnifier_utils::MaybeUpdateActiveMagnifierFocus(
       view->GetBoundsInScreen().CenterPoint());
@@ -321,22 +327,23 @@ bool CaptureModeSessionFocusCycler::HighlightableView::ClickView() {
   views::View* view = GetView();
   DCHECK(view);
 
-  views::Button* button = views::Button::AsButton(view);
-  if (!button) {
+  if (!views::IsViewClass<views::Button>(view) &&
+      !views::IsViewClass<views::Link>(view)) {
     return false;
   }
 
-  // `button` such as the close button or the capture button may be destroyed
-  // after `AcceleratorPressed`, which will cause UAF. Use a `WeakPtr` to detect
+  // Views such as the close button or the capture button may be destroyed
+  // after `OnKeyPressed`, which will cause UAF. Use a `WeakPtr` to detect
   // this and skip `NotifyAccessibilityEvent` in this case.
   auto weak_ptr = weak_ptr_factory_.GetWeakPtr();
 
   bool handled = false;
-  if (button->AcceleratorPressed(
-          ui::Accelerator(ui::VKEY_SPACE, /*modifiers=*/0))) {
+  if (view->OnKeyPressed(ui::KeyEvent(ui::EventType::kKeyPressed,
+                                      ui::VKEY_RETURN, ui::EF_NONE))) {
     handled = true;
     if (weak_ptr) {
-      button->NotifyAccessibilityEvent(ax::mojom::Event::kStateChanged, true);
+      view->NotifyAccessibilityEventDeprecated(
+          ax::mojom::Event::kStateChanged, true);
     }
   }
 
@@ -747,7 +754,7 @@ CaptureModeSessionFocusCycler::GetNextGroup(bool reverse) const {
 
   const std::vector<FocusGroup>& groups_list = GetCurrentGroupList();
   const int increment = reverse ? -1 : 1;
-  const auto iter = base::ranges::find(groups_list, current_focus_group_);
+  const auto iter = std::ranges::find(groups_list, current_focus_group_);
   DCHECK(iter != groups_list.end());
   size_t next_group_index = std::distance(groups_list.begin(), iter);
   const auto group_size = groups_list.size();
@@ -818,7 +825,7 @@ bool CaptureModeSessionFocusCycler::IsGroupAvailable(FocusGroup group) const {
       return !!GetRecordingTypeMenuWidget();
     case FocusGroup::kActionButtons: {
       return session_->action_container_view_ &&
-             !session_->action_container_view_->children().empty();
+             !session_->action_container_view_->GetFocusableViews().empty();
     }
   }
 }
@@ -926,12 +933,10 @@ CaptureModeSessionFocusCycler::GetGroupItems(FocusGroup group) const {
     case FocusGroup::kActionButtons: {
       auto* action_container_view = session_->action_container_view_.get();
       if (action_container_view) {
-        for (views::View* action_button : action_container_view->children()) {
-          if (action_button && action_button->GetEnabled()) {
-            auto* highlight_helper = HighlightHelper::Get(action_button);
-            CHECK(highlight_helper);
-            items.push_back(highlight_helper);
-          }
+        for (views::View* view : action_container_view->GetFocusableViews()) {
+          auto* highlight_helper = HighlightHelper::Get(view);
+          CHECK(highlight_helper);
+          items.push_back(highlight_helper);
         }
       }
       break;
@@ -980,7 +985,7 @@ bool CaptureModeSessionFocusCycler::FindFocusedViewAndUpdateFocusIndex(
     return true;
 
   const size_t current_focus_index =
-      base::ranges::find(
+      std::ranges::find(
           views, true,
           &CaptureModeSessionFocusCycler::HighlightableView::has_focus) -
       views.begin();
@@ -1039,8 +1044,8 @@ void CaptureModeSessionFocusCycler::UpdateA11yAnnotation() {
         auto& view_a11y = contents_view->GetViewAccessibility();
         view_a11y.SetPreviousFocus(previous);
         view_a11y.SetNextFocus(next);
-        contents_view->NotifyAccessibilityEvent(ax::mojom::Event::kTreeChanged,
-                                                true);
+        contents_view->NotifyAccessibilityEventDeprecated(
+            ax::mojom::Event::kTreeChanged, true);
       };
 
   // If there is only one widget left, clear the focus overrides so that they

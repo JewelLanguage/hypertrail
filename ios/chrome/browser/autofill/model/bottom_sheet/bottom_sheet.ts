@@ -36,17 +36,21 @@ function isObservable_(element: HTMLElement): boolean {
 }
 
 /*
+ * Returns true if the bottom sheet can be triggered.
+ * @private
+ */
+function canTriggerBottomSheet_(focusedElement: Element) {
+  // Verify that the window's layout viewport has a height and a width and also
+  // that the element is visible.
+  return window.innerHeight > 0 && window.innerWidth > 0 &&
+      gCrWeb.fill.isVisibleNode(focusedElement);
+}
+
+/*
  * Prepare and send message to show bottom sheet.
  * @private
  */
 function showBottomSheet_(hasUserGesture: boolean): void {
-  // Verify that the window's layout viewport has a height and a width and also
-  // that the element is visible.
-  if (window.innerHeight == 0 || window.innerWidth == 0 ||
-      !gCrWeb.fill.isVisibleNode(lastBlurredElement_)) {
-    return;
-  }
-
   let field = null;
   let fieldType = '';
   let fieldValue = '';
@@ -95,11 +99,16 @@ function focusEventHandler_(event: Event): void {
     return;
   }
 
-  // Prevent the keyboard from showing up.
-  event.target.blur();
-  lastBlurredElement_ = event.target;
+  // Show the bottom sheet iff the conditions are right, or bail out otherwise
+  // and let the user fallback to using keyboard for filling the field.
+  if (canTriggerBottomSheet_(event.target!)) {
+    // Prevent the keyboard from showing up iff the bottom sheet can be
+    // triggered.
+    event.target.blur();
+    lastBlurredElement_ = event.target;
 
-  showBottomSheet_(event.isTrusted);
+    showBottomSheet_(event.isTrusted);
+  }
 }
 
 /**
@@ -127,7 +136,7 @@ function detachListeners_(renderer_ids: number[]): void {
 function attachListeners(
     renderer_ids: number[], allow_autofocus: boolean): void {
   // Build list of elements
-  let blurredElement: HTMLElement|null = null;
+  let elementToBlur: HTMLElement|null = null;
   let elementsToObserve: Element[] = [];
   for (const renderer_id of renderer_ids) {
     const element = gCrWeb.fill.getElementByUniqueID(renderer_id);
@@ -135,8 +144,14 @@ function attachListeners(
     // observing it.
     if (element && isObservable_(element) &&
         !observedElements_.find(elem => elem === element)) {
-      elementsToObserve.push(element);
-      if (document.activeElement === element) {
+      const autofocused = document.activeElement === element;
+      if (allow_autofocus || !autofocused ||
+          !gCrWeb.autofill_form_features
+               .isAutofillFixPaymentSheetSpamEnabled()) {
+        // Observe element if eligible.
+        elementsToObserve.push(element);
+      }
+      if (autofocused) {
         // Check if the field is empty (ignoring white spaces).
         if (element.value.trim() != '') {
           // The user has already started filling the active field, so bail out
@@ -144,10 +159,7 @@ function attachListeners(
           return;
         }
         if (allow_autofocus) {
-          // Remove the focus on an element if it already has focus and we want
-          // to show the related bottom sheet immediately.
-          element.blur();
-          blurredElement = element;
+          elementToBlur = element;
         }
       }
     }
@@ -159,9 +171,15 @@ function attachListeners(
     observedElements_.push(element);
   }
 
-  // Restore focus if it was removed.
-  if (blurredElement) {
-    lastBlurredElement_ = blurredElement;
+  // If (1) the element was already focused (i.e. likely autofocused) at the
+  // moment of attaching the listeners , (2) taking over autofocus is allowed,
+  // and (3) the sheet can be triggered, trigger the bottom sheet immediately
+  // and allow restoring the focus later on once the sheet is dismissed.
+  if (elementToBlur && canTriggerBottomSheet_(elementToBlur!)) {
+    // Remove the focus so the sheet can take over filling without conflicting
+    // with the keyboard.
+    elementToBlur.blur();
+    lastBlurredElement_ = elementToBlur;
     showBottomSheet_(/*hasUserGesture=*/ false);
   }
 }

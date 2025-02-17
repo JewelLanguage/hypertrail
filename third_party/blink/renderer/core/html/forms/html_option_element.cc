@@ -42,9 +42,10 @@
 #include "third_party/blink/renderer/core/html/forms/html_data_list_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_opt_group_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_select_element.h"
-#include "third_party/blink/renderer/core/html/html_image_element.h"
 #include "third_party/blink/renderer/core/html/html_slot_element.h"
+#include "third_party/blink/renderer/core/html/html_span_element.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
+#include "third_party/blink/renderer/core/html/shadow/shadow_element_names.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
@@ -124,6 +125,8 @@ HTMLOptionElement* HTMLOptionElement::CreateForJSConstructor(
 
 void HTMLOptionElement::Trace(Visitor* visitor) const {
   visitor->Trace(text_observer_);
+  visitor->Trace(nearest_ancestor_select_);
+  visitor->Trace(label_container_);
   HTMLElement::Trace(visitor);
 }
 
@@ -153,11 +156,23 @@ bool HTMLOptionElement::MatchesEnabledPseudoClass() const {
 }
 
 String HTMLOptionElement::DisplayLabel() const {
+  if (RuntimeEnabledFeatures::OptionLabelAttributeWhitespaceEnabled()) {
+    // If the label attribute is set and is not an empty string, then use its
+    // value. Otherwise, use inner text.
+    String label_attr = String(FastGetAttribute(html_names::kLabelAttr));
+    if (!label_attr.empty()) {
+      return label_attr.StripWhiteSpace(IsHTMLSpace<UChar>)
+          .SimplifyWhiteSpace(IsHTMLSpace<UChar>);
+    }
+    return CollectOptionInnerText()
+        .StripWhiteSpace(IsHTMLSpace<UChar>)
+        .SimplifyWhiteSpace(IsHTMLSpace<UChar>);
+  }
+
   String label_attr = String(FastGetAttribute(html_names::kLabelAttr))
     .StripWhiteSpace(IsHTMLSpace<UChar>).SimplifyWhiteSpace(IsHTMLSpace<UChar>);
-  String inner_text = CollectOptionInnerText(IncludeAltText::kIncludeAltText)
-                          .StripWhiteSpace(IsHTMLSpace<UChar>)
-                          .SimplifyWhiteSpace(IsHTMLSpace<UChar>);
+  String inner_text = CollectOptionInnerText()
+    .StripWhiteSpace(IsHTMLSpace<UChar>).SimplifyWhiteSpace(IsHTMLSpace<UChar>);
   // FIXME: The following treats an element with the label attribute set to
   // the empty string the same as an element with no label attribute at all.
   // Is that correct? If it is, then should the label function work the same
@@ -166,7 +181,7 @@ String HTMLOptionElement::DisplayLabel() const {
 }
 
 String HTMLOptionElement::text() const {
-  return CollectOptionInnerText(IncludeAltText::kIncludeAltText)
+  return CollectOptionInnerText()
       .StripWhiteSpace(IsHTMLSpace<UChar>)
       .SimplifyWhiteSpace(IsHTMLSpace<UChar>);
 }
@@ -248,7 +263,7 @@ String HTMLOptionElement::value() const {
   const AtomicString& value = FastGetAttribute(html_names::kValueAttr);
   if (!value.IsNull())
     return value;
-  return CollectOptionInnerText(IncludeAltText::kDontIncludeAltText)
+  return CollectOptionInnerText()
       .StripWhiteSpace(IsHTMLSpace<UChar>)
       .SimplifyWhiteSpace(IsHTMLSpace<UChar>);
 }
@@ -357,24 +372,31 @@ HTMLDataListElement* HTMLOptionElement::OwnerDataListElement() const {
   return Traversal<HTMLDataListElement>::FirstAncestor(*this);
 }
 
-HTMLSelectElement* HTMLOptionElement::OwnerSelectElement() const {
-  if (RuntimeEnabledFeatures::SelectParserRelaxationEnabled()) {
-    // TODO(crbug.com/1511354): Consider using a flat tree traversal here
-    // instead of a node traversal. That would probably also require
-    // changing HTMLOptionsCollection to support flat tree traversals as well.
-    // TODO(crbug.com/351990825): Cache the owner select ancestor on insertion
-    // rather than doing a tree traversal here every time OwnerSelectElement is
-    // called, which may be a lot.
-    for (Node& ancestor : NodeTraversal::AncestorsOf(*this)) {
-      if (IsA<HTMLOptionElement>(ancestor)) {
-        // Don't associate nested <option>s with <select>s. This matches the
-        // traversals in OptionList and HTMLOptionElement::InsertedInto.
-        return nullptr;
-      }
-      if (auto* select = DynamicTo<HTMLSelectElement>(ancestor)) {
-        return select;
-      }
+namespace {
+HTMLSelectElement* NearestAncestorSelectNoNesting(
+    const HTMLOptionElement& option) {
+  for (Node& ancestor : NodeTraversal::AncestorsOf(option)) {
+    if (IsA<HTMLOptionElement>(ancestor)) {
+      // Don't associate nested <option>s with <select>s. This matches the
+      // traversals in OptionList and HTMLOptionElement::InsertedInto.
+      return nullptr;
     }
+    if (auto* select = DynamicTo<HTMLSelectElement>(ancestor)) {
+      return select;
+    }
+  }
+  return nullptr;
+}
+}  // namespace
+
+HTMLSelectElement* HTMLOptionElement::OwnerSelectElement(
+    bool skip_check) const {
+  if (HTMLSelectElement::SelectParserRelaxationEnabled(this)) {
+    if (!skip_check) {
+      DCHECK_EQ(nearest_ancestor_select_,
+                NearestAncestorSelectNoNesting(*this));
+    }
+    return nearest_ancestor_select_;
   } else {
     if (!parentNode()) {
       return nullptr;
@@ -389,11 +411,17 @@ HTMLSelectElement* HTMLOptionElement::OwnerSelectElement() const {
   return nullptr;
 }
 
+void HTMLOptionElement::SetOwnerSelectElement(HTMLSelectElement* select) {
+  CHECK(HTMLSelectElement::SelectParserRelaxationEnabled(this));
+  DCHECK_EQ(select, NearestAncestorSelectNoNesting(*this));
+  nearest_ancestor_select_ = select;
+}
+
 String HTMLOptionElement::label() const {
   const AtomicString& label = FastGetAttribute(html_names::kLabelAttr);
   if (!label.IsNull())
     return label;
-  return CollectOptionInnerText(IncludeAltText::kIncludeAltText)
+  return CollectOptionInnerText()
       .StripWhiteSpace(IsHTMLSpace<UChar>)
       .SimplifyWhiteSpace(IsHTMLSpace<UChar>);
 }
@@ -427,34 +455,17 @@ String HTMLOptionElement::DefaultToolTip() const {
   return String();
 }
 
-String HTMLOptionElement::CollectOptionInnerText(
-    IncludeAltText include_alt_text) const {
+String HTMLOptionElement::CollectOptionInnerText() const {
   StringBuilder text;
   for (Node* node = firstChild(); node;) {
-    bool skip_children = false;
-    auto* element = DynamicTo<Element>(node);
-    if (node->IsTextNode()) {
+    if (node->IsTextNode())
       text.Append(node->nodeValue());
-    } else if (element && element->IsScriptElement()) {
-      // Text nodes inside script elements are not part of the option text.
-      skip_children = true;
-    } else if (auto* img = DynamicTo<HTMLImageElement>(element)) {
-      if (RuntimeEnabledFeatures::SelectParserRelaxationEnabled() &&
-          include_alt_text == IncludeAltText::kIncludeAltText) {
-        skip_children = true;
-        String img_alt = img->AltText();
-        if (!img_alt.empty()) {
-          text.Append(" ");
-          text.Append(img_alt);
-          text.Append(" ");
-        }
-      }
-    }
-    if (skip_children) {
+    // Text nodes inside script elements are not part of the option text.
+    auto* element = DynamicTo<Element>(node);
+    if (element && element->IsScriptElement())
       node = NodeTraversal::NextSkippingChildren(*node, this);
-    } else {
+    else
       node = NodeTraversal::Next(*node, this);
-    }
   }
   return text.ToString();
 }
@@ -467,33 +478,37 @@ HTMLFormElement* HTMLOptionElement::form() const {
 }
 
 void HTMLOptionElement::DidAddUserAgentShadowRoot(ShadowRoot& root) {
+  if (HTMLSelectElement::CustomizableSelectEnabled(this)) {
+    label_container_ = MakeGarbageCollected<HTMLSpanElement>(GetDocument());
+    label_container_->SetShadowPseudoId(
+        shadow_element_names::kOptionLabelContainer);
+    label_container_->setAttribute(html_names::kAriaHiddenAttr,
+                                   keywords::kTrue);
+    root.appendChild(label_container_);
+
+    auto* slot = MakeGarbageCollected<HTMLSlotElement>(GetDocument());
+    slot->SetShadowPseudoId(shadow_element_names::kOptionSlot);
+    root.appendChild(slot);
+  }
+
   UpdateLabel();
 }
 
 void HTMLOptionElement::UpdateLabel() {
-  // For appearance:base-select <select> without a label attribute we also
-  // need to render all children. We only check UsesMenuList and not computed
-  // style because we don't want to change DOM content based on computed style
-  // and because appearance:auto/none don't render the UA shadowroot when
-  // UsesMenuList is true.
-  if (RuntimeEnabledFeatures::CustomizableSelectEnabled()) {
-    if (auto* select = OwnerSelectElement()) {
-      if (select->UsesMenuList() &&
-          FastGetAttribute(html_names::kLabelAttr).empty()) {
-        return;
-      }
+  if (HTMLSelectElement::CustomizableSelectEnabled(this)) {
+    if (label_container_) {
+      label_container_->setTextContent(DisplayLabel());
     }
-  }
-
-  if (ShadowRoot* root = UserAgentShadowRoot())
+  } else if (ShadowRoot* root = UserAgentShadowRoot()) {
     root->setTextContent(DisplayLabel());
+  }
 }
 
 Node::InsertionNotificationRequest HTMLOptionElement::InsertedInto(
     ContainerNode& insertion_point) {
   auto return_value = HTMLElement::InsertedInto(insertion_point);
-  if (!RuntimeEnabledFeatures::SelectParserRelaxationEnabled()) {
-    CHECK(!RuntimeEnabledFeatures::CustomizableSelectEnabled());
+  if (!HTMLSelectElement::SelectParserRelaxationEnabled(this)) {
+    CHECK(!HTMLSelectElement::CustomizableSelectEnabled(this));
     return return_value;
   }
 
@@ -513,9 +528,7 @@ Node::InsertionNotificationRequest HTMLOptionElement::InsertedInto(
     // can remove the code in HTMLSelectElement::ChildrenChanged and
     // HTMLOptGroupElement::ChildrenChanged which handles this case as well as
     // the code here which avoids handling it.
-    // TODO(crbug.com/1511354): This UsesMenuList check doesn't account for
-    // the case when the select's rendering is changed after insertion.
-    SetTextOnlyRendering(!parent_select->UsesMenuList());
+    SetOwnerSelectElement(parent_select);
     return return_value;
   }
 
@@ -533,10 +546,8 @@ Node::InsertionNotificationRequest HTMLOptionElement::InsertedInto(
       passed_insertion_point = true;
     }
     if (auto* select = DynamicTo<HTMLSelectElement>(ancestor)) {
+      SetOwnerSelectElement(select);
       if (passed_insertion_point) {
-        // TODO(crbug.com/1511354): This UsesMenuList check doesn't account for
-        // the case when the select's rendering is changed after insertion.
-        SetTextOnlyRendering(!select->UsesMenuList());
         select->OptionInserted(*this, Selected());
       }
       break;
@@ -548,8 +559,8 @@ Node::InsertionNotificationRequest HTMLOptionElement::InsertedInto(
 
 void HTMLOptionElement::RemovedFrom(ContainerNode& insertion_point) {
   HTMLElement::RemovedFrom(insertion_point);
-  if (!RuntimeEnabledFeatures::SelectParserRelaxationEnabled()) {
-    CHECK(!RuntimeEnabledFeatures::CustomizableSelectEnabled());
+  if (!HTMLSelectElement::SelectParserRelaxationEnabled(this)) {
+    CHECK(!HTMLSelectElement::CustomizableSelectEnabled(this));
     return;
   }
 
@@ -579,10 +590,10 @@ void HTMLOptionElement::RemovedFrom(ContainerNode& insertion_point) {
       insertion_point_passed && is_parent_select_or_optgroup;
 
   if (was_removed_from_select_parent) {
+    SetOwnerSelectElement(nullptr);
     // Don't call select->OptionRemoved() in this case because
     // HTMLSelectElement::ChildrenChanged or
     // HTMLOptGroupElement::ChildrenChanged will call it for us.
-    SetTextOnlyRendering(true);
     return;
   }
 
@@ -597,60 +608,17 @@ void HTMLOptionElement::RemovedFrom(ContainerNode& insertion_point) {
     }
   }
 
+  SetOwnerSelectElement(nullptr);
+
   for (Node& ancestor : NodeTraversal::InclusiveAncestorsOf(insertion_point)) {
     if (IsA<HTMLOptionElement>(ancestor)) {
       // Nested options should not be associated with selects.
       return;
     }
     if (auto* select = DynamicTo<HTMLSelectElement>(ancestor)) {
-      SetTextOnlyRendering(true);
       select->OptionRemoved(*this);
       break;
     }
-  }
-}
-
-void HTMLOptionElement::SetTextOnlyRendering(bool text_only) {
-  if (!RuntimeEnabledFeatures::CustomizableSelectEnabled()) {
-    return;
-  }
-
-#if DCHECK_IS_ON()
-  {
-    // Double-check to make sure that we are setting the correct state according
-    // to the DOM tree. If there is a nearest ancestor <select> and it
-    // UsesMenuList, then we should be rendering all content rather than
-    // text-only.
-    auto* select = OwnerSelectElement();
-    DCHECK_EQ(select && select->UsesMenuList(), !text_only);
-  }
-#endif
-
-  // If the label attribute is present, then we should be rendering that
-  // instead, even in appearance:base-select mode:
-  // https://github.com/openui/open-ui/issues/1115
-  if (!FastGetAttribute(html_names::kLabelAttr).empty()) {
-    text_only = true;
-  }
-
-  if (auto* first_child = GetShadowRoot()->firstChild()) {
-    bool currently_text_only = first_child->getNodeType() == kTextNode;
-    CHECK_NE(currently_text_only, IsA<HTMLSlotElement>(first_child))
-        << " <option>'s UA ShadowRoot should either be text or a <slot>.";
-    if (currently_text_only == text_only) {
-      return;
-    }
-  }
-
-  GetShadowRoot()->RemoveChildren();
-  if (!text_only) {
-    // Render all child content by just having an unnamed <slot>.
-    GetShadowRoot()->AppendChild(
-        MakeGarbageCollected<HTMLSlotElement>(GetDocument()));
-  } else {
-    // Render only text content by only having a text node inside the
-    // shadowroot.
-    UpdateLabel();
   }
 }
 
@@ -664,7 +632,7 @@ bool HTMLOptionElement::SpatialNavigationFocused() const {
 bool HTMLOptionElement::IsDisplayNone(bool ensure_style) {
   const ComputedStyle* style = GetComputedStyle();
   if (!style && ensure_style &&
-      RuntimeEnabledFeatures::SelectParserRelaxationEnabled()) {
+      HTMLSelectElement::SelectParserRelaxationEnabled(this)) {
     style = EnsureComputedStyle();
   }
   return !style || style->Display() == EDisplay::kNone;
@@ -697,20 +665,28 @@ void HTMLOptionElement::DefaultEventHandlerInternal(Event& event) {
   const auto* mouse_event = DynamicTo<MouseEvent>(event);
   if (mouse_event && event.type() == event_type_names::kMouseup &&
       mouse_event->button() ==
-          static_cast<int16_t>(WebPointerProperties::Button::kLeft) &&
-      select->MouseupShouldClosePicker()) {
-    select->SelectOptionByPopup(this);
-    select->HidePopup(SelectPopupHideBehavior::kNormal);
-    event.SetDefaultHandled();
+          static_cast<int16_t>(WebPointerProperties::Button::kLeft)) {
+    // We leave the picker open, and do not "pick" an option, only if:
+    //  1. The mousedown was on the <select> button, so we have a mousedown
+    //     location stored, and
+    //  2. The mouseup on this <option> was within kEpsilon layout units
+    //     (post zoom, page-relative) of the location of the mousedown. I.e.
+    //     the mouse was not dragged between mousedown and mouseup.
+    std::optional<gfx::PointF> mouse_down_loc =
+        GetDocument().CustomizableSelectMousedownLocation();
+    constexpr float kEpsilon = 5;  // 5 pixels in any direction
+    bool mouse_moved = !mouse_down_loc.has_value() ||
+                       !mouse_down_loc->IsWithinDistance(
+                           mouse_event->AbsoluteLocation(), kEpsilon);
+    if (mouse_moved) {
+      select->SelectOptionByPopup(this);
+      select->HidePopup(SelectPopupHideBehavior::kNormal);
+      event.SetDefaultHandled();
+    }
+    GetDocument().SetCustomizableSelectMousedownLocation(std::nullopt);
     return;
-  } else if (event.type() == event_type_names::kMouseleave ||
-             event.type() == event_type_names::kMousedown) {
-    // In the case that the picker overlaps the invoker button and the user
-    // clicks and drags between options, releasing the pointer should choose an
-    // option and close the picker after the mouse has left an option or
-    // released the pointer and clicked down again.
-    // https://issues.chromium.org/issues/385300320
-    select->SetMouseupShouldClosePicker(true);
+  } else if (event.type() == event_type_names::kMousedown) {
+    GetDocument().SetCustomizableSelectMousedownLocation(std::nullopt);
   }
 
   auto* keyboard_event = DynamicTo<KeyboardEvent>(event);
@@ -820,12 +796,22 @@ void HTMLOptionElement::DefaultEventHandlerInternal(Event& event) {
 
 void HTMLOptionElement::FinishParsingChildren() {
   HTMLElement::FinishParsingChildren();
-  if (RuntimeEnabledFeatures::CustomizableSelectEnabled() && Selected()) {
+  if (HTMLSelectElement::CustomizableSelectEnabled(this) && Selected()) {
     auto* select = OwnerSelectElement();
     if (select && !select->IsMultiple()) {
       select->UpdateAllSelectedcontents(this);
     }
   }
+}
+
+// static
+bool HTMLOptionElement::IsLabelContainerElement(const Element& element) {
+  if (!HTMLSelectElement::CustomizableSelectEnabled(&element)) {
+    return false;
+  }
+  return IsA<HTMLOptionElement>(element.OwnerShadowHost()) &&
+         element.ShadowPseudoId() ==
+             shadow_element_names::kOptionLabelContainer;
 }
 
 }  // namespace blink

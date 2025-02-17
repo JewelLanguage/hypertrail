@@ -72,7 +72,6 @@ id<GREYMatcher> ManageUMALinkMatcher() {
 
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration config = [super appConfigurationForTestCase];
-  config.features_enabled.push_back(kNewSyncOptInIllustration);
   config.additional_args.push_back(
       "--disable-features=UpdatedFirstRunSequence");
   return config;
@@ -559,14 +558,7 @@ id<GREYMatcher> ManageUMALinkMatcher() {
       performAction:grey_tap()];
   // Setup the identity to add.
   FakeSystemIdentity* fakeIdentity2 = [FakeSystemIdentity fakeIdentity2];
-  [SigninEarlGrey addFakeIdentityForSSOAuthAddAccountFlow:fakeIdentity2];
-  // Confirm the fake add identity screen.
-  [[EarlGrey
-      selectElementWithMatcher:grey_allOf(
-                                   grey_accessibilityID(
-                                       kFakeAuthAddAccountButtonIdentifier),
-                                   grey_sufficientlyVisible(), nil)]
-      performAction:grey_tap()];
+  [SigninEarlGreyUI addFakeAccountInFakeAddAccountMenu:fakeIdentity2];
   // Accept sign-in.
   [[self elementInteractionWithGreyMatcher:chrome_test_util::
                                                PromoScreenPrimaryButtonMatcher()
@@ -960,13 +952,7 @@ id<GREYMatcher> ManageUMALinkMatcher() {
                           kPromoStyleScrollViewAccessibilityIdentifier]
       performAction:grey_tap()];
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
-  [SigninEarlGrey addFakeIdentityForSSOAuthAddAccountFlow:fakeIdentity];
-  [[EarlGrey
-      selectElementWithMatcher:grey_allOf(
-                                   grey_accessibilityID(
-                                       kFakeAuthAddAccountButtonIdentifier),
-                                   grey_sufficientlyVisible(), nil)]
-      performAction:grey_tap()];
+  [SigninEarlGreyUI addFakeAccountInFakeAddAccountMenu:fakeIdentity];
   // Verify that the primary button text is correct.
   NSString* continueAsText = l10n_util::GetNSStringF(
       IDS_IOS_FIRST_RUN_SIGNIN_CONTINUE_AS,
@@ -990,10 +976,11 @@ id<GREYMatcher> ManageUMALinkMatcher() {
   [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity];
 
   ExpectedSigninHistograms* expecteds = [[ExpectedSigninHistograms alloc]
-      initWithAccessPoint:signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE];
+      initWithAccessPoint:signin_metrics::AccessPoint::kStartPage];
   // TODO(crbug.com/41493423): We should log Signin is started. Maybe also that
   // it’s offered.
   expecteds.signinSigninCompletedAccessPoint = 1;
+  expecteds.signinSignInCompleted = 1;
   [SigninEarlGrey assertExpectedSigninHistograms:expecteds];
 }
 
@@ -1333,7 +1320,7 @@ id<GREYMatcher> ManageUMALinkMatcher() {
               grey_accessibilityID(
                   kPromoStyleHeaderViewBackgroundAccessibilityIdentifier),
               chrome_test_util::ImageViewWithImageNamed(
-                  @"sync_opt_in_background"),
+                  @"history_sync_opt_in_background"),
               grey_sufficientlyVisible(), nil)]
       assertWithMatcher:grey_notNil()];
 }

@@ -62,6 +62,7 @@
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/download_test_observer.h"
+#include "content/public/test/fenced_frame_test_util.h"
 #include "content/public/test/navigation_handle_observer.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/url_loader_interceptor.h"
@@ -844,7 +845,7 @@ IN_PROC_BROWSER_TEST_F(
     // require a dedicated process.
     EXPECT_NE(opener->GetSiteInstance()->GetProcess(),
               popup->GetSiteInstance()->GetProcess());
-    EXPECT_NE(old_popup_site_instance->GetProcess(),
+    EXPECT_NE(old_popup_site_instance->GetOrCreateProcess(),
               popup->GetSiteInstance()->GetProcess());
   } else {
     EXPECT_EQ(opener->GetSiteInstance(), popup->GetSiteInstance());
@@ -855,7 +856,7 @@ IN_PROC_BROWSER_TEST_F(
     EXPECT_FALSE(old_popup_site_instance->RequiresDedicatedProcess());
     EXPECT_EQ(opener->GetSiteInstance()->GetProcess(),
               popup->GetSiteInstance()->GetProcess());
-    EXPECT_EQ(old_popup_site_instance->GetProcess(),
+    EXPECT_EQ(old_popup_site_instance->GetOrCreateProcess(),
               popup->GetSiteInstance()->GetProcess());
   }
 }
@@ -977,7 +978,7 @@ IN_PROC_BROWSER_TEST_F(
     // require a dedicated process.
     EXPECT_NE(opener->GetSiteInstance()->GetProcess(),
               popup->GetSiteInstance()->GetProcess());
-    EXPECT_NE(old_popup_site_instance->GetProcess(),
+    EXPECT_NE(old_popup_site_instance->GetOrCreateProcess(),
               popup->GetSiteInstance()->GetProcess());
   } else {
     EXPECT_EQ(opener->GetSiteInstance(), popup->GetSiteInstance());
@@ -990,7 +991,7 @@ IN_PROC_BROWSER_TEST_F(
     EXPECT_FALSE(old_popup_site_instance->RequiresDedicatedProcess());
     EXPECT_EQ(opener->GetSiteInstance()->GetProcess(),
               popup->GetSiteInstance()->GetProcess());
-    EXPECT_EQ(old_popup_site_instance->GetProcess(),
+    EXPECT_EQ(old_popup_site_instance->GetOrCreateProcess(),
               popup->GetSiteInstance()->GetProcess());
   }
 }
@@ -1637,7 +1638,8 @@ IN_PROC_BROWSER_TEST_F(WebstoreIsolationBrowserTest, WebstorePopupIsIsolated) {
   EXPECT_NE(webstore_instance, popup_instance);
   EXPECT_NE(webstore_instance, initial_instance);
   EXPECT_NE(webstore_instance->GetProcess(), initial_instance->GetProcess());
-  EXPECT_NE(webstore_instance->GetProcess(), popup_instance->GetProcess());
+  EXPECT_NE(webstore_instance->GetProcess(),
+            popup_instance->GetOrCreateProcess());
   EXPECT_FALSE(webstore_instance->IsRelatedSiteInstance(popup_instance.get()));
   EXPECT_FALSE(
       webstore_instance->IsRelatedSiteInstance(initial_instance.get()));
@@ -1647,7 +1649,8 @@ IN_PROC_BROWSER_TEST_F(WebstoreIsolationBrowserTest, WebstorePopupIsIsolated) {
   EXPECT_TRUE(content::NavigateToURLFromRenderer(popup, first_url));
   scoped_refptr<content::SiteInstance> final_instance(
       popup->GetPrimaryMainFrame()->GetSiteInstance());
-  EXPECT_NE(final_instance->GetProcess(), webstore_instance->GetProcess());
+  EXPECT_NE(final_instance->GetProcess(),
+            webstore_instance->GetOrCreateProcess());
   EXPECT_FALSE(final_instance->IsRelatedSiteInstance(webstore_instance.get()));
 }
 
@@ -1687,7 +1690,7 @@ IN_PROC_BROWSER_TEST_F(WebstoreIsolationBrowserTest,
   EXPECT_TRUE(content::NavigateToURLFromRenderer(popup, first_url));
   scoped_refptr<content::SiteInstance> final_instance(
       popup->GetPrimaryMainFrame()->GetSiteInstance());
-  EXPECT_NE(final_instance->GetProcess(), popup_instance->GetProcess());
+  EXPECT_NE(final_instance->GetProcess(), popup_instance->GetOrCreateProcess());
   EXPECT_FALSE(final_instance->IsRelatedSiteInstance(popup_instance.get()));
 }
 
@@ -1740,7 +1743,7 @@ IN_PROC_BROWSER_TEST_F(WebstoreOverrideIsolationBrowserTest,
   EXPECT_TRUE(content::NavigateToURLFromRenderer(popup, first_url));
   scoped_refptr<content::SiteInstance> final_instance(
       popup->GetPrimaryMainFrame()->GetSiteInstance());
-  EXPECT_NE(final_instance->GetProcess(), popup_instance->GetProcess());
+  EXPECT_NE(final_instance->GetProcess(), popup_instance->GetOrCreateProcess());
   EXPECT_FALSE(final_instance->IsRelatedSiteInstance(popup_instance.get()));
 }
 
@@ -3174,4 +3177,86 @@ IN_PROC_BROWSER_TEST_F(SiteIsolationForCOOPBrowserTest,
   EXPECT_THAT(GetSavedIsolatedSites(browser()->profile()),
               UnorderedElementsAre("https://coop1.com", "https://coop3.com",
                                    "https://coop4.com"));
+}
+
+class FencedFrameNavigationBrowserTest : public ChromeNavigationBrowserTest {
+ public:
+  void SetUpOnMainThread() override {
+    ChromeNavigationBrowserTest::SetUpOnMainThread();
+
+    // Add content/test/data for cross_site_iframe_factory.html.
+    embedded_https_test_server().ServeFilesFromSourceDirectory(
+        "content/test/data");
+    embedded_https_test_server().SetSSLConfig(
+        net::EmbeddedTestServer::CERT_TEST_NAMES);
+  }
+
+  content::RenderFrameHost* primary_main_frame_host() {
+    return browser()
+        ->tab_strip_model()
+        ->GetActiveWebContents()
+        ->GetPrimaryMainFrame();
+  }
+
+  content::test::FencedFrameTestHelper& fenced_frame_test_helper() {
+    return fenced_frame_test_helper_;
+  }
+
+ private:
+  content::test::FencedFrameTestHelper fenced_frame_test_helper_;
+};
+
+IN_PROC_BROWSER_TEST_F(FencedFrameNavigationBrowserTest,
+                       FencedFrameMainFrameNavigationBlockedIfNetworkRevoked) {
+  ASSERT_TRUE(embedded_https_test_server().Start());
+
+  // Navigate to a page that contains a fenced frame.
+  const GURL main_url = embedded_https_test_server().GetURL(
+      "a.test", "/cross_site_iframe_factory.html?a.test(a.test{fenced})");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), main_url));
+
+  // Get fenced frame render frame host.
+  std::vector<content::RenderFrameHost*> child_frames =
+      fenced_frame_test_helper().GetChildFencedFrameHosts(
+          primary_main_frame_host());
+  EXPECT_EQ(child_frames.size(), 1u);
+  content::RenderFrameHost* fenced_frame_rfh = child_frames[0];
+
+  GURL target_url = embedded_https_test_server().GetURL(
+      "a.test", "/fenced_frames/title0.html");
+
+  // Open the link in new tab.
+  content::OpenURLParams params(
+      target_url, content::Referrer(), fenced_frame_rfh->GetFrameTreeNodeId(),
+      WindowOpenDisposition::NEW_BACKGROUND_TAB, ui::PAGE_TRANSITION_LINK,
+      /*is_renderer_initiated=*/false);
+
+  params.source_render_process_id =
+      fenced_frame_rfh->GetProcess()->GetDeprecatedID();
+  params.source_render_frame_id = fenced_frame_rfh->GetRoutingID();
+  params.initiator_frame_token = fenced_frame_rfh->GetFrameToken();
+  params.initiator_process_id =
+      fenced_frame_rfh->GetProcess()->GetDeprecatedID();
+  params.initiator_origin = fenced_frame_rfh->GetLastCommittedOrigin();
+  params.source_site_instance = fenced_frame_rfh->GetSiteInstance();
+
+  // Disable fenced frame untrusted network.
+  EXPECT_TRUE(ExecJs(fenced_frame_rfh, R"(
+    (async () => {
+      return window.fence.disableUntrustedNetwork();
+    })();
+  )"));
+
+  ui_test_utils::TabAddedWaiter tab_add(browser());
+
+  // Initiate a main frame navigation with the fenced frame as the initiator.
+  browser()->OpenURL(params, /*navigation_handle_callback=*/{});
+
+  // Make sure the navigation did not take place.
+  tab_add.Wait();
+  int index_of_new_tab = browser()->tab_strip_model()->count() - 1;
+  content::WebContents* new_web_contents =
+      browser()->tab_strip_model()->GetWebContentsAt(index_of_new_tab);
+  EXPECT_TRUE(WaitForLoadStop(new_web_contents));
+  EXPECT_TRUE(new_web_contents->GetLastCommittedURL().is_empty());
 }

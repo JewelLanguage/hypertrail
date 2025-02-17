@@ -4,17 +4,20 @@
 
 #include "ui/views/controls/button/label_button_label.h"
 
+#include <optional>
 #include <string>
+#include <string_view>
 
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/color/color_variant.h"
 #include "ui/views/layout/layout_provider.h"
 #include "ui/views/style/typography.h"
 #include "ui/views/style/typography_provider.h"
 
 namespace views::internal {
 
-LabelButtonLabel::LabelButtonLabel(const std::u16string& text, int text_context)
+LabelButtonLabel::LabelButtonLabel(std::u16string_view text, int text_context)
     : Label(text, text_context, style::STYLE_PRIMARY) {}
 
 LabelButtonLabel::~LabelButtonLabel() = default;
@@ -37,10 +40,8 @@ void LabelButtonLabel::SetDisabledColorId(std::optional<ui::ColorId> color_id) {
 }
 
 std::optional<ui::ColorId> LabelButtonLabel::GetDisabledColorId() const {
-  if (absl::holds_alternative<ui::ColorId>(requested_disabled_color_)) {
-    return absl::get<ui::ColorId>(requested_disabled_color_);
-  }
-  return std::nullopt;
+  return requested_disabled_color_ ? requested_disabled_color_->GetColorId()
+                                   : std::nullopt;
 }
 
 void LabelButtonLabel::SetEnabledColor(SkColor color) {
@@ -61,10 +62,8 @@ void LabelButtonLabel::SetEnabledColorId(std::optional<ui::ColorId> color_id) {
 }
 
 std::optional<ui::ColorId> LabelButtonLabel::GetEnabledColorId() const {
-  if (absl::holds_alternative<ui::ColorId>(requested_enabled_color_)) {
-    return absl::get<ui::ColorId>(requested_enabled_color_);
-  }
-  return std::nullopt;
+  return requested_enabled_color_ ? requested_enabled_color_->GetColorId()
+                                  : std::nullopt;
 }
 
 void LabelButtonLabel::OnThemeChanged() {
@@ -77,12 +76,15 @@ void LabelButtonLabel::OnEnabledChanged() {
 }
 
 void LabelButtonLabel::SetColorForEnableState() {
-  const absl::variant<absl::monostate, SkColor, ui::ColorId>& color =
+  const auto& color_variant =
       GetEnabled() ? requested_enabled_color_ : requested_disabled_color_;
-  if (absl::holds_alternative<SkColor>(color)) {
-    Label::SetEnabledColor(absl::get<SkColor>(color));
-  } else if (absl::holds_alternative<ui::ColorId>(color)) {
-    Label::SetEnabledColorId(absl::get<ui::ColorId>(color));
+
+  if (color_variant) {
+    if (auto color = color_variant->GetSkColor()) {
+      Label::SetEnabledColor(*color);
+    } else {
+      Label::SetEnabledColorId(*color_variant->GetColorId());
+    }
   } else {
     // Get default color Id.
     const ui::ColorId default_color_id = TypographyProvider::Get().GetColorId(

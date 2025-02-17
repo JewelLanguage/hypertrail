@@ -12,11 +12,13 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
+#include "base/stl_util.h"
 #include "build/chromeos_buildflags.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "extensions/browser/blocklist_extension_prefs.h"
+#include "extensions/browser/disable_reason.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
@@ -34,10 +36,6 @@
 #include "extensions/common/manifest_handlers/shared_module_info.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "third_party/blink/public/common/service_worker/service_worker_status_code.h"
-
-#if BUILDFLAG(IS_CHROMEOS)
-#include "chrome/browser/ash/crosapi/browser_util.h"
-#endif  // BUILDFLAG(IS_CHROMEOS)
 
 using content::DevToolsAgentHost;
 using extensions::mojom::ManifestLocation;
@@ -62,7 +60,8 @@ ExtensionRegistrar::ExtensionRegistrar(content::BrowserContext* browser_context,
       renderer_helper_(
           RendererStartupHelperFactory::GetForBrowserContext(browser_context)) {
   // ExtensionRegistrar is created by ExtensionSystem via ExtensionService, and
-  // ExtensionSystemFactory depends on ProcessManager, so this should be safe.
+  // ChromeExtensionSystemFactory depends on ProcessManager, so this should be
+  // safe.
   auto* process_manager = ProcessManager::Get(browser_context_);
   DCHECK(process_manager);
   process_manager_observation_.Observe(process_manager);
@@ -149,10 +148,15 @@ void ExtensionRegistrar::AddExtension(
   if (registry_->disabled_extensions().Contains(extension->id())) {
     // Show the extension disabled error if a permissions increase or a remote
     // installation is the reason it was disabled, and no other reasons exist.
-    int reasons = extension_prefs_->GetDisableReasons(extension->id());
-    const int kReasonMask = disable_reason::DISABLE_PERMISSIONS_INCREASE |
-                            disable_reason::DISABLE_REMOTE_INSTALL;
-    if (reasons & kReasonMask && !(reasons & ~kReasonMask)) {
+    DisableReasonSet reasons =
+        extension_prefs_->GetDisableReasons(extension->id());
+    const DisableReasonSet error_reasons = {
+        disable_reason::DISABLE_PERMISSIONS_INCREASE,
+        disable_reason::DISABLE_REMOTE_INSTALL};
+    DisableReasonSet other_reasons =
+        base::STLSetDifference<DisableReasonSet>(reasons, error_reasons);
+
+    if (!reasons.empty() && other_reasons.empty()) {
       delegate_->ShowExtensionDisabledError(
           extension.get(),
           extension_prefs_->HasDisableReason(
@@ -193,8 +197,9 @@ void ExtensionRegistrar::RemoveExtension(const ExtensionId& extension_id,
       registry_->GetExtensionById(extension_id, include_mask));
 
   // If the extension is blocked/blocklisted, no need to notify again.
-  if (!extension)
+  if (!extension) {
     return;
+  }
 
   if (registry_->terminated_extensions().Contains(extension_id)) {
     // The extension was already deactivated from the call to
@@ -255,10 +260,19 @@ void ExtensionRegistrar::EnableExtension(const ExtensionId& extension_id) {
   ActivateExtension(extension, false);
 }
 
-void ExtensionRegistrar::DisableExtension(const ExtensionId& extension_id,
-                                          int disable_reasons) {
+void ExtensionRegistrar::DisableExtension(
+    const ExtensionId& extension_id,
+    const DisableReasonSet& disable_reasons) {
+  auto passkey = ExtensionPrefs::DisableReasonRawManipulationPasskey();
+  DisableExtensionWithRawReasons(passkey, extension_id, disable_reasons);
+}
+
+void ExtensionRegistrar::DisableExtensionWithRawReasons(
+    ExtensionPrefs::DisableReasonRawManipulationPasskey,
+    const ExtensionId& extension_id,
+    base::flat_set<int> disable_reasons) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  DCHECK_NE(disable_reason::DISABLE_NONE, disable_reasons);
+  DCHECK(!disable_reasons.empty());
 
   scoped_refptr<const Extension> extension =
       registry_->GetExtensionById(extension_id, ExtensionRegistry::EVERYTHING);
@@ -270,41 +284,39 @@ void ExtensionRegistrar::DisableExtension(const ExtensionId& extension_id,
     // Remove disallowed disable reasons.
     // Certain disable reasons are always allowed, since they are more internal
     // to the browser (rather than the user choosing to disable the extension).
-    int internal_disable_reason_mask =
-        extensions::disable_reason::DISABLE_RELOAD |
-        extensions::disable_reason::DISABLE_CORRUPTED |
-        extensions::disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY |
+    base::flat_set<int> internal_disable_reasons = {
+        extensions::disable_reason::DISABLE_RELOAD,
+        extensions::disable_reason::DISABLE_CORRUPTED,
+        extensions::disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY,
         extensions::disable_reason::
-            DISABLE_PUBLISHED_IN_STORE_REQUIRED_BY_POLICY |
-        extensions::disable_reason::DISABLE_BLOCKED_BY_POLICY |
-        extensions::disable_reason::DISABLE_CUSTODIAN_APPROVAL_REQUIRED |
-        extensions::disable_reason::DISABLE_REINSTALL |
-        extensions::disable_reason::DISABLE_UNSUPPORTED_MANIFEST_VERSION |
-        extensions::disable_reason::DISABLE_NOT_VERIFIED |
-        extensions::disable_reason::DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION;
+            DISABLE_PUBLISHED_IN_STORE_REQUIRED_BY_POLICY,
+        extensions::disable_reason::DISABLE_BLOCKED_BY_POLICY,
+        extensions::disable_reason::DISABLE_CUSTODIAN_APPROVAL_REQUIRED,
+        extensions::disable_reason::DISABLE_REINSTALL,
+        extensions::disable_reason::DISABLE_UNSUPPORTED_MANIFEST_VERSION,
+        extensions::disable_reason::DISABLE_NOT_VERIFIED,
+        extensions::disable_reason::DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION,
+    };
 
-#if BUILDFLAG(IS_CHROMEOS)
-    // For controlled extensions, only allow disabling not ash-keeplisted
-    // extensions if Lacros is the only browser.
-    if (!crosapi::browser_util::IsAshWebBrowserEnabled()) {
-      internal_disable_reason_mask |=
-          extensions::disable_reason::DISABLE_NOT_ASH_KEEPLISTED;
-    }
-#endif  // BUILDFLAG(IS_CHROMEOS)
+    disable_reasons = base::STLSetIntersection<base::flat_set<int>>(
+        disable_reasons, internal_disable_reasons);
 
-    disable_reasons &= internal_disable_reason_mask;
-
-    if (disable_reasons == disable_reason::DISABLE_NONE)
+    if (disable_reasons.empty()) {
       return;
+    }
   }
+
+  auto passkey = ExtensionPrefs::DisableReasonRawManipulationPasskey();
 
   // The extension may have been disabled already. Just add the disable reasons.
   if (!IsExtensionEnabled(extension_id)) {
-    extension_prefs_->AddDisableReasons(extension_id, disable_reasons);
+    extension_prefs_->AddRawDisableReasons(passkey, extension_id,
+                                           disable_reasons);
     return;
   }
 
-  extension_prefs_->SetExtensionDisabled(extension_id, disable_reasons);
+  extension_prefs_->SetExtensionDisabledWithRawReasons(passkey, extension_id,
+                                                       disable_reasons);
 
   int include_mask =
       ExtensionRegistry::EVERYTHING & ~ExtensionRegistry::DISABLED;
@@ -331,12 +343,12 @@ void ExtensionRegistrar::DisableExtension(const ExtensionId& extension_id,
 
 void ExtensionRegistrar::DisableExtensionWithSource(
     const Extension* source_extension,
-    const std::string& extension_id,
-    disable_reason::DisableReason disable_reasons) {
+    const ExtensionId& extension_id,
+    disable_reason::DisableReason disable_reason) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  DCHECK(disable_reasons == disable_reason::DISABLE_USER_ACTION ||
-         disable_reasons == disable_reason::DISABLE_BLOCKED_BY_POLICY);
-  if (disable_reasons == disable_reason::DISABLE_BLOCKED_BY_POLICY) {
+  DCHECK(disable_reason == disable_reason::DISABLE_USER_ACTION ||
+         disable_reason == disable_reason::DISABLE_BLOCKED_BY_POLICY);
+  if (disable_reason == disable_reason::DISABLE_BLOCKED_BY_POLICY) {
     DCHECK(Manifest::IsPolicyLocation(source_extension->location()) ||
            Manifest::IsComponentLocation(source_extension->location()));
   }
@@ -345,14 +357,14 @@ void ExtensionRegistrar::DisableExtensionWithSource(
       registry_->GetExtensionById(extension_id, ExtensionRegistry::EVERYTHING);
   CHECK(extension_system_->management_policy()->ExtensionMayModifySettings(
       source_extension, extension, nullptr));
-  DisableExtension(extension_id, disable_reasons);
+  DisableExtension(extension_id, {disable_reason});
 }
 
 void ExtensionRegistrar::EnabledReloadableExtensions() {
   std::vector<std::string> extensions_to_enable;
   for (const auto& e : registry_->disabled_extensions()) {
-    if (extension_prefs_->GetDisableReasons(e->id()) ==
-        disable_reason::DISABLE_RELOAD) {
+    if (extension_prefs_->HasOnlyDisableReason(
+            e->id(), disable_reason::DISABLE_RELOAD)) {
       extensions_to_enable.push_back(e->id());
     }
   }
@@ -375,13 +387,14 @@ void ExtensionRegistrar::RemoveComponentExtension(
 void ExtensionRegistrar::RemoveDisableReasonAndMaybeEnable(
     const std::string& extension_id,
     disable_reason::DisableReason reason_to_remove) {
-  auto disable_reason = extension_prefs_->GetDisableReasons(extension_id);
-  if ((disable_reason & reason_to_remove) == 0) {
+  DisableReasonSet disable_reasons =
+      extension_prefs_->GetDisableReasons(extension_id);
+  if (!disable_reasons.contains(reason_to_remove)) {
     return;
   }
 
   extension_prefs_->RemoveDisableReason(extension_id, reason_to_remove);
-  if (disable_reason == reason_to_remove) {
+  if (disable_reasons.size() == 1) {
     EnableExtension(extension_id);
   }
 }
@@ -478,7 +491,7 @@ void ExtensionRegistrar::ReloadExtension(
       orphaned_dev_tools_[extension_id] = std::move(agent_hosts);
     }
     path = enabled_extension->path();
-    DisableExtension(extension_id, disable_reason::DISABLE_RELOAD);
+    DisableExtension(extension_id, {disable_reason::DISABLE_RELOAD});
     DCHECK(registry_->disabled_extensions().Contains(extension_id));
     reloading_extensions_.insert(extension_id);
   } else if (!disabled_extension) {
@@ -734,7 +747,7 @@ void ExtensionRegistrar::OnGreylistStateAdded(const std::string& extension_id,
   // to disable the extension again.
   blocklist_prefs::UpdateCurrentGreylistStatesAsAcknowledged(extension_id,
                                                              extension_prefs_);
-  DisableExtension(extension_id, disable_reason::DISABLE_GREYLIST);
+  DisableExtension(extension_id, {disable_reason::DISABLE_GREYLIST});
 }
 
 void ExtensionRegistrar::BlocklistExtensionForTest(

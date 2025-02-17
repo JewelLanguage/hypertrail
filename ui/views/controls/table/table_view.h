@@ -13,9 +13,13 @@
 #include "ui/base/models/list_selection_model.h"
 #include "ui/base/models/table_model.h"
 #include "ui/base/models/table_model_observer.h"
+#include "ui/color/color_id.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/render_text.h"
+#include "ui/views/layout/layout_provider.h"
 #include "ui/views/metadata/view_factory.h"
+#include "ui/views/style/platform_style.h"
+#include "ui/views/style/typography.h"
 #include "ui/views/view.h"
 #include "ui/views/views_export.h"
 
@@ -24,6 +28,14 @@ namespace ui {
 struct AXActionData;
 
 }  // namespace ui
+
+namespace task_manager {
+
+// Forward declaring TaskManagerView to use as a PassKey because it has
+// permission to disable alternating row colors on macOS.
+class TaskManagerView;
+
+}  // namespace task_manager
 
 // A TableView is a view that displays multiple rows with any number of columns.
 // TableView is driven by a TableModel. The model returns the contents
@@ -56,6 +68,23 @@ struct TableHeaderStyle {
   std::optional<int> resize_bar_vertical_padding;
   std::optional<int> separator_horizontal_padding;
   std::optional<gfx::Font::Weight> font_weight;
+  std::optional<ui::ColorId> separator_horizontal_color_id;
+  std::optional<ui::ColorId> separator_vertical_color_id;
+  std::optional<ui::ColorId> background_color_id;
+};
+
+struct TableBackgroundStyle {
+  ui::ColorId background = ui::kColorTableBackground;
+  ui::ColorId alternate = ui::kColorTableBackgroundAlternate;
+  ui::ColorId selected_focused = ui::kColorTableBackgroundSelectedFocused;
+  ui::ColorId selected_unfocused = ui::kColorTableBackgroundSelectedUnfocused;
+};
+
+struct TableStyle {
+  TableBackgroundStyle background_tokens;
+
+  // Icons will be drawn with a rounded rect background if this is set to true.
+  bool icons_have_background = false;
 };
 
 // The cell's in the first column of a table can contain:
@@ -106,6 +135,9 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
 
   using SortDescriptors = std::vector<SortDescriptor>;
 
+  static constexpr int kTextContext = style::CONTEXT_TABLE_ROW;
+  static constexpr int kTextStyle = style::STYLE_BODY_4;
+
   // Creates a new table using the model and columns specified.
   // The table type applies to the content of the first column (text, icon and
   // text, checkbox and text).
@@ -154,6 +186,9 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
   // Sets the TableGrouper. TableView does not own |grouper| (common use case is
   // to have TableModel implement TableGrouper).
   void SetGrouper(TableGrouper* grouper);
+
+  // Determines whether to draw the TableGrouper on the left side of the table.
+  void SetGrouperVisibility(bool visible);
 
   // Returns the number of rows in the TableView.
   size_t GetRowCount() const;
@@ -224,6 +259,7 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
   // Maps from the index in terms of the view to that of the model.
   size_t ViewToModel(size_t view_index) const;
 
+  void SetRowPadding(views::DistanceMetric distance_metric);
   int GetRowHeight() const { return row_height_; }
 
   bool GetSelectOnRemove() const;
@@ -242,6 +278,12 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
   // If enabled, hovering over a row causes the row's background color to
   // change.
   void SetMouseHoveringEnabled(bool enabled);
+
+  // Updates whether table rows will render with alternating colors. Enabling
+  // only works on macOS, other platforms results in a no-op.
+  void SetAlternatingRowColorsEnabled(
+      base::PassKey<task_manager::TaskManagerView> key,
+      bool enabled);
 
   // Returns the proper ax sort direction.
   ax::mojom::SortDirection GetFirstSortDescriptorDirection() const;
@@ -264,6 +306,14 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
   void SetHeaderStyle(const TableHeaderStyle& style);
   const TableHeaderStyle& header_style() const { return header_style_; }
 
+  void SetTableStyle(const TableStyle& style);
+  const TableStyle& table_style() const { return table_style_; }
+
+  ui::ColorId BackgroundColorId() const;
+  ui::ColorId BackgroundAlternateColorId() const;
+  ui::ColorId BackgroundSelectedFocusedColorId() const;
+  ui::ColorId BackgroundSelectedUnfocusedColorId() const;
+
   // View overrides:
   void Layout(PassKey) override;
   gfx::Size CalculatePreferredSize(
@@ -275,7 +325,7 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
   void OnMouseMoved(const ui::MouseEvent& event) override;
   void OnMouseExited(const ui::MouseEvent& event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
-  std::u16string GetTooltipText(const gfx::Point& p) const override;
+  std::u16string GetRenderedTooltipText(const gfx::Point& p) const override;
   bool HandleAccessibleAction(const ui::AXActionData& action_data) override;
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
 
@@ -562,6 +612,11 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
   // The row beneath the cursor, if the table is focused.
   std::optional<size_t> hovered_row_ = std::nullopt;
 
+  // If enabled, rows will alternate between kColorTableBackground and
+  // kColorTableBackgroundAlternate.
+  bool alternating_row_colors_ =
+      PlatformStyle::kTableViewSupportsAlternatingRowColors;
+
   TableType table_type_ = TableType::kTextOnly;
 
   bool single_selection_ = true;
@@ -611,8 +666,14 @@ class VIEWS_EXPORT TableView : public View, public ui::TableModelObserver {
   // pending or not.
   bool update_accessibility_focus_pending_ = false;
 
+  // Draws the Grouper if one is present, and set to true.
+  bool grouper_visible_ = true;
+
   // Customization for the header. Includes options such as padding.
   TableHeaderStyle header_style_;
+
+  // Customization for the table.
+  TableStyle table_style_;
 
   // TODO(crbug.com/388086397): Enable by mouse hovering by default when color
   // tokens are refined on all platforms.

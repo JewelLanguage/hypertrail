@@ -266,14 +266,22 @@ public class ShrinkExpandHubLayoutAnimatorProvider implements HubLayoutAnimatorP
         if (mAnimatorSupplier.hasValue()) return;
 
         assert mAnimationDataSupplier.hasValue();
+        ShrinkExpandAnimationData animationData = mAnimationDataSupplier.get();
 
         @Nullable View toolbarView = mHubContainerView.findViewById(R.id.hub_toolbar);
         RecordHistogram.recordBooleanHistogram(
                 "Android.Hub.ToolbarPresentOnAnimation", toolbarView != null);
 
         boolean isShrink = mAnimationType == HubLayoutAnimationType.SHRINK_TAB;
-        float initialAlpha = isShrink ? 0.0f : 1.0f;
-        float finalAlpha = isShrink ? 1.0f : 0.0f;
+        float initialAlpha;
+        float finalAlpha;
+        if (animationData.isTopToolbar()) {
+            initialAlpha = isShrink ? 0.0f : 1.0f;
+            finalAlpha = isShrink ? 1.0f : 0.0f;
+        } else {
+            initialAlpha = 1.0f;
+            finalAlpha = 1.0f;
+        }
         final @Nullable ObjectAnimator fadeAnimator;
         if (toolbarView != null) {
             fadeAnimator =
@@ -294,7 +302,6 @@ public class ShrinkExpandHubLayoutAnimatorProvider implements HubLayoutAnimatorP
                         ? HubUtils.getSearchBoxHeight(
                                 mHubContainerView, R.id.hub_toolbar, R.id.toolbar_action_container)
                         : 0;
-        ShrinkExpandAnimationData animationData = mAnimationDataSupplier.get();
         Rect initialRect = animationData.getInitialRect();
         Rect finalRect = animationData.getFinalRect();
         mShrinkExpandAnimator =
@@ -316,28 +323,18 @@ public class ShrinkExpandHubLayoutAnimatorProvider implements HubLayoutAnimatorP
             shrinkExpandAnimator.addUpdateListener(ignored -> mAnimationTracker.onUpdate());
         }
 
-        int initialTopRadius = Math.round(animationData.getInitialTopCornerRadius());
-        int initialBottomRadius = Math.round(animationData.getInitialBottomCornerRadius());
-        int initialRectWidth = initialRect.width();
-        int finalRectWidth = finalRect.width();
-        float scaleFactor = (float) initialRectWidth / finalRectWidth;
-        int finalTopRadius = Math.round(animationData.getFinalTopCornerRadius() * scaleFactor);
-        int finalBottomRadius =
-                Math.round(animationData.getFinalBottomCornerRadius() * scaleFactor);
+        int[] initialRoundedCorners = animationData.getInitialCornerRadii();
+        int[] finalRoundedCorners = animationData.getFinalCornerRadii();
         mShrinkExpandImageView.setRoundedCorners(
-                initialTopRadius, initialTopRadius, initialBottomRadius, initialBottomRadius);
-        ValueAnimator cornerAnimator = ValueAnimator.ofFloat(0f, 1f);
+                initialRoundedCorners[0],
+                initialRoundedCorners[1],
+                initialRoundedCorners[2],
+                initialRoundedCorners[3]);
+
+        ValueAnimator cornerAnimator =
+                RoundedCornerAnimatorUtil.createRoundedCornerAnimator(
+                        mShrinkExpandImageView, initialRoundedCorners, finalRoundedCorners);
         cornerAnimator.setInterpolator(interpolator);
-        int deltaTop = finalTopRadius - initialTopRadius;
-        int deltaBottom = finalBottomRadius - initialBottomRadius;
-        cornerAnimator.addUpdateListener(
-                animation -> {
-                    float fraction = animation.getAnimatedFraction();
-                    int top = initialTopRadius + Math.round(deltaTop * fraction);
-                    int bottom = initialBottomRadius + Math.round(deltaBottom * fraction);
-                    mShrinkExpandImageView.setRoundedCorners(top, top, bottom, bottom);
-                    mShrinkExpandImageView.invalidate();
-                });
 
         AnimatorSet animatorSet = new AnimatorSet();
         if (fadeAnimator == null) {

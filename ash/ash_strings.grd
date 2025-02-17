@@ -452,6 +452,24 @@ Style notes:
       <message name="IDS_ASH_STATUS_TRAY_NEARBY_SHARE_BUTTON_LABEL" desc="The shorter label used for the button in the status tray to toggle Nearby Share high visibility mode, which makes the device visible to all nearby devices for file sharing.">
         Nearby visibility
       </message>
+      <message name="IDS_ASH_STATUS_TRAY_NEARBY_SHARE_ICON_TOOLTIP" desc="Quick Share tile icon tooltip.">
+        Toggle Quick Share. Quick Share is <ph name="quick_share_state">$1<ex>On</ex></ph>
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_NEARBY_SHARE_TILE_TOOLTIP" desc="Quick Share tile tooltip.">
+        Show Quick Share settings
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_NEARBY_SHARE_TILE_TOOLTIP_ENABLED" desc="Quick Share tile tooltip when enabled.">
+        Show Quick Share settings. <ph name="visibility">$1<ex>Your devices</ex></ph> visibility selected
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_NEARBY_SHARE_TILE_TOOLTIP_DISABLED" desc="Quick Share tile tooltip when disabled.">
+        Show Quick Share settings. Quick Share disabled
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_NEARBY_SHARE_TILE_TOOLTIP_HIGH_VISIBILITY" desc="Quick Share tile tooltip when device is in high visibility.">
+        Show Quick Share settings. Visible to everyone for <ph name="time_remaining">$1<ex>10 min</ex></ph>
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_NEARBY_SHARE_DETAILED_VIEW_SETTINGS_BUTTON_TOOLTIP" desc="Settings button tooltip.">
+        Quick Share settings
+      </message>
       <message name="IDS_ASH_STATUS_TRAY_NEARBY_SHARE_DETAILED_VIEW_CONTACTS_SUBLABEL" desc="The sublabel in the Contacts visibility row.">
         Only your contacts with a Google Account
       </message>
@@ -2709,9 +2727,6 @@ You can also use the keyboard shortcut. First, highlight text, then press <ph na
       <message name="IDS_ASH_DESKS_TEMPLATES_DELETE_DESK_DIALOG_TITLE" desc="The text of the title of the saved desk delete dialog, which shows up when trying to delete a saved desk.">
         Delete saved desk?
       </message>
-      <message name="IDS_ASH_DESKS_TEMPLATES_UNSUPPORTED_LACROS_DIALOG_DESCRIPTION" desc="The text of the description of the desks templates unsupported apps dialog, which shows up when trying to save a desk that contains an unsupported app (i.e. Crostini app).">
-        Lacros windows aren't currently supported. Other apps will be saved.
-      </message>
       <message name="IDS_ASH_DESKS_TEMPLATES_UNSUPPORTED_LINUX_APPS_DIALOG_DESCRIPTION" desc="The text of the description of the desks templates unsupported apps dialog, which shows up when trying to save a desk that contains an unsupported app (i.e. Crostini app).">
         Linux apps aren’t currently supported. Other apps will be saved.
       </message>
@@ -4147,9 +4162,6 @@ No devices connected.
 
       <message name="IDS_ASH_IME_MENU_ACCESSIBLE_NAME" desc="The accessible text for opt-in IME menu icon in status tray.">
         IME menu button
-      </message>
-      <message name="IDS_ASH_MOUSE_KEYS_TRAY_ACCESSIBLE_NAME" desc="The accessible text for the mouse keys menu icon in the status tray.">
-        Mouse keys button
       </message>
       <message name="IDS_ASH_SELECT_TO_SPEAK_TRAY_ACCESSIBLE_NAME" desc="The accessible text for the select-to-speak menu icon in the status tray.">
         Select-to-speak button
@@ -5605,22 +5617,22 @@ No devices connected.
         A few things to keep in mind
       </message>
       <message name="IDS_ASH_MAGIC_BOOST_DISCLAMIER_PARAGRAPH_ONE" desc="Text shown as the first paragraph of the Magic Boost disclamier view's body.">
-        You must be at least 18 years old to use Help me write and Help me read.
+        You must be at least 18 years old to use Help me read, Help me write, and create images with AI.
       </message>
       <message name="IDS_ASH_MAGIC_BOOST_DISCLAIMER_PARAGRAPH_TWO" desc="Text shown as the second paragraph of the Magic Boost disclamier view's body.">
-        When you turn on Help me write and Help me read, the input text, document content, and web page URL are sent to Google AI servers to generate writing suggestions, generate summaries, answer questions, and improve the product, subject to <ph name="LINK_TO_SERVICE_TERMS">$1<ex>Google's Terms of Service</ex></ph>. Don't include anything personal, sensitive, or confidential.
+        When you turn on these features, the input text, document content, and web page URL may be sent to Google AI servers. This information is used to generate writing suggestions, generate summaries, answer questions, and improve the product, subject to <ph name="LINK_TO_SERVICE_TERMS">$1<ex>Google's Terms of Service and Privacy Policy</ex></ph>. Don't include anything personal, sensitive, or confidential.
       </message>
       <message name="IDS_ASH_MAGIC_BOOST_DISCLAIMER_PARAGRAPH_THREE" desc="Text shown as the third paragraph of the Magic Boost disclamier view's body.">
-        Generative AI is experimental, in early development, and currently has limited availability.
+        Generative AI can make mistakes, including about people, so double-check it.
       </message>
       <message name="IDS_ASH_MAGIC_BOOST_DISCLAIMER_PARAGRAPH_FOUR" desc="Text shown as the forth paragraph of the Magic Boost disclamier view's body.">
-        You can turn off Help me write and Help me read at any time in Settings. <ph name="LINK_TO_LEARN_MORE">$1<ex>Learn more</ex></ph>
+        You can turn off these features at any time in Settings. <ph name="LINK_TO_LEARN_MORE">$1<ex>Learn more</ex></ph>
       </message>
       <message name="IDS_ASH_MAGIC_BOOST_DISCLAIMER_LEARN_MORE_LINK_TEXT" desc="The linked text Learn More text in the Magic Boost disclaimer view.">
         Learn more
       </message>
       <message name="IDS_ASH_MAGIC_BOOST_DISCLAIMER_TERMS_LINK_TEXT" desc="The linked Google terms of service text in the Magic Boost disclaimer view.">
-        Google's Terms of Service
+        Google's Terms of Service and Privacy Policy
       </message>
 
       <!-- Multi-profiles intro dialog -->
@@ -6841,23 +6853,74 @@ Here are some things you can try to get started.
       <message name="IDS_ASH_SCREEN_CAPTURE_EDUCATION_SETTINGS_NUDGE_LABEL" desc="The label of the Screen Capture Education settings nudge (Arm 3) for using the quick settings menu.">
         Use the screen capture tool in quick settings to take screenshots
       </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_COPY_TEXT_BUTTON_LABEL" desc="The label on a button that can be clicked to copy text from the contents of a screenshot into the user's clipboard.">
+        Copy text
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_TEXT_COPIED_TOAST" desc="The message shown on a toast to indicate text was copied to the user's clipboard from the contents of a screenshot.">
+        Text copied to Clipboard
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_MORE_ACTIONS_UNAVAILABLE_OFFLINE_ERROR" desc="The error message shown to indicate to the user that some actions (e.g. search) are not available while offline.">
+        Connect to internet for more
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_ACTION_ATTEMPTED_OFFLINE_ERROR" desc="The error message shown if the user is offline while attempting an action that requires an internet connection.">
+        Check your internet and try again
+      </message>
 
       <!-- Scanner -->
       <!-- TODO: crbug.com/375967525 - Finalize these strings and mark them as translateable -->
-      <message name="IDS_ASH_SCANNER_ACTION_CREATE_EVENT_LABEL" desc="The label on a button that can be clicked to create a new calendar event from the contents of a screenshot." translateable="false">
+      <message name="IDS_ASH_SCANNER_ACTION_CREATE_EVENT_LABEL" desc="The label on a button that can be clicked to create a new calendar event from the contents of a screenshot. Clicking the button will open a draft new event in Google Calendar with the event details pre-filled.">
         Add to Calendar
       </message>
-      <message name="IDS_ASH_SCANNER_ACTION_CREATE_CONTACT_LABEL" desc="The label on a button that can be clicked to create a new contact from the contents of a screenshot." translateable="false">
+      <message name="IDS_ASH_SCANNER_ACTION_CREATE_CONTACT_LABEL" desc="The label on a button that can be clicked to create a new contact from the contents of a screenshot. Clicking the button will open a draft new contact in Google Contacts with the contact details pre-filled.">
         Create contact
       </message>
-      <message name="IDS_ASH_SCANNER_ACTION_CREATE_SHEET" desc="The label on a button that can be clicked to create a new Google Sheet from the contents of a screenshot." translateable="false">
+      <message name="IDS_ASH_SCANNER_ACTION_CREATE_SHEET" desc="The label on a button that can be clicked to create a new Google Sheet from the contents of a screenshot.">
         Create Google Sheets
       </message>
-      <message name="IDS_ASH_SCANNER_ACTION_CREATE_DOC" desc="The label on a button that can be clicked to create a new Google Doc from the contents of a screenshot." translateable="false">
+      <message name="IDS_ASH_SCANNER_ACTION_CREATE_DOC" desc="The label on a button that can be clicked to create a new Google Doc from the contents of a screenshot.">
         Create Google Docs
       </message>
-      <message name="IDS_ASH_SCANNER_ACTION_COPY_TEXT_AND_FORMAT" desc="The label on a button that can be clicked to copy text with formatting from the contents of a screenshot." translateable="false">
-        Copy text and format
+      <message name="IDS_ASH_SCANNER_ACTION_COPY_TEXT_AND_FORMAT" desc="The label on a button that can be clicked to copy text with formatting from the contents of a screenshot. Formatting includes properties such as text size, font, and color.">
+        Copy with formatting
+      </message>
+      <message name="IDS_ASH_SCANNER_ACTION_SUCCESS_TOAST_CREATE_EVENT" desc="The message shown on a toast to indicate that event details were created from the contents of a screenshot." translateable="false">
+        Created event
+      </message>
+      <message name="IDS_ASH_SCANNER_ACTION_SUCCESS_TOAST_CREATE_CONTACT" desc="The message shown on a toast to indicate a new contact was created from the contents of a screenshot." translateable="false">
+        Created contact
+      </message>
+      <message name="IDS_ASH_SCANNER_ACTION_SUCCESS_TOAST_CREATE_DOC" desc="The message shown on a toast to indicate a new Google Doc was created from the contents of a screenshot." translateable="false">
+        Created Google Doc
+      </message>
+      <message name="IDS_ASH_SCANNER_ACTION_SUCCESS_TOAST_CREATE_SHEET" desc="The message shown on a toast to indicate a new Google Sheet was created from the contents of a screenshot." translateable="false">
+        Created Google Sheet
+      </message>
+      <message name="IDS_ASH_SCANNER_ACTION_SUCCESS_TOAST_COPY_TEXT_AND_FORMAT" desc="The message shown on a toast to indicate text with formatting was copied to the user's clipboard from the contents of a screenshot." translateable="false">
+        Text copied to Clipboard
+      </message>
+      <message name="IDS_ASH_SCANNER_ACTION_FAILURE_TOAST_CREATE_EVENT" desc="The message shown on a toast to indicate an error occurred when trying to add an event to the user's calendar from the contents of a screenshot.">
+        Couldn't add to Calendar
+      </message>
+      <message name="IDS_ASH_SCANNER_ACTION_FAILURE_TOAST_CREATE_CONTACT" desc="The message shown on a toast to indicate an error occurred when trying to create a new contact from the contents of a screenshot.">
+        Couldn’t create contact
+      </message>
+      <message name="IDS_ASH_SCANNER_ACTION_FAILURE_TOAST_CREATE_DOC" desc="The message shown on a toast to indicate an error occurred when trying to create a new Google Doc from the contents of a screenshot.">
+        Couldn’t create Google Doc
+      </message>
+      <message name="IDS_ASH_SCANNER_ACTION_FAILURE_TOAST_CREATE_SHEET" desc="The message shown on a toast to indicate an error occurred when trying to create a new Google Sheet from the contents of a screenshot.">
+        Couldn’t create Google Sheet
+      </message>
+      <message name="IDS_ASH_SCANNER_ACTION_FAILURE_TOAST_COPY_TEXT_AND_FORMAT" desc="The message shown on a toast to indicate an error occurred when trying to copy text with formatting from the contents of a screenshot.">
+        Couldn’t copy with formatting
+      </message>
+      <message name="IDS_ASH_SCANNER_ACTION_TOAST_FEEDBACK_ICON_ACCESSIBLE_NAME" desc="The accessible name of the feedback icon button on a toast shown when an action has been completed. Clicking the feedback icon button opens a dialog for users to report feedback.">
+        Send feedback
+      </message>
+      <message name="IDS_ASH_SCANNER_ERROR_TRY_AGAIN_LINK_TEXT" desc="The text on a try again link shown next to an error message indicating that something went wrong. The link can be pressed to try the action again.">
+        Try again
+      </message>
+      <message name="IDS_ASH_SCANNER_ERROR_GENERIC" desc="Generic message shown when an error occurs while loading actions for a screenshot.">
+        Something went wrong.
       </message>
 
       <!-- Snap Group -->
@@ -8071,6 +8134,9 @@ Otherwise the built-in touchpad will be re-enabled in <ph name="TIMEOUT_SECONDS"
       <message name="IDS_ASH_MOUSE_KEYS_PERIOD_RELEASE" desc="Label to show how to release mouse button after a drag.">
         Press "." to release
       </message>
+      <message name="IDS_ASH_MOUSE_KEYS_C_KEY_RELEASE" desc="Label to show how to release mouse button after a drag.">
+        Press "c" to release
+      </message>
       <message name="IDS_ASH_MOUSE_KEYS_PAUSED" desc="Label to show the mouse keys paused state.">
         Mouse keys paused
       </message>
@@ -8928,8 +8994,8 @@ To shut down the device, press and hold the power button on the device again.
       <message name="IDS_ASH_BIRCH_CORAL_SELECTOR_APP_SUBTITLE" desc="In the birch coral button selector UI, the subtitle for the app section.">
         Apps
       </message>
-      <message name="IDS_ASH_BIRCH_CORAL_SELECTOR_ACCESSIBLE_NAME" translateable="false" desc="The accessible name for the birch coral button selector UI.">
-        Coral selector
+      <message name="IDS_ASH_BIRCH_CORAL_SELECTOR_ACCESSIBLE_NAME" desc="The accessible name for the birch coral button selector UI.">
+        Items in the suggested group
       </message>
       <message name="IDS_ASH_BIRCH_CORAL_SELECTOR_ITEM_CLOSE_BUTTON_TOOLTIP" desc="The tooltip of the close button on smart grouping expanded menu item">
         Remove item from suggested group
@@ -8966,8 +9032,8 @@ To shut down the device, press and hold the power button on the device again.
       </message>
 
       <!-- Graduation app strings -->
-      <message name="IDS_ASH_GRADUATION_NUDGE_TEXT" desc="Text shown in nudge that is displayed after the Content Transfer app becomes available.">
-        Use the Content Transfer app to move your school account data to your personal account
+      <message name="IDS_ASH_GRADUATION_NUDGE_TEXT" desc="Text shown in nudge that is displayed after the Content transfer app becomes available.">
+        Use the Content transfer app to move your school account data to your personal account
       </message>
 
       <!-- Ash style -->

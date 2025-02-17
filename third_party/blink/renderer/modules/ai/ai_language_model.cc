@@ -10,10 +10,13 @@
 #include "third_party/blink/public/mojom/ai/ai_language_model.mojom-blink.h"
 #include "third_party/blink/public/mojom/ai/model_streaming_responder.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_union_ai_language_model_prompt_input.h"
+#include "third_party/blink/renderer/core/dom/abort_signal.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/modules/ai/ai_language_model_factory.h"
 #include "third_party/blink/renderer/modules/ai/ai_metrics.h"
 #include "third_party/blink/renderer/modules/ai/ai_mojo_client.h"
+#include "third_party/blink/renderer/modules/ai/ai_utils.h"
 #include "third_party/blink/renderer/modules/ai/exception_helpers.h"
 #include "third_party/blink/renderer/modules/ai/model_execution_responder.h"
 #include "third_party/blink/renderer/modules/event_target_modules_names.h"
@@ -60,7 +63,7 @@ class CloneLanguageModelClient
   // mojom::blink::AIManagerCreateLanguageModelClient implementation.
   void OnResult(
       mojo::PendingRemote<mojom::blink::AILanguageModel> language_model_remote,
-      mojom::blink::AILanguageModelInfoPtr info) override {
+      mojom::blink::AILanguageModelInstanceInfoPtr info) override {
     if (!GetResolver()) {
       return;
     }
@@ -152,7 +155,7 @@ AILanguageModel::AILanguageModel(
     ExecutionContext* execution_context,
     mojo::PendingRemote<mojom::blink::AILanguageModel> pending_remote,
     scoped_refptr<base::SequencedTaskRunner> task_runner,
-    blink::mojom::blink::AILanguageModelInfoPtr info)
+    blink::mojom::blink::AILanguageModelInstanceInfoPtr info)
     : ExecutionContextClient(execution_context),
       task_runner_(task_runner),
       language_model_remote_(execution_context) {
@@ -162,6 +165,10 @@ AILanguageModel::AILanguageModel(
     current_tokens_ = info->current_tokens;
     top_k_ = info->sampling_params->top_k;
     temperature_ = info->sampling_params->temperature;
+    if (info->expected_input_languages.has_value()) {
+      expected_input_languages_ =
+          ToStringLanguageCodes(info->expected_input_languages.value());
+    }
   }
 }
 
@@ -181,7 +188,7 @@ ExecutionContext* AILanguageModel::GetExecutionContext() const {
 
 ScriptPromise<IDLString> AILanguageModel::prompt(
     ScriptState* script_state,
-    const WTF::String& input,
+    const V8AILanguageModelPromptInput* input,
     const AILanguageModelPromptOptions* options,
     ExceptionState& exception_state) {
   if (!script_state->ContextIsValid()) {
@@ -189,16 +196,24 @@ ScriptPromise<IDLString> AILanguageModel::prompt(
     return ScriptPromise<IDLString>();
   }
 
+  ScriptPromiseResolver<IDLString>* resolver =
+      MakeGarbageCollected<ScriptPromiseResolver<IDLString>>(script_state);
+  auto promise = resolver->Promise();
+
+  // The API impl only accepts a string for now, more to come soon!
+  if (!input->IsString()) {
+    resolver->RejectWithTypeError("Input type not supported");
+    return promise;
+  }
+  const WTF::String& input_string = input->GetAsString();
+
   base::UmaHistogramEnumeration(AIMetrics::GetAIAPIUsageMetricName(
                                     AIMetrics::AISessionType::kLanguageModel),
                                 AIMetrics::AIAPI::kSessionPrompt);
 
   base::UmaHistogramCounts1M(AIMetrics::GetAISessionRequestSizeMetricName(
                                  AIMetrics::AISessionType::kLanguageModel),
-                             int(input.CharactersSizeInBytes()));
-  ScriptPromiseResolver<IDLString>* resolver =
-      MakeGarbageCollected<ScriptPromiseResolver<IDLString>>(script_state);
-  auto promise = resolver->Promise();
+                             int(input_string.CharactersSizeInBytes()));
 
   if (!language_model_remote_) {
     ThrowSessionDestroyedException(exception_state);
@@ -218,13 +233,13 @@ ScriptPromise<IDLString> AILanguageModel::prompt(
                     WrapWeakPersistent(this)),
       WTF::BindRepeating(&AILanguageModel::OnContextOverflow,
                          WrapWeakPersistent(this)));
-  language_model_remote_->Prompt(input, std::move(pending_remote));
+  language_model_remote_->Prompt(input_string, std::move(pending_remote));
   return promise;
 }
 
 ReadableStream* AILanguageModel::promptStreaming(
     ScriptState* script_state,
-    const WTF::String& input,
+    const V8AILanguageModelPromptInput* input,
     const AILanguageModelPromptOptions* options,
     ExceptionState& exception_state) {
   if (!script_state->ContextIsValid()) {
@@ -232,13 +247,20 @@ ReadableStream* AILanguageModel::promptStreaming(
     return nullptr;
   }
 
+  // The API impl only accepts a string for now, more to come soon!
+  if (!input->IsString()) {
+    exception_state.ThrowTypeError("Input type not supported");
+    return nullptr;
+  }
+  const WTF::String& input_string = input->GetAsString();
+
   base::UmaHistogramEnumeration(AIMetrics::GetAIAPIUsageMetricName(
                                     AIMetrics::AISessionType::kLanguageModel),
                                 AIMetrics::AIAPI::kSessionPromptStreaming);
 
   base::UmaHistogramCounts1M(AIMetrics::GetAISessionRequestSizeMetricName(
                                  AIMetrics::AISessionType::kLanguageModel),
-                             int(input.CharactersSizeInBytes()));
+                             int(input_string.CharactersSizeInBytes()));
 
   if (!language_model_remote_) {
     ThrowSessionDestroyedException(exception_state);
@@ -246,10 +268,7 @@ ReadableStream* AILanguageModel::promptStreaming(
   }
 
   AbortSignal* signal = options->getSignalOr(nullptr);
-  if (signal && signal->aborted()) {
-    // TODO(crbug.com/374879796): figure out how to handling aborted signal for
-    // the streaming API.
-    ThrowAbortedException(exception_state);
+  if (HandleAbortSignal(signal, script_state, exception_state)) {
     return nullptr;
   }
 
@@ -261,7 +280,7 @@ ReadableStream* AILanguageModel::promptStreaming(
                         WrapWeakPersistent(this)),
           WTF::BindRepeating(&AILanguageModel::OnContextOverflow,
                              WrapWeakPersistent(this)));
-  language_model_remote_->Prompt(input, std::move(pending_remote));
+  language_model_remote_->Prompt(input_string, std::move(pending_remote));
   return readable_stream;
 }
 

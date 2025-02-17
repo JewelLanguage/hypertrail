@@ -269,6 +269,19 @@ PrimaryAccountManager::PrimaryAccountManager(
   // level are loaded.
   CHECK(primary_account_.has_value());
 
+  // `prefs::kPrefsThemesSearchEnginesAccountStorageEnabled` is set for sync
+  // users and new signed in users. It is not cleared on sign out.
+  if (base::FeatureList::IsEnabled(
+          switches::kEnablePreferencesAccountStorage)) {
+    if (HasPrimaryAccount(signin::ConsentLevel::kSync)) {
+      scoped_pref_commit.SetBoolean(
+          prefs::kPrefsThemesSearchEnginesAccountStorageEnabled, true);
+    }
+  } else {
+    scoped_pref_commit.ClearPref(
+        prefs::kPrefsThemesSearchEnginesAccountStorageEnabled);
+  }
+
   // Instrument metrics to know what fraction of users without a primary
   // account previously did have one, with sync enabled.
   RecordHadPreviousSyncAccount();
@@ -302,6 +315,8 @@ void PrimaryAccountManager::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(kExplicitBrowserSigninWithoutFeatureEnabled,
                                 false);
   registry->RegisterBooleanPref(prefs::kExplicitBrowserSignin, false);
+  registry->RegisterBooleanPref(
+      prefs::kPrefsThemesSearchEnginesAccountStorageEnabled, false);
 }
 
 // static
@@ -409,11 +424,11 @@ PrimaryAccountManager::GetOrRestorePrimaryAccountInfoOnInitialize(
   }
 
   if (base::FeatureList::IsEnabled(kRestorePrimaryAccountInfo)) {
-    CHECK_EQ(account_id,
-             account_tracker_service_->SeedAccountInfo(
-                 last_syncing_gaia_id, last_syncing_email,
-                 signin_metrics::AccessPoint::
-                     ACCESS_POINT_RESTORE_PRIMARY_ACCOUNT_ON_PROFILE_LOAD));
+    CHECK_EQ(
+        account_id,
+        account_tracker_service_->SeedAccountInfo(
+            last_syncing_gaia_id, last_syncing_email,
+            signin_metrics::AccessPoint::kRestorePrimaryAccountOnProfileLoad));
 
     return std::make_pair(account_tracker_service_->GetAccountInfo(account_id),
                           InitializeAccountInfoState::
@@ -737,9 +752,8 @@ void PrimaryAccountManager::ComputeExplicitBrowserSignin(
       signin_metrics::AccessPoint access_point =
           event_details.GetSetPrimaryAccountAccessPoint().value();
 
-      if (access_point == signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN ||
-          access_point ==
-              signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN) {
+      if (access_point == signin_metrics::AccessPoint::kUnknown ||
+          access_point == signin_metrics::AccessPoint::kWebSignin) {
         scoped_pref_commit.ClearPref(
             kExplicitBrowserSigninWithoutFeatureEnabled);
         if (switches::IsExplicitBrowserSigninUIOnDesktopEnabled()) {
@@ -752,6 +766,11 @@ void PrimaryAccountManager::ComputeExplicitBrowserSignin(
             kExplicitBrowserSigninWithoutFeatureEnabled, true);
         if (switches::IsExplicitBrowserSigninUIOnDesktopEnabled()) {
           scoped_pref_commit.SetBoolean(prefs::kExplicitBrowserSignin, true);
+        }
+        if (base::FeatureList::IsEnabled(
+                switches::kEnablePreferencesAccountStorage)) {
+          scoped_pref_commit.SetBoolean(
+              prefs::kPrefsThemesSearchEnginesAccountStorageEnabled, true);
         }
       }
   }

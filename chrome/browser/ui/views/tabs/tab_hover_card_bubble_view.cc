@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "base/containers/lru_cache.h"
 #include "base/memory/raw_ptr.h"
@@ -222,8 +223,8 @@ class TabHoverCardBubbleView::ThumbnailView
     switch (image_type) {
       case ImageType::kNone:
       case ImageType::kNoneButWaiting:
-        image_view->SetBackground(
-            views::CreateSolidBackground(bubble_view_->color()));
+        image_view->SetBackground(views::CreateSolidOrThemedBackground(
+            bubble_view_->background_color()));
         break;
       case ImageType::kPlaceholder:
         image_view->SetVerticalAlignment(views::ImageView::Alignment::kCenter);
@@ -631,11 +632,11 @@ void TabHoverCardBubbleView::SetPlaceholderImage() {
   thumbnail_view_->SetPlaceholderImage();
 }
 
-std::u16string TabHoverCardBubbleView::GetTitleTextForTesting() const {
+std::u16string_view TabHoverCardBubbleView::GetTitleTextForTesting() const {
   return title_label_->GetText();
 }
 
-std::u16string TabHoverCardBubbleView::GetDomainTextForTesting() const {
+std::u16string_view TabHoverCardBubbleView::GetDomainTextForTesting() const {
   return domain_label_->GetText();
 }
 

@@ -30,6 +30,7 @@ class RealTimeReportingBindings;
 class RegisterAdBeaconBindings;
 class RegisterAdMacroBindings;
 class ReportBindings;
+class PrivateModelTrainingBindings;
 class SetBidBindings;
 class SetPriorityBindings;
 class SetPrioritySignalsOverrideBindings;
@@ -37,6 +38,7 @@ class SharedStorageBindings;
 class AuctionConfigLazyFiller;
 class BiddingBrowserSignalsLazyFiller;
 class InterestGroupLazyFiller;
+class ReportWinBrowserSignalsLazyFiller;
 class SellerBrowserSignalsLazyFiller;
 
 // Base class for bindings used with contexts used with ContextRecycler.
@@ -118,6 +120,10 @@ class CONTENT_EXPORT ContextRecycler {
   void AddReportBindings(bool queue_report_aggregate_win_allowed);
   ReportBindings* report_bindings() { return report_bindings_.get(); }
 
+  void AddPrivateModelTrainingBindings();
+  PrivateModelTrainingBindings* private_model_training_bindings() {
+    return private_model_training_bindings_.get();
+  }
   void AddSetBidBindings();
   SetBidBindings* set_bid_bindings() { return set_bid_bindings_.get(); }
 
@@ -154,6 +160,11 @@ class CONTENT_EXPORT ContextRecycler {
     return seller_browser_signals_lazy_filler_.get();
   }
 
+  void AddReportWinBrowserSignalsLazyFiller();
+  ReportWinBrowserSignalsLazyFiller* report_win_lazy_filler() {
+    return report_win_browser_signals_lazy_filler_.get();
+  }
+
   void EnsureAuctionConfigLazyFillers(size_t required);
   std::vector<std::unique_ptr<AuctionConfigLazyFiller>>&
   auction_config_lazy_fillers() {
@@ -186,6 +197,8 @@ class CONTENT_EXPORT ContextRecycler {
   std::unique_ptr<RegisterAdBeaconBindings> register_ad_beacon_bindings_;
   std::unique_ptr<RegisterAdMacroBindings> register_ad_macro_bindings_;
   std::unique_ptr<ReportBindings> report_bindings_;
+  std::unique_ptr<PrivateModelTrainingBindings>
+      private_model_training_bindings_;
   std::unique_ptr<SetBidBindings> set_bid_bindings_;
   std::unique_ptr<SetPriorityBindings> set_priority_bindings_;
   std::unique_ptr<SetPrioritySignalsOverrideBindings>
@@ -204,6 +217,8 @@ class CONTENT_EXPORT ContextRecycler {
 
   std::unique_ptr<SellerBrowserSignalsLazyFiller>
       seller_browser_signals_lazy_filler_;
+  std::unique_ptr<ReportWinBrowserSignalsLazyFiller>
+      report_win_browser_signals_lazy_filler_;
 };
 
 // Helper to enter a context scope on creation and reset all bindings

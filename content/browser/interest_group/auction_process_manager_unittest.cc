@@ -288,7 +288,7 @@ class TestAuctionProcessManager
       // BindInterface() will only be invoked once, synchronously, for each
       // AuctionManagerBaseType::CreateProcessInternal() invocation.
       static_cast<MockRenderProcessHost*>(
-          worklet_process.site_instance()->GetProcess())
+          worklet_process.site_instance()->GetOrCreateProcess())
           ->OverrideBinderForTesting(
               auction_worklet::mojom::AuctionWorkletService::Name_,
               base::BindRepeating(&TestAuctionProcessManager<
@@ -430,8 +430,6 @@ class AuctionProcessManagerTest
         break;
       case ProcessMode::kInRendererSharedProcess:
         disabled_features.emplace_back(
-            features::kProcessSharingWithStrictSiteInstances);
-        disabled_features.emplace_back(
             features::kOriginKeyedProcessesByDefault);
         scoped_command_line_.GetProcessCommandLine()->RemoveSwitch(
             switches::kSitePerProcess);
@@ -534,7 +532,7 @@ class AuctionProcessManagerTest
     auto* cache_remote = WaitForCacheRemote(handle);
     ASSERT_TRUE(cache_remote);
 
-    scoped_refptr<TrustedSignalsCacheImpl::Handle> trusted_signals_handle;
+    std::unique_ptr<TrustedSignalsCacheImpl::Handle> trusted_signals_handle;
     int partition_id_ignored = 0;
     // Request signals of the corresponding worklet type, on behalf of `origin`.
     // None of the other parameters matter.
@@ -1838,7 +1836,7 @@ TEST_P(SitePerProcessAuctionProcessManagerTest,
   // launch as completed. |frame_site_instance| will help keep it alive.
   scoped_refptr<SiteInstance> frame_site_instance =
       site_instance1_->GetRelatedSiteInstance(kOriginA.GetURL());
-  frame_site_instance->GetProcess()->Init();
+  frame_site_instance->GetOrCreateProcess()->Init();
   for (std::unique_ptr<MockRenderProcessHost>& proc :
        *rph_factory_.GetProcesses()) {
     proc->SimulateReady();

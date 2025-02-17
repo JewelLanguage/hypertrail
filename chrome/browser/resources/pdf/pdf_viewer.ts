@@ -745,7 +745,7 @@ export class PdfViewerElement extends PdfViewerBaseElement {
     // Text fragment directives should be handled after the document is set to
     // finished loading.
     if (progress === 100) {
-      this.maybeRenderTextDirectiveHighlights_();
+      this.maybeRenderTextDirectiveHighlights_(this.originalUrl);
     }
   }
 
@@ -1026,6 +1026,7 @@ export class PdfViewerElement extends PdfViewerBaseElement {
     assert(this.paramsParser);
     this.paramsParser.getViewportFromUrlParams(newUrl).then(
         params => this.handleUrlParams(params));
+    this.maybeRenderTextDirectiveHighlights_(newUrl);
   }
 
   // <if expr="enable_pdf_ink2">
@@ -1110,27 +1111,37 @@ export class PdfViewerElement extends PdfViewerBaseElement {
 
     const blob = new Blob(dataArray);
     const fileName = this.attachments_[index].name;
-    // TODO(crbug.com/373852607): Update to `showSaveFilePicker`.
-    chrome.fileSystem.chooseEntry(
-        {type: 'saveFile', suggestedName: fileName},
-        (entry?: FileSystemFileEntry) => {
-          if (chrome.runtime.lastError) {
-            if (chrome.runtime.lastError.message !== 'User cancelled') {
-              console.error(
-                  'chrome.fileSystem.chooseEntry failed: ' +
-                  chrome.runtime.lastError.message);
-            }
-            return;
-          }
-          entry!.createWriter((writer: FileWriter) => {
-            writer.write(blob);
-            // <if expr="enable_ink">
-            // Unblock closing the window now that the user has saved
-            // successfully.
-            this.setShowBeforeUnloadDialog_(false);
-            // </if>
-          });
+    if (this.pdfUseShowSaveFilePicker_) {
+      try {
+        const fileHandle = await window.showSaveFilePicker({
+          suggestedName: fileName,
         });
+
+        const writable = await fileHandle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+      } catch (error: any) {
+        if (error.name !== 'AbortError') {
+          console.error('window.showSaveFilePicker failed: ' + error);
+        }
+      }
+    } else {
+      chrome.fileSystem.chooseEntry(
+          {type: 'saveFile', suggestedName: fileName},
+          (entry?: FileSystemFileEntry) => {
+            if (chrome.runtime.lastError) {
+              if (chrome.runtime.lastError.message !== 'User cancelled') {
+                console.error(
+                    'chrome.fileSystem.chooseEntry failed: ' +
+                    chrome.runtime.lastError.message);
+              }
+              return;
+            }
+            entry!.createWriter((writer: FileWriter) => {
+              writer.write(blob);
+            });
+          });
+    }
   }
 
   /**
@@ -1138,7 +1149,7 @@ export class PdfViewerElement extends PdfViewerBaseElement {
    * save.
    * @param streamUrl Unique identifier for a PDF Viewer instance.
    */
-  private async onSave_(streamUrl: string) {
+  private onSave_(streamUrl: string) {
     if (streamUrl !== this.browserApi!.getStreamInfo().streamUrl) {
       return;
     }
@@ -1280,9 +1291,9 @@ export class PdfViewerElement extends PdfViewerBaseElement {
    * Sends a message to the PDF plugin to highlight the provided text
    * directives if any.
    */
-  private maybeRenderTextDirectiveHighlights_() {
+  private maybeRenderTextDirectiveHighlights_(url: string) {
     assert(this.paramsParser);
-    const textDirectives = this.paramsParser.getTextFragments(this.originalUrl);
+    const textDirectives = this.paramsParser.getTextFragments(url);
     if (textDirectives.length > 0) {
       this.pluginController_.highlightTextFragments(textDirectives);
     }
@@ -1342,10 +1353,7 @@ export class PdfViewerElement extends PdfViewerBaseElement {
 
     // Create blob before callback to avoid race condition.
     const blob = new Blob([result.dataToSave], {type: 'application/pdf'});
-    // TODO(crbug.com/373852607): When  OOPIF PDF is enabled, cross origin
-    // checks block the request for `showSaveFilePicker`. Fix the issue by
-    // allow-listing the request from PDF Viewer.
-    if (!this.pdfOopifEnabled && this.pdfUseShowSaveFilePicker_) {
+    if (this.pdfUseShowSaveFilePicker_) {
       try {
         const fileHandle = await window.showSaveFilePicker({
           suggestedName: fileName,
@@ -1452,14 +1460,22 @@ export class PdfViewerElement extends PdfViewerBaseElement {
     }
   }
 
+  // <if expr="enable_ink">
   protected async onPrint_() {
     record(UserAction.PRINT);
-    // <if expr="enable_ink">
     await this.exitAnnotationMode_();
-    // </if>
     assert(this.currentController);
     this.currentController.print();
   }
+  // </if>
+
+  // <if expr="not enable_ink">
+  protected onPrint_() {
+    record(UserAction.PRINT);
+    assert(this.currentController);
+    this.currentController.print();
+  }
+  // </if>
 
   /**
    * Updates the toolbar's annotation available flag depending on current

@@ -128,7 +128,7 @@ FieldClassificationModelEncoder::EncodeField(const AutofillField& field) const {
   output.emplace_back(cls_token());
 
   for (int feature : encoding_parameters_.features()) {
-    base::ranges::move(encode(feature), std::back_inserter(output));
+    std::ranges::move(encode(feature), std::back_inserter(output));
   }
 
   // Pad the remaining space, if any, with zeroes.
@@ -170,7 +170,7 @@ FieldClassificationModelEncoder::EncodeFormFeatures(
   output.emplace_back(form_cls_token());
 
   for (int feature : encoding_parameters_.form_features()) {
-    base::ranges::move(encode(feature), std::back_inserter(output));
+    std::ranges::move(encode(feature), std::back_inserter(output));
   }
 
   // Pad the remaining space, if any, with zeroes.
@@ -184,8 +184,9 @@ std::u16string FieldClassificationModelEncoder::StandardizeString(
   std::u16string standardized_input(input);
   if (encoding_parameters_.split_on_camel_case()) {
     std::string utf8_input = base::UTF16ToUTF8(standardized_input);
-    re2::RE2::GlobalReplace(&utf8_input, re2::RE2("([a-z])([A-Z])"), "\\1 \\2");
-    re2::RE2::GlobalReplace(&utf8_input, re2::RE2("([A-Z])([A-Z][a-z])"),
+    re2::RE2::GlobalReplace(&utf8_input, re2::RE2("(\\p{Ll})(\\p{Lu})"),
+                            "\\1 \\2");
+    re2::RE2::GlobalReplace(&utf8_input, re2::RE2("(\\p{Lu})(\\p{Lu}\\p{Ll})"),
                             "\\1 \\2");
     standardized_input = base::UTF8ToUTF16(utf8_input);
   }

@@ -7,6 +7,8 @@
 #include <stdint.h>
 
 #include <iterator>
+#include <optional>
+#include <ranges>
 
 #include "base/containers/contains.h"
 #include "base/containers/fixed_flat_set.h"
@@ -118,6 +120,10 @@ bool IsDefaultPrediction(const FieldPrediction& prediction) {
       FieldPrediction::SOURCE_OVERRIDE,
       FieldPrediction::SOURCE_MANUAL_OVERRIDE};
   return default_sources.contains(prediction.source());
+}
+
+bool IsAutofillAiPrediction(const FieldPrediction& prediction) {
+  return prediction.source() == FieldPrediction::SOURCE_AUTOFILL_AI;
 }
 
 // Returns true if for two consecutive events, the second event may be ignored.
@@ -252,6 +258,19 @@ void AutofillField::set_heuristic_type(HeuristicSource s, FieldType type) {
   }
 }
 
+std::optional<FieldType> AutofillField::GetAutofillAiServerTypePredictions()
+    const {
+  for (const FieldPrediction& prediction : server_predictions_) {
+    FieldType predicted_type =
+        ToSafeFieldType(prediction.type(), NO_SERVER_DATA);
+    if (predicted_type != IMPROVED_PREDICTION &&
+        GroupTypeOfFieldType(predicted_type) == FieldTypeGroup::kAutofillAi) {
+      return predicted_type;
+    }
+  }
+  return std::nullopt;
+}
+
 void AutofillField::set_server_predictions(
     std::vector<FieldPrediction> predictions) {
   overall_type_ = AutofillType(NO_SERVER_DATA);
@@ -264,26 +283,33 @@ void AutofillField::set_server_predictions(
   experimental_server_predictions_.clear();
 
   for (auto& prediction : predictions) {
-    if (prediction.has_source()) {
-      if (prediction.source() == FieldPrediction::SOURCE_UNSPECIFIED)
-        // A prediction with `SOURCE_UNSPECIFIED` is one of two things:
-        //   1. No prediction for default, a.k.a. `NO_SERVER_DATA`. The absence
-        //      of a prediction may not be creditable to a particular prediction
-        //      source.
-        //   2. An experiment that is missing from the `PredictionSource` enum.
-        //      Protobuf corrects unknown values to 0 when parsing.
-        // Neither case is actionable.
-        continue;
-      if (IsDefaultPrediction(prediction)) {
-        server_predictions_.push_back(std::move(prediction));
-      } else {
-        experimental_server_predictions_.push_back(std::move(prediction));
-      }
-    } else {
+    if (!prediction.has_source()) {
       // TODO(crbug.com/40243028): captured tests store old autofill api
       // response recordings without `source` field. We need to maintain the old
       // behavior until these recordings will be migrated.
       server_predictions_.push_back(std::move(prediction));
+      continue;
+    }
+
+    if (prediction.source() == FieldPrediction::SOURCE_UNSPECIFIED) {
+      // A prediction with `SOURCE_UNSPECIFIED` is one of two things:
+      //   1. No prediction for default, a.k.a. `NO_SERVER_DATA`. The absence
+      //      of a prediction may not be creditable to a particular prediction
+      //      source.
+      //   2. An experiment that is missing from the `PredictionSource` enum.
+      //      Protobuf corrects unknown values to 0 when parsing.
+      // Neither case is actionable.
+      continue;
+    }
+
+    if (IsDefaultPrediction(prediction)) {
+      server_predictions_.push_back(std::move(prediction));
+    } else if (IsAutofillAiPrediction(prediction)) {
+      if (base::FeatureList::IsEnabled(features::kAutofillAiWithDataSchema)) {
+        server_predictions_.push_back(std::move(prediction));
+      }
+    } else {
+      experimental_server_predictions_.push_back(std::move(prediction));
     }
   }
 

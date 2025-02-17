@@ -101,7 +101,7 @@ class DefaultBehavior : public CaptureModeBehavior {
     // TODO(crbug.com/376103983): Verify `CaptureRegionOverlayController` works
     // correctly. It is always created in Sunfish session to paint the region
     // selection UI, but should only support text overlay if Scanner is enabled.
-    return IsSunfishAllowedAndEnabled();
+    return IsSunfishSessionAllowed();
   }
   bool CanPaintRegionOverlay() const override {
     auto* controller = CaptureModeController::Get();
@@ -116,7 +116,7 @@ class DefaultBehavior : public CaptureModeBehavior {
   bool ShouldEndSessionOnShowingSearchResults() const override { return true; }
   bool CanShowSmartActionsButton() const override {
     auto* scanner_controller = Shell::Get()->scanner_controller();
-    return scanner_controller && scanner_controller->CanStartSession();
+    return scanner_controller && scanner_controller->CanShowUi();
   }
   bool CanShowActionButtons() const override { return true; }
   void OnRegionSelectedOrAdjusted() override {
@@ -363,7 +363,7 @@ class SunfishBehavior : public CaptureModeBehavior {
     }
   }
   bool ShouldRegionOverlayBeAllowed() const override {
-    return IsSunfishAllowedAndEnabled();
+    return IsSunfishSessionAllowed();
   }
   bool CanPaintRegionOverlay() const override { return true; }
   bool ShouldShowGlowWhileProcessingCaptureType(
@@ -384,6 +384,7 @@ class SunfishBehavior : public CaptureModeBehavior {
   bool ShouldShowCaptureButtonAfterRegionSelected() const override {
     return false;
   }
+  bool ShouldPaintSunfishCaptureRegion() const override { return true; }
   bool CanShowActionButtons() const override { return true; }
   bool ShouldEndSessionOnSearchResultClicked() const override { return true; }
   const std::u16string GetCaptureLabelRegionText() const override {
@@ -559,7 +560,7 @@ bool CaptureModeBehavior::ShouldReShowUisAtPerformingCapture(
 
 bool CaptureModeBehavior::ShouldShowDefaultActionButtonsAfterRegionSelected()
     const {
-  if (!IsSunfishAllowedAndEnabled()) {
+  if (!IsSunfishSessionAllowed()) {
     return false;
   }
   auto* controller = CaptureModeController::Get();
@@ -572,6 +573,10 @@ bool CaptureModeBehavior::CanShowSmartActionsButton() const {
 }
 
 bool CaptureModeBehavior::CanShowActionButtons() const {
+  return false;
+}
+
+bool CaptureModeBehavior::ShouldPaintSunfishCaptureRegion() const {
   return false;
 }
 

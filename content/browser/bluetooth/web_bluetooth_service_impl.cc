@@ -10,6 +10,7 @@
 
 #include "content/browser/bluetooth/web_bluetooth_service_impl.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -20,7 +21,6 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
@@ -60,9 +60,9 @@
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom.h"
 #include "third_party/blink/public/common/bluetooth/web_bluetooth_device_id.h"
 #include "third_party/blink/public/mojom/bluetooth/web_bluetooth.mojom.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom.h"
 
 namespace content {
 
@@ -301,7 +301,7 @@ bool HasValidFilter(
     return false;
   }
 
-  return !filters->empty() && base::ranges::all_of(*filters, IsValidFilter);
+  return !filters->empty() && std::ranges::all_of(*filters, IsValidFilter);
 }
 
 // Struct that holds the result of a cache query.
@@ -458,7 +458,7 @@ WebBluetoothServiceImpl::GetBluetoothAllowed() {
 
   // Check if Web Bluetooth is allowed by Permissions Policy.
   if (!render_frame_host().IsFeatureEnabled(
-          blink::mojom::PermissionsPolicyFeature::kBluetooth)) {
+          network::mojom::PermissionsPolicyFeature::kBluetooth)) {
     return blink::mojom::WebBluetoothResult::PERMISSIONS_POLICY_VIOLATION;
   }
 

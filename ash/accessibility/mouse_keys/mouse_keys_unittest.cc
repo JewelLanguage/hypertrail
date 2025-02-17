@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <string_view>
+
 #include "ash/accelerators/accelerator_controller_impl.h"
 #include "ash/accessibility/accessibility_controller.h"
+#include "ash/accessibility/drag_event_rewriter.h"
 #include "ash/accessibility/mouse_keys/mouse_keys_controller.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/events/test_event_capturer.h"
@@ -62,7 +65,7 @@ class TestTextInputView : public views::WidgetDelegateView {
   }
 
   void FocusOnTextInput() { text_field_->RequestFocus(); }
-  const std::u16string& GetText() { return text_field_->GetText(); }
+  std::u16string_view GetText() { return text_field_->GetText(); }
 
  private:
   raw_ptr<views::Textfield> text_field_;  // owned by views hierarchy.
@@ -140,7 +143,7 @@ class MouseKeysTest : public AshTestBase {
     return GetBubbleController()->widget_->IsVisible();
   }
 
-  const std::u16string GetBubbleText() const {
+  std::u16string_view GetBubbleText() const {
     return GetBubbleView()->GetTextForTesting();
   }
 
@@ -538,7 +541,6 @@ TEST_F(MouseKeysTest, SelectButtonLeftHand) {
   ClearEvents();
   PressAndReleaseKey(ui::VKEY_W);
   EXPECT_EQ(0u, CheckForKeyEvents().size());
-  LOG(ERROR) << "[LKupo] this is the first click event";
   ExpectClick(CheckForMouseEvents(), ui::EF_LEFT_MOUSE_BUTTON,
               kDefaultPosition);
 
@@ -1064,6 +1066,11 @@ TEST_F(MouseKeysTest, Dragging) {
   EXPECT_TRUE(IsMouseDraggedIconVisible());
   EXPECT_FALSE(IsButtonChangeIconVisible());
 
+  auto* drag_event_rewriter =
+      Shell::Get()->mouse_keys_controller()->GetDragEventRewriterForTest();
+  ASSERT_NE(drag_event_rewriter, nullptr);
+  ASSERT_TRUE(drag_event_rewriter->IsEnabled());
+
   auto mouse_events = CheckForMouseEvents();
   EXPECT_EQ(0u, CheckForKeyEvents().size());
   ASSERT_EQ(1u, mouse_events.size());
@@ -1094,12 +1101,28 @@ TEST_F(MouseKeysTest, Dragging) {
   ClearEvents();
   PressAndReleaseKey(ui::VKEY_OEM_PERIOD);
   EXPECT_FALSE(IsBubbleVisible());
+  ASSERT_FALSE(drag_event_rewriter->IsEnabled());
   mouse_events = CheckForMouseEvents();
   EXPECT_EQ(0u, CheckForKeyEvents().size());
   ASSERT_EQ(1u, mouse_events.size());
   EXPECT_EQ(ui::EventType::kMouseReleased, mouse_events[0].type());
   EXPECT_TRUE(ui::EF_LEFT_MOUSE_BUTTON & mouse_events[0].flags());
   EXPECT_EQ(mouse_events[0].location(), position);
+}
+
+TEST_F(MouseKeysTest, LeftHandDraggingBubble) {
+  SetEnabled(true);
+  SetLeftHanded(true);
+  ClearEvents();
+
+  // Start Drag.
+  PressAndReleaseKey(ui::VKEY_Z);
+
+  // Bubble view with the correct message and icon should be displayed.
+  EXPECT_TRUE(IsBubbleVisible());
+  EXPECT_EQ(GetBubbleText(), u"Press \"c\" to release");
+  EXPECT_TRUE(IsMouseDraggedIconVisible());
+  EXPECT_FALSE(IsButtonChangeIconVisible());
 }
 
 TEST_F(MouseKeysTest, DragWithClick) {

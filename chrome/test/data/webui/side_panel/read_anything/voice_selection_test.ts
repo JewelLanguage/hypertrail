@@ -6,7 +6,7 @@ import {BrowserProxy} from 'chrome-untrusted://read-anything-side-panel.top-chro
 import type {AppElement} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 import {assertEquals} from 'chrome-untrusted://webui-test/chai_assert.js';
 
-import {createSpeechSynthesisVoice, suppressInnocuousErrors} from './common.js';
+import {createApp, createSpeechSynthesisVoice} from './common.js';
 import {FakeReadingMode} from './fake_reading_mode.js';
 import {FakeSpeechSynthesis} from './fake_speech_synthesis.js';
 import {TestColorUpdaterBrowserProxy} from './test_color_updater_browser_proxy.js';
@@ -33,22 +33,18 @@ suite('Automatic voice selection', () => {
     defaultVoiceForDifferentLang,
   ];
 
-  let testBrowserProxy: TestColorUpdaterBrowserProxy;
   let app: AppElement;
 
-  setup(() => {
-    suppressInnocuousErrors();
-    testBrowserProxy = new TestColorUpdaterBrowserProxy();
-    BrowserProxy.setInstance(testBrowserProxy);
+  setup(async () => {
+    // Clearing the DOM should always be done first.
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    BrowserProxy.setInstance(new TestColorUpdaterBrowserProxy());
     const readingMode = new FakeReadingMode();
     chrome.readingMode = readingMode as unknown as typeof chrome.readingMode;
     chrome.readingMode.baseLanguageForSpeech = pageLang;
     chrome.readingMode.isReadAloudEnabled = true;
 
-    app = document.createElement('read-anything-app');
-    document.body.appendChild(app);
-
+    app = await createApp();
     app.synth = new FakeSpeechSynthesis();
 
     app.synth.getVoices = () => voices;

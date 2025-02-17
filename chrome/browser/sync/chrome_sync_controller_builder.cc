@@ -15,6 +15,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/security_events/security_event_recorder.h"
 #include "chrome/browser/spellchecker/spellcheck_service.h"
+#include "chrome/browser/themes/theme_local_data_batch_uploader.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_syncable_service.h"
 #include "chrome/browser/ui/ui_features.h"
@@ -45,20 +46,19 @@
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 #if BUILDFLAG(IS_CHROMEOS)
-#include "ash/components/arc/arc_util.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "chrome/browser/ash/app_list/app_list_syncable_service.h"
 #include "chrome/browser/ash/app_list/arc/arc_package_sync_data_type_controller.h"
 #include "chrome/browser/ash/app_list/arc/arc_package_syncable_service.h"
 #include "chrome/browser/ash/arc/arc_util.h"
-#include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/ash/floating_sso/cookie_sync_data_type_controller.h"
 #include "chrome/browser/ash/floating_sso/floating_sso_service.h"
 #include "chrome/browser/ash/printing/oauth2/authorization_zones_manager.h"
 #include "chrome/browser/ash/printing/printers_sync_bridge.h"
 #include "chrome/browser/ash/printing/synced_printers_manager.h"
 #include "chromeos/ash/components/sync_wifi/wifi_configuration_sync_service.h"
+#include "chromeos/ash/experiences/arc/arc_util.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
@@ -233,9 +233,17 @@ ChromeSyncControllerBuilder::Build(syncer::SyncService* sync_service) {
               syncer::THEMES, data_type_store_factory,
               theme_service_.value()->GetThemeSyncableService()->AsWeakPtr(),
               dump_stack,
-              browser_sync::ExtensionDataTypeController::DelegateMode::
-                  kLegacyFullSyncModeOnly,
-              extension_system_profile_.value()));
+              base::FeatureList::IsEnabled(
+                  syncer::kSeparateLocalAndAccountThemes)
+                  ? browser_sync::ExtensionDataTypeController::DelegateMode::
+                        kTransportModeWithSingleModel
+                  : browser_sync::ExtensionDataTypeController::DelegateMode::
+                        kLegacyFullSyncModeOnly,
+              extension_system_profile_.value(),
+              // SyncService depends on ThemeService. So the
+              // ThemeSyncableService instance should outlive the controller.
+              std::make_unique<ThemeLocalDataBatchUploader>(
+                  theme_service_.value()->GetThemeSyncableService())));
     }
 
     if (web_app_provider_.value()) {

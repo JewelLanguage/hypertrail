@@ -182,6 +182,7 @@ class MockRenderProcessHost : public RenderProcessHost {
   void DecrementWorkerRefCount() override;
   void IncrementPendingReuseRefCount() override;
   void DecrementPendingReuseRefCount() override;
+  int GetPendingReuseRefCountForTesting() const override;
   bool AreRefCountsDisabled() override;
   mojom::Renderer* GetRendererInterface() override;
 
@@ -203,6 +204,7 @@ class MockRenderProcessHost : public RenderProcessHost {
       const network::CrossOriginEmbedderPolicy&,
       mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>,
       const network::DocumentIsolationPolicy& document_isolation_policy,
+      mojo::PendingRemote<network::mojom::DocumentIsolationPolicyReporter>,
       const storage::BucketLocator& bucket,
       mojo::PendingReceiver<blink::mojom::CacheStorage> receiver) override;
   void BindFileSystemManager(
@@ -345,6 +347,7 @@ class MockRenderProcessHost : public RenderProcessHost {
   bool is_unused_;
   bool is_ready_ = false;
   base::Process process;
+  int pending_view_count_;
   int worker_ref_count_;
   int pending_reuse_ref_count_;
   int foreground_service_worker_count_;

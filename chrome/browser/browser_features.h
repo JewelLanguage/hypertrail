@@ -37,6 +37,8 @@ BASE_DECLARE_FEATURE(kBookmarkTriggerForPrerender2);
 BASE_DECLARE_FEATURE(kCertificateTransparencyAskBeforeEnabling);
 BASE_DECLARE_FEATURE(kCertVerificationNetworkTime);
 
+BASE_DECLARE_FEATURE(kContentUsesBrowserThemeColorMode);
+
 #if BUILDFLAG(IS_LINUX)
 BASE_DECLARE_FEATURE(kDbusSecretPortal);
 BASE_DECLARE_FEATURE(kUseFreedesktopSecretKeyProvider);
@@ -47,10 +49,6 @@ BASE_DECLARE_FEATURE(kDestroySystemProfiles);
 
 #if BUILDFLAG(IS_CHROMEOS)
 BASE_DECLARE_FEATURE(kDoubleTapToZoomInTabletMode);
-#endif
-
-#if BUILDFLAG(IS_WIN)
-BASE_DECLARE_FEATURE(kUseAppBoundEncryptionProviderForEncryption);
 #endif
 
 BASE_DECLARE_FEATURE(kFlexOrgManagementDisclosure);

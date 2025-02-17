@@ -1672,7 +1672,7 @@ public class AwSettingsTest {
                         getTitleOnUiThread());
             }
 
-            ThreadUtils.runOnUiThreadBlocking(() -> webContents.removeObserver(observer));
+            ThreadUtils.runOnUiThreadBlocking(() -> observer.observe(null));
         }
 
         private String getData() {
@@ -1913,7 +1913,7 @@ public class AwSettingsTest {
         final AwContents awContents = testContainerView.getAwContents();
         AwSettings settings = mActivityTestRule.getAwSettingsOnUiThread(awContents);
         final String actualUserAgentString = settings.getUserAgentString();
-        Assert.assertEquals(actualUserAgentString, AwSettings.getDefaultUserAgent());
+        Assert.assertEquals(AwSettings.getDefaultUserAgent(), actualUserAgentString);
         final String patternString =
                 "Mozilla/5\\.0 \\(Linux;( U;)? Android ([^;]+);( (\\w+)-(\\w+);)?"
                         + "\\s?(.*)\\sBuild/(.+); wv\\) "
@@ -2180,7 +2180,8 @@ public class AwSettingsTest {
     @SmallTest
     @Feature({"AndroidWebView", "Preferences"})
     @RequiresRestart("setDatabaseEnabled is ignored after the first use of WebView in the process")
-    @CommandLineFlags.Add({"enable-features=kWebSQLAccess"})
+    @CommandLineFlags.Add({"enable-features=WebSQLWebViewAccess"})
+    // TODO(crbug.com/395838064): Cleanup test with WebSQLWebViewAccess flag removal.
     public void testDatabaseInitialValue() throws Throwable {
         TestAwContentsClient client = new TestAwContentsClient();
         final AwTestContainerView testContainerView =
@@ -2194,7 +2195,8 @@ public class AwSettingsTest {
     @SmallTest
     @Feature({"AndroidWebView", "Preferences"})
     @RequiresRestart("setDatabaseEnabled is ignored after the first use of WebView in the process")
-    @CommandLineFlags.Add({"enable-features=kWebSQLAccess"})
+    @CommandLineFlags.Add({"enable-features=WebSQLWebViewAccess"})
+    // TODO(crbug.com/395838064): Cleanup test with WebSQLWebViewAccess flag removal.
     public void testDatabaseEnabled() throws Throwable {
         TestAwContentsClient client = new TestAwContentsClient();
         final AwTestContainerView testContainerView =
@@ -2209,7 +2211,8 @@ public class AwSettingsTest {
     @SmallTest
     @Feature({"AndroidWebView", "Preferences"})
     @RequiresRestart("setDatabaseEnabled is ignored after the first use of WebView in the process")
-    @CommandLineFlags.Add({"enable-features=kWebSQLAccess"})
+    @CommandLineFlags.Add({"enable-features=WebSQLWebViewAccess"})
+    // TODO(crbug.com/395838064): Cleanup test with WebSQLWebViewAccess flag removal.
     public void testDatabaseDisabled() throws Throwable {
         TestAwContentsClient client = new TestAwContentsClient();
         final AwTestContainerView testContainerView =
@@ -3768,7 +3771,7 @@ public class AwSettingsTest {
         public AwSettings createAwSettings(Context context, boolean supportsLegacyQuirks) {
             return new AwSettings(
                     context,
-                    /* isAccessFromFileURLsGrantedByDefault= */ false,
+                    /* isAccessFromFileUrlsGrantedByDefault= */ false,
                     supportsLegacyQuirks,
                     mAllow,
                     /* allowGeolocationOnInsecureOrigins= */ true,
@@ -3852,7 +3855,7 @@ public class AwSettingsTest {
         public AwSettings createAwSettings(Context context, boolean supportsLegacyQuirks) {
             return new AwSettings(
                     context,
-                    /* isAccessFromFileURLsGrantedByDefault= */ false,
+                    /* isAccessFromFileUrlsGrantedByDefault= */ false,
                     supportsLegacyQuirks,
                     /* allowEmptyDocumentPersistence= */ false,
                     /* allowGeolocationOnInsecureOrigins= */ true,

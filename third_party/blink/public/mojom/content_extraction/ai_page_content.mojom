@@ -4,6 +4,7 @@
 
 module blink.mojom;
 
+import "third_party/blink/public/mojom/forms/form_control_type.mojom";
 import "third_party/blink/public/mojom/tokens/tokens.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
 import "url/mojom/origin.mojom";
@@ -34,6 +35,7 @@ enum AIPageContentAttributeType {
 
   // Structured chunks.
   kForm,
+  kFormControl,
   kTable,
   kTableRow,
   kTableCell,
@@ -64,12 +66,41 @@ struct AIPageContentGeometry {
   // Whether the content node is fixed or sticky position. This may suggest
   // that the node is a header, footer, or sidebar.
   bool is_fixed_or_sticky_position;
+};
 
+struct AIPageContentInteractionInfo {
   // Whether the content node can scroll in the x direction.
   bool scrolls_overflow_x;
 
   // Whether the content node can scroll in the y direction.
   bool scrolls_overflow_y;
+
+  // Whether the content node is selectable.
+  bool is_selectable;
+
+  // Whether the content node is editable; i.e. whether the user can type into
+  // it. This refers to the text actually being editable, not whether the
+  // content node is a text field.
+  bool is_editable;
+
+  // Whether the content node can be resized. This is relevant for scroll
+  // containers and iframes which have the CSS resize behavior.
+  bool can_resize_horizontal;
+  bool can_resize_vertical;
+
+  // Whether the content node is focusable.
+  bool is_focusable;
+
+  // Whether the content node is focused.
+  bool is_focused;
+
+  // Whether the content node is draggable.
+  bool is_draggable;
+
+  // Whether the content node is clickable. This checks for whether the node is
+  // a clickable control (e.g. form control elements) or has activation
+  // behavior. It also checks for whether the node has a click handler.
+  bool is_clickable;
 };
 
 enum AIPageContentTextSize {
@@ -83,6 +114,9 @@ enum AIPageContentTextSize {
 struct AIPageContentTextStyle {
   AIPageContentTextSize text_size;
   bool has_emphasis;
+
+  // Color as a 32 bit RGBA value.
+  uint32 color;
 };
 
 struct AIPageContentTextInfo {
@@ -144,7 +178,46 @@ struct AIPageContentTableRowData {
 };
 
 struct AIPageContentFormData {
-  // TODO(crbug.com/381879263): Add fields for form data.
+  string? form_name;
+};
+
+// Represents an option in a select field. See below for example.
+//
+// HTML                                      | value  | text
+// ------------------------------------------+--------+------
+// <option value=Foo label=Bar>Baz</option>  | "Foo"  | "Bar"
+// <option value=Foo>Bar</option>            | "Foo"  | "Bar"
+// <option label=Bar>Foo</option>            | "Foo"  | "Bar"
+// <option>Foo</option>                      | "Foo"  | "Foo"
+// <option value=Foo></option>               | "Foo"  | ""
+// <option label=Bar></option>               | ""     | "Bar"
+struct AIPageContentSelectOption {
+  string? value;
+  string? text;
+  bool is_selected;
+};
+
+struct AIPageContentFormControlData {
+  // The type of control for this form field.
+  FormControlType form_control_type;
+
+  // The name for the field.
+  string? field_name;
+
+  // The value of the field.
+  string? field_value;
+
+  // The options for a select field, if applicable.
+  array<AIPageContentSelectOption> select_options;
+
+  // The placeholder text for the field.
+  string? placeholder;
+
+  // Whether the field is checked.
+  bool is_checked;
+
+  // Whether the field is required.
+  bool is_required;
 };
 
 struct AIPageContentAttributes {
@@ -160,6 +233,9 @@ struct AIPageContentAttributes {
   // Geometry of the common_ancestor_dom_node_id.
   AIPageContentGeometry? geometry;
 
+  // Interaction information for the common_ancestor_dom_node_id.
+  AIPageContentInteractionInfo? interaction_info;
+
   // Only set if attribute_type is kText.
   AIPageContentTextInfo? text_info;
 
@@ -171,6 +247,9 @@ struct AIPageContentAttributes {
 
   // Only set if attribute_type is kForm.
   AIPageContentFormData? form_data;
+
+  // Only set if attribute_type is kFormControl.
+  AIPageContentFormControlData? form_control_data;
 
   // Only set if attribute_type is kTable.
   AIPageContentTableData? table_data;
@@ -220,5 +299,5 @@ struct AIPageContentOptions {
 interface AIPageContentAgent {
   // Provides the AIPageContent representation for this LocalFrame and all
   // LocalFrames accessible from the LocalFrameRoot.
-  GetAIPageContent(AIPageContentOptions request) => (AIPageContent page_content);
+  GetAIPageContent(AIPageContentOptions request) => (AIPageContent? page_content);
 };

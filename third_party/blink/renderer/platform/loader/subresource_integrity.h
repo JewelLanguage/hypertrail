@@ -20,6 +20,7 @@
 
 namespace blink {
 
+class FeatureContext;
 class IntegrityReport;
 class KURL;
 class Resource;
@@ -44,6 +45,7 @@ class PLATFORM_EXPORT SubresourceIntegrity final {
       const SegmentedBuffer* buffer,
       const KURL& resource_url,
       const Resource&,
+      const FeatureContext*,
       IntegrityReport&,
       HashMap<HashAlgorithm, String>* computed_hashes);
   static bool CheckSubresourceIntegrity(const IntegrityMetadataSet&,
@@ -51,6 +53,7 @@ class PLATFORM_EXPORT SubresourceIntegrity final {
                                         const KURL& resource_url,
                                         const FetchResponseType,
                                         const String& raw_headers,
+                                        const FeatureContext*,
                                         IntegrityReport&);
   static std::optional<String> GetSubresourceIntegrityHash(
       const SegmentedBuffer*,
@@ -61,10 +64,21 @@ class PLATFORM_EXPORT SubresourceIntegrity final {
   // The IntegrityMetadataSet argument is an out parameters which contains the
   // set of all valid, parsed metadata from |attribute|.
   static void ParseIntegrityAttribute(const WTF::String& attribute,
-                                      IntegrityMetadataSet&);
+                                      IntegrityMetadataSet&,
+                                      const FeatureContext*);
   static void ParseIntegrityAttribute(const WTF::String& attribute,
                                       IntegrityMetadataSet&,
+                                      const FeatureContext*,
                                       IntegrityReport*);
+
+  // Returns true if the element's `integrity` and `signature` attributes
+  // produce a verifiable signature for the element's content.
+  //
+  // https://mikewest.github.io/inline-integrity/
+  static bool VerifyInlineIntegrity(const String& integrity,
+                                    const String& signatures,
+                                    const String& source_code,
+                                    const FeatureContext*);
 
  private:
   friend class SubresourceIntegrityTest;
@@ -83,6 +97,7 @@ class PLATFORM_EXPORT SubresourceIntegrity final {
       const SegmentedBuffer* buffer,
       const KURL& resource_url,
       const String& raw_headers,
+      const FeatureContext*,
       IntegrityReport&,
       HashMap<HashAlgorithm, String>* computed_hashes);
 
@@ -90,6 +105,7 @@ class PLATFORM_EXPORT SubresourceIntegrity final {
   static bool CheckHashesImpl(const WTF::HashSet<IntegrityMetadataPair>&,
                               const SegmentedBuffer*,
                               const KURL&,
+                              const FeatureContext*,
                               IntegrityReport&,
                               HashMap<HashAlgorithm, String>* computed_hashes);
 
@@ -109,6 +125,7 @@ class PLATFORM_EXPORT SubresourceIntegrity final {
                                               const SegmentedBuffer* buffer);
 
   static AlgorithmParseResult ParseAttributeAlgorithm(std::string_view token,
+                                                      const FeatureContext*,
                                                       IntegrityAlgorithm&);
   typedef std::pair<const char*, IntegrityAlgorithm> AlgorithmPrefixPair;
   static bool ParseDigest(std::string_view maybe_digest, String& digest);

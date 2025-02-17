@@ -128,8 +128,8 @@ class WebContentsDelegateAndroid : public content::WebContentsDelegate {
   // empty bitmap if the capture fails) only if this returns true.
   bool MaybeCopyContentAreaAsBitmap(
       base::OnceCallback<void(const SkBitmap&)> callback) override;
-  bool SupportsForwardTransitionAnimation() override;
   SkBitmap MaybeCopyContentAreaAsBitmapSync() override;
+  SkBitmap GetBackForwardTransitionFallbackUXInternalPageIcon() override;
   void DidBackForwardTransitionAnimationChange() override;
   content::BackForwardTransitionAnimationManager::FallbackUXConfig
   GetBackForwardTransitionFallbackUXConfig() override;

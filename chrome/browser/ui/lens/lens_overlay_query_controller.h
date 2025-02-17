@@ -100,6 +100,10 @@ class LensOverlayQueryController {
   // Clears the state and resets stored values.
   void EndQuery();
 
+  // Restarts the query flow if its in a state where no cluster info is
+  // available.
+  void MaybeRestartQueryFlow();
+
   // Sends a full image request to translate the page.
   virtual void SendFullPageTranslateQuery(const std::string& source_language,
                                           const std::string& target_language);
@@ -157,8 +161,7 @@ class LensOverlayQueryController {
       std::optional<SkBitmap> region_bytes);
 
   // Sends a task completion Gen204 ping for certain user actions.
-  virtual void SendTaskCompletionGen204IfEnabled(
-      lens::mojom::UserAction user_action);
+  void SendTaskCompletionGen204IfEnabled(lens::mojom::UserAction user_action);
 
   // Sends a semantic event Gen204 ping.
   virtual void SendSemanticEventGen204IfEnabled(
@@ -168,6 +171,11 @@ class LensOverlayQueryController {
 
   // Testing method to reset the cluster info state.
   void ResetRequestClusterInfoStateForTesting();
+
+  // Returns a vsrid string for opening in a new tab, to replace the vsrid in
+  // an existing query URL. Will not affect the state of this controller's
+  // request id generator or analytics id.
+  std::string GetVsridForNewTab();
 
   base::TimeTicks partial_page_contents_request_start_time_for_testing() const {
     return partial_page_contents_request_start_time_;
@@ -179,7 +187,7 @@ class LensOverlayQueryController {
   virtual std::unique_ptr<EndpointFetcher> CreateEndpointFetcher(
       lens::LensOverlayServerRequest* request,
       const GURL& fetch_url,
-      const std::string& http_method,
+      const HttpMethod& http_method,
       const base::TimeDelta& timeout,
       const std::vector<std::string>& request_headers,
       const std::vector<std::string>& cors_exempt_headers,
@@ -193,6 +201,13 @@ class LensOverlayQueryController {
       std::string vit_query_param_value,
       std::optional<base::TimeDelta> cluster_info_latency,
       std::optional<std::string> encoded_analytics_id);
+
+  // Sends a task completion Gen204 ping for certain user actions with
+  // the given analytics id. Protected to allow overriding in tests to
+  // check the encoded analytics id.
+  virtual void SendTaskCompletionGen204IfEnabled(
+      std::string encoded_analytics_id,
+      lens::mojom::UserAction user_action);
 
   // The callback for full image requests, including upon query flow start
   // and interaction retries.
@@ -224,6 +239,8 @@ class LensOverlayQueryController {
     // The full image response has been received and resulted in an error
     // response.
     kReceivedFullImageErrorResponse = 5,
+    // The cluster info has expired and a new query flow needs to be started.
+    kClusterInfoExpired = 6,
   };
 
   // Data class for constructing a fetch request to the Lens servers.
@@ -340,7 +357,9 @@ class LensOverlayQueryController {
   // Creates the PageContentRequest that is sent to the server and performs the
   // request. Prefer to use PrepareAndFetchPageContentRequest() directly since
   // it calls this method after doing the necessary preprocessing.
-  void PrepareAndFetchPageContentRequestPart2(lens::Payload payload);
+  void PrepareAndFetchPageContentRequestPart2(
+      lens::LensOverlayRequestId request_id,
+      lens::Payload payload);
 
   // Performs the page content request. This is a send and forget request, so we
   // are not expecting a response.
@@ -352,6 +371,10 @@ class LensOverlayQueryController {
 
   // Handles the prgress of the page content upload request.
   void PageContentUploadProgressHandler(uint64_t position, uint64_t total);
+
+  // Marks that the page content upload is no longer in progress and sends the
+  // pending contextual query.
+  void PageContentUploadFinished();
 
   // Creates a full image request with the partial page content bytes and sends
   // it to the server.
@@ -602,6 +625,11 @@ class LensOverlayQueryController {
   std::unique_ptr<signin::PrimaryAccountAccessTokenFetcher>
       interaction_access_token_fetcher_;
 
+  // The request id to use for the first batch of requests. The requests sent on
+  // the start of the query flow will use this request id. Subsequent requests
+  // will use the request id generator.
+  std::unique_ptr<lens::LensOverlayRequestId> initial_request_id_;
+
   // The data for the full image request in progress. Is null if no full image
   // request has been made.
   std::unique_ptr<LensServerFetchRequest> latest_full_image_request_data_;
@@ -681,8 +709,15 @@ class LensOverlayQueryController {
   // content request to finish uploading.
   base::OnceClosure pending_contextual_query_callback_;
 
-  // Whether or not a page contents request has been sent.
-  bool page_contents_request_sent_ = false;
+  // Whether or not this is the first page contents request being sent to the
+  // server. Used to determine whether or not to generate a new request id for
+  // the next request.
+  bool is_first_page_contents_request_ = true;
+
+  // Whether or not this is the first partial page contents request being sent
+  // to the server. Used to determine whether or not to generate a new request
+  // id for the next request.
+  bool is_first_partial_page_contents_request_ = true;
 
   // The invocation source that triggered the query flow.
   lens::LensOverlayInvocationSource invocation_source_;
@@ -698,6 +733,13 @@ class LensOverlayQueryController {
 
   // The current gen204 id for logging, set on each overlay invocation.
   uint64_t gen204_id_ = 0;
+
+  // The latest encoded analytics id. Updated on each full-image and
+  // interaction request. This may differ from the analytics id in the
+  // latest_interaction_request_data_ if the user makes a text-only query,
+  // because no interaction request is made in that case even though the
+  // request id is incremented.
+  std::string latest_encoded_analytics_id_;
 
   // The time it took from sending the cluster info request to receiving
   // the response.

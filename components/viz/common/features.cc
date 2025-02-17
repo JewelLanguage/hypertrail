@@ -76,6 +76,12 @@ BASE_FEATURE(kUseFrameIntervalDecider,
              "UseFrameIntervalDecider",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+#if BUILDFLAG(IS_ANDROID)
+BASE_FEATURE(kUseFrameIntervalDeciderNewAndroidFeatures,
+             "UseFrameIntervalDeciderNewAndroidFeatures",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
+
 BASE_FEATURE(kTemporalSkipOverlaysWithRootCopyOutputRequests,
              "TemporalSkipOverlaysWithRootCopyOutputRequests",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -147,10 +153,11 @@ BASE_FEATURE(kRemoveRedirectionBitmap,
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
-// Note: This feature is actively being finched (Oct, 2024).
+// Feature finched to stable 50% and launched.
+// See crbug.com/350764043
 BASE_FEATURE(kRenderPassDrawnRect,
              "RenderPassDrawnRect",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_ANDROID)
 // When wide color gamut content from the web is encountered, promote our
@@ -229,7 +236,7 @@ BASE_FEATURE(kWebViewEnableADPFGpuMain,
 // Enable WebView providing frame rate hints to View system.
 BASE_FEATURE(kWebViewFrameRateHints,
              "WebViewFrameRateHints",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
 #if BUILDFLAG(IS_APPLE)
@@ -252,15 +259,8 @@ const base::FeatureParam<int> kCALayerNewLimitManyVideos{&kCALayerNewLimit,
 #endif
 
 #if BUILDFLAG(IS_MAC)
-// Use the system CVDisplayLink callbacks for the BeginFrame source, so
-// BeginFrame is aligned with HW VSync.
-BASE_FEATURE(kCVDisplayLinkBeginFrameSource,
-             "CVDisplayLinkBeginFrameSource",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Whether the presentation should be delayed until the next CVDisplayLink
-// callback when kCVDisplayLinkBeginFrameSource is enabled. This flag has no
-// effect if kCVDisplayLinkBeginFrameSource is disabled.
+// callback.
 BASE_FEATURE(kVSyncAlignedPresent,
              "VSyncAlignedPresent",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -273,6 +273,11 @@ BASE_FEATURE(kAllowUndamagedNonrootRenderPassToSkip,
 #else
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
+
+// Enables occlusion culling for TextureDrawQuads when possible.
+BASE_FEATURE(kOcclusionCullingForTextureQuads,
+             "OcclusionCullingForTextureQuads",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Allow SurfaceAggregator to merge render passes when they contain quads that
 // require overlay (e.g. protected video). See usage in |EmitSurfaceContent|.
@@ -572,6 +577,12 @@ bool IsOnBeginFrameAcksEnabled() {
   return base::FeatureList::IsEnabled(features::kOnBeginFrameAcks);
 }
 
+bool IsOcclusionCullingForTextureQuadsEnabled() {
+  static bool enabled =
+      base::FeatureList::IsEnabled(features::kOcclusionCullingForTextureQuads);
+  return enabled;
+}
+
 bool ShouldDrawImmediatelyWhenInteractive() {
   return base::FeatureList::IsEnabled(
       features::kDrawImmediatelyWhenInteractive);
@@ -618,10 +629,6 @@ bool IsUsingFrameIntervalDecider() {
 }
 
 #if BUILDFLAG(IS_MAC)
-bool IsCVDisplayLinkBeginFrameSourceEnabled() {
-  return base::FeatureList::IsEnabled(features::kCVDisplayLinkBeginFrameSource);
-}
-
 bool IsVSyncAlignedPresentEnabled() {
   return base::FeatureList::IsEnabled(features::kVSyncAlignedPresent);
 }

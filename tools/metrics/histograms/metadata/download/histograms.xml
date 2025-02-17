@@ -221,7 +221,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Download.Bubble.{DownloadBubbleViewType}ViewSize"
-    units="items" expires_after="2025-06-07">
+    units="items" expires_after="2025-08-10">
   <owner>chlily@chromium.org</owner>
   <owner>chrome-counter-abuse-alerts@google.com</owner>
   <summary>
@@ -289,57 +289,12 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Download.DangerousDialog.Events"
-    enum="DangerousDownloadDialogEvent" expires_after="2025-06-08">
+    enum="DangerousDownloadDialogEvent" expires_after="2025-08-10">
   <owner>qinmin@chromium.org</owner>
   <summary>
     Records user interactions with the dangerous download dialog on Android.
     Records when the dialog is shown, or when user clicks on a button or
     dismisses the dialog.
-  </summary>
-</histogram>
-
-<histogram name="Download.DangerousDownloadInterstitial.Action"
-    enum="DangerousDownloadInterstitialAction" expires_after="2025-06-08">
-  <owner>drubery@chromium.org</owner>
-  <owner>chrome-counter-abuse-alerts@google.com</owner>
-  <summary>
-    Records user action while attempting to recover a blocked download from
-    chrome://downloads. This is logged when the user interacts with the
-    dangerous download interstitial.
-  </summary>
-</histogram>
-
-<histogram
-    name="Download.DangerousDownloadInterstitial.InteractionTime.{InteractionType}"
-    units="ms" expires_after="2025-06-08">
-  <owner>drubery@chromium.org</owner>
-  <owner>chrome-counter-abuse-alerts@google.com</owner>
-  <summary>
-    Measures the time (in ms) between {InteractionType} on the dangerous
-    download interstitial. The interstitial is shown when attempting to recover
-    a blocked download from chrome://downloads. This is logged at most once per
-    dangerous download.
-  </summary>
-  <token key="InteractionType">
-    <variant name="CancelInterstitial"
-        summary="opening and canceling the interstitial"/>
-    <variant name="CompleteSurvey" summary="opening and submitting the survey"/>
-    <variant name="OpenSurvey"
-        summary="opening the interstitial and opening the survey"/>
-    <variant name="SaveDangerous"
-        summary="opening and bypassing the interstitial"/>
-  </token>
-</histogram>
-
-<histogram name="Download.DangerousDownloadInterstitial.SurveyResponse"
-    enum="DangerousDownloadInterstitialSurveyOptions"
-    expires_after="2025-06-08">
-  <owner>drubery@chromium.org</owner>
-  <owner>chrome-counter-abuse-alerts@google.com</owner>
-  <summary>
-    Records user response to the optional survey on the chrome://downloads
-    dangerous download interstitial. This is logged when the user attempts to
-    save the dangerous download and a survey option is selected.
   </summary>
 </histogram>
 
@@ -398,7 +353,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Download.DuplicatePdfDownloadTriggered"
-    enum="BooleanOpenInline" expires_after="2025-06-08">
+    enum="BooleanOpenInline" expires_after="2025-08-10">
   <owner>qinmin@chromium.org</owner>
   <owner>clank-downloads@google.com</owner>
   <summary>
@@ -556,7 +511,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Download.IOSDownloadFileUI" enum="DownloadFileUI"
-    expires_after="2025-06-08">
+    expires_after="2025-08-10">
   <owner>sdefresne@chromium.org</owner>
   <owner>ewannpv@chromium.org</owner>
   <owner>mrefaat@chromium.org</owner>
@@ -579,7 +534,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Download.IOSDownloadMimeType" enum="DownloadMimeTypeResult"
-    expires_after="2025-06-08">
+    expires_after="2025-08-10">
   <owner>sdefresne@chromium.org</owner>
   <owner>ewannpv@chromium.org</owner>
   <owner>mrefaat@chromium.org</owner>
@@ -709,6 +664,18 @@ chromium-metrics-reviews@google.com.
     Content types of the downloads being opened. This histogram is logged
     whenever a download is opened, whether from the shelf/bubble or
     chrome://downloads. Logged on Desktop platforms.
+  </summary>
+</histogram>
+
+<histogram name="Download.OpenDownloads.OpenWithExternalAppsSource"
+    enum="OpenDownloadWithExternalAppsSource" expires_after="2025-07-06">
+  <owner>shuyng@google.com</owner>
+  <owner>clank-downloads@google.com</owner>
+  <summary>
+    Records the source when download is forwarding from Chrome to an external
+    app to open. Recorded when the view intent is handled; even if the intent
+    picker is dismissed. Only record when there is an app to handle the intent.
+    Logged on Android only.
   </summary>
 </histogram>
 
@@ -1134,7 +1101,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Download.Start.ContentType.{TransientType}"
-    enum="DownloadContentType" expires_after="2025-06-08">
+    enum="DownloadContentType" expires_after="2025-08-10">
   <owner>qinmin@chromium.org</owner>
   <owner>clank-downloads@google.com</owner>
   <summary>
@@ -1170,7 +1137,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Download.UserValidatedDangerousDownload.DownloadsPage"
-    enum="DownloadItem.DangerType" expires_after="2025-06-08">
+    enum="DownloadItem.DangerType" expires_after="2025-08-10">
   <owner>chlily@chromium.org</owner>
   <owner>chrome-counter-abuse-alerts@google.com</owner>
   <summary>
@@ -1237,7 +1204,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Download.WebUi.LoadCompletedInMainFrame" units="ms"
-    expires_after="2025-06-08">
+    expires_after="2025-08-10">
   <owner>awado@google.com</owner>
   <owner>jacastro@chromium.org</owner>
   <summary>

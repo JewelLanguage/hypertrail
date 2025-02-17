@@ -38,6 +38,8 @@ source_set("tab_groups") {
     "//ios/chrome/browser/collaboration/model:collaboration_delegate",
     "//ios/chrome/browser/collaboration/model:features",
     "//ios/chrome/browser/collaboration/model/messaging",
+    "//ios/chrome/browser/data_sharing/model",
+    "//ios/chrome/browser/data_sharing/model:observer_bridge",
     "//ios/chrome/browser/drag_and_drop/model",
     "//ios/chrome/browser/favicon/model",
     "//ios/chrome/browser/main/model",
@@ -46,6 +48,7 @@ source_set("tab_groups") {
     "//ios/chrome/browser/saved_tab_groups/favicon/ui",
     "//ios/chrome/browser/saved_tab_groups/model",
     "//ios/chrome/browser/share_kit/model",
+    "//ios/chrome/browser/share_kit/model:constants",
     "//ios/chrome/browser/share_kit/model:factory",
     "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
     "//ios/chrome/browser/shared/model/browser",
@@ -137,6 +140,8 @@ source_set("tab_groups_ui") {
     "tab_groups_panel_item_data.mm",
     "tab_groups_panel_item_data_source.h",
     "tab_groups_panel_mutator.h",
+    "tab_groups_panel_notification_cell.h",
+    "tab_groups_panel_notification_cell.mm",
     "tab_groups_panel_view_controller.h",
     "tab_groups_panel_view_controller.mm",
   ]
@@ -151,6 +156,7 @@ source_set("tab_groups_ui") {
     "//ios/chrome/browser/menu/ui_bundled",
     "//ios/chrome/browser/saved_tab_groups/favicon/ui",
     "//ios/chrome/browser/share_kit/model",
+    "//ios/chrome/browser/share_kit/model:constants",
     "//ios/chrome/browser/shared/model/web_state_list",
     "//ios/chrome/browser/shared/public/commands",
     "//ios/chrome/browser/shared/public/features",
@@ -233,7 +239,10 @@ source_set("tab_group_consumer") {
     "tab_group_creation_consumer.h",
   ]
 
-  deps = [ "//components/tab_groups" ]
+  deps = [
+    "//components/tab_groups",
+    "//ios/chrome/browser/share_kit/model:constants",
+  ]
 }
 
 source_set("tab_groups_constant") {
@@ -268,6 +277,7 @@ source_set("unit_tests") {
     ":tab_groups_ui",
     "//base/test:test_support",
     "//components/collaboration:test_support",
+    "//components/data_sharing:test_support",
     "//components/data_sharing/public",
     "//components/policy/core/common:common_constants",
     "//components/prefs:test_support",
@@ -276,6 +286,7 @@ source_set("unit_tests") {
     "//components/sync_preferences:test_support",
     "//components/tab_groups",
     "//ios/chrome/browser/collaboration/model",
+    "//ios/chrome/browser/collaboration/model/messaging",
     "//ios/chrome/browser/drag_and_drop/model",
     "//ios/chrome/browser/main/model",
     "//ios/chrome/browser/policy/model:policy_util",
@@ -328,6 +339,7 @@ source_set("eg2_tests") {
     "//ios/chrome/browser/incognito_reauth/ui_bundled:incognito_reauth_util",
     "//ios/chrome/browser/share_kit/model:test_constants",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
+    "//ios/chrome/browser/shared/model/url:constants",
     "//ios/chrome/browser/shared/public/features",
     "//ios/chrome/browser/signin/model:fake_system_identity",
     "//ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/grid:grid_ui_constants",
@@ -352,8 +364,8 @@ source_set("eg_app_support+eg2") {
   configs += [ "//build/config/ios:xctest_config" ]
   testonly = true
   sources = [
-    "tab_group_sync_earl_grey_app_interface.h",
-    "tab_group_sync_earl_grey_app_interface.mm",
+    "tab_group_app_interface.h",
+    "tab_group_app_interface.mm",
   ]
   visibility = [
     "//ios/chrome/test/earl_grey:eg_app_support+eg2",
@@ -367,6 +379,8 @@ source_set("eg_app_support+eg2") {
     "//ios/chrome/browser/collaboration/model:features",
     "//ios/chrome/browser/data_sharing/model",
     "//ios/chrome/browser/saved_tab_groups/model",
+    "//ios/chrome/browser/share_kit/model:factory",
+    "//ios/chrome/browser/share_kit/model:test_support",
     "//ios/chrome/browser/shared/model/application_context",
     "//ios/chrome/browser/shared/model/profile",
     "//ios/chrome/browser/shared/public/features",
@@ -379,10 +393,8 @@ source_set("eg_test_support+eg2") {
   configs += [ "//build/config/ios:xctest_config" ]
   testonly = true
   sources = [
-    "tab_group_sync_earl_grey.h",
-    "tab_group_sync_earl_grey.mm",
-    "tab_group_sync_earl_grey_app_interface.h",
-    "tab_group_sync_earl_grey_app_interface_stub.mm",
+    "tab_group_app_interface.h",
+    "tab_group_app_interface_stub.mm",
   ]
   deps = [ "//ios/testing/earl_grey:eg_test_support+eg2" ]
 }

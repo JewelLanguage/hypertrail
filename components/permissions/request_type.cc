@@ -4,12 +4,13 @@
 
 #include "components/permissions/request_type.h"
 
+#include <algorithm>
+
 #include "base/check.h"
 #include "base/containers/contains.h"
 #include "base/containers/fixed_flat_set.h"
 #include "base/feature_list.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "build/build_config.h"
 #include "components/permissions/features.h"
 #include "components/permissions/permission_request.h"
@@ -20,7 +21,6 @@
 #else
 #include "components/permissions/vector_icons/vector_icons.h"
 #include "components/vector_icons/vector_icons.h"
-#include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icon_types.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
@@ -167,7 +167,7 @@ const gfx::VectorIcon& GetBlockedIconIdDesktop(RequestType type) {
       return vector_icons::kStorageAccessOffIcon;
     case RequestType::kIdentityProvider:
       // TODO(crbug.com/40252825): use a dedicated icon
-      return gfx::kNoneIcon;
+      return gfx::VectorIcon::EmptyIcon();
     case RequestType::kKeyboardLock:
       return vector_icons::kKeyboardLockOffIcon;
     case RequestType::kPointerLock:

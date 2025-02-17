@@ -126,6 +126,9 @@ void DumpAccessibilityTreeTest::SetUpCommandLine(
   // Enable AOMAriaRelationshipProperties
   command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
                                   "AOMAriaRelationshipProperties");
+  // Enable command/commandfor attributes
+  command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
+                                  "HTMLCommandAttributes");
 }
 
 std::vector<std::string> DumpAccessibilityTreeTest::Dump(ui::AXMode mode) {
@@ -2224,6 +2227,22 @@ IN_PROC_BROWSER_TEST_P(CustomizableSelectEnabledDumpAccessibilityTreeTest,
   RunHtmlTest(FILE_PATH_LITERAL("custom-select-label-element.html"));
 }
 
+IN_PROC_BROWSER_TEST_P(CustomizableSelectEnabledDumpAccessibilityTreeTest,
+                       AccessibilityCustomSelectForbiddenInteractiveContent) {
+  RunHtmlTest(
+      FILE_PATH_LITERAL("custom-select-forbidden-interactive-content.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(CustomizableSelectEnabledDumpAccessibilityTreeTest,
+                       AccessibilityCustomSelectButtonValue) {
+  RunHtmlTest(FILE_PATH_LITERAL("custom-select-button-value.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(CustomizableSelectEnabledDumpAccessibilityTreeTest,
+                       AccessibilityCustomSelectImgAlt) {
+  RunHtmlTest(FILE_PATH_LITERAL("custom-select-img-alt.html"));
+}
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, AccessibilityDd) {
   RunHtmlTest(FILE_PATH_LITERAL("dd.html"));
 }
@@ -4205,6 +4224,18 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, ContentVisibilityLabel) {
   RunRegressionTest(FILE_PATH_LITERAL("content-visibility-label.html"));
 }
 
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, CommandForApiPopover) {
+  RunHtmlTest(FILE_PATH_LITERAL("commandfor-api-popover.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, CommandForApiDialog) {
+  RunHtmlTest(FILE_PATH_LITERAL("commandfor-api-dialog.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, CommandForApiDialogModal) {
+  RunHtmlTest(FILE_PATH_LITERAL("commandfor-api-dialog-modal.html"));
+}
+
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest, DisplayContentsSelectCrash) {
   RunRegressionTest(FILE_PATH_LITERAL("display-contents-select-crash.html"));
 }
@@ -4461,6 +4492,43 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeTest,
                        AccessibilityCSSInteractivityInert) {
   RunCSSTest(FILE_PATH_LITERAL("interactivity-inert.html"));
+}
+
+class DumpAccessibilityTreeWithCarouselTest : public DumpAccessibilityTreeTest {
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    DumpAccessibilityTreeTest::SetUpCommandLine(command_line);
+    // Enable Carousel primitives.
+    // TODO(vmpstr): These should be sufficient, but buttons don't
+    // seem to appear with just the three flags. Investigate why.
+    //
+    // command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
+    //                                 "PseudoElementsFocusable");
+    // command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
+    //                                 "CSSPseudoScrollButtons");
+    // command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
+    //                                 "CSSPseudoScrollMarkers");
+    command_line->AppendSwitch("enable-experimental-web-platform-features");
+  }
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    DumpAccessibilityTreeWithCarouselTest,
+    ::testing::ValuesIn(DumpAccessibilityTestBase::TreeTestPasses()),
+    DumpAccessibilityTreeTestPassToString());
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeWithCarouselTest, CarouselNoTabs) {
+  RunCSSTest(FILE_PATH_LITERAL("carousel-no-tabs.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeWithCarouselTest,
+                       CarouselWithTabs) {
+  RunCSSTest(FILE_PATH_LITERAL("carousel-with-tabs.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityTreeWithCarouselTest,
+                       PositionedButtons) {
+  RunCSSTest(FILE_PATH_LITERAL("carousel-positioned-buttons.html"));
 }
 
 //

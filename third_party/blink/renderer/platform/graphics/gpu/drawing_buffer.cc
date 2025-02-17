@@ -46,9 +46,7 @@
 #include "base/numerics/ostream_operators.h"
 #include "build/build_config.h"
 #include "cc/layers/texture_layer.h"
-#include "components/viz/common/resources/bitmap_allocation.h"
 #include "components/viz/common/resources/resource_sizes.h"
-#include "components/viz/common/resources/shared_bitmap.h"
 #include "components/viz/common/resources/shared_image_format.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
 #include "components/viz/common/resources/transferable_resource.h"
@@ -367,7 +365,7 @@ void DrawingBuffer::SetDrawBuffer(GLenum draw_buffer) {
   draw_buffer_ = draw_buffer;
 }
 
-void DrawingBuffer::SetSharedImageInterfaceProviderForBitmapTest(
+void DrawingBuffer::SetSharedImageInterfaceProviderForSoftwareRenderingTest(
     std::unique_ptr<WebGraphicsSharedImageInterfaceProvider> sii_provider) {
   shared_image_interface_provider_for_bitmap_test_ = std::move(sii_provider);
 }
@@ -383,14 +381,18 @@ DrawingBuffer::GetSharedImageInterfaceProviderForBitmap() {
 DrawingBuffer::SoftwareResource
 DrawingBuffer::CreateOrRecycleSoftwareResource() {
   const viz::SharedImageFormat format = viz::SinglePlaneFormat::kBGRA_8888;
+  const gfx::ColorSpace& color_space =
+      back_color_buffer_->shared_image->color_space();
   // Must call GetSharedImageInterfaceProvider first so all base::WeakPtr
   // restored in |resource.sii_provider| is updated.
   auto* sii_provider = GetSharedImageInterfaceProviderForBitmap();
 
   auto it = std::remove_if(
       recycled_software_resources_.begin(), recycled_software_resources_.end(),
-      [this](const SoftwareResource& resource) {
-        return resource.shared_image->size() != size_ || !resource.sii_provider;
+      [&](const SoftwareResource& resource) {
+        return resource.shared_image->size() != size_ ||
+               resource.shared_image->color_space() != color_space ||
+               !resource.sii_provider;
       });
   recycled_software_resources_.Shrink(
       static_cast<wtf_size_t>(it - recycled_software_resources_.begin()));
@@ -406,10 +408,12 @@ DrawingBuffer::CreateOrRecycleSoftwareResource() {
   if (!shared_image_interface) {
     return SoftwareResource();
   }
+  // ReadFramebufferIntoBitmapPixels always produced bottom-Left origin.
   auto shared_image =
       shared_image_interface->CreateSharedImageForSoftwareCompositor(
-          {format, size_, gfx::ColorSpace(),
-           gpu::SHARED_IMAGE_USAGE_CPU_WRITE_ONLY, "DrawingBufferBitmap"});
+          {format, size_, color_space, kBottomLeft_GrSurfaceOrigin,
+           kPremul_SkAlphaType, gpu::SHARED_IMAGE_USAGE_CPU_WRITE_ONLY,
+           "DrawingBufferBitmap"});
 
   SoftwareResource resource = {std::move(shared_image),
                                shared_image_interface->GenVerifiedSyncToken(),
@@ -437,14 +441,10 @@ bool DrawingBuffer::PrepareTransferableResource(
     }
 
     // Populate the output TransferableResource from the SharedImage.
-    *out_resource = viz::TransferableResource::MakeGpu(
-        shared_image, shared_image->GetTextureTarget(), sync_token,
-        shared_image->size(), shared_image->format(),
-        shared_image->usage().Has(gpu::SHARED_IMAGE_USAGE_SCANOUT),
-        viz::TransferableResource::ResourceSource::kDrawingBuffer);
-    out_resource->color_space = shared_image->color_space();
+    *out_resource = viz::TransferableResource::Make(
+        shared_image, viz::TransferableResource::ResourceSource::kDrawingBuffer,
+        sync_token);
     out_resource->hdr_metadata = hdr_metadata_;
-    out_resource->origin = shared_image->surface_origin();
   } else {
     // Populate the TransferableResource with a SharedImage for the software
     // compositor.
@@ -457,15 +457,12 @@ bool DrawingBuffer::PrepareTransferableResource(
     ReadFramebufferIntoBitmapPixels(
         static_cast<uint8_t*>(mapping->GetMemoryForPlane(0).data()));
 
-    *out_resource = viz::TransferableResource::MakeSoftwareSharedImage(
-        resource.shared_image, resource.sync_token, size_,
-        viz::SinglePlaneFormat::kBGRA_8888,
-        viz::TransferableResource::ResourceSource::kDrawingBuffer);
-    out_resource->color_space = back_color_buffer_->shared_image->color_space();
-    out_resource->hdr_metadata = hdr_metadata_;
+    *out_resource = viz::TransferableResource::Make(
+        resource.shared_image,
+        viz::TransferableResource::ResourceSource::kDrawingBuffer,
+        resource.sync_token);
 
-    // ReadFramebufferIntoBitmapPixels always produced bottom-Left origin.
-    out_resource->origin = kBottomLeft_GrSurfaceOrigin;
+    out_resource->hdr_metadata = hdr_metadata_;
 
     // This holds a ref on the DrawingBuffer that will keep it alive until the
     // mailbox is released (and while the release callback is running). It also
@@ -754,15 +751,12 @@ scoped_refptr<StaticBitmapImage> DrawingBuffer::TransferToStaticBitmapImage() {
   // TODO(xidachen): Create a small pool of recycled textures from
   // ImageBitmapRenderingContext's transferFromImageBitmap, and try to use them
   // in DrawingBuffer.
-  bool is_overlay_candidate =
-      shared_image->usage().Has(gpu::SHARED_IMAGE_USAGE_SCANOUT);
   return AcceleratedStaticBitmapImage::CreateFromCanvasSharedImage(
       std::move(shared_image), sync_token,
       /* shared_image_texture_id = */ 0, sk_image_info,
       context_provider_->GetWeakPtr(), base::PlatformThread::CurrentRef(),
       ThreadScheduler::Current()->CleanupTaskRunner(),
-      std::move(release_callback),
-      /*supports_display_compositing=*/true, is_overlay_candidate);
+      std::move(release_callback));
 }
 
 scoped_refptr<DrawingBuffer::ColorBuffer>
@@ -1285,10 +1279,7 @@ bool DrawingBuffer::ReallocateDefaultFramebuffer(const gfx::Size& size,
     // TexStorage is not core in GLES2 (webgl1) and enabling (or emulating) it
     // universally can cause issues with BGRA formats.
     // See: crbug.com/1443160#c38
-    bool use_tex_image =
-        !texture_storage_enabled_ &&
-        base::FeatureList::IsEnabled(
-            features::kUseImageInsteadOfStorageForStagingBuffer);
+    bool use_tex_image = !texture_storage_enabled_;
     if (webgl_version_ == kWebGL1 && requested_format_ == GL_SRGB8_ALPHA8) {
       // On GLES2:
       //   * SRGB_ALPHA_EXT is not a valid internal format for TexStorage2DEXT.

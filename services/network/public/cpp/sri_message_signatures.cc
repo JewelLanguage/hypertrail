@@ -52,8 +52,8 @@ std::optional<mojom::SRIMessageSignatureComponentPtr> ParseComponent(
   }
 
   std::string name = component.item.GetString();
-  if (name == "identity-digest") {
-    // The "identity-digest" component requires a single `sf` parameter with
+  if (name == "unencoded-digest") {
+    // The "unencoded-digest" component requires a single `sf` parameter with
     // a `true` boolean value.
     if (!ItemHasSingleBooleanParam(component, "sf")) {
       errors.push_back(
@@ -501,7 +501,7 @@ std::optional<std::string> ConstructSignatureBase(
       // other than encoding a list of known headers and their types.
       // Fortunately, we only support one header at the moment, so the list is
       // manageable.
-      if (component->name == "identity-digest") {
+      if (component->name == "unencoded-digest") {
         std::optional<net::structured_headers::Dictionary> dict =
             net::structured_headers::ParseDictionary(header.value());
         if (!dict.has_value()) {
@@ -589,10 +589,14 @@ bool ValidateSRIMessageSignaturesOverHeaders(
 std::optional<mojom::BlockedByResponseReason>
 MaybeBlockResponseForSRIMessageSignature(
     const GURL& request_url,
-    const network::mojom::URLResponseHead& response) {
+    const network::mojom::URLResponseHead& response,
+    bool checks_forced_by_initiator,
+    const raw_ptr<mojom::DevToolsObserver> devtools_observer,
+    const std::string& devtools_request_id) {
   // If the feature is disabled, never block resources.
   if (!base::FeatureList::IsEnabled(
-          features::kSRIMessageSignatureEnforcement)) {
+          features::kSRIMessageSignatureEnforcement) &&
+      !checks_forced_by_initiator) {
     return std::nullopt;
   }
 
@@ -601,9 +605,18 @@ MaybeBlockResponseForSRIMessageSignature(
     return std::nullopt;
   }
   auto parsed_headers = ParseSRIMessageSignaturesFromHeaders(*response.headers);
-  if (!parsed_headers->signatures.size() ||
-      ValidateSRIMessageSignaturesOverHeaders(parsed_headers, request_url,
-                                              *response.headers)) {
+  bool passed_validation = !parsed_headers->signatures.size() ||
+                           ValidateSRIMessageSignaturesOverHeaders(
+                               parsed_headers, request_url, *response.headers);
+
+  if (devtools_observer && !devtools_request_id.empty()) {
+    for (const auto& error : parsed_headers->errors) {
+      devtools_observer->OnSRIMessageSignatureError(devtools_request_id,
+                                                    request_url, error);
+    }
+  }
+
+  if (passed_validation) {
     return std::nullopt;
   }
   return mojom::BlockedByResponseReason::kSRIMessageSignatureMismatch;
@@ -612,12 +625,14 @@ MaybeBlockResponseForSRIMessageSignature(
 void MaybeSetAcceptSignatureHeader(
     net::URLRequest* request,
     const std::vector<std::string>& expected_signatures) {
-  // The `Accept-Signature` header is only sent if Signature-based SRI
-  // enforcement is generally enabled.
-  if (!base::FeatureList::IsEnabled(
-          features::kSRIMessageSignatureEnforcement)) {
-    return;
-  }
+  // In order to support request-specific experimentation, we send the
+  // `Accept-Signature` header whenever signatures are expected by a request's
+  // initiator, regardless of the `features::kSRIMessageSignatureEnforcement`
+  // flag state.
+  //
+  // TODO(393924693): Remove this comment once we no longer need the origin
+  // trial infrastructure.
+
   std::stringstream header;
   int counter = 0;
   for (const std::string& public_key : expected_signatures) {
@@ -634,7 +649,7 @@ void MaybeSetAcceptSignatureHeader(
     if (counter) {
       header << ", ";
     }
-    header << "sig" << counter << "=(\"identity-digest\";sf);keyid=\""
+    header << "sig" << counter << "=(\"unencoded-digest\";sf);keyid=\""
            << public_key << "\";tag=\"sri\"";
     ++counter;
   }

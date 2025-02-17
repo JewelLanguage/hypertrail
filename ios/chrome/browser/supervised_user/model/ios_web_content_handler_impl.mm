@@ -31,25 +31,25 @@ void IOSWebContentHandlerImpl::RequestLocalApproval(
     const GURL& url,
     const std::u16string& child_display_name,
     const supervised_user::UrlFormatter& url_formatter,
+    const supervised_user::FilteringBehaviorReason& filtering_behavior_reason,
     ApprovalRequestInitiatedCallback callback) {
   CHECK(base::FeatureList::IsEnabled(supervised_user::kLocalWebApprovals));
 
-  supervised_user::SupervisedUserSettingsService* settings_service =
-      SupervisedUserSettingsServiceFactory::GetForProfile(
-          ProfileIOS::FromBrowserState(web_state_->GetBrowserState()));
   GURL target_url = url_formatter.FormatUrl(url);
   base::OnceCallback<void(supervised_user::LocalApprovalResult)>
       completion_callback = base::BindOnce(
           &IOSWebContentHandlerImpl::OnLocalApprovalRequestCompleted,
-          weak_factory_.GetWeakPtr(), std::ref(*settings_service), target_url,
-          base::TimeTicks::Now());
+          weak_factory_.GetWeakPtr(), target_url, base::TimeTicks::Now());
 
   // The command handler must stay alive after initialization.
   CHECK(commands_handler_);
   [commands_handler_
       showParentAccessBottomSheetForWebState:web_state_
+                                   targetURL:target_url
+                     filteringBehaviorReason:filtering_behavior_reason
                                   completion:base::CallbackToBlock(std::move(
                                                  completion_callback))];
+  is_bottomsheet_shown_ = true;
 
   // Runs the `callback` to inform the caller that the flow initiation was
   // successful.
@@ -86,16 +86,34 @@ void IOSWebContentHandlerImpl::GoBack() {
   }
 }
 
+void IOSWebContentHandlerImpl::MaybeCloseLocalApproval() {
+  if (is_bottomsheet_shown_) {
+    WebContentHandler::RecordLocalWebApprovalResultMetric(
+        supervised_user::LocalApprovalResult::kCanceled);
+  }
+  [commands_handler_ hideParentAccessBottomSheet];
+  is_bottomsheet_shown_ = false;
+}
+
 void IOSWebContentHandlerImpl::Close() {
   CHECK(web_state_);
   web_state_->CloseWebState();
 }
 
 void IOSWebContentHandlerImpl::OnLocalApprovalRequestCompleted(
-    supervised_user::SupervisedUserSettingsService& settings_service,
     const GURL& url,
     base::TimeTicks start_time,
     supervised_user::LocalApprovalResult approval_result) {
+  // If the bottomsheet is closed before the asynchronous callback completion,
+  // do nothing.
+  if (!is_bottomsheet_shown_) {
+    return;
+  }
+  is_bottomsheet_shown_ = false;
+
+  supervised_user::SupervisedUserSettingsService* settings_service =
+      SupervisedUserSettingsServiceFactory::GetForProfile(
+          ProfileIOS::FromBrowserState(web_state_->GetBrowserState()));
   WebContentHandler::OnLocalApprovalRequestCompleted(
-      settings_service, url, start_time, approval_result);
+      *settings_service, url, start_time, approval_result);
 }

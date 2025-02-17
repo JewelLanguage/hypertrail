@@ -20,6 +20,7 @@ import androidx.lifecycle.LifecycleOwner;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.RecyclerView.ItemAnimator;
 import androidx.recyclerview.widget.RecyclerView.OnScrollListener;
+import androidx.recyclerview.widget.RecyclerView.ViewHolder;
 
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
@@ -56,6 +57,7 @@ import org.chromium.components.image_fetcher.ImageFetcherFactory;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogManager.ModalDialogType;
+import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 
 import java.util.function.Consumer;
@@ -201,6 +203,7 @@ public class BookmarkManagerCoordinator
         mBookmarkToolbarCoordinator =
                 new BookmarkToolbarCoordinator(
                         context,
+                        mProfile,
                         mSelectableListLayout,
                         mSelectionDelegate,
                         /* searchDelegate= */ this,
@@ -256,7 +259,7 @@ public class BookmarkManagerCoordinator
                         moveSnackbarManager);
         mPromoHeaderManager = mMediator.getPromoHeaderManager();
 
-        bookmarkDelegateSupplier.set(/* bookmarkDelegate= */ mMediator);
+        bookmarkDelegateSupplier.set(/* object= */ mMediator);
 
         mMainView.addOnAttachStateChangeListener(this);
 
@@ -508,8 +511,61 @@ public class BookmarkManagerCoordinator
         return mMediator;
     }
 
-    public TestingDelegate getTestingDelegate() {
-        return mMediator;
+    public BookmarkManagerTestingDelegate getTestingDelegate() {
+        return new BookmarkManagerTestingDelegate() {
+            @Override
+            public BookmarkId getBookmarkIdByPositionForTesting(int position) {
+                return mMediator.getIdByPositionForTesting(position);
+            }
+
+            @Override
+            public ImprovedBookmarkRow getBookmarkRowByPosition(int position) {
+                return (ImprovedBookmarkRow) getBookmarkViewHolderByPosition(position).itemView;
+            }
+
+            @Override
+            public ViewHolder getBookmarkViewHolderByPosition(int position) {
+                return getViewHolderByPosition(getBookmarkStartIndex() + position);
+            }
+
+            @Override
+            public ViewHolder getViewHolderByPosition(int position) {
+                return mRecyclerView.findViewHolderForAdapterPosition(position);
+            }
+
+            @Override
+            public int getBookmarkCount() {
+                int bookmarkCount = 0;
+                for (ListItem item : mModelList) {
+                    if (item.type == BookmarkListEntry.ViewType.IMPROVED_BOOKMARK_VISUAL
+                            || item.type == BookmarkListEntry.ViewType.IMPROVED_BOOKMARK_COMPACT) {
+                        bookmarkCount++;
+                    }
+                }
+
+                return bookmarkCount;
+            }
+
+            @Override
+            public int getBookmarkStartIndex() {
+                return mMediator.getBookmarkItemStartIndex();
+            }
+
+            @Override
+            public int getBookmarkEndIndex() {
+                return mMediator.getBookmarkItemEndIndex();
+            }
+
+            @Override
+            public void searchForTesting(@Nullable String query) {
+                mMediator.search(query);
+            }
+
+            @Override
+            public void simulateSignInForTesting() {
+                mMediator.simulateSignInForTesting();
+            }
+        };
     }
 
     public ModelList getModelListForTesting() {

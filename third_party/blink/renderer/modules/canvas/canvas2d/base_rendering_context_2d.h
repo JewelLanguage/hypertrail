@@ -23,13 +23,13 @@
 #include "cc/paint/record_paint_canvas.h"
 #include "third_party/blink/public/mojom/frame/color_scheme.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_canvas_fill_rule.h"
-#include "third_party/blink/renderer/bindings/modules/v8/v8_image_smoothing_quality.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_typedefs.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_performance_monitor.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_typed_array.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/cached_color.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_path.h"
+#include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_recording_context_2d.h"
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_rendering_context_2d_state.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_deferred_paint_record.h"
@@ -94,8 +94,6 @@ class Canvas2dGPUTransferOption;
 class CanvasPattern;
 class CanvasRenderingContextHost;
 class CanvasResourceProvider;
-class DOMMatrix;
-class DOMMatrixInit;
 class ExceptionState;
 class ExecutionContext;
 class Font;
@@ -117,7 +115,6 @@ class TextCluster;
 class TextClusterOptions;
 class TextMetrics;
 class V8GPUTextureFormat;
-class V8UnionCanvasFilterOrString;
 struct V8CanvasStyle;
 enum class CanvasOps;
 enum class ColorParseResult;
@@ -126,8 +123,13 @@ template <typename T>
 class NotShared;
 class V8CanvasFontStretch;
 class V8CanvasTextRendering;
+class V8CanvasTextAlign;
+class V8CanvasTextBaseline;
+class V8CanvasDirection;
+class V8CanvasFontKerning;
+class V8CanvasFontVariantCaps;
 
-class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
+class MODULES_EXPORT BaseRenderingContext2D : public CanvasRecordingContext2D {
  public:
   static constexpr unsigned kFallbackToCPUAfterReadbacks = 2;
 
@@ -169,27 +171,8 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
   double lineDashOffset() const;
   void setLineDashOffset(double);
 
-  virtual double shadowOffsetX() const;
-  virtual void setShadowOffsetX(double);
-
-  virtual double shadowOffsetY() const;
-  virtual void setShadowOffsetY(double);
-
-  virtual double shadowBlur() const;
-  virtual void setShadowBlur(double);
-
   String shadowColor() const;
   void setShadowColor(const String&);
-
-  // Alpha value that goes from 0 to 1.
-  double globalAlpha() const;
-  void setGlobalAlpha(double);
-
-  String globalCompositeOperation() const;
-  void setGlobalCompositeOperation(const String&);
-
-  const V8UnionCanvasFilterOrString* filter() const;
-  void setFilter(ScriptState*, const V8UnionCanvasFilterOrString* input);
 
   void save();
   void restore(ExceptionState& exception_state);
@@ -203,30 +186,12 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
                   ExceptionState& exception_state) {
     beginLayerImpl(script_state, options, &exception_state);
   }
-  // Pop state stack if top state was pushed by beginLayer, restore state and draw the bitmap.
+  // Pop state stack if top state was pushed by beginLayer, restore state and
+  // draw the bitmap.
   void endLayer(ExceptionState& exception_state);
   int LayerCount() const { return layer_count_; }
   virtual void reset();  // Called by the javascript interface
   void ResetInternal();  // Called from within blink
-
-  void scale(double sx, double sy);
-  void rotate(double angle_in_radians);
-  void translate(double tx, double ty);
-  void transform(double m11,
-                 double m12,
-                 double m21,
-                 double m22,
-                 double dx,
-                 double dy);
-  void setTransform(double m11,
-                    double m12,
-                    double m21,
-                    double m22,
-                    double dx,
-                    double dy);
-  void setTransform(DOMMatrixInit*, ExceptionState&);
-  virtual DOMMatrix* getTransform();
-  virtual void resetTransform();
 
   void beginPath();
 
@@ -361,11 +326,6 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
                     int dirty_height,
                     ExceptionState&);
 
-  bool imageSmoothingEnabled() const;
-  void setImageSmoothingEnabled(bool);
-  V8ImageSmoothingQuality imageSmoothingQuality() const;
-  void setImageSmoothingQuality(const V8ImageSmoothingQuality&);
-
   // Transfers a canvas' existing back-buffer to a GPUTexture for use in a
   // WebGPU pipeline. The canvas' image can be used as a texture, or the texture
   // can be bound as a color attachment and modified. After its texture is
@@ -400,7 +360,6 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
   // the current color.
   virtual Color GetCurrentColor() const = 0;
 
-  virtual cc::PaintCanvas* GetOrCreatePaintCanvas() = 0;
   virtual const cc::PaintCanvas* GetPaintCanvas() const = 0;
   cc::PaintCanvas* GetPaintCanvas() {
     return const_cast<cc::PaintCanvas*>(
@@ -421,7 +380,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
                         CanvasPerformanceMonitor::DrawType) = 0;
 
   virtual sk_sp<PaintFilter> StateGetFilter() = 0;
-  void SnapshotStateForFilter();
+  void SnapshotStateForFilter() final;
 
   virtual CanvasRenderingContextHost* GetCanvasRenderingContextHost() const {
     return nullptr;
@@ -445,14 +404,14 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
 
   void RestoreMatrixClipStack(cc::PaintCanvas*) const;
 
-  String direction() const;
-  void setDirection(const String&);
+  V8CanvasDirection direction() const;
+  void setDirection(const V8CanvasDirection);
 
-  String textAlign() const;
-  void setTextAlign(const String&);
+  V8CanvasTextAlign textAlign() const;
+  void setTextAlign(const V8CanvasTextAlign);
 
-  String textBaseline() const;
-  void setTextBaseline(const String&);
+  V8CanvasTextBaseline textBaseline() const;
+  void setTextBaseline(const V8CanvasTextBaseline);
 
   String letterSpacing() const;
   void setLetterSpacing(const String&);
@@ -463,14 +422,14 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
   V8CanvasTextRendering textRendering() const;
   void setTextRendering(const V8CanvasTextRendering&);
 
-  String fontKerning() const;
-  void setFontKerning(const String&);
+  V8CanvasFontKerning fontKerning() const;
+  void setFontKerning(const V8CanvasFontKerning);
 
   V8CanvasFontStretch fontStretch() const;
   void setFontStretch(const V8CanvasFontStretch&);
 
-  String fontVariantCaps() const;
-  void setFontVariantCaps(const String&);
+  V8CanvasFontVariantCaps fontVariantCaps() const;
+  void setFontVariantCaps(const V8CanvasFontVariantCaps&);
 
   String font() const;
   void setFont(const String& new_font);
@@ -588,19 +547,14 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
   explicit BaseRenderingContext2D(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
-  virtual HTMLCanvasElement* HostAsHTMLCanvasElement() const;
   virtual OffscreenCanvas* HostAsOffscreenCanvas() const;
   virtual FontSelector* GetFontSelector() const;
-  const Font& AccessFont(HTMLCanvasElement* canvas);
+  const Font* AccessFont(HTMLCanvasElement* canvas);
 
   void WillUseCurrentFont() const;
   virtual bool WillSetFont() const;
   virtual bool ResolveFont(const String& new_font) = 0;
   virtual bool CurrentFontResolvedAndUpToDate() const;
-
-  ALWAYS_INLINE CanvasRenderingContext2DState& GetState() const {
-    return *state_stack_.back();
-  }
 
   bool ComputeDirtyRect(const gfx::RectF& local_bounds, SkIRect*);
   bool ComputeDirtyRect(const gfx::RectF& local_bounds,
@@ -640,7 +594,6 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
                      CanvasRenderingContext2DState::ImageType,
                      BaseRenderingContext2D::OverdrawOp overdraw_op);
 
-  HeapVector<Member<CanvasRenderingContext2DState>> state_stack_;
   unsigned max_state_stack_depth_ = 1;
   // Counts how many states have been pushed with BeginLayer.
   int layer_count_ = 0;
@@ -653,23 +606,6 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
   virtual void TryRestoreContextEvent(TimerBase*) {}
 
   static const char kDefaultFont[];
-  static const char kInheritDirectionString[];
-  static const char kRtlDirectionString[];
-  static const char kLtrDirectionString[];
-  static const char kAutoKerningString[];
-  static const char kNormalKerningString[];
-  static const char kNoneKerningString[];
-  static const char kNormalVariantString[];
-  static const char kSmallCapsVariantString[];
-  static const char kAllSmallCapsVariantString[];
-  static const char kPetiteVariantString[];
-  static const char kAllPetiteVariantString[];
-  static const char kUnicaseVariantString[];
-  static const char kTitlingCapsVariantString[];
-  static const char kAutoRendering[];
-  static const char kOptimizeSpeedRendering[];
-  static const char kOptimizeLegibilityRendering[];
-  static const char kGeometricPrecisionRendering[];
   virtual void DisableAcceleration() {}
 
   // Override to prematurely disable acceleration because of a readback.
@@ -715,8 +651,8 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
                         double x,
                         double y,
                         CanvasRenderingContext2DState::PaintType paint_type,
-                        TextAlign align,
-                        TextBaseline baseline,
+                        V8CanvasTextAlign align,
+                        V8CanvasTextBaseline baseline,
                         unsigned run_start,
                         unsigned run_end,
                         double* max_width = nullptr,
@@ -747,8 +683,6 @@ class MODULES_EXPORT BaseRenderingContext2D : public CanvasPath {
   void ValidateStateStackImpl(const cc::PaintCanvas* canvas = nullptr) const;
 
   bool ShouldDrawImageAntialiased(const gfx::RectF& dest_rect) const;
-
-  void SetTransform(const AffineTransform&);
 
   AffineTransform GetTransform() const override;
 
@@ -1201,12 +1135,6 @@ void BaseRenderingContext2D::AdjustRectForCanvas(T& x,
     height = -height;
     y -= height;
   }
-}
-
-ALWAYS_INLINE void BaseRenderingContext2D::SetTransform(
-    const AffineTransform& matrix) {
-  GetState().SetTransform(matrix);
-  SetIsTransformInvertible(matrix.IsInvertible());
 }
 
 ALWAYS_INLINE bool BaseRenderingContext2D::IsFullCanvasCompositeMode(

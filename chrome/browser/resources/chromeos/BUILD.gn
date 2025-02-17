@@ -7,8 +7,7 @@ import("//chrome/common/features.gni")
 import("//third_party/closure_compiler/compile_js.gni")
 import("//tools/grit/grit_rule.gni")
 
-assert(is_chromeos_ash,
-       "Only ChromeOS Ash resources in //c/b/resources//chromeos.")
+assert(is_chromeos, "Only ChromeOS resources in //c/b/resources/chromeos.")
 
 group("resources") {
   public_deps = [
@@ -17,7 +16,6 @@ group("resources") {
     "accessibility:build",
     "add_supervision:resources",
     "app_install:resources",
-    "arc_account_picker:resources",
     "assistant_optin:resources",
     "audio:resources",
     "bluetooth_pairing_dialog:resources",
@@ -91,7 +89,6 @@ group("closure_compile") {
     ":closure_compile_local",
     "account_manager:closure_compile",
     "account_manager/components:closure_compile",
-    "arc_account_picker:closure_compile",
     "assistant_optin:closure_compile",
     "emulator:closure_compile",
     "multidevice_internals:closure_compile",

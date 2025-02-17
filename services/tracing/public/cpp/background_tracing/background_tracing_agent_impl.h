@@ -42,15 +42,20 @@ class COMPONENT_EXPORT(BACKGROUND_TRACING_CPP) BackgroundTracingAgentImpl
 
   // base::trace_event::NamedTriggerManager
   bool DoEmitNamedTrigger(const std::string& trigger_name,
-                          std::optional<int32_t> value) override;
+                          std::optional<int32_t> value,
+                          uint64_t flow_id) override;
 
  private:
   void OnHistogramChanged(const std::string& rule_id,
-                          base::Histogram::Sample reference_lower_value,
-                          base::Histogram::Sample reference_upper_value,
+                          base::Histogram::Sample32 reference_lower_value,
+                          base::Histogram::Sample32 reference_upper_value,
                           const char* histogram_name,
                           uint64_t name_hash,
-                          base::Histogram::Sample actual_value);
+                          base::Histogram::Sample32 actual_value);
+
+  void DoEmitNamedTriggerImpl(const std::string& trigger_name,
+                              std::optional<int32_t> value,
+                              uint64_t flow_id);
 
   mojo::Remote<mojom::BackgroundTracingAgentClient> client_;
   base::Time histogram_last_changed_;
@@ -60,6 +65,7 @@ class COMPONENT_EXPORT(BACKGROUND_TRACING_CPP) BackgroundTracingAgentImpl
       std::unique_ptr<base::StatisticsRecorder::ScopedHistogramSampleObserver>>
       histogram_callback_map_;
 
+  scoped_refptr<base::SequencedTaskRunner> task_runner_;
   base::WeakPtrFactory<BackgroundTracingAgentImpl> weak_factory_{this};
 };
 

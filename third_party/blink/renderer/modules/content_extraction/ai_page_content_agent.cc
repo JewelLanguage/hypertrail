@@ -4,10 +4,21 @@
 
 #include "third_party/blink/renderer/modules/content_extraction/ai_page_content_agent.h"
 
+#include "base/time/time.h"
+#include "third_party/blink/renderer/core/css/properties/longhands.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_document_state.h"
+#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
+#include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/html/forms/html_form_control_element.h"
+#include "third_party/blink/renderer/core/html/forms/html_form_element.h"
+#include "third_party/blink/renderer/core/html/forms/html_input_element.h"
+#include "third_party/blink/renderer/core/html/forms/html_option_element.h"
+#include "third_party/blink/renderer/core/html/forms/html_select_element.h"
+#include "third_party/blink/renderer/core/html/forms/option_list.h"
+#include "third_party/blink/renderer/core/html/forms/text_control_element.h"
 #include "third_party/blink/renderer/core/html/html_anchor_element.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
 #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
@@ -105,6 +116,10 @@ bool HasEmphasis(const ComputedStyle& style) {
          style.HasAppliedTextDecorations() ||
          style.VerticalAlign() == EVerticalAlign::kSub ||
          style.VerticalAlign() == EVerticalAlign::kSuper;
+}
+
+RGBA32 GetColor(const ComputedStyle& style) {
+  return style.VisitedDependentColor(GetCSSPropertyColor()).Rgb();
 }
 
 const LayoutIFrame* GetIFrame(const LayoutObject& object) {
@@ -214,11 +229,20 @@ bool IsVisible(const LayoutObject& object) {
 }
 
 bool ShouldSkipSubtree(const LayoutObject& object) {
-  // Skip embedded content that is not an iframe.
-  // TODO(crbug.com/381273397): Add content for embed and object.
   auto* layout_embedded_content = DynamicTo<LayoutEmbeddedContent>(object);
-  if (layout_embedded_content && !GetIFrame(object)) {
-    return true;
+  if (layout_embedded_content) {
+    auto* layout_iframe = GetIFrame(object);
+
+    // Skip embedded content that is not an iframe.
+    // TODO(crbug.com/381273397): Add content for embed and object.
+    if (!layout_iframe) {
+      return true;
+    }
+
+    // Skip iframe nodes which don't have a Document.
+    if (!layout_iframe->ChildFrameView()) {
+      return true;
+    }
   }
 
   // List markers are communicated by the kOrderedList and kUnorderedList
@@ -258,6 +282,7 @@ void ProcessTextNode(const LayoutText& layout_text,
   auto text_style = mojom::blink::AIPageContentTextStyle::New();
   text_style->text_size = GetTextSize(*layout_text.Style(), document_style);
   text_style->has_emphasis = HasEmphasis(*layout_text.Style());
+  text_style->color = GetColor(*layout_text.Style());
 
   auto text_info = mojom::blink::AIPageContentTextInfo::New();
   text_info->text_content = layout_text.TransformedText();
@@ -330,6 +355,55 @@ void ProcessTableNode(const LayoutTable& layout_table,
   attributes.table_data = std::move(table_data);
 }
 
+void ProcessFormNode(const HTMLFormElement& form_element,
+                     mojom::blink::AIPageContentAttributes& attributes,
+                     const ComputedStyle& document_style) {
+  attributes.attribute_type = mojom::blink::AIPageContentAttributeType::kForm;
+  if (!IsVisible(*form_element.GetLayoutObject())) {
+    return;
+  }
+  auto form_data = mojom::blink::AIPageContentFormData::New();
+  if (const auto& name = form_element.GetName()) {
+    form_data->form_name = name;
+  }
+  attributes.form_data = std::move(form_data);
+}
+
+void ProcessFormControlNode(const HTMLFormControlElement& form_control_element,
+                            mojom::blink::AIPageContentAttributes& attributes,
+                            const ComputedStyle& document_style) {
+  attributes.attribute_type =
+      mojom::blink::AIPageContentAttributeType::kFormControl;
+  if (!IsVisible(*form_control_element.GetLayoutObject())) {
+    return;
+  }
+  auto form_control_data = mojom::blink::AIPageContentFormControlData::New();
+  form_control_data->form_control_type = form_control_element.FormControlType();
+  form_control_data->field_name = form_control_element.GetName();
+  form_control_data->is_required = form_control_element.IsRequired();
+  if (const auto* text_control_element =
+          DynamicTo<TextControlElement>(form_control_element)) {
+    form_control_data->field_value = text_control_element->Value();
+    form_control_data->placeholder =
+        text_control_element->GetPlaceholderValue();
+  }
+  if (const auto* html_input_element =
+          DynamicTo<HTMLInputElement>(form_control_element)) {
+    form_control_data->is_checked = html_input_element->Checked();
+  }
+  if (const auto* select_element =
+          DynamicTo<HTMLSelectElement>(form_control_element)) {
+    for (auto& option_element : select_element->GetOptionList()) {
+      auto select_option = mojom::blink::AIPageContentSelectOption::New();
+      select_option->value = option_element.value();
+      select_option->text = option_element.text();
+      select_option->is_selected = option_element.Selected();
+      form_control_data->select_options.push_back(std::move(select_option));
+    }
+  }
+  attributes.form_control_data = std::move(form_control_data);
+}
+
 mojom::blink::AIPageContentTableRowType GetTableRowType(
     const LayoutTableRow& layout_table_row) {
   if (auto* section = layout_table_row.Section()) {
@@ -357,6 +431,66 @@ void ProcessTableRowNode(const LayoutTableRow& layout_table_row,
   auto table_row_data = mojom::blink::AIPageContentTableRowData::New();
   table_row_data->row_type = GetTableRowType(layout_table_row);
   attributes.table_row_data = std::move(table_row_data);
+}
+
+// Records latency metrics for the given latency and total latency.
+void RecordLatencyMetrics(base::TimeDelta latency,
+                          base::TimeDelta latency_with_scheduling_delay,
+                          bool is_main_frame,
+                          const mojom::blink::AIPageContentOptions& options) {
+  if (is_main_frame) {
+    UMA_HISTOGRAM_TIMES(
+        "OptimizationGuide.AIPageContent.RendererLatency.MainFrame", latency);
+  } else {
+    UMA_HISTOGRAM_TIMES(
+        "OptimizationGuide.AIPageContent.RendererLatency.RemoteSubFrame",
+        latency);
+  }
+
+  if (options.on_critical_path) {
+    if (is_main_frame) {
+      UMA_HISTOGRAM_TIMES(
+          "OptimizationGuide.AIPageContent.RendererLatencyWithSchedulingDelay."
+          "Critical."
+          "MainFrame",
+          latency_with_scheduling_delay);
+    } else {
+      UMA_HISTOGRAM_TIMES(
+          "OptimizationGuide.AIPageContent.RendererLatencyWithSchedulingDelay."
+          "Critical."
+          "RemoteSubFrame",
+          latency_with_scheduling_delay);
+    }
+  } else {
+    if (is_main_frame) {
+      UMA_HISTOGRAM_TIMES(
+          "OptimizationGuide.AIPageContent.RendererLatencyWithSchedulingDelay."
+          "NonCritical."
+          "MainFrame",
+          latency_with_scheduling_delay);
+    } else {
+      UMA_HISTOGRAM_TIMES(
+          "OptimizationGuide.AIPageContent.RendererLatencyWithSchedulingDelay."
+          "NonCritical."
+          "RemoteSubFrame",
+          latency_with_scheduling_delay);
+    }
+  }
+}
+
+// Runs the given tasks.
+void RunTasks(WTF::Vector<base::OnceClosure> tasks) {
+  for (auto& task : tasks) {
+    std::move(task).Run();
+  }
+}
+
+bool ShouldRunLifecycleForSyncExtraction(
+    const mojom::blink::AIPageContentOptions& options) {
+  // Including hidden searchable content requires layout for nodes which are
+  // skipped during rendering. So we need a special lifecycle for them and can't
+  // use the computed state from the regular lifecycle update.
+  return options.on_critical_path || options.include_hidden_searchable_content;
 }
 
 }  // namespace
@@ -416,32 +550,62 @@ void AIPageContentAgent::Trace(Visitor* visitor) const {
   Supplement<Document>::Trace(visitor);
 }
 
+void AIPageContentAgent::DidFinishPostLifecycleSteps(const LocalFrameView&) {
+  RunTasksIfReady();
+}
+
 void AIPageContentAgent::GetAIPageContent(
     mojom::blink::AIPageContentOptionsPtr options,
     GetAIPageContentCallback callback) {
-  if (options->on_critical_path) {
-    GetAIPageContentSync(std::move(options), std::move(callback),
-                         base::TimeTicks());
+  base::TimeTicks start_time = base::TimeTicks::Now();
+
+  if (ShouldRunLifecycleForSyncExtraction(*options)) {
+    GetAIPageContentSync(std::move(options), std::move(callback), start_time);
     return;
   }
 
-  // Note: We could maintain a set of all pending requests to batch process them
-  // when the idle task runs. But it's better for this to be handled in the
-  // browser process.
-  //
-  // TODO(crbug.com/389117697): Consider running this after a frame is
-  // committed, in case that happens before the idle task runs.
-  ThreadScheduler::Current()->PostIdleTask(
-      FROM_HERE, WTF::BindOnce(&AIPageContentAgent::GetAIPageContentSync,
-                               WrapWeakPersistent(this), std::move(options),
-                               std::move(callback)));
+  if (!is_registered_) {
+    is_registered_ = true;
+    if (LocalFrameView* view = GetSupplementable()->View()) {
+      view->RegisterForLifecycleNotifications(this);
+    }
+  }
+
+  // Running lifecycle beyond layout is expensive and the information is only
+  // needed to compute geometry. Limit the update to layout if we don't need the
+  // geometry.
+  // We don't expect many overlapping calls to this service as the browser will
+  // only issue one request at a time.
+  if (options->include_geometry) {
+    geometry_tasks_.push_back(WTF::BindOnce(
+        &AIPageContentAgent::GetAIPageContentSync, WrapWeakPersistent(this),
+        std::move(options), std::move(callback), start_time));
+  } else {
+    layout_clean_tasks_.push_back(WTF::BindOnce(
+        &AIPageContentAgent::GetAIPageContentSync, WrapWeakPersistent(this),
+        std::move(options), std::move(callback), start_time));
+  }
+
+  // Run tasks if the document lifecycle is at least as advanced.
+  RunTasksIfReady();
+}
+
+void AIPageContentAgent::RunTasksIfReady() {
+  if (GetSupplementable()->Lifecycle().GetState() >=
+      DocumentLifecycle::kPrePaintClean) {
+    RunTasks(std::move(geometry_tasks_));
+  }
+  if (GetSupplementable()->Lifecycle().GetState() >=
+      DocumentLifecycle::kLayoutClean) {
+    RunTasks(std::move(layout_clean_tasks_));
+  }
 }
 
 void AIPageContentAgent::GetAIPageContentSync(
     mojom::blink::AIPageContentOptionsPtr options,
     GetAIPageContentCallback callback,
-    base::TimeTicks deadline) const {
-  const auto start_time = base::TimeTicks::Now();
+    base::TimeTicks start_time) const {
+  const auto sync_start_time = base::TimeTicks::Now();
 
   auto content = GetAIPageContentInternal(*options);
   if (!content) {
@@ -450,36 +614,9 @@ void AIPageContentAgent::GetAIPageContentSync(
   }
 
   const auto end_time = base::TimeTicks::Now();
-  const auto latency = end_time - start_time;
-  const bool is_main_frame =
-      GetSupplementable()->GetFrame()->IsOutermostMainFrame();
-  if (is_main_frame) {
-    UMA_HISTOGRAM_TIMES(
-        "OptimizationGuide.AIPageContent.RendererLatency.MainFrame", latency);
-  } else {
-    UMA_HISTOGRAM_TIMES(
-        "OptimizationGuide.AIPageContent.RendererLatency.RemoteSubFrame",
-        latency);
-  }
-
-  if (deadline != base::TimeTicks()) {
-    base::TimeDelta exceed_duration = base::Milliseconds(0);
-    if (end_time > deadline) {
-      exceed_duration = end_time - deadline;
-    }
-    if (is_main_frame) {
-      UMA_HISTOGRAM_TIMES(
-          "OptimizationGuide.AIPageContent.IdleDeadlineExceedDuration."
-          "MainFrame",
-          exceed_duration);
-    } else {
-      UMA_HISTOGRAM_TIMES(
-          "OptimizationGuide.AIPageContent.IdleDeadlineExceedDuration."
-          "RemoteSubFrame",
-          exceed_duration);
-    }
-  }
-
+  RecordLatencyMetrics(end_time - sync_start_time, end_time - start_time,
+                       GetSupplementable()->GetFrame()->IsOutermostMainFrame(),
+                       *options);
   std::move(callback).Run(std::move(content));
 }
 
@@ -514,26 +651,36 @@ mojom::blink::AIPageContentPtr AIPageContentAgent::ContentBuilder::Build(
   // activation reason of FindInPage.
   std::vector<DisplayLockDocumentState::ScopedForceActivatableDisplayLocks>
       forced_activatable_locks;
-  if (options_->include_hidden_searchable_content) {
-    forced_activatable_locks.emplace_back(
-        document.GetDisplayLockDocumentState()
-            .GetScopedForceActivatableLocks());
-    document.View()->ForAllChildLocalFrameViews(
-        [&](LocalFrameView& frame_view) {
-          if (!frame_view.GetFrame().GetDocument()) {
-            return;
-          }
+  if (ShouldRunLifecycleForSyncExtraction(*options_)) {
+    if (options_->include_hidden_searchable_content) {
+      forced_activatable_locks.emplace_back(
+          document.GetDisplayLockDocumentState()
+              .GetScopedForceActivatableLocks());
+      document.View()->ForAllChildLocalFrameViews(
+          [&](LocalFrameView& frame_view) {
+            if (!frame_view.GetFrame().GetDocument()) {
+              return;
+            }
 
-          forced_activatable_locks.emplace_back(
-              frame_view.GetFrame()
-                  .GetDocument()
-                  ->GetDisplayLockDocumentState()
-                  .GetScopedForceActivatableLocks());
-        });
+            forced_activatable_locks.emplace_back(
+                frame_view.GetFrame()
+                    .GetDocument()
+                    ->GetDisplayLockDocumentState()
+                    .GetScopedForceActivatableLocks());
+          });
+    }
+
+    // Running lifecycle beyond layout is expensive and the information is only
+    // needed to compute geometry. Limit the update to layout if we don't need
+    // the geometry.
+    if (options_->include_geometry) {
+      document.View()->UpdateAllLifecyclePhasesExceptPaint(
+          DocumentUpdateReason::kUnknown);
+    } else {
+      document.View()->UpdateLifecycleToLayoutClean(
+          DocumentUpdateReason::kUnknown);
+    }
   }
-
-  document.View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kUnknown);
 
   auto* layout_view = document.GetLayoutView();
   auto* document_style = layout_view->Style();
@@ -627,7 +774,8 @@ AIPageContentAgent::ContentBuilder::MaybeGenerateContentNode(
   auto content_node = mojom::blink::AIPageContentNode::New();
   content_node->content_attributes =
       mojom::blink::AIPageContentAttributes::New();
-  auto& attributes = *content_node->content_attributes;
+  mojom::blink::AIPageContentAttributes& attributes =
+      *content_node->content_attributes;
   AddAnnotatedRoles(object, attributes.annotated_roles);
 
   // Set the attribute type and add any special attributes if the attribute type
@@ -666,6 +814,12 @@ AIPageContentAgent::ContentBuilder::MaybeGenerateContentNode(
   } else if (object.IsTableCell()) {
     attributes.attribute_type =
         mojom::blink::AIPageContentAttributeType::kTableCell;
+  } else if (const auto* form_element =
+                 DynamicTo<HTMLFormElement>(object.GetNode())) {
+    ProcessFormNode(*form_element, attributes, document_style);
+  } else if (const auto* form_control =
+                 DynamicTo<HTMLFormControlElement>(object.GetNode())) {
+    ProcessFormControlNode(*form_control, attributes, document_style);
   } else if (element && IsHeadingTag(*element)) {
     attributes.attribute_type =
         mojom::blink::AIPageContentAttributeType::kHeading;
@@ -701,6 +855,8 @@ AIPageContentAgent::ContentBuilder::MaybeGenerateContentNode(
 
   AddNodeGeometry(object, attributes);
 
+  AddNodeInteractionInfo(object, attributes);
+
   return content_node;
 }
 
@@ -723,7 +879,7 @@ void AIPageContentAgent::ContentBuilder::AddNodeGeometry(
   }
 
   attributes.geometry = mojom::blink::AIPageContentGeometry::New();
-  auto& geometry = *attributes.geometry;
+  mojom::blink::AIPageContentGeometry& geometry = *attributes.geometry;
 
   geometry.outer_bounding_box =
       object.AbsoluteBoundingBoxRect(kMapCoordinatesFlags);
@@ -737,8 +893,41 @@ void AIPageContentAgent::ContentBuilder::AddNodeGeometry(
   geometry.is_fixed_or_sticky_position =
       object.Style()->GetPosition() == EPosition::kFixed ||
       object.Style()->GetPosition() == EPosition::kSticky;
-  geometry.scrolls_overflow_x = object.Style()->ScrollsOverflowX();
-  geometry.scrolls_overflow_y = object.Style()->ScrollsOverflowY();
+}
+
+void AIPageContentAgent::ContentBuilder::AddNodeInteractionInfo(
+    const LayoutObject& object,
+    mojom::blink::AIPageContentAttributes& attributes) const {
+  attributes.interaction_info =
+      mojom::blink::AIPageContentInteractionInfo::New();
+  mojom::blink::AIPageContentInteractionInfo& interaction_info =
+      *attributes.interaction_info;
+  const ComputedStyle& style = *object.Style();
+  interaction_info.scrolls_overflow_x = style.ScrollsOverflowX();
+  interaction_info.scrolls_overflow_y = style.ScrollsOverflowY();
+  bool is_selectable = object.IsSelectable();
+  interaction_info.is_selectable = is_selectable;
+
+  if (auto* node = object.GetNode()) {
+    interaction_info.is_editable = IsEditable(*node);
+  }
+
+  if (auto* box = DynamicTo<LayoutBox>(object)) {
+    if (box->CanResize()) {
+      EResize resize = style.UsedResize();
+      interaction_info.can_resize_vertical =
+          resize == EResize::kVertical || resize == EResize::kBoth;
+      interaction_info.can_resize_horizontal =
+          resize == EResize::kHorizontal || resize == EResize::kBoth;
+    }
+  }
+
+  if (auto* element = DynamicTo<HTMLElement>(object.GetNode())) {
+    interaction_info.is_focusable = element->IsFocusable();
+    interaction_info.is_focused = element->IsFocused();
+    interaction_info.is_draggable = element->draggable();
+    interaction_info.is_clickable = element->IsMaybeClickable();
+  }
 }
 
 }  // namespace blink

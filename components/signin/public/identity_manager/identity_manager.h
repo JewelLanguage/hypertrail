@@ -206,7 +206,9 @@ class IdentityManager : public KeyedService,
                                      const std::string& oauth_consumer_name,
                                      const ScopeSet& scopes,
                                      AccessTokenFetcher::TokenCallback callback,
-                                     AccessTokenFetcher::Mode mode);
+                                     AccessTokenFetcher::Mode mode,
+                                     AccessTokenFetcher::Source token_source =
+                                         AccessTokenFetcher::Source::kProfile);
 
   // Creates an AccessTokenFetcher given the passed-in information, allowing
   // to specify a custom |url_loader_factory| as well.
@@ -218,6 +220,13 @@ class IdentityManager : public KeyedService,
       const ScopeSet& scopes,
       AccessTokenFetcher::TokenCallback callback,
       AccessTokenFetcher::Mode mode);
+
+#if BUILDFLAG(IS_IOS)
+  void GetRefreshTokenFromDevice(
+      const CoreAccountId& account_id,
+      const OAuth2AccessTokenManager::ScopeSet& scopes,
+      AccessTokenFetcher::TokenCallback callback);
+#endif
 
   // If an entry exists in the cache of access tokens corresponding to the
   // given information, removes that entry; in this case, the next access token
@@ -244,6 +253,11 @@ class IdentityManager : public KeyedService,
 
   // Returns true if a refresh token exists for |account_id|.
   bool HasAccountWithRefreshToken(const CoreAccountId& account_id) const;
+
+#if BUILDFLAG(IS_IOS)
+  bool HasAccountWithRefreshTokenOnDevice(
+      const CoreAccountId& account_id) const;
+#endif
 
   // Returns true if all refresh tokens have been loaded from disk.
   bool AreRefreshTokensLoaded() const;
@@ -661,6 +675,7 @@ class IdentityManager : public KeyedService,
                               token_operation_source) override;
 #if BUILDFLAG(IS_IOS)
   void OnAccountsOnDeviceChanged() override;
+  void OnAccountOnDeviceUpdated(const AccountInfo& account_info) override;
 #endif
 
   // GaiaCookieManagerService callbacks:

@@ -3,8 +3,8 @@
 // found in the LICENSE file.
 
 #ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
 #endif
 
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
@@ -93,13 +93,48 @@ namespace {
 constexpr float kIconToneDark = 40.f;
 constexpr float kIconToneLight = 80.f;
 
+// Values are expressed as a proportion of resulting image size.
+struct AvatarWithDottedRingParams {
+  // Radius of the dotted ring.
+  float dotted_ring_radius = 0;
+  // The stroke is fully inside the ring.
+  float ring_stroke_width = 0;
+  // Padding around the image to fit it inside the ring.
+  float image_padding = 0;
+};
+
+constexpr AvatarWithDottedRingParams kAvatarWithDottedRingParamsWithPadding = {
+    .dotted_ring_radius = 0.29,
+    .ring_stroke_width = 0.05,
+    .image_padding = 0.3,
+};
+
+constexpr AvatarWithDottedRingParams kAvatarWithDottedRingParamsNoPadding = {
+    .dotted_ring_radius = 0.5,
+    .ring_stroke_width = 0.075,
+    .image_padding = 0.13,
+};
+
+// Sanity check: the dotted ring is smaller than the full image.
+static_assert(kAvatarWithDottedRingParamsWithPadding.dotted_ring_radius <= 0.5);
+static_assert(kAvatarWithDottedRingParamsNoPadding.dotted_ring_radius <= 0.5);
+
+// Sanity check: the avatar image fits inside the dotted ring (taking the ring
+// stroke width into account).
+static_assert(kAvatarWithDottedRingParamsWithPadding.dotted_ring_radius >
+              0.5 - kAvatarWithDottedRingParamsWithPadding.image_padding +
+                  kAvatarWithDottedRingParamsWithPadding.ring_stroke_width);
+static_assert(kAvatarWithDottedRingParamsNoPadding.dotted_ring_radius >
+              0.5 - kAvatarWithDottedRingParamsNoPadding.image_padding +
+                  kAvatarWithDottedRingParamsNoPadding.ring_stroke_width);
+
 #if BUILDFLAG(IS_WIN)
 const int kOldAvatarIconWidth = 38;
 const int kOldAvatarIconHeight = 31;
 
 // 2x sized versions of the old profile avatar icons.
 // TODO(crbug.com/41444689): Clean this up.
-const int kProfileAvatarIconResources2x[] = {
+constexpr auto kProfileAvatarIconResources2x = std::to_array<int>({
     IDR_PROFILE_AVATAR_2X_0,  IDR_PROFILE_AVATAR_2X_1,
     IDR_PROFILE_AVATAR_2X_2,  IDR_PROFILE_AVATAR_2X_3,
     IDR_PROFILE_AVATAR_2X_4,  IDR_PROFILE_AVATAR_2X_5,
@@ -114,7 +149,7 @@ const int kProfileAvatarIconResources2x[] = {
     IDR_PROFILE_AVATAR_2X_22, IDR_PROFILE_AVATAR_2X_23,
     IDR_PROFILE_AVATAR_2X_24, IDR_PROFILE_AVATAR_2X_25,
     IDR_PROFILE_AVATAR_2X_26,
-};
+});
 
 // Returns a copied SkBitmap for the given image that can be safely passed to
 // another thread.
@@ -411,12 +446,15 @@ constexpr size_t kPlaceholderAvatarIndex = 0;
 #endif
 
 ui::ImageModel GetGuestAvatar(int size) {
-  return ui::ImageModel::FromVectorIcon(
-      kUserAccountAvatarRefreshIcon,
-      switches::IsExplicitBrowserSigninUIOnDesktopEnabled()
-          ? ui::kColorMenuIcon
-          : ui::kColorAvatarIconGuest,
-      size);
+  int color_id = ui::kColorMenuIcon;
+  const gfx::VectorIcon* vector_icon = &kUserAccountAvatarRefreshIcon;
+  if (base::FeatureList::IsEnabled(switches::kEnableImprovedGuestProfileMenu)) {
+    // Guest profiles generally use the default theme, no need to go through the
+    // `ThemeService`.
+    color_id = ui::kColorSysPrimary;
+    vector_icon = &kAccountBoxIcon;
+  }
+  return ui::ImageModel::FromVectorIcon(*vector_icon, color_id, size);
 }
 
 gfx::Image GetSizedAvatarIcon(const gfx::Image& image,
@@ -471,29 +509,21 @@ ui::ImageModel GetSizedAvatarImageModel(const ui::ImageModel& image, int size) {
 
 #if !BUILDFLAG(IS_ANDROID)
 gfx::ImageSkia GetAvatarWithDottedRing(const ui::ImageModel& image,
-                                       int size_with_padding,
+                                       int size,
+                                       bool has_padding,
+                                       bool has_background,
                                        ui::ColorProvider* color_provider) {
   DCHECK(!image.IsEmpty());
-  // Values are expressed as a proportion of `size`.
-  // Radius of the dotted ring.
-  constexpr float kAvatarDottedRingRadius = 0.29;
-  // Padding around the image to fit it inside the ring.
-  constexpr float kAvatarPaddingForRing = 0.3;
-  // The stroke is fully inside `kAvatarDottedRingRadius`.
-  constexpr float kAvatarRingStrokeWidth = 0.05;
-  // Sanity check: the dotted ring is smaller than the full image.
-  static_assert(kAvatarDottedRingRadius < 0.5);
-  // Sanity check: the avatar image fits inside the dotted ring (taking the ring
-  // stroke width into account).
-  static_assert(kAvatarDottedRingRadius >
-                0.5 - kAvatarPaddingForRing + kAvatarRingStrokeWidth);
 
-  const int avatar_padding =
-      std::nearbyint(kAvatarPaddingForRing * size_with_padding);
+  const AvatarWithDottedRingParams& params =
+      has_padding ? kAvatarWithDottedRingParamsWithPadding
+                  : kAvatarWithDottedRingParamsNoPadding;
+
+  const int avatar_padding = std::nearbyint(params.image_padding * size);
   const int avatar_ring_radius =
-      std::nearbyint(kAvatarDottedRingRadius * size_with_padding);
-  const int avatar_size = size_with_padding - 2 * avatar_padding;
-  const float avatar_ring_stroke = kAvatarRingStrokeWidth * size_with_padding;
+      std::nearbyint(params.dotted_ring_radius * size);
+  const int avatar_size = size - 2 * avatar_padding;
+  const float avatar_ring_stroke = params.ring_stroke_width * size;
 
   // Shrink the avatar to fit inside the dotted ring.
   gfx::ImageSkia sized_avatar_image =
@@ -504,14 +534,16 @@ gfx::ImageSkia GetAvatarWithDottedRing(const ui::ImageModel& image,
   gfx::ImageSkia padded_image = gfx::CanvasImageSource::CreatePadded(
       sized_avatar_image, gfx::Insets(avatar_padding));
   // Add background color.
-  gfx::ImageSkia padded_image_with_background = AddBackgroundToImage(
-      padded_image, color_provider->GetColor(ui::kColorBubbleBackground));
+  if (has_background) {
+    padded_image = AddBackgroundToImage(
+        padded_image, color_provider->GetColor(ui::kColorBubbleBackground));
+  }
   // Add dotted ring.
   return gfx::ImageSkia(
       std::make_unique<ImageWithDottedCircleSource>(
-          padded_image_with_background, avatar_ring_radius, avatar_ring_stroke,
+          padded_image, avatar_ring_radius, avatar_ring_stroke,
           color_provider->GetColor(ui::kColorSysStateInactiveRing)),
-      gfx::Size(size_with_padding, size_with_padding));
+      gfx::Size(size, size));
 }
 #endif  // !BUILDFLAG(IS_ANDROID)
 
@@ -799,7 +831,6 @@ int GetDefaultAvatarIconResourceIDAtIndex(size_t index) {
 
 #if BUILDFLAG(IS_WIN)
 int GetOldDefaultAvatar2xIconResourceIDAtIndex(size_t index) {
-  DCHECK_LT(index, std::size(kProfileAvatarIconResources2x));
   return kProfileAvatarIconResources2x[index];
 }
 #endif  // BUILDFLAG(IS_WIN)

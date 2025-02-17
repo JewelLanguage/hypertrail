@@ -7,7 +7,6 @@
 
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "services/screen_ai/buildflags/buildflags.h"
 #include "ui/base/command_id_constants.h"
 
@@ -140,6 +139,7 @@
 #define IDC_ORGANIZE_TABS               35044
 #define IDC_CREATE_NEW_TAB_GROUP        35045
 #define IDC_DECLUTTER_TABS              35046
+#define IDC_SEND_SHARED_TAB_GROUP_FEEDBACK 35047
 
 // Page-manipulation commands that target a specified tab, which may not be the
 // active one.
@@ -432,6 +432,9 @@
 // Context menu items that provide fast access to input methods.
 #define IDC_CONTENT_CONTEXT_EMOJI 50220
 #define IDC_CONTEXT_COMPOSE 50230
+// Context menu items to control glic
+#define IDC_CONTENT_CONTEXT_CLOSE_GLIC  50231
+#define IDC_CONTENT_CONTEXT_RELOAD_GLIC  50232
 // Context menu items in the bookmark bar
 #define IDC_BOOKMARK_BAR_OPEN_ALL 51000
 #define IDC_BOOKMARK_BAR_OPEN_ALL_NEW_WINDOW 51001
@@ -469,6 +472,7 @@
 
 // Context menu items in the status tray
 #define IDC_STATUS_TRAY_KEEP_CHROME_RUNNING_IN_BACKGROUND 51100
+#define IDC_STATUS_TRAY_KEEP_CHROME_RUNNING_IN_BACKGROUND_SETTING 51101
 
 // Context menu items for media router
 #define IDC_MEDIA_ROUTER_ABOUT 51200
@@ -558,6 +562,7 @@
 #define IDC_GLIC_STATUS_ICON_MENU_CUSTOMIZE_KEYBOARD_SHORTCUT 53311
 #define IDC_GLIC_STATUS_ICON_MENU_REMOVE_ICON                 53312
 #define IDC_GLIC_STATUS_ICON_MENU_SETTINGS                    53313
+#define IDC_GLIC_STATUS_ICON_MENU_EXIT                        53314
 
 // NOTE: The last valid command value is 57343 (0xDFFF)
 // See http://msdn.microsoft.com/en-us/library/t2zechd4(VS.71).aspx

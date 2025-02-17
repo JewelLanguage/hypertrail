@@ -499,6 +499,9 @@ void FrameTreeNode::SetPendingFramePolicy(blink::FramePolicy frame_policy) {
         frame_policy.required_document_policy;
   }
 
+  pending_frame_policy_.deferred_fetch_policy =
+      frame_policy.deferred_fetch_policy;
+
   // Fenced frame roots do not have a parent, so add an extra check here to
   // still allow a fenced frame to properly set its container policy. The
   // required document policy and sandbox flags should stay unmodified.
@@ -621,6 +624,12 @@ void FrameTreeNode::TakeNavigationRequest(
     was_discarded_ = false;
   }
   render_manager()->DidCreateNavigationRequest(navigation_request_.get());
+
+  devtools_instrumentation::DidStartNavigating(
+      *this, navigation_request_->common_params().url,
+      navigation_request_->devtools_navigation_token(),
+      navigation_request_->common_params().navigation_type);
+
   DidStartLoading(previous_frame_tree_loading_state);
 }
 

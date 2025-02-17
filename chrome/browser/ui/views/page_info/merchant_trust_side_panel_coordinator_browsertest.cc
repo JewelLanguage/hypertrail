@@ -50,10 +50,15 @@ page_info::MerchantData CreateValidMerchantData() {
 
 class MockMerchantTrustService : public page_info::MerchantTrustService {
  public:
-  MockMerchantTrustService() : MerchantTrustService(nullptr, false, nullptr) {}
+  MockMerchantTrustService()
+      : MerchantTrustService(nullptr, nullptr, false, nullptr) {}
   MOCK_METHOD(void,
               GetMerchantTrustInfo,
               (const GURL&, page_info::MerchantDataCallback),
+              (const, override));
+  MOCK_METHOD(void,
+              RecordMerchantTrustInteraction,
+              (const GURL&, page_info::MerchantTrustInteraction),
               (const, override));
 };
 
@@ -132,6 +137,11 @@ IN_PROC_BROWSER_TEST_F(MerchantTrustSidePanelCoordinatorBrowserTest,
             std::move(callback).Run(
                 url, std::make_optional(CreateValidMerchantData()));
           }));
+
+  EXPECT_CALL(*service(), RecordMerchantTrustInteraction(
+                              _, page_info::MerchantTrustInteraction::
+                                     kSidePanelOpenedOnSameTabNavigation))
+      .Times(1);
   ASSERT_TRUE(
       ui_test_utils::NavigateToURL(browser(), kGURLWithMerchantTrustData));
 
@@ -158,6 +168,10 @@ IN_PROC_BROWSER_TEST_F(MerchantTrustSidePanelCoordinatorBrowserTest,
           Invoke([](const GURL& url, page_info::MerchantDataCallback callback) {
             std::move(callback).Run(url, std::nullopt);
           }));
+  EXPECT_CALL(*service(), RecordMerchantTrustInteraction(
+                              _, page_info::MerchantTrustInteraction::
+                                     kSidePanelClosedOnSameTabNavigation))
+      .Times(1);
   GURL kGURLWithoutMerchantTrustData = CreateUrl(kUrlWithoutMerchantTrustData);
   ASSERT_TRUE(
       ui_test_utils::NavigateToURL(browser(), kGURLWithoutMerchantTrustData));
@@ -335,6 +349,5 @@ IN_PROC_BROWSER_TEST_F(MerchantTrustSidePanelCoordinatorBrowserTest,
   auto* side_panel_view = static_cast<WebViewSidePanelView*>(view.get());
 
   EXPECT_EQ(side_panel_view->GetLastUrlForTesting(),
-            CreateUrl(kMerchantReviewsUrl).spec() +
-                "?s=CHROME_SIDE_PANEL#reviews");
+            CreateUrl(kMerchantReviewsUrl).spec() + "?s=CHROME_SIDE_PANEL");
 }

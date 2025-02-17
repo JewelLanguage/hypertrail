@@ -289,22 +289,15 @@ using base::UserMetricsAction;
   BOOL isAccountEligibleForSignInPromo = NO;
   if ([SigninPromoViewMediator
           shouldDisplaySigninPromoViewWithAccessPoint:
-              signin_metrics::AccessPoint::ACCESS_POINT_NTP_FEED_TOP_PROMO
+              signin_metrics::AccessPoint::kNtpFeedTopPromo
                                     signinPromoAction:SigninPromoAction::
                                                           kInstantSignin
                                 authenticationService:self.authenticationService
                                           prefService:self.prefService]) {
     isAccountEligibleForSignInPromo = ![self isUserSignedIn];
   }
-  // Don't show the promo for incognito or start surface or if account is not
-  // eligible.
-  BOOL isStartSurfaceOrIncognito = self.isIncognito ||
-                                   [self.NTPDelegate isStartSurface] ||
-                                   !self.isSignInPromoEnabled;
-  if (!isStartSurfaceOrIncognito && isAccountEligibleForSignInPromo) {
-    return true;
-  }
-  return false;
+  return !self.isIncognito && ![self.NTPDelegate isStartSurface] &&
+         self.isSignInPromoEnabled && isAccountEligibleForSignInPromo;
 }
 
 - (void)updateShouldShowPromo {

@@ -52,7 +52,6 @@
 
 using base::test::ios::kWaitForPageLoadTimeout;
 using chrome_test_util::ButtonWithAccessibilityLabelId;
-using chrome_test_util::GoogleSyncSettingsButton;
 using chrome_test_util::IdentityCellMatcherForEmail;
 using chrome_test_util::SettingsAccountButton;
 using chrome_test_util::SettingsSignInRowMatcher;
@@ -371,8 +370,7 @@ void CompleteSigninFlow() {
                                    IDS_IOS_FIRST_RUN_SIGNIN_DONT_SIGN_IN))]
       assertWithMatcher:grey_nil()];
   ExpectedSigninHistograms* expecteds = [[ExpectedSigninHistograms alloc]
-      initWithAccessPoint:signin_metrics::AccessPoint::
-                              ACCESS_POINT_FORCED_SIGNIN];
+      initWithAccessPoint:signin_metrics::AccessPoint::kForcedSignin];
   // TODO(crbug.com/41493423): We should log Signin is started. Maybe also that
   // it’s offered.
   [SigninEarlGrey assertExpectedSigninHistograms:expecteds];
@@ -670,10 +668,9 @@ void CompleteSigninFlow() {
   // Sign-in from the regular prompt.
   CompleteSigninFlow();
 
-  // Sync utilities require sync to be initialized in order to perform
-  // operations on the Sync server.
-  [ChromeEarlGrey waitForSyncEngineInitialized:YES
-                                   syncTimeout:base::Seconds(10)];
+  // Sync utilities require sync to be active in order to perform operations on
+  // the Sync server.
+  [ChromeEarlGrey waitForSyncTransportStateActiveWithTimeout:base::Seconds(10)];
 
   // Make sure the forced sign-in screen isn't shown because sign-in was
   // already done.
@@ -803,10 +800,9 @@ void CompleteSigninFlow() {
   // Sign-in from the regular prompt.
   CompleteSigninFlow();
 
-  // Sync utilities require sync to be initialized in order to perform
-  // operations on the Sync server.
-  [ChromeEarlGrey waitForSyncEngineInitialized:YES
-                                   syncTimeout:base::Seconds(10)];
+  // Sync utilities require sync to be active in order to perform operations on
+  // the Sync server.
+  [ChromeEarlGrey waitForSyncTransportStateActiveWithTimeout:base::Seconds(10)];
 
   // Make sure the forced sign-in screen isn't shown because the browser is
   // already signed in.
@@ -972,7 +968,7 @@ void CompleteSigninFlow() {
   // Show the regular sign-in prompt on the second window which will raise a UI
   // blocker on the second window.
   [ChromeEarlGreyUI openSettingsMenuInWindowWithNumber:1];
-  [ChromeEarlGreyUI tapSettingsMenuButton:GoogleSyncSettingsButton()];
+  [ChromeEarlGreyUI tapSettingsMenuButton:SettingsAccountButton()];
 
   // Enable the forced sign-in policy.
   SetSigninEnterprisePolicyValue(BrowserSigninMode::kForced);

@@ -156,6 +156,13 @@ class CORE_EXPORT LocalFrameView final
 
     // Called after the layout lifecycle phase.
     virtual void DidFinishLayout() {}
+
+    // Called when the lifecycle is complete and an update has been pushed to the
+    // compositor.
+    // This hook should be preferred for updating state that needs the lifecycle to
+    // be clean but don't need to update state that is pushed further in the
+    // rendering pipeline.
+    virtual void DidFinishPostLifecycleSteps(const LocalFrameView&) {}
   };
 
   explicit LocalFrameView(LocalFrame&);
@@ -254,6 +261,8 @@ class CORE_EXPORT LocalFrameView final
 
   void ForceUpdateViewportIntersections();
 
+  void ScheduleDelayedIntersection(base::TimeDelta);
+
   void SetPaintArtifactCompositorNeedsUpdate();
 
   // Methods for getting/setting the size Blink should use to layout the
@@ -268,8 +277,7 @@ class CORE_EXPORT LocalFrameView final
     return layout_size_fixed_to_frame_size_;
   }
 
-  bool GetIntrinsicSizingInfo(NaturalSizingInfo&) const override;
-  bool HasIntrinsicSizingInfo() const override;
+  std::optional<NaturalSizingInfo> GetNaturalDimensions() const override;
 
   void Dispose() override;
   void PropagateFrameRects() override;
@@ -490,9 +498,6 @@ class CORE_EXPORT LocalFrameView final
 
   void AddAnimatingScrollableArea(PaintLayerScrollableArea*);
   void RemoveAnimatingScrollableArea(PaintLayerScrollableArea*);
-  const ScrollableAreaSet* AnimatingScrollableAreas() const {
-    return animating_scrollable_areas_.Get();
-  }
 
   // Used when UnifiedScrollableAreas is disabled.
   void AddUserScrollableArea(PaintLayerScrollableArea&);
@@ -973,6 +978,8 @@ class CORE_EXPORT LocalFrameView final
   void RunIntersectionObserverSteps();
   void RenderThrottlingStatusChanged();
 
+  void DelayedIntersectionTimerFired(TimerBase*);
+
   // Methods to do point conversion via layoutObjects, in order to take
   // transforms into account.
   gfx::Rect ConvertToContainingEmbeddedContentView(const gfx::Rect&) const;
@@ -1103,12 +1110,13 @@ class CORE_EXPORT LocalFrameView final
 
   // Scrollable areas which overflow in the block flow direction.
   // Needed for calculating scroll anchoring.
-  Member<ScrollableAreaSet> scroll_anchoring_scrollable_areas_;
-  Member<ScrollableAreaSet> animating_scrollable_areas_;
+  ScrollableAreaSet scroll_anchoring_scrollable_areas_;
+  ScrollableAreaSet animating_scrollable_areas_;
   // All scrollable areas in the frame's document,
   // or user-scrollable ones if UnifiedScrollableAreas is disabled.
   ScrollableAreaMap scrollable_areas_;
   ScrollableAreaSet scrollable_areas_with_scroll_node_;
+
   BoxModelObjectSet background_attachment_fixed_objects_;
   Member<FrameViewAutoSizeInfo> auto_size_info_;
 
@@ -1162,6 +1170,7 @@ class CORE_EXPORT LocalFrameView final
 
   IntersectionObservationState intersection_observation_state_;
   gfx::Vector2dF accumulated_scroll_delta_since_last_intersection_update_;
+  HeapTaskRunnerTimer<LocalFrameView> delayed_intersection_timer_;
 
   mojom::blink::ViewportIntersectionState last_intersection_state_;
 

@@ -35,7 +35,6 @@
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/sync/service/sync_service_observer.h"
-#include "components/webdata/common/web_data_service_consumer.h"
 #include "ui/gfx/image/image.h"
 #include "url/gurl.h"
 
@@ -68,7 +67,6 @@ class PaymentsDatabaseHelper;
 // unnecessarily inefficient, since any change causes the PayDM to reload all of
 // its data.
 class PaymentsDataManager : public AutofillWebDataServiceObserverOnUISequence,
-                            public WebDataServiceConsumer,
                             public AccountInfoGetter,
                             public syncer::SyncServiceObserver,
                             public signin::IdentityManager::Observer {
@@ -108,10 +106,8 @@ class PaymentsDataManager : public AutofillWebDataServiceObserverOnUISequence,
   // AutofillWebDataServiceObserverOnUISequence:
   void OnAutofillChangedBySync(syncer::DataType data_type) override;
 
-  // WebDataServiceConsumer:
-  void OnWebDataServiceRequestDone(
-      WebDataServiceBase::Handle h,
-      std::unique_ptr<WDTypedResult> result) override;
+  void OnWebDataServiceRequestDone(WebDataServiceBase::Handle h,
+                                   std::unique_ptr<WDTypedResult> result);
 
   // AccountInfoGetter:
   CoreAccountInfo GetAccountInfoForPaymentsServer() const override;
@@ -257,7 +253,10 @@ class PaymentsDataManager : public AutofillWebDataServiceObserverOnUISequence,
   // Returns the unlinked buy-now-pay-later issuers. This is a list of BNPL
   // issuers that are available to be used but have NOT been linked to the
   // payments account by the user.
-  const std::vector<BnplIssuer>& GetUnlinkedBnplIssuers() const;
+  base::span<const BnplIssuer> GetUnlinkedBnplIssuers() const;
+
+  // Returns all BNPL issuers, both linked and unlinked.
+  std::vector<BnplIssuer> GetBnplIssuers() const;
 
   // Adds `iban` to the web database as a local IBAN. Returns the guid of
   // `iban` if the add is successful, or an empty string otherwise.
@@ -317,8 +316,7 @@ class PaymentsDataManager : public AutofillWebDataServiceObserverOnUISequence,
   virtual bool SaveCardLocallyIfNew(const CreditCard& imported_credit_card);
 
   // Removes the credit card or IBAN identified by `guid`.
-  // Returns true if something was removed.
-  virtual bool RemoveByGUID(const std::string& guid);
+  virtual void RemoveByGUID(const std::string& guid);
 
   // Removes all local credit cards and CVCs modified on or after `delete_begin`
   // and strictly before `delete_end`. Used for browsing data deletion purposes.
@@ -362,6 +360,16 @@ class PaymentsDataManager : public AutofillWebDataServiceObserverOnUISequence,
 
   // Sets the value of the kAutofillHasSeenIban pref to true.
   void SetAutofillHasSeenIban();
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
+  // Returns the value of the kAutofillHasSeenBnpl pref.
+  bool IsAutofillHasSeenBnplPrefEnabled() const;
+
+  // Sets the value of the kAutofillHasSeenBnpl pref to true.
+  void SetAutofillHasSeenBnpl();
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS)
 
   // Returns whether sync's integration with payments is on.
   virtual bool IsAutofillWalletImportEnabled() const;
@@ -633,6 +641,9 @@ class PaymentsDataManager : public AutofillWebDataServiceObserverOnUISequence,
   // Check if credit card benefits sync flag is enabled.
   bool IsCardBenefitsSyncEnabled() const;
 
+  // Returns the value of the AutofillBnplEnabled pref.
+  virtual bool IsAutofillBnplPrefEnabled() const;
+
   // Triggered when all the card art image fetches have been completed,
   // regardless of whether all of them succeeded.
   void OnCardArtImagesFetched(
@@ -663,6 +674,8 @@ class PaymentsDataManager : public AutofillWebDataServiceObserverOnUISequence,
   bool AreEwalletAccountsSupported() const;
 
   // Whether buy-now-pay-later issuers are supported for the platform OS.
+  // Checks if the user's locale is supported for BNPL, and if the BNPL feature
+  // is enabled.
   bool AreBnplIssuersSupported() const;
 
   // Whether generic payment instruments are supported.
@@ -762,7 +775,7 @@ class PaymentsDataManager : public AutofillWebDataServiceObserverOnUISequence,
   // Whether sync should be considered on in a test.
   bool is_syncing_for_test_ = false;
 
-  base::WeakPtrFactory<PaymentsDataManager> weak_factory_{this};
+  base::WeakPtrFactory<PaymentsDataManager> weak_ptr_factory_{this};
 };
 
 }  // namespace autofill

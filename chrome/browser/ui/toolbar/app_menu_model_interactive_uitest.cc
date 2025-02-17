@@ -195,6 +195,7 @@ IN_PROC_BROWSER_TEST_F(AppMenuModelInteractiveTest,
       CheckViewProperty(
           AppMenuModel::kSaveAndShareMenuItem, &views::MenuItemView::title,
           l10n_util::GetStringUTF16(IDS_CAST_SAVE_AND_SHARE_MENU)),
+      ScrollIntoView(AppMenuModel::kSaveAndShareMenuItem),
       SelectMenuItem(AppMenuModel::kSaveAndShareMenuItem),
       EnsurePresent(AppMenuModel::kCastTitleItem));
 }
@@ -456,6 +457,7 @@ IN_PROC_BROWSER_TEST_F(UniversalInstallAppMenuModelInteractiveTest,
       WaitForState(kAppBannerManagerState, InstallableWebAppCheckResult::kNo),
       PressButton(kToolbarAppMenuButtonElementId),
       EnsurePresent(AppMenuModel::kSaveAndShareMenuItem),
+      ScrollIntoView(AppMenuModel::kSaveAndShareMenuItem),
       SelectMenuItem(AppMenuModel::kSaveAndShareMenuItem),
       VerifyDiyAppMenuItemViews());
 }
@@ -491,6 +493,7 @@ IN_PROC_BROWSER_TEST_F(UniversalInstallAppMenuModelInteractiveTest,
                    InstallableWebAppCheckResult::kYes_Promotable),
       PressButton(kToolbarAppMenuButtonElementId),
       EnsurePresent(AppMenuModel::kSaveAndShareMenuItem),
+      ScrollIntoView(AppMenuModel::kSaveAndShareMenuItem),
       SelectMenuItem(AppMenuModel::kSaveAndShareMenuItem),
       EnsurePresent(AppMenuModel::kInstallAppItem),
       CheckViewProperty(
@@ -513,21 +516,15 @@ IN_PROC_BROWSER_TEST_F(UniversalInstallAppMenuModelInteractiveTest,
                    InstallableWebAppCheckResult::kYes_Promotable),
       PressButton(kToolbarAppMenuButtonElementId),
       EnsurePresent(AppMenuModel::kSaveAndShareMenuItem),
+      ScrollIntoView(AppMenuModel::kSaveAndShareMenuItem),
       SelectMenuItem(AppMenuModel::kSaveAndShareMenuItem),
       EnsurePresent(AppMenuModel::kInstallAppItem));
 }
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 class SupervisedUserAppMenuModelInteractiveTest
-    : public AppMenuModelInteractiveTest,
-      public testing::WithParamInterface<bool> {
+    : public AppMenuModelInteractiveTest {
  public:
-  SupervisedUserAppMenuModelInteractiveTest() {
-    scoped_feature_list_.InitWithFeatureState(
-        supervised_user::kHideGuestModeForSupervisedUsers,
-        HideGuestModeForSupervisedUsersFeatureEnabled());
-  }
-
   void SetUpInProcessBrowserTestFixture() override {
     unused_subscription_ =
         BrowserContextDependencyManager::GetInstance()
@@ -553,10 +550,6 @@ class SupervisedUserAppMenuModelInteractiveTest
             browser()->profile());
   }
 
-  static bool HideGuestModeForSupervisedUsersFeatureEnabled() {
-    return GetParam();
-  }
-
   void SignIn(bool is_supervised_user) {
     AccountInfo account_info =
         identity_test_environment_adaptor_->identity_test_env()
@@ -575,7 +568,7 @@ class SupervisedUserAppMenuModelInteractiveTest
       identity_test_environment_adaptor_;
 };
 
-IN_PROC_BROWSER_TEST_P(SupervisedUserAppMenuModelInteractiveTest,
+IN_PROC_BROWSER_TEST_F(SupervisedUserAppMenuModelInteractiveTest,
                        OpenGuestSessionForSignedOutUser) {
   RunTestSequence(PressButton(kToolbarAppMenuButtonElementId),
                   SelectMenuItem(AppMenuModel::kProfileMenuItem),
@@ -583,7 +576,7 @@ IN_PROC_BROWSER_TEST_P(SupervisedUserAppMenuModelInteractiveTest,
                   CheckGuestWindowOpened(browser()));
 }
 
-IN_PROC_BROWSER_TEST_P(SupervisedUserAppMenuModelInteractiveTest,
+IN_PROC_BROWSER_TEST_F(SupervisedUserAppMenuModelInteractiveTest,
                        OpenGuestSessionForSignedInRegularUser) {
   SignIn(/*is_supervised_user=*/false);
   RunTestSequence(PressButton(kToolbarAppMenuButtonElementId),
@@ -592,28 +585,13 @@ IN_PROC_BROWSER_TEST_P(SupervisedUserAppMenuModelInteractiveTest,
                   CheckGuestWindowOpened(browser()));
 }
 
-IN_PROC_BROWSER_TEST_P(SupervisedUserAppMenuModelInteractiveTest,
+IN_PROC_BROWSER_TEST_F(SupervisedUserAppMenuModelInteractiveTest,
                        OpenGuestSessionForSignedInSupervisedUser) {
   SignIn(/*is_supervised_user=*/true);
 
-  if (HideGuestModeForSupervisedUsersFeatureEnabled()) {
-    RunTestSequence(PressButton(kToolbarAppMenuButtonElementId),
-                    SelectMenuItem(AppMenuModel::kProfileMenuItem),
-                    EnsureNotPresent(AppMenuModel::kProfileOpenGuestItem));
-  } else {
-    RunTestSequence(PressButton(kToolbarAppMenuButtonElementId),
-                    SelectMenuItem(AppMenuModel::kProfileMenuItem),
-                    SelectMenuItem(AppMenuModel::kProfileOpenGuestItem),
-                    CheckGuestWindowOpened(browser()));
-  }
+  RunTestSequence(PressButton(kToolbarAppMenuButtonElementId),
+                  SelectMenuItem(AppMenuModel::kProfileMenuItem),
+                  EnsureNotPresent(AppMenuModel::kProfileOpenGuestItem));
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    SupervisedUser,
-    SupervisedUserAppMenuModelInteractiveTest,
-    ::testing::Bool(),
-    [](const testing::TestParamInfo<bool>& info) {
-      return info.param ? "HideGuestModeForSupervisedUsersEnabled"
-                        : "HideGuestModeForSupervisedUsersDisabled";
-    });
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)

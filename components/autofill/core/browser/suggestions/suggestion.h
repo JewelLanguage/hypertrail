@@ -81,9 +81,8 @@ struct Suggestion {
 
   struct AutofillAiPayload final {
     AutofillAiPayload();
-    AutofillAiPayload(
-        const base::flat_map<FieldGlobalId, std::u16string>& values_to_fill,
-        const DenseSet<FieldFillingSkipReason>& ignorable_skip_reasons);
+    explicit AutofillAiPayload(
+        const base::flat_map<FieldGlobalId, std::u16string>& values_to_fill);
     AutofillAiPayload(const AutofillAiPayload&);
     AutofillAiPayload(AutofillAiPayload&&);
     AutofillAiPayload& operator=(const AutofillAiPayload&);
@@ -95,8 +94,6 @@ struct Suggestion {
 
     // Values to be filled into fields with corresponding ids.
     base::flat_map<FieldGlobalId, std::u16string> values_to_fill;
-    // Autofill skip reasons to be ignored.
-    DenseSet<FieldFillingSkipReason> ignorable_skip_reasons;
   };
 
   struct PaymentsPayload final {
@@ -249,8 +246,10 @@ struct Suggestion {
     kGooglePayDark,
     kHttpWarning,
     kHttpsInvalid,
+    kIdCard,
     kKey,
     kLocation,
+    kLoyalty,
     kMagic,
     kOfferTag,
     kPenSpark,
@@ -259,6 +258,7 @@ struct Suggestion {
     kSettings,
     kSettingsAndroid,
     kUndo,
+    kVehicle,
     // Payment method icons
     kCardGeneric,
     kCardAmericanExpress,

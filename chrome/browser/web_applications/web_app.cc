@@ -29,6 +29,7 @@
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom-shared.h"
 #include "chrome/browser/web_applications/proto/web_app_os_integration_state.pb.h"
 #include "chrome/browser/web_applications/proto/web_app_proto_package.pb.h"
+#include "chrome/browser/web_applications/tabbed_mode_scope_matcher.h"
 #include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app_chromeos_data.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
@@ -42,7 +43,7 @@
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/manifest/manifest_util.h"
-#include "third_party/blink/public/common/permissions_policy/origin_with_possible_wildcards.h"
+#include "third_party/blink/public/common/permissions_policy/permissions_policy_declaration.h"
 #include "third_party/blink/public/common/permissions_policy/policy_helper_public.h"
 #include "third_party/blink/public/common/safe_url_pattern.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom-shared.h"
@@ -323,6 +324,17 @@ base::Value RelatedApplicationsToDebugValue(
 }
 }  // namespace
 
+WebApp::CachedDerivedData::CachedDerivedData() = default;
+WebApp::CachedDerivedData::~CachedDerivedData() = default;
+WebApp::CachedDerivedData::CachedDerivedData(CachedDerivedData&&) = default;
+WebApp::CachedDerivedData& WebApp::CachedDerivedData::operator=(
+    CachedDerivedData&&) = default;
+WebApp::CachedDerivedData::CachedDerivedData(const CachedDerivedData&) {}
+WebApp::CachedDerivedData& WebApp::CachedDerivedData::operator=(
+    const CachedDerivedData&) {
+  return *this;
+}
+
 WebApp::WebApp(const webapps::AppId& app_id)
     : app_id_(app_id),
       chromeos_data_(IsChromeOsDataMandatory()
@@ -469,18 +481,18 @@ void WebApp::SetStartUrl(const GURL& start_url) {
 }
 
 void WebApp::SetScope(const GURL& scope) {
-  // TODO(crbug.com/339718933): Remove this after shortcut apps are fully
-  // removed.
+  GURL scope_for_app = scope;
+  // If the given scope is empty, populate the scope from the `start_url_`.
   if (scope.is_empty()) {
-    scope_ = scope;
-    return;
+    CHECK(start_url_.is_valid());
+    scope_for_app = start_url_.GetWithoutFilename();
   }
-  CHECK(scope.is_valid());
+  CHECK(scope_for_app.is_valid());
   // Ensure that the scope can never include queries or fragments, as per spec.
   GURL::Replacements scope_replacements;
   scope_replacements.ClearRef();
   scope_replacements.ClearQuery();
-  scope_ = scope.ReplaceComponents(scope_replacements);
+  scope_ = scope_for_app.ReplaceComponents(scope_replacements);
 }
 
 void WebApp::SetThemeColor(std::optional<SkColor> theme_color) {
@@ -745,6 +757,7 @@ void WebApp::SetWebAppManagementExternalConfigMap(
 
 void WebApp::SetTabStrip(std::optional<blink::Manifest::TabStrip> tab_strip) {
   tab_strip_ = std::move(tab_strip);
+  cached_derived_data_.home_tab_scope.reset();
 }
 
 void WebApp::SetCurrentOsIntegrationStates(
@@ -894,6 +907,22 @@ base::Value::Dict WebApp::ExternalManagementConfig::AsDebugValue() const {
   root.Set("additional_policy_ids", std::move(policy_ids));
   root.Set("is_placeholder", is_placeholder);
   return root;
+}
+
+const std::vector<TabbedModeScopeMatcher>& WebApp::GetTabbedModeHomeScope()
+    const {
+  if (!cached_derived_data_.home_tab_scope.has_value()) {
+    cached_derived_data_.home_tab_scope.emplace();
+    if (tab_strip_.has_value()) {
+      if (const auto* params = absl::get_if<blink::Manifest::HomeTabParams>(
+              &tab_strip_->home_tab)) {
+        for (auto& pattern : params->scope_patterns) {
+          cached_derived_data_.home_tab_scope->emplace_back(pattern);
+        }
+      }
+    }
+  }
+  return *cached_derived_data_.home_tab_scope;
 }
 
 const std::optional<GeneratedIconFix>& WebApp::generated_icon_fix() const {
@@ -1084,8 +1113,10 @@ base::Value WebApp::AsDebugValueWithOnlyPlatformAgnosticFields() const {
 
   if (launch_handler_) {
     base::Value::Dict launch_handler_json;
-    launch_handler_json.Set("client_mode",
-                            base::ToString(launch_handler_->client_mode));
+    launch_handler_json.Set(
+        "client_mode", base::ToString(launch_handler_->parsed_client_mode()));
+    launch_handler_json.Set("client_mode_valid_and_specified",
+                            launch_handler_->client_mode_valid_and_specified());
     root.Set("launch_handler", std::move(launch_handler_json));
   } else {
     root.Set("launch_handler", base::Value());

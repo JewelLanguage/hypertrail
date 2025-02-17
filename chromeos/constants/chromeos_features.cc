@@ -6,10 +6,7 @@
 
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chromeos/startup/browser_params_proxy.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chromeos_features.h"
 
 namespace chromeos::features {
 
@@ -20,7 +17,7 @@ BASE_FEATURE(kApnPolicies, "ApnPolicies", base::FEATURE_DISABLED_BY_DEFAULT);
 // percentage.
 BASE_FEATURE(kBatteryBadgeIcon,
              "BatteryBadgeIcon",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables better quick settings UI for bluetooth and wifi error states.
 BASE_FEATURE(kBluetoothWifiQSPodRefresh,
@@ -129,11 +126,15 @@ BASE_FEATURE(kGeminiAppPreinstall,
              "GeminiAppPreinstall",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
 // Enables Kiosk Heartbeats to be sent via Encrypted Reporting Pipeline
 BASE_FEATURE(kKioskHeartbeatsViaERP,
              "KioskHeartbeatsViaERP",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Enables the new Magic Boost Consent Flow.
+BASE_FEATURE(kMagicBoostRevamp,
+             "MagicBoostRevamp",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Controls enabling / disabling the mahi feature.
 BASE_FEATURE(kMahi, "Mahi", base::FEATURE_ENABLED_BY_DEFAULT);
@@ -157,7 +158,6 @@ BASE_FEATURE(kMahiSendingUrl,
 
 // Controls whether to enable Mahi for managed users.
 BASE_FEATURE(kMahiManaged, "MahiManaged", base::FEATURE_ENABLED_BY_DEFAULT);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 // Controls enabling / disabling the mahi debugging.
 BASE_FEATURE(kMahiDebugging,
@@ -207,13 +207,6 @@ BASE_FEATURE(kOrcaUseL10nStrings,
              "OrcaUseL10nStrings",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Whether a set of UI optimizations within `OverviewSession::Init()` are
-// enabled or not. These should have no user-visible impact, except a faster
-// presentation time for the first frame of most overview sessions.
-BASE_FEATURE(kOverviewSessionInitOptimizations,
-             "OverviewSessionInitOptimizations",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Feature management flag used to gate preinstallation of the Gemini app. This
 // flag is meant to be enabled by the feature management module.
 BASE_FEATURE(kFeatureManagementGeminiAppPreinstall,
@@ -241,7 +234,7 @@ BASE_FEATURE(kFeatureManagementDisableChromeCompose,
 // feature management module.
 BASE_FEATURE(kFeatureManagementRoundedWindows,
              "FeatureManagementRoundedWindows",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables the first wave of new features for the chrome.enterprise.platformKeys
 // API. That includes:
@@ -289,10 +282,10 @@ BASE_FEATURE(kUploadOfficeToCloudForEnterprise,
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables syncing of user's Office files upload workflow preferences for
-// enterprise users, such whether to ask before moving files to the cloud.
+// enterprise users, such as whether to ask before moving files to the cloud.
 BASE_FEATURE(kUploadOfficeToCloudSync,
              "UploadOfficeToCloudSync",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Controls the use of scope extensions for the Microsoft 365 PWA from finch as
 // a fallback.
@@ -367,11 +360,7 @@ bool IsBluetoothWifiQSPodRefreshEnabled() {
 }
 
 bool IsCloudGamingDeviceEnabled() {
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  return chromeos::BrowserParamsProxy::Get()->IsCloudGamingDevice();
-#else
   return base::FeatureList::IsEnabled(kCloudGamingDevice);
-#endif
 }
 
 bool IsAlmanacLauncherPayloadEnabled() {
@@ -404,11 +393,7 @@ bool IsDataMigrationEnabled() {
 }
 
 bool IsDeskProfilesEnabled() {
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  return chromeos::BrowserParamsProxy::Get()->IsDeskProfilesEnabled();
-#else
   return base::FeatureList::IsEnabled(kDeskProfiles);
-#endif
 }
 
 bool IsEssentialSearchEnabled() {
@@ -416,12 +401,7 @@ bool IsEssentialSearchEnabled() {
 }
 
 bool IsFileSystemProviderCloudFileSystemEnabled() {
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  return chromeos::BrowserParamsProxy::Get()
-      ->IsFileSystemProviderCloudFileSystemEnabled();
-#else
   return base::FeatureList::IsEnabled(kFileSystemProviderCloudFileSystem);
-#endif
 }
 
 bool IsFileSystemProviderContentCacheEnabled() {
@@ -430,12 +410,7 @@ bool IsFileSystemProviderContentCacheEnabled() {
   if (!IsFileSystemProviderCloudFileSystemEnabled()) {
     return false;
   }
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  return chromeos::BrowserParamsProxy::Get()
-      ->IsFileSystemProviderContentCacheEnabled();
-#else
   return base::FeatureList::IsEnabled(kFileSystemProviderContentCache);
-#endif
 }
 
 bool IsGeminiAppPreinstallFeatureManagementEnabled() {
@@ -446,30 +421,22 @@ bool IsGeminiAppPreinstallEnabled() {
   return base::FeatureList::IsEnabled(kGeminiAppPreinstall);
 }
 
+bool IsMagicBoostRevampEnabled() {
+  return base::FeatureList::IsEnabled(kMagicBoostRevamp);
+}
+
 bool IsMahiEnabled() {
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  return chromeos::BrowserParamsProxy::Get()->IsMahiEnabled();
-#else
   return base::FeatureList::IsEnabled(kMahi) &&
          base::FeatureList::IsEnabled(kFeatureManagementMahi);
-#endif
 }
 
 // Mahi requests are composed & sent from ash.
 bool IsMahiSendingUrl() {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
   return base::FeatureList::IsEnabled(kMahiSendingUrl);
-#else
-  return false;
-#endif
 }
 
 bool IsMahiManagedEnabled() {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
   return base::FeatureList::IsEnabled(kMahiManaged);
-#else
-  return false;
-#endif
 }
 
 bool IsMahiDebuggingEnabled() {
@@ -497,40 +464,23 @@ bool IsOfficeNavigationCapturingReimplEnabled() {
 }
 
 bool IsOrcaEnabled() {
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  return chromeos::BrowserParamsProxy::Get()->IsOrcaEnabled();
-#else
   return base::FeatureList::IsEnabled(chromeos::features::kOrcaDogfood) ||
          (base::FeatureList::IsEnabled(chromeos::features::kOrca) &&
           base::FeatureList::IsEnabled(kFeatureManagementOrca));
-#endif
 }
 
 bool IsOrcaUseL10nStringsEnabled() {
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  return chromeos::BrowserParamsProxy::Get()->IsOrcaUseL10nStringsEnabled();
-#else
   return base::FeatureList::IsEnabled(chromeos::features::kOrcaUseL10nStrings);
-#endif
 }
 
 bool IsOrcaInternationalizeEnabled() {
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  return chromeos::BrowserParamsProxy::Get()->IsOrcaInternationalizeEnabled();
-#else
   return base::FeatureList::IsEnabled(
       chromeos::features::kOrcaInternationalize);
-#endif
 }
 
 bool ShouldDisableChromeComposeOnChromeOS() {
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  return chromeos::BrowserParamsProxy::Get()
-      ->ShouldDisableChromeComposeOnChromeOS();
-#else
   return base::FeatureList::IsEnabled(kFeatureManagementDisableChromeCompose) ||
          IsOrcaEnabled();
-#endif
 }
 
 bool IsQuickAnswersMaterialNextUIEnabled() {
@@ -550,21 +500,12 @@ bool IsQuickAnswersV2SettingsSubToggleEnabled() {
 }
 
 bool IsUploadOfficeToCloudEnabled() {
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  return chromeos::BrowserParamsProxy::Get()->IsUploadOfficeToCloudEnabled();
-#else
   return base::FeatureList::IsEnabled(kUploadOfficeToCloud);
-#endif
 }
 
 bool IsUploadOfficeToCloudForEnterpriseEnabled() {
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-  // TODO(b/296282654): Implement propagation if necessary.
-  return false;
-#else
   return base::FeatureList::IsEnabled(kUploadOfficeToCloud) &&
          base::FeatureList::IsEnabled(kUploadOfficeToCloudForEnterprise);
-#endif
 }
 
 bool IsUploadOfficeToCloudSyncEnabled() {
@@ -582,8 +523,10 @@ bool IsMicrosoftOneDriveIntegrationForEnterpriseEnabled() {
 }
 
 bool IsRoundedWindowsEnabled() {
-  return base::FeatureList::IsEnabled(kFeatureManagementRoundedWindows) &&
-         base::FeatureList::IsEnabled(kRoundedWindows);
+  static bool is_enabled =
+      base::FeatureList::IsEnabled(kFeatureManagementRoundedWindows) &&
+      base::FeatureList::IsEnabled(kRoundedWindows);
+  return is_enabled;
 }
 
 bool IsSystemBlurEnabled() {
@@ -596,10 +539,6 @@ bool IsPkcs12ToChapsDualWriteEnabled() {
 
 bool IsFeatureManagementHistoryEmbeddingEnabled() {
   return base::FeatureList::IsEnabled(kFeatureManagementHistoryEmbedding);
-}
-
-bool AreOverviewSessionInitOptimizationsEnabled() {
-  return base::FeatureList::IsEnabled(kOverviewSessionInitOptimizations);
 }
 
 int RoundedWindowsRadius() {

@@ -298,6 +298,8 @@ const ui::CocoaActionList& GetCocoaActionListForTesting() {
       @"accessibilityDisclosedRows" : NSAccessibilityDisclosedRowsAttribute,
       @"accessibilityDisclosureLevel" : NSAccessibilityDisclosureLevelAttribute,
       @"accessibilityHeader" : NSAccessibilityHeaderAttribute,
+      @"accessibilityHorizontalScrollBar" :
+          NSAccessibilityHorizontalScrollBarAttribute,
       @"accessibilityIndex" : NSAccessibilityIndexAttribute,
       @"accessibilityLinkedUIElements" :
           NSAccessibilityLinkedUIElementsAttribute,
@@ -309,6 +311,8 @@ const ui::CocoaActionList& GetCocoaActionListForTesting() {
       @"accessibilitySplitters" : NSAccessibilitySplittersAttribute,
       @"accessibilityTabs" : NSAccessibilityTabsAttribute,
       @"accessibilityToolbarButton" : NSAccessibilityToolbarButtonAttribute,
+      @"accessibilityVerticalScrollBar" :
+          NSAccessibilityVerticalScrollBarAttribute,
       @"accessibilityVisibleColumns" : NSAccessibilityVisibleColumnsAttribute,
       @"accessibilityVisibleCells" : NSAccessibilityVisibleCellsAttribute,
       @"accessibilityVisibleRows" : NSAccessibilityVisibleRowsAttribute,
@@ -434,6 +438,10 @@ const ui::CocoaActionList& GetCocoaActionListForTesting() {
 }
 
 - (BOOL)conditionallyRespondsToSelector:(SEL)selector {
+  static std::unordered_set<SEL> methodSelectorsForActions = {
+      @selector(accessibilityPerformPress),
+  };
+
   static std::unordered_set<SEL> methodSelectorsForParameterizedAttributes = {
       @selector(accessibilityCellForColumn:row:),
       @selector(accessibilityRangeForIndex:),
@@ -452,6 +460,20 @@ const ui::CocoaActionList& GetCocoaActionListForTesting() {
     NSArray* attributes =
         [self internalAccessibilityParameterizedAttributeNames];
     if (![attributes containsObject:attribute]) {
+      return NO;
+    }
+  }
+
+  // See if the method is permitted by checking its corresponding action
+  // counterpart.
+  if (methodSelectorsForActions.find(selector) !=
+      methodSelectorsForActions.end()) {
+    NSString* selectorString = NSStringFromSelector(selector);
+    NSString* action =
+        [[AXPlatformNodeCocoa newAccessibilityAPIMethodToActionMap]
+            objectForKey:selectorString];
+    NSArray* actions = [self internalAccessibilityActionNames];
+    if (![actions containsObject:action]) {
       return NO;
     }
   }
@@ -3522,6 +3544,36 @@ const ui::CocoaActionList& GetCocoaActionListForTesting() {
 - (id)accessibilityToolbarButton {
   // Chromium windows do not have a toolbar button.
   return nil;
+}
+
+- (id)accessibilityScrollBar:(ax::mojom::State)state {
+  if (![self instanceActive]) {
+    return nil;
+  }
+
+  // TODO(crbug.com/363275809): For this to work for `ScrollView`, `ScrollView`
+  // should add `kControlsIds` on its horizontal and vertical scrollbars.
+  std::vector<ui::AXPlatformNode*> targets =
+      _node->GetDelegate()->GetSourceNodesForReverseRelations(
+          ax::mojom::IntListAttribute::kControlsIds);
+  for (auto target : targets) {
+    if (auto* delegate = target->GetDelegate()) {
+      if (delegate->GetRole() == ax::mojom::Role::kScrollBar &&
+          delegate->HasState(state)) {
+        return target->GetNativeViewAccessible();
+      }
+    }
+  }
+
+  return nil;
+}
+
+- (id)accessibilityHorizontalScrollBar {
+  return [self accessibilityScrollBar:ax::mojom::State::kHorizontal];
+}
+
+- (id)accessibilityVerticalScrollBar {
+  return [self accessibilityScrollBar:ax::mojom::State::kVertical];
 }
 
 // NSAccessibility: configuring linkage elements.

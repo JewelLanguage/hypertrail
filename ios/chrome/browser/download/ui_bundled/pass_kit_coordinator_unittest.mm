@@ -8,6 +8,7 @@
 
 #import <memory>
 
+#import "base/ios/ios_util.h"
 #import "base/logging.h"
 #import "base/memory/raw_ptr.h"
 #import "base/test/ios/wait_util.h"
@@ -32,8 +33,8 @@
 #import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util.h"
 
-using base::test::ios::WaitUntilConditionOrTimeout;
 using base::test::ios::kWaitForUIElementTimeout;
+using base::test::ios::WaitUntilConditionOrTimeout;
 
 // Test fixture for PassKitCoordinator class.
 class PassKitCoordinatorTest : public PlatformTest {
@@ -91,7 +92,15 @@ TEST_F(PassKitCoordinatorTest, ValidPassKitObject) {
   coordinator_.passes = @[ pass ];
   [coordinator_ start];
 
-  if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
+  // Wallet app is not supported on iPads simulator or on iPad device before
+  // iOS18.2.
+#if TARGET_IPHONE_SIMULATOR
+  const bool simulator = true;
+#else
+  const bool simulator = false;
+#endif
+  if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET &&
+      (simulator || !base::ios::IsRunningOnOrLater(18, 2, 0))) {
     // Wallet app is not supported on iPads.
   } else {
     EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForUIElementTimeout, ^{

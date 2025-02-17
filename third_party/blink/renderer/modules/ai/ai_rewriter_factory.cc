@@ -6,10 +6,13 @@
 
 #include "base/notreached.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "third_party/blink/public/mojom/ai/ai_common.mojom-blink.h"
 #include "third_party/blink/public/mojom/ai/ai_manager.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_ai_rewriter_create_options.h"
+#include "third_party/blink/renderer/modules/ai/ai_capability_availability.h"
 #include "third_party/blink/renderer/modules/ai/ai_mojo_client.h"
 #include "third_party/blink/renderer/modules/ai/ai_rewriter.h"
+#include "third_party/blink/renderer/modules/ai/ai_utils.h"
 #include "third_party/blink/renderer/modules/ai/exception_helpers.h"
 #include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver.h"
@@ -82,7 +85,11 @@ class CreateRewriterClient : public GarbageCollected<CreateRewriterClient>,
             options->getSharedContextOr(g_empty_string),
             ToMojoAIRewriterTone(options->tone()),
             ToMojoAIRewriterFormat(options->format()),
-            ToMojoAIRewriterLength(options->length())));
+            ToMojoAIRewriterLength(options->length()),
+            ToMojoLanguageCodes(options->getExpectedInputLanguagesOr({})),
+            ToMojoLanguageCodes(options->getExpectedContextLanguagesOr({})),
+            mojom::blink::AILanguageCode::New(
+                options->getOutputLanguageOr(g_empty_string))));
   }
   ~CreateRewriterClient() override = default;
 
@@ -134,17 +141,17 @@ void AIRewriterFactory::Trace(Visitor* visitor) const {
   visitor->Trace(ai_);
 }
 
-ScriptPromise<V8AICapabilityAvailability> AIRewriterFactory::availability(
+ScriptPromise<V8AIAvailability> AIRewriterFactory::availability(
     ScriptState* script_state,
     AIRewriterCreateCoreOptions* options,
     ExceptionState& exception_state) {
   if (!script_state->ContextIsValid()) {
     ThrowInvalidContextException(exception_state);
-    return ScriptPromise<V8AICapabilityAvailability>();
+    return ScriptPromise<V8AIAvailability>();
   }
 
   auto* resolver =
-      MakeGarbageCollected<ScriptPromiseResolver<V8AICapabilityAvailability>>(
+      MakeGarbageCollected<ScriptPromiseResolver<V8AIAvailability>>(
           script_state);
   auto promise = resolver->Promise();
   if (!ai_->GetAIRemote().is_connected()) {
@@ -152,22 +159,24 @@ ScriptPromise<V8AICapabilityAvailability> AIRewriterFactory::availability(
     return promise;
   }
 
-  // TODO: Pass option to underlying check.
   ai_->GetAIRemote()->CanCreateRewriter(
       mojom::blink::AIRewriterCreateOptions::New(
           /*shared_context=*/g_empty_string,
           ToMojoAIRewriterTone(options->tone()),
           ToMojoAIRewriterFormat(options->format()),
-          ToMojoAIRewriterLength(options->length())),
+          ToMojoAIRewriterLength(options->length()),
+          ToMojoLanguageCodes(options->getExpectedInputLanguagesOr({})),
+          ToMojoLanguageCodes(options->getExpectedContextLanguagesOr({})),
+          mojom::blink::AILanguageCode::New(
+              options->getOutputLanguageOr(g_empty_string))),
       WTF::BindOnce(
-          [](ScriptPromiseResolver<V8AICapabilityAvailability>* resolver,
+          [](ScriptPromiseResolver<V8AIAvailability>* resolver,
              AIRewriterFactory* factory,
              mojom::blink::ModelAvailabilityCheckResult result) {
-            AICapabilityAvailability availability =
-                HandleModelAvailabilityCheckResult(
-                    factory->GetExecutionContext(),
-                    AIMetrics::AISessionType::kRewriter, result);
-            resolver->Resolve(AICapabilityAvailabilityToV8(availability));
+            AIAvailability availability = HandleModelAvailabilityCheckResult(
+                factory->GetExecutionContext(),
+                AIMetrics::AISessionType::kRewriter, result);
+            resolver->Resolve(AIAvailabilityToV8(availability));
           },
           WrapPersistent(resolver), WrapWeakPersistent(this)));
   return promise;

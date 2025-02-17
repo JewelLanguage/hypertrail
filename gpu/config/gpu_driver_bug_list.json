@@ -1315,7 +1315,7 @@
       "os": {
         "type": "android"
       },
-      "gl_vendor": "Intel.*",
+      "gl_vendor": ".*Intel.*",
       "features": [
         "msaa_is_slow"
       ]
@@ -3453,6 +3453,19 @@
       "gl_renderer": "Mali.*",
       "features": [
         "msaa_is_slow"
+      ]
+    },
+    {
+      "id": 441,
+      "description": "Limits the number of system-wide accelerated video decoders to 10 due to a driver crash.",
+      "cr_bugs": [333711204],
+      "os": {
+        "type" : "chromeos"
+      },
+      "vendor_id": "0x1002",
+      "device_id": ["0x98e4"],
+      "features": [
+        "max_num_hw_video_decoders_10"
       ]
     }
   ]

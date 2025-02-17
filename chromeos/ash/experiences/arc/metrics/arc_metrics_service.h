@@ -12,10 +12,6 @@
 #include <utility>
 #include <vector>
 
-#include "ash/components/arc/arc_browser_context_keyed_service_factory_base.h"
-#include "ash/components/arc/mojom/anr.mojom.h"
-#include "ash/components/arc/mojom/metrics.mojom.h"
-#include "ash/components/arc/mojom/process.mojom.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
@@ -25,9 +21,13 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chromeos/ash/components/dbus/vm_concierge/concierge_service.pb.h"
+#include "chromeos/ash/experiences/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "chromeos/ash/experiences/arc/metrics/arc_daily_metrics.h"
 #include "chromeos/ash/experiences/arc/metrics/arc_metrics_constants.h"
 #include "chromeos/ash/experiences/arc/metrics/arc_wm_metrics.h"
+#include "chromeos/ash/experiences/arc/mojom/anr.mojom.h"
+#include "chromeos/ash/experiences/arc/mojom/metrics.mojom.h"
+#include "chromeos/ash/experiences/arc/mojom/process.mojom.h"
 #include "chromeos/ash/experiences/arc/session/arc_bridge_service.h"
 #include "chromeos/ash/experiences/arc/session/connection_observer.h"
 #include "components/guest_os/guest_os_engagement_metrics.h"

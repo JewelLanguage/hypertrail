@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "net/cert/cert_verify_proc.h"
 
 #include <stdint.h>
@@ -46,11 +51,11 @@
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_values.h"
 #include "net/log/net_log_with_source.h"
+#include "third_party/boringssl/src/include/openssl/pki/ocsp.h"
 #include "third_party/boringssl/src/include/openssl/pool.h"
 #include "third_party/boringssl/src/pki/encode_values.h"
 #include "third_party/boringssl/src/pki/extended_key_usage.h"
 #include "third_party/boringssl/src/pki/ocsp.h"
-#include "third_party/boringssl/src/pki/ocsp_revocation_status.h"
 #include "third_party/boringssl/src/pki/parse_certificate.h"
 #include "third_party/boringssl/src/pki/pem.h"
 #include "third_party/boringssl/src/pki/signature_algorithm.h"

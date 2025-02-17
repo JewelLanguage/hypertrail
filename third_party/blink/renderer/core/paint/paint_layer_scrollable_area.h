@@ -283,8 +283,6 @@ class CORE_EXPORT PaintLayerScrollableArea final
   bool IsThrottled() const override;
   ChromeClient* GetChromeClient() const override;
 
-  SmoothScrollSequencer* GetSmoothScrollSequencer() const override;
-
   void DidCompositorScroll(const gfx::PointF&) override;
 
   bool ShouldScrollOnMainThread() const override;
@@ -564,6 +562,8 @@ class CORE_EXPORT PaintLayerScrollableArea final
   bool SetTargetSnapAreaElementIds(cc::TargetSnapAreaElementIds) override;
   void UpdateFocusDataForSnapAreas() override;
 
+  std::optional<cc::SnapPositionData> GetSnapPosition(
+      const cc::SnapSelectionStrategy& strategy) const override;
   std::optional<gfx::PointF> GetSnapPositionAndSetTarget(
       const cc::SnapSelectionStrategy& strategy) override;
   // Functions related to firing scrollsnapchange events.

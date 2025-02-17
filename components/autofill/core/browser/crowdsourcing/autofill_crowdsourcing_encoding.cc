@@ -14,7 +14,6 @@
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/types/optional_ref.h"
@@ -49,6 +48,27 @@ std::ostream& operator<<(std::ostream& out,
     }
   }
   return out;
+}
+
+// Returns a `FieldPrediction::Source` that is guaranteed to be in the bounds
+// of the enum.
+FieldPrediction::Source ToSafeFieldPredictionSource(
+    FieldPrediction::Source source) {
+  FieldPrediction::Source result = FieldPrediction::SOURCE_UNSPECIFIED;
+  switch (source) {
+    case FieldPrediction::SOURCE_UNSPECIFIED:
+    case FieldPrediction::SOURCE_AUTOFILL_DEFAULT:
+    case FieldPrediction::SOURCE_PASSWORDS_DEFAULT:
+    case FieldPrediction::SOURCE_ALL_APPROVED_EXPERIMENTS:
+    case FieldPrediction::SOURCE_FIELD_RANKS:
+    case FieldPrediction::SOURCE_OVERRIDE:
+    case FieldPrediction::SOURCE_MANUAL_OVERRIDE:
+    case FieldPrediction::SOURCE_AUTOFILL_COMBINED_TYPES:
+    case FieldPrediction::SOURCE_AUTOFILL_AI:
+      result = source;
+      break;
+  }
+  return result;
 }
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
@@ -89,8 +109,8 @@ std::deque<FieldSuggestion> MergeManualAndServerOverrides(
     }
   }
   // At most one override source is non-empty - preserve the values.
-  base::ranges::move(manual_overrides, std::back_inserter(result));
-  base::ranges::move(server_overrides, std::back_inserter(result));
+  std::ranges::move(manual_overrides, std::back_inserter(result));
+  std::ranges::move(server_overrides, std::back_inserter(result));
 
   return result;
 }
@@ -292,6 +312,12 @@ void PopulateRandomizedFieldMetadata(
         RandomizedEncoder::kFieldAutocomplete, field.autocomplete_attribute(),
         /*include_checksum=*/false, metadata->mutable_autocomplete());
   }
+  if (!field.pattern().empty()) {
+    EncodeRandomizedValue(encoder, form_signature, field_signature,
+                          RandomizedEncoder::kFieldPattern, field.pattern(),
+                          /*include_checksum=*/false,
+                          metadata->mutable_pattern());
+  }
 }
 
 // Encodes the fields of `upload_fields` in the in-out parameter `upload`.
@@ -479,12 +505,19 @@ std::optional<FieldSuggestion> GetFieldSuggestion(
         if (!suggestion.has_value() || suggestion->predictions().empty()) {
           return 0;  // Lowest priority
         }
-        switch (suggestion->predictions().begin()->source()) {
+        switch (ToSafeFieldPredictionSource(
+            suggestion->predictions().begin()->source())) {
+          case FieldPrediction::SOURCE_AUTOFILL_AI:
+            return base::FeatureList::IsEnabled(
+                       features::kAutofillAiWithDataSchema)
+                       ? 2
+                       : 0;
           case FieldPrediction::SOURCE_UNSPECIFIED:
           case FieldPrediction::SOURCE_AUTOFILL_DEFAULT:
           case FieldPrediction::SOURCE_PASSWORDS_DEFAULT:
           case FieldPrediction::SOURCE_ALL_APPROVED_EXPERIMENTS:
           case FieldPrediction::SOURCE_FIELD_RANKS:
+          case FieldPrediction::SOURCE_AUTOFILL_COMBINED_TYPES:
             return std::ranges::all_of(suggestion->predictions(),
                                        [](const auto& prediction) {
                                          return prediction.type() ==
@@ -497,6 +530,7 @@ std::optional<FieldSuggestion> GetFieldSuggestion(
           case FieldPrediction::SOURCE_MANUAL_OVERRIDE:
             return 4;
         }
+        NOTREACHED();
       };
   // Fetch suggestions from form signature, host form signature and alternative
   // form signature.
@@ -646,8 +680,8 @@ std::vector<AutofillUploadContents> EncodeUploadRequest(
   }
 
   std::vector<AutofillField*> upload_fields(form.fields().size());
-  base::ranges::transform(form.fields(), upload_fields.begin(),
-                          &std::unique_ptr<AutofillField>::get);
+  std::ranges::transform(form.fields(), upload_fields.begin(),
+                         &std::unique_ptr<AutofillField>::get);
   EncodeFormFieldsForUpload(form, upload_fields, &upload);
   std::vector<AutofillUploadContents> uploads = {std::move(upload)};
 
@@ -660,8 +694,8 @@ std::vector<AutofillUploadContents> EncodeUploadRequest(
            field->host_form_signature() == form.form_signature();
   });
   // Partition `upload_fields` with respect to the forms' renderer id.
-  base::ranges::stable_sort(upload_fields, /*comp=*/{},
-                            &FormFieldData::renderer_form_id);
+  std::ranges::stable_sort(upload_fields, /*comp=*/{},
+                           &FormFieldData::renderer_form_id);
 
   for (auto subform_begin = upload_fields.begin();
        subform_begin != upload_fields.end();) {

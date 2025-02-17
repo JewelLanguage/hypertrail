@@ -30,7 +30,6 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &input::features::kInputOnViz,
     &features::kAccessibilityDeprecateTypeAnnounce,
     &features::kAccessibilityIncludeLongClickAction,
-    &features::kAccessibilityPageZoomEnhancements,
     &features::kAccessibilityPageZoomV2,
     &features::kAccessibilityUnifiedSnapshots,
     &features::kAccessibilityManageBroadcastReceiverOnBackground,
@@ -38,7 +37,6 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &features::kAndroidOpenPdfInline,
     &features::kFedCm,
     &features::kHidePastePopupOnGSB,
-    &features::kProcessSharingWithStrictSiteInstances,
     &features::kReduceGpuPriorityOnBackground,
     &features::kContinueGestureOnLosingFocus,
     &features::kSmartZoom,
@@ -50,8 +48,8 @@ const base::Feature* const kFeaturesExposedToJava[] = {
 
 // static
 base::android::FeatureMap* GetFeatureMap() {
-  static base::NoDestructor<base::android::FeatureMap> kFeatureMap(std::vector(
-      std::begin(kFeaturesExposedToJava), std::end(kFeaturesExposedToJava)));
+  static base::NoDestructor<base::android::FeatureMap> kFeatureMap(
+      kFeaturesExposedToJava);
   return kFeatureMap.get();
 }
 

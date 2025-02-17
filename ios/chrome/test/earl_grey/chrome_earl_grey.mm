@@ -761,12 +761,12 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
   NSString* errorString = [NSString
       stringWithFormat:@"Failed waiting for web state not containing %@", text];
 
-  GREYCondition* waitForText = [GREYCondition
-      conditionWithName:errorString
-                  block:^{
-                    return !
-                        [ChromeEarlGreyAppInterface webStateContainsText:text];
-                  }];
+  GREYCondition* waitForText =
+      [GREYCondition conditionWithName:errorString
+                                 block:^{
+                                   return ![ChromeEarlGreyAppInterface
+                                       webStateContainsText:text];
+                                 }];
   bool containsText =
       [waitForText waitWithTimeout:kWaitForUIElementTimeout.InSecondsF()];
   EG_TEST_HELPER_ASSERT_TRUE(containsText, errorString);
@@ -979,13 +979,6 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
   NSString* GUID = base::SysUTF8ToNSString(UTF8GUID);
   [ChromeEarlGreyAppInterface
       deleteAutofillProfileFromFakeSyncServerWithGUID:GUID];
-}
-
-- (void)waitForSyncEngineInitialized:(BOOL)isInitialized
-                         syncTimeout:(base::TimeDelta)timeout {
-  EG_TEST_HELPER_ASSERT_NO_ERROR([ChromeEarlGreyAppInterface
-      waitForSyncEngineInitialized:isInitialized
-                       syncTimeout:timeout]);
 }
 
 - (void)waitForSyncFeatureEnabled:(BOOL)isEnabled

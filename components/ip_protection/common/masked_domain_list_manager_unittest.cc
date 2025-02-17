@@ -14,6 +14,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/unguessable_token.h"
+#include "components/ip_protection/common/ip_protection_data_types.h"
 #include "components/privacy_sandbox/masked_domain_list/masked_domain_list.pb.h"
 #include "net/base/features.h"
 #include "net/base/network_anonymization_key.h"
@@ -22,6 +23,7 @@
 #include "services/network/public/mojom/proxy_config.mojom-shared.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
 #include "url/url_util.h"
 
 namespace ip_protection {
@@ -55,13 +57,14 @@ const std::vector<MatchTest> kMatchTests = {
         true,
     },
     // Public suffix list testcases.
-    // Assumes that "googleapis.com" is on the public suffix list.
+    // Assumes that "googleapis.com" is added as a resource owner that owns
+    // itself only.
     //
     // The `googleapis.com` domain is in the owned_resources of an MDL entry,
     // but the top level site is not owned by it so this is a 3rd party request
     // and should be proxied.
     MatchTest{
-        "OnPsl_OnOwnedResources_TopToDifferentDomain",
+        "PslAddedAsResource_OnOwnedResources_TopToDifferentDomain",
         "googleapis.com",
         "top.com",
         true,
@@ -72,20 +75,21 @@ const std::vector<MatchTest> kMatchTests = {
     // The top level site is not owned by the same owner so this is a 3rd
     // party request and should be proxied.
     MatchTest{
-        "OnPsl_OnOwnedResources_TopToDifferentDomainSubDomain",
+        "PslAddedAsResource_OnOwnedResources_TopToDifferentDomainSubDomain",
         "sub.googleapis.com",
         "top.com",
         true,
         true,
     },
-    // Request from one site in the PSL rules to another in the PSL rules.
-    // `co.jp` is listed on the PSL.
+    // Request from one site that is added as a PSL entry to another site that
+    // is added as a PSL entry.
+    // `co.jp` is added as a PSL.
     // No MDL entry claims ownership of `co.jp`
     // An MDL entry claims ownership of `sub.co.jp`
-    // Should be proxied because `co.jp` is listed on the PSL and the
-    // top_frame_site has the same suffix but is not same-site.
+    // Should be proxied because `co.jp` is listed as a resource that owns
+    // itself and the top_frame_site has the same suffix but is not same-site.
     MatchTest{
-        "OnPsl_MatchingOwnedResources_TopToSubOnSameDomain"
+        "PslAddedAsResource_MatchingOwnedResources_TopToSubOnSameDomain"
         "OwnerClaimsSubdomain",
         "sub.co.jp",
         "other.co.jp",
@@ -93,25 +97,26 @@ const std::vector<MatchTest> kMatchTests = {
         true,
     },
     // Request from an owned property to an owned resource.
-    // The owned resource is a subdomain of a PSL entry.
+    // The owned resource is a subdomain of a PSL entry resource.
     // Should be proxied but not if bypass is allowed, because while
-    // `co.jp` is listed in the PSL, the subdomain is
+    // `co.jp` is listed as a PSL resource, the subdomain is
     // privately owned and an MDL entry claims ownership of it and this is a
-    // request between an owned property to an owned resource of the same owner.
+    // request between an owned property to an owned resource of the same
+    // owner.
     MatchTest{
-        "Psl_MatchingOwnedResources_SubdomainNotOnPsl",
+        "PslAddedAsResource_MatchingOwnedResources_SubdomainNotOnPsl",
         "sub.co.jp",
         "owned_property.com",
         true,
         false,
     },
-    // Request from one site in the PSL rules to another in the PSL rules.
-    // `co.jp` is listed on the PSL.
+    // Request from one PSL entry site to another PSL entry site.
+    // `co.jp` is listed as a resource that owns itself.
     // No MDL entry claims ownership of `co.jp`
     // No MDL entry claims ownership of `site.co.jp`
     // Bypasses the proxy for same-site check of request and top_frame_site.
     MatchTest{
-        "OnPsl_SameSiteRequest"
+        "PslAddedAsResource_SameSiteRequest"
         "OwnerClaimsSubdomain",
         "same.site.co.jp",
         "site.co.jp",
@@ -221,34 +226,6 @@ TEST_F(MaskedDomainListManagerBaseTest,
   EXPECT_TRUE(allow_list.IsPopulated());
 }
 
-TEST_F(MaskedDomainListManagerBaseTest, AllowlistIsPopulated_MdlHasPslRules) {
-  MaskedDomainListManager allow_list(
-      network::mojom::IpProtectionProxyBypassPolicy::kNone);
-  MaskedDomainList mdl;
-  mdl.add_public_suffix_list_rules()->set_private_domain("example.com");
-  allow_list.UpdateMaskedDomainList(
-      mdl,
-      /*exclusion_list=*/std::vector<std::string>());
-
-  EXPECT_TRUE(allow_list.IsPopulated());
-}
-
-TEST_F(MaskedDomainListManagerBaseTest,
-       AllowlistIsPopulated_MdlHasResourceOwnersAndPslRules) {
-  MaskedDomainListManager allow_list(
-      network::mojom::IpProtectionProxyBypassPolicy::kNone);
-  MaskedDomainList mdl;
-  auto* resource_owner = mdl.add_resource_owners();
-  resource_owner->set_owner_name("foo");
-  resource_owner->add_owned_resources()->set_domain("example.com");
-  mdl.add_public_suffix_list_rules()->set_private_domain("example.com");
-  allow_list.UpdateMaskedDomainList(
-      mdl,
-      /*exclusion_list=*/std::vector<std::string>());
-
-  EXPECT_TRUE(allow_list.IsPopulated());
-}
-
 TEST_F(MaskedDomainListManagerBaseTest, AllowlistAcceptsMultipleUpdates) {
   base::HistogramTester histogram_tester;
   MaskedDomainListManager allow_list(
@@ -300,6 +277,26 @@ TEST_F(MaskedDomainListManagerTest, ShouldMatchHttp) {
       allow_list_no_bypass_.Matches(kHttpRequestUrl, kHttpCrossSiteNak));
   EXPECT_TRUE(allow_list_first_party_bypass_.Matches(kHttpRequestUrl,
                                                      kHttpCrossSiteNak));
+}
+
+TEST_F(MaskedDomainListManagerTest, ShouldMatchWss) {
+  const auto kWssRequestUrl = GURL(base::StrCat({"wss://", kTestDomain}));
+  const auto kHttpCrossSiteNak = net::NetworkAnonymizationKey::CreateCrossSite(
+      net::SchemefulSite(GURL("http://top.com")));
+
+  EXPECT_TRUE(allow_list_no_bypass_.Matches(kWssRequestUrl, kHttpCrossSiteNak));
+  EXPECT_TRUE(allow_list_first_party_bypass_.Matches(kWssRequestUrl,
+                                                     kHttpCrossSiteNak));
+}
+
+TEST_F(MaskedDomainListManagerTest, ShouldMatchWs) {
+  const auto kWsRequestUrl = GURL(base::StrCat({"ws://", kTestDomain}));
+  const auto kHttpCrossSiteNak = net::NetworkAnonymizationKey::CreateCrossSite(
+      net::SchemefulSite(GURL("http://top.com")));
+
+  EXPECT_TRUE(allow_list_no_bypass_.Matches(kWsRequestUrl, kHttpCrossSiteNak));
+  EXPECT_TRUE(
+      allow_list_first_party_bypass_.Matches(kWsRequestUrl, kHttpCrossSiteNak));
 }
 
 TEST_F(MaskedDomainListManagerTest, ShouldMatchThirdPartyToTopLevelFrame) {
@@ -444,6 +441,44 @@ TEST_F(MaskedDomainListManagerTest, AllowListWithoutBypassUsesLessMemory) {
             allow_list_no_bypass_.EstimateMemoryUsage());
 }
 
+TEST_F(MaskedDomainListManagerTest, Matches_MdlType_MatchesCorrectly) {
+  MaskedDomainListManager mdl_manager(
+      network::mojom::IpProtectionProxyBypassPolicy::kNone);
+
+  MaskedDomainList mdl;
+
+  ResourceOwner* resource_owner = mdl.add_resource_owners();
+  resource_owner->set_owner_name("example");
+  Resource* resource = resource_owner->add_owned_resources();
+  std::string default_mdl_domain = "default-mdl.com";
+  resource->set_domain(default_mdl_domain);
+  resource = resource_owner->add_owned_resources();
+  std::string regular_mdl_domain = "regular-mdl.com";
+  resource->set_domain(regular_mdl_domain);
+  resource->add_experiments(
+      Resource::Experiment::Resource_Experiment_EXPERIMENT_EXTERNAL_REGULAR);
+  resource->set_exclude_default_group(true);
+
+  mdl_manager.UpdateMaskedDomainList(
+      mdl, /*exclusion_list=*/std::vector<std::string>());
+
+  // The default MDL resource should ONLY match for mdl type kDefault.
+  EXPECT_TRUE(
+      mdl_manager.Matches(GURL(base::StrCat({"https://", default_mdl_domain})),
+                          net::NetworkAnonymizationKey(), MdlType::kDefault));
+  EXPECT_FALSE(mdl_manager.Matches(
+      GURL(base::StrCat({"https://", default_mdl_domain})),
+      net::NetworkAnonymizationKey(), MdlType::kRegularBrowsing));
+
+  // The regular MDL resource should ONLY match for mdl type kRegularBrowsing.
+  EXPECT_FALSE(
+      mdl_manager.Matches(GURL(base::StrCat({"https://", regular_mdl_domain})),
+                          net::NetworkAnonymizationKey(), MdlType::kDefault));
+  EXPECT_TRUE(mdl_manager.Matches(
+      GURL(base::StrCat({"https://", regular_mdl_domain})),
+      net::NetworkAnonymizationKey(), MdlType::kRegularBrowsing));
+}
+
 class MaskedDomainListManagerMatchTest
     : public MaskedDomainListManagerBaseTest,
       public testing::WithParamInterface<MatchTest> {};
@@ -464,9 +499,15 @@ TEST_P(MaskedDomainListManagerMatchTest, Match) {
   Resource* resource = resource_owner->add_owned_resources();
   resource->set_domain("example.com");
 
-  // Public Suffix List (includes private section)
-  mdl.add_public_suffix_list_rules()->set_private_domain("googleapis.com");
-  mdl.add_public_suffix_list_rules()->set_private_domain("co.jp");
+  // Public Suffix List domains are added to the MDL as ResourceOwners.
+  resource_owner = mdl.add_resource_owners();
+  resource_owner->set_owner_name("googleapis.com");
+  resource = resource_owner->add_owned_resources();
+  resource->set_domain("googleapis.com");
+  resource_owner = mdl.add_resource_owners();
+  resource_owner->set_owner_name("co.jp");
+  resource = resource_owner->add_owned_resources();
+  resource->set_domain("co.jp");
 
   // Additional ResourceOwner - Includes resources which are on the public
   // suffix list.
@@ -559,10 +600,18 @@ TEST_F(MaskedDomainListManagerBaseTest, ExclusionSetDomainsRemovedFromMDL) {
   for (auto const& [domain, subdomains] : tld_map_with_domains) {
     EXPECT_TRUE(mdl_manager.Matches(GURL(base::StrCat({"https://", domain})),
                                     net::NetworkAnonymizationKey()));
+    EXPECT_TRUE(mdl_manager.Matches(GURL(base::StrCat({"wss://", domain})),
+                                    net::NetworkAnonymizationKey()));
+    EXPECT_TRUE(mdl_manager.Matches(GURL(base::StrCat({"ws://", domain})),
+                                    net::NetworkAnonymizationKey()));
     for (auto const& subdomain : subdomains) {
       EXPECT_TRUE(
           mdl_manager.Matches(GURL(base::StrCat({"https://", subdomain})),
                               net::NetworkAnonymizationKey()));
+      EXPECT_TRUE(mdl_manager.Matches(GURL(base::StrCat({"wss://", subdomain})),
+                                      net::NetworkAnonymizationKey()));
+      EXPECT_TRUE(mdl_manager.Matches(GURL(base::StrCat({"ws://", subdomain})),
+                                      net::NetworkAnonymizationKey()));
     }
   }
 

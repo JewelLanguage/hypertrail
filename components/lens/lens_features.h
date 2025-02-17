@@ -49,6 +49,14 @@ BASE_DECLARE_FEATURE(kLensOverlayRoutingInfo);
 COMPONENT_EXPORT(LENS_FEATURES)
 BASE_DECLARE_FEATURE(kLensOverlaySurvey);
 
+// Enables the Lens overlay side panel open in new tab option.
+COMPONENT_EXPORT(LENS_FEATURES)
+BASE_DECLARE_FEATURE(kLensOverlaySidePanelOpenInNewTab);
+
+// Enables the Lens overlay simplified selection flow.
+COMPONENT_EXPORT(LENS_FEATURES)
+BASE_DECLARE_FEATURE(kLensOverlaySimplifiedSelection);
+
 // The base URL for Lens.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern const base::FeatureParam<std::string> kHomepageURLForLens;
@@ -90,6 +98,10 @@ extern const base::FeatureParam<bool> kDismissLoadingStateOnPrimaryPageChanged;
 // Enables Lens fullscreen search on Desktop platforms.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern const base::FeatureParam<bool> kEnableFullscreenSearch;
+
+// Enable "open in new tab" option in side panel.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern const base::FeatureParam<bool> kLensOverlayEnableOpenInNewTab;
 
 // The URL for the Lens home page.
 COMPONENT_EXPORT(LENS_FEATURES)
@@ -537,6 +549,10 @@ int GetLensOverlayImageContextMenuActionsTextReceivedTimeout();
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool IsLensOverlayContextualSearchboxEnabled();
 
+// Whether to enable the "open in new tab" option in the side panel.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool IsLensOverlaySidePanelOpenInNewTabEnabled();
+
 // Returns whether to use the new optimized request flow which makes a request
 // to get the cluster info prior to uploading any image or page content bytes.
 // This also decouples sending the images and page content bytes in the same
@@ -611,6 +627,14 @@ extern bool IsLensOverlayRoutingInfoEnabled();
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool HandleSidePanelTextDirectivesEnabled();
 
+// Whether to hold contextual queries until the user acknowledges the
+// contextual searchbox. If this is disabled, the contextual queries will be
+// sent immediately after the page content upload request is sent. If this is
+// enabled, the contextual queries will be sent after the server responds to the
+// page content upload request.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool ShouldHoldContextualQueriesUntilAck();
+
 // Whether to compress the PDF bytes using zstd before sending them to the
 // server.
 COMPONENT_EXPORT(LENS_FEATURES)
@@ -622,6 +646,17 @@ extern bool ShouldZstdCompressPdfBytes();
 // details.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern int GetZstdCompressionLevel();
+
+// Whether to enable the simplified selection flow in the Lens overlay.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool IsSimplifiedSelectionEnabled();
+
+
+// Whether to fix the request id for page content upload requests. When enabled,
+// this will not increment the image upload request ID when the page content
+// upload request is sent.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool PageContentUploadRequestIdFixEnabled();
 }  // namespace lens::features
 
 #endif  // COMPONENTS_LENS_LENS_FEATURES_H_

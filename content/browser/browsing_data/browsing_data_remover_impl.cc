@@ -31,6 +31,7 @@
 #include "content/browser/browsing_data/browsing_data_filter_builder_impl.h"
 #include "content/browser/dips/dips_service_impl.h"
 #include "content/browser/dips/dips_utils.h"
+#include "content/browser/preloading/prerender/prerender_host_registry.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -462,12 +463,7 @@ void BrowsingDataRemoverImpl::RemoveImpl(
     storage_partition_remove_mask |=
         StoragePartition::REMOVE_DATA_MASK_SHADER_CACHE;
   }
-  if (remove_mask & DATA_TYPE_MEDIA_LICENSES ||
-      // TODO(crbug.com/40264778): For now, media licenses are part of the quota
-      // management system. If all DOM storage types are being removed, remove
-      // media licenses as well. When bug is resolved, this condition can be
-      // removed.
-      (remove_mask & DATA_TYPE_DOM_STORAGE) == DATA_TYPE_DOM_STORAGE) {
+  if (remove_mask & DATA_TYPE_MEDIA_LICENSES) {
     storage_partition_remove_mask |=
         StoragePartition::REMOVE_DATA_MASK_MEDIA_LICENSES;
   }
@@ -604,11 +600,14 @@ void BrowsingDataRemoverImpl::RemoveImpl(
 
     // Clears the BFCache entries that match the removal filter for the current
     // browser context.
+    // Clears the Prerender Cache for the current browser context.
     auto storage_key_filter = filter_builder->BuildStorageKeyFilter();
     for (WebContentsImpl* web_contents : WebContentsImpl::GetAllWebContents()) {
       if (web_contents->GetBrowserContext() == browser_context_) {
         web_contents->GetController().GetBackForwardCache().Flush(
             storage_key_filter);
+        web_contents->GetPrerenderHostRegistry()->CancelAllHosts(
+            PrerenderFinalStatus::kBrowsingDataRemoved);
       }
     }
   }
@@ -658,8 +657,7 @@ void BrowsingDataRemoverImpl::RemoveImpl(
 
   //////////////////////////////////////////////////////////////////////////////
   // Auth cache.
-  if ((remove_mask & DATA_TYPE_COOKIES) &&
-      !(remove_mask & DATA_TYPE_AVOID_CLOSING_CONNECTIONS)) {
+  if (remove_mask & DATA_TYPE_COOKIES) {
     storage_partition->GetNetworkContext()->ClearHttpAuthCache(
         delete_begin_.is_null() ? base::Time::Min() : delete_begin_,
         delete_end_.is_null() ? base::Time::Max() : delete_end_,

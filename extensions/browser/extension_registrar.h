@@ -14,6 +14,7 @@
 #include "base/scoped_observation.h"
 #include "extensions/browser/blocklist_state.h"
 #include "extensions/browser/disable_reason.h"
+#include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/process_manager.h"
 #include "extensions/browser/process_manager_observer.h"
 #include "extensions/browser/unloaded_extension_reason.h"
@@ -155,16 +156,28 @@ class ExtensionRegistrar : public ProcessManagerObserver {
 
   // Marks |extension| as disabled and deactivates it. The ExtensionRegistry
   // retains a reference to it, so it can be enabled later.
-  void DisableExtension(const ExtensionId& extension_id, int disable_reasons);
+  void DisableExtension(const ExtensionId& extension_id,
+                        const DisableReasonSet& disable_reasons);
+
+  // Any code which needs to write unknown reasons should use the
+  // methods below, which operate on raw integers. This is needed for scenarios
+  // like Sync where unknown reasons can be synced from newer versions of the
+  // browser to older versions. The method above will trigger undefined behavior
+  // when unknown values are casted to DisableReason while constructing
+  // DisableReasonSet. Most code should use the method above. We want to limit
+  // the usage of the method below, so it is guarded by a passkey.
+  void DisableExtensionWithRawReasons(
+      ExtensionPrefs::DisableReasonRawManipulationPasskey,
+      const ExtensionId& extension_id,
+      base::flat_set<int> disable_reasons);
 
   // Same as `DisableExtension`, but assumes that the request to disable
   // `extension_id` originates from `source_extension` when evaluating whether
   // the extension can be disabled. Please see `ExtensionMayModifySettings`
   // for details.
-  void DisableExtensionWithSource(
-      const Extension* source_extension,
-      const std::string& extension_id,
-      disable_reason::DisableReason disable_reasons);
+  void DisableExtensionWithSource(const Extension* source_extension,
+                                  const ExtensionId& extension_id,
+                                  disable_reason::DisableReason disable_reason);
 
   // Attempts to enable all disabled extensions which the only disabled reason
   // is reloading.

@@ -4,16 +4,14 @@
 
 #include "chrome/browser/ash/app_list/arc/arc_app_test.h"
 
+#include <algorithm>
 #include <vector>
 
-#include "ash/components/arc/arc_util.h"
-#include "ash/components/arc/mojom/app.mojom-shared.h"
 #include "ash/constants/ash_features.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -29,7 +27,9 @@
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
+#include "chromeos/ash/experiences/arc/arc_util.h"
 #include "chromeos/ash/experiences/arc/intent_helper/arc_intent_helper_bridge.h"
+#include "chromeos/ash/experiences/arc/mojom/app.mojom-shared.h"
 #include "chromeos/ash/experiences/arc/session/arc_bridge_service.h"
 #include "chromeos/ash/experiences/arc/session/arc_service_manager.h"
 #include "chromeos/ash/experiences/arc/session/arc_session_runner.h"
@@ -396,8 +396,8 @@ void ArcAppTest::AddPackage(arc::mojom::ArcPackageInfoPtr package) {
 }
 
 void ArcAppTest::UpdatePackage(arc::mojom::ArcPackageInfoPtr updated_package) {
-  auto it = base::ranges::find(fake_packages_, updated_package->package_name,
-                               &arc::mojom::ArcPackageInfo::package_name);
+  auto it = std::ranges::find(fake_packages_, updated_package->package_name,
+                              &arc::mojom::ArcPackageInfo::package_name);
   if (it != fake_packages_.end()) {
     *it = std::move(updated_package);
   }

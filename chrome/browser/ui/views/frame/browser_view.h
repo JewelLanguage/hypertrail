@@ -77,6 +77,8 @@ class ExclusiveAccessBubbleViews;
 class FullscreenControlHost;
 class InfoBarContainerView;
 class LocationBarView;
+class MultiContentsView;
+class ScrimView;
 class SidePanel;
 class StatusBubbleViews;
 class TabSearchBubbleHost;
@@ -119,12 +121,8 @@ class WatermarkView;
 }
 
 namespace glic {
-class BorderView;
+class GlicBorderView;
 }  // namespace glic
-
-namespace segmentation_platform {
-struct ClassificationResult;
-}
 
 ///////////////////////////////////////////////////////////////////////////////
 // BrowserView
@@ -292,9 +290,13 @@ class BrowserView : public BrowserWindow,
   ContentsWebView* contents_web_view() { return contents_web_view_; }
   views::WebView* devtools_web_view() { return devtools_web_view_; }
 
+  ScrimView* contents_scrim_view() { return contents_scrim_view_; }
+
 #if BUILDFLAG(ENABLE_GLIC)
-  glic::BorderView* glic_border() const { return glic_border_; }
+  glic::GlicBorderView* glic_border() const { return glic_border_; }
 #endif
+
+  ScrimView* window_scrim_view_for_testing() { return window_scrim_view_; }
 
   base::WeakPtr<BrowserView> GetAsWeakPtr() {
     return weak_ptr_factory_.GetWeakPtr();
@@ -464,7 +466,21 @@ class BrowserView : public BrowserWindow,
   void UpdateWebAppStatusIconsVisiblity();
 
   // Getter for the `window.setResizable(bool)` state.
-  std::optional<bool> GetCanResizeFromWebAPI() const;
+  std::optional<bool> GetWebApiWindowResizable() const;
+
+  // Return the tab strip index of the single tab (if any) that is inactive but
+  // part of a split view. Assumes there is max one split view in the tab
+  // strip, it contains exactly two tabs, and one of those tabs is currently
+  // active.
+  int GetInactiveSplitTabIndex();
+
+  // Display the current active split view as a series of multiple side-by-side
+  // web contents.
+  void ShowSplitView();
+
+  // Display only the current active tab's web contents, hiding any previous
+  // side-by-side display.
+  void HideSplitView();
 
   // BrowserWindow:
   void Show() override;
@@ -515,7 +531,7 @@ class BrowserView : public BrowserWindow,
   void Maximize() override;
   void Minimize() override;
   void Restore() override;
-  void OnCanResizeFromWebAPIChanged() override;
+  void OnWebApiWindowResizableChanged() override;
   bool GetCanResize() override;
   ui::mojom::WindowShowState GetWindowShowState() const override;
   void EnterFullscreen(const GURL& url,
@@ -541,6 +557,7 @@ class BrowserView : public BrowserWindow,
   void UpdateToolbar(content::WebContents* contents) override;
   bool UpdateToolbarSecurityState() override;
   void UpdateCustomTabBarVisibility(bool visible, bool animate) override;
+  void SetContentScrimVisibility(bool visible) override;
   void ResetToolbarTabState(content::WebContents* contents) override;
   void FocusToolbar() override;
   ExtensionsContainer* GetExtensionsContainer() override;
@@ -577,11 +594,6 @@ class BrowserView : public BrowserWindow,
   sharing_hub::ScreenshotCapturedBubble* ShowScreenshotCapturedBubble(
       content::WebContents* contents,
       const gfx::Image& image) override;
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  // TODO(crbug.com/339262105): Clean up the old password promo methods after
-  // the generic promo launch.
-  void VerifyUserEligibilityIOSPasswordPromoBubble() override;
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
   qrcode_generator::QRCodeGeneratorBubbleView* ShowQRCodeGeneratorBubble(
       content::WebContents* contents,
       const GURL& url,
@@ -683,6 +695,10 @@ class BrowserView : public BrowserWindow,
       TabStripModel* tab_strip_model,
       const TabStripModelChange& change,
       const TabStripSelectionChange& selection) override;
+  void TabChangedAt(content::WebContents* contents,
+                    int index,
+                    TabChangeType change_type) override;
+  void OnSplitViewAdded(std::vector<tabs::TabInterface*> tabs) override;
   void TabStripEmpty() override;
   void WillCloseAllTabs(TabStripModel* tab_strip_model) override;
   void CloseAllTabsStopped(TabStripModel* tab_strip_model,
@@ -739,6 +755,8 @@ class BrowserView : public BrowserWindow,
                              const gfx::Rect& new_bounds) override;
   void OnWidgetVisibilityChanged(views::Widget* widget, bool visible) override;
   void OnWidgetShowStateChanged(views::Widget* widget) override;
+  void OnWidgetWindowModalVisibilityChanged(views::Widget* widget,
+                                            bool visible) override;
 
   // content::WebContentsObserver:
   void DidFirstVisuallyNonEmptyPaint() override;
@@ -835,7 +853,7 @@ class BrowserView : public BrowserWindow,
       tab_search::mojom::TabOrganizationFeature organization_feature) override;
   void CloseTabSearchBubble() override;
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
   AccessibilityFocusHighlight* GetAccessibilityFocusHighlightForTesting() {
     return accessibility_focus_highlight_.get();
   }
@@ -953,20 +971,6 @@ class BrowserView : public BrowserWindow,
   // type, and there should be a subsequent re-layout to show it.
   // |contents| can be null.
   bool MaybeShowInfoBar(content::WebContents* contents);
-
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  // TODO(crbug.com/339262105): Clean up the old password promo methods after
-  // the generic promo launch.
-  // Decides whether to show the iOS Password Promo Bubble based on segmentation
-  // platform classification results (is passed as a callback to the
-  // segmentation API).
-  void MaybeShowIOSPasswordPromoBubble(
-      const segmentation_platform::ClassificationResult& result);
-  // TODO(crbug.com/339262105): Clean up the old password promo methods after
-  // the generic promo launch.
-  // Shows the iOS Password Promo Bubble.
-  void ShowIOSPasswordPromoBubble();
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
   // Updates devtools window for given contents. This method will show docked
   // devtools window for inspected |web_contents| that has docked devtools
@@ -1098,6 +1102,7 @@ class BrowserView : public BrowserWindow,
   void FrameColorsChanged();
 
   void UpdateAccessibleNameForRootView();
+  void UpdateAccessibleURLForRootView(const GURL& url);
 
   // |allowed_without_policy| represents whether or not the browser is allowed
   // to enter fullscreen, irrespective of policy. This is is necessary to
@@ -1216,13 +1221,23 @@ class BrowserView : public BrowserWindow,
   // The InfoBarContainerView that contains InfoBars for the current tab.
   raw_ptr<InfoBarContainerView> infobar_container_ = nullptr;
 
-  // The view that contains the selected WebContents.
+  // The view that contains the active WebContents.
+  // TODO(crbug.com/393451405): Remove this direct reference when side by side
+  // is enabled, going through multi_contents_view_ for the active contents web
+  // view.
   raw_ptr<ContentsWebView> contents_web_view_ = nullptr;
+
+  // The view that contains all visible WebContents.
+  raw_ptr<MultiContentsView> multi_contents_view_ = nullptr;
+
+  // The scrim view that covers the content area when a tab-modal dialog is
+  // open.
+  raw_ptr<ScrimView> contents_scrim_view_ = nullptr;
 
   // It draws a border around the web contents area, on top of the
   // `contents_web_view_`. Null if the feature isn't enabled, or the platform
   // isn't supported.
-  raw_ptr<glic::BorderView> glic_border_ = nullptr;
+  raw_ptr<glic::GlicBorderView> glic_border_ = nullptr;
 
   // The view that contains devtools window for the selected WebContents.
   raw_ptr<views::WebView> devtools_web_view_ = nullptr;
@@ -1257,6 +1272,12 @@ class BrowserView : public BrowserWindow,
 
   // The Status information bubble that appears at the bottom of the window.
   std::unique_ptr<StatusBubbleViews> status_bubble_;
+
+  // The scrim view that covers the browser window when a window-modal dialog is
+  // showing.
+  // This is currently not used on macOS where the platform draws a native
+  // scrim for window modals (NSWindow sheet).
+  raw_ptr<ScrimView> window_scrim_view_ = nullptr;
 
   // A mapping between accelerators and command IDs.
   std::map<ui::Accelerator, int> accelerator_table_;
@@ -1349,7 +1370,7 @@ class BrowserView : public BrowserWindow,
   // The last bounds we notified about in TryNotifyWindowBoundsChanged().
   gfx::Rect last_widget_bounds_;
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
   std::unique_ptr<AccessibilityFocusHighlight> accessibility_focus_highlight_;
 #endif
 

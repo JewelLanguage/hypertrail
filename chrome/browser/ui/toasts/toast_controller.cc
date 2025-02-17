@@ -293,7 +293,7 @@ void ToastController::CreateToast(ToastParams params,
             &RecordToastActionButtonClicked, params.toast_id)));
   }
 
-  if (params.menu_model) {
+  if (spec->has_menu()) {
     toast_view->AddMenu(std::move(params.menu_model));
   }
 
@@ -345,7 +345,6 @@ void ToastController::OnFullscreenStateChanged() {
 }
 
 void ToastController::ClearTabScopedToasts() {
-  toast_close_timer_.Stop();
   if (next_toast_params_.has_value()) {
     const ToastId toast_id = next_toast_params_.value().toast_id;
     const ToastSpecification* const specification =
@@ -360,6 +359,7 @@ void ToastController::ClearTabScopedToasts() {
       !toast_registry_
            ->GetToastSpecification(currently_showing_toast_id_.value())
            ->is_global_scope()) {
+    toast_close_timer_.Stop();
     CloseToast(toasts::ToastCloseReason::kAbort);
   }
 }

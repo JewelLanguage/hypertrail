@@ -6,6 +6,7 @@
 #define REMOTING_BASE_CLOUD_SERVICE_CLIENT_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "base/functional/callback_forward.h"
@@ -34,58 +35,53 @@ struct NetworkTrafficAnnotationTag;
 
 namespace remoting {
 
-namespace apis::v1 {
-class ProvisionGceInstanceResponse;
-}  // namespace apis::v1
-
-class ProtobufHttpStatus;
+class HttpStatus;
 
 // A service client that communicates with the directory service.
 class CloudServiceClient {
  public:
   using GenerateHostTokenCallback = base::OnceCallback<void(
-      const ProtobufHttpStatus&,
+      const HttpStatus&,
       std::unique_ptr<::google::internal::remoting::cloud::v1alpha::
                           GenerateHostTokenResponse>)>;
   using GenerateIceConfigCallback = base::OnceCallback<void(
-      const ProtobufHttpStatus&,
+      const HttpStatus&,
       std::unique_ptr<::google::internal::remoting::cloud::v1alpha::
                           GenerateIceConfigResponse>)>;
-  using LegacyProvisionGceInstanceCallback = base::OnceCallback<void(
-      const ProtobufHttpStatus&,
-      std::unique_ptr<apis::v1::ProvisionGceInstanceResponse>)>;
   using ProvisionGceInstanceCallback = base::OnceCallback<void(
-      const ProtobufHttpStatus&,
+      const HttpStatus&,
       std::unique_ptr<
           ::google::remoting::cloud::v1::ProvisionGceInstanceResponse>)>;
   using ReauthorizeHostCallback = base::OnceCallback<void(
-      const ProtobufHttpStatus&,
+      const HttpStatus&,
       std::unique_ptr<::google::internal::remoting::cloud::v1alpha::
                           ReauthorizeHostResponse>)>;
   using SendHeartbeatCallback = base::OnceCallback<void(
-      const ProtobufHttpStatus&,
+      const HttpStatus&,
       std::unique_ptr<::google::internal::remoting::cloud::v1alpha::Empty>)>;
   using UpdateRemoteAccessHostCallback = base::OnceCallback<void(
-      const ProtobufHttpStatus&,
+      const HttpStatus&,
       std::unique_ptr<
           ::google::internal::remoting::cloud::v1alpha::RemoteAccessHost>)>;
   using VerifySessionTokenCallback = base::OnceCallback<void(
-      const ProtobufHttpStatus&,
+      const HttpStatus&,
       std::unique_ptr<::google::internal::remoting::cloud::v1alpha::
                           VerifySessionTokenResponse>)>;
 
-  // TODO: joedow - Remove the single param c'tor when we no longer support the
-  // legacy provisioning path.
-  explicit CloudServiceClient(
-      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
-  // Used for creating a service client to call the Remoting Cloud API using
-  // the |api_key| provided.
-  CloudServiceClient(
-      const std::string& api_key,
-      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
   // Used for creating a service client to call the Remoting Cloud Private API
   // using a scoped OAuth access token generated for the device robot account.
-  CloudServiceClient(
+  static std::unique_ptr<CloudServiceClient> CreateForChromotingRobotAccount(
+      OAuthTokenGetter* oauth_token_getter,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
+  // Used for creating a service client to call the Remoting Cloud API using
+  // the |api_key| provided which associates the request with a GCP project.
+  static std::unique_ptr<CloudServiceClient> CreateForGcpProject(
+      const std::string& api_key,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
+  // Used for creating a service client to call the Remoting Cloud API using
+  // an access token associated with the default service account for the
+  // Compute Engine Instance the code is running on.
+  static std::unique_ptr<CloudServiceClient> CreateForGceDefaultServiceAccount(
       OAuthTokenGetter* oauth_token_getter,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
 
@@ -94,19 +90,12 @@ class CloudServiceClient {
   CloudServiceClient(const CloudServiceClient&) = delete;
   CloudServiceClient& operator=(const CloudServiceClient&) = delete;
 
-  // TODO: joedow - Remove the legacy codepath once the new flow is working.
-  void LegacyProvisionGceInstance(
-      const std::string& owner_email,
-      const std::string& display_name,
-      const std::string& public_key,
-      const std::optional<std::string>& existing_directory_id,
-      LegacyProvisionGceInstanceCallback callback);
-
   void ProvisionGceInstance(
       const std::string& owner_email,
       const std::string& display_name,
       const std::string& public_key,
       const std::optional<std::string>& existing_directory_id,
+      const std::optional<std::string>& instance_identity_token,
       ProvisionGceInstanceCallback callback);
 
   void SendHeartbeat(const std::string& directory_id,
@@ -134,6 +123,12 @@ class CloudServiceClient {
   void CancelPendingRequests();
 
  private:
+  CloudServiceClient(
+      const std::string& api_key,
+      OAuthTokenGetter* oauth_token_getter,
+      const std::string& base_service_url,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
+
   template <typename CallbackType>
   void ExecuteRequest(
       const net::NetworkTrafficAnnotationTag& traffic_annotation,
@@ -143,7 +138,7 @@ class CloudServiceClient {
       std::unique_ptr<google::protobuf::MessageLite> request_message,
       CallbackType callback);
 
-  // The customer API_KEY to use for calling the Cloud API.
+  // The customer API_KEY to use for calling the Remoting Cloud API.
   std::string api_key_;
 
   ProtobufHttpClient http_client_;

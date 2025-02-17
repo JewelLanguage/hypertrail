@@ -11,8 +11,10 @@
 #include "base/test/task_environment.h"
 #include "components/collaboration/internal/collaboration_controller.h"
 #include "components/collaboration/test_support/mock_collaboration_controller_delegate.h"
+#include "components/data_sharing/public/data_sharing_service.h"
 #include "components/data_sharing/public/features.h"
 #include "components/data_sharing/test_support/mock_data_sharing_service.h"
+#include "components/saved_tab_groups/test_support/mock_tab_group_sync_service.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "components/sync/base/features.h"
 #include "components/sync/test/test_sync_service.h"
@@ -24,16 +26,18 @@ using data_sharing::GroupData;
 using data_sharing::GroupId;
 using data_sharing::GroupMember;
 using data_sharing::MemberRole;
+using testing::_;
+using testing::Invoke;
 using testing::Return;
 
 namespace collaboration {
 
 namespace {
 
-const char kUserGaia[] = "gaia_id";
-const char kUserEmail[] = "test@email.com";
-const char kGroupId[] = "/?-group_id";
-const char kAccessToken[] = "/?-access_token";
+constexpr GaiaId::Literal kUserGaia("gaia_id");
+constexpr char kUserEmail[] = "test@email.com";
+constexpr char kGroupId[] = "/?-group_id";
+constexpr char kAccessToken[] = "/?-access_token";
 
 }  // namespace
 
@@ -52,7 +56,7 @@ class CollaborationServiceImplTest : public testing::Test {
 
   void InitService() {
     service_ = std::make_unique<CollaborationServiceImpl>(
-        /*tab_group_sync_service=*/nullptr, &mock_data_sharing_service_,
+        &mock_tab_group_sync_service_, &mock_data_sharing_service_,
         identity_test_env_.identity_manager(), test_sync_service_.get());
   }
 
@@ -60,6 +64,7 @@ class CollaborationServiceImplTest : public testing::Test {
   base::test::SingleThreadTaskEnvironment task_environment_;
   signin::IdentityTestEnvironment identity_test_env_;
   std::unique_ptr<syncer::TestSyncService> test_sync_service_;
+  tab_groups::MockTabGroupSyncService mock_tab_group_sync_service_;
   data_sharing::MockDataSharingService mock_data_sharing_service_;
   std::unique_ptr<CollaborationServiceImpl> service_;
 };
@@ -71,7 +76,7 @@ TEST_F(CollaborationServiceImplTest, ConstructionAndEmptyServiceCheck) {
 TEST_F(CollaborationServiceImplTest, GetCurrentUserRoleForGroup) {
   GroupData group_data = GroupData();
   GroupMember group_member = GroupMember();
-  group_member.gaia_id = GaiaId(kUserGaia);
+  group_member.gaia_id = kUserGaia;
   group_member.role = MemberRole::kOwner;
   group_data.members.push_back(group_member);
 
@@ -93,7 +98,7 @@ TEST_F(CollaborationServiceImplTest, GetCurrentUserRoleForGroup) {
   identity_test_env_.MakeAccountAvailable(
       kUserEmail,
       {.primary_account_consent_level = signin::ConsentLevel::kSignin,
-       .gaia_id = GaiaId(kUserGaia)});
+       .gaia_id = kUserGaia});
   EXPECT_EQ(service_->GetCurrentUserRoleForGroup(group_id), MemberRole::kOwner);
 }
 
@@ -147,10 +152,12 @@ TEST_F(CollaborationServiceImplTest, StartJoinFlow) {
       std::make_unique<MockCollaborationControllerDelegate>();
   EXPECT_CALL(*mock_delegate_invalid, OnFlowFinished());
   service_->StartJoinFlow(std::move(mock_delegate_invalid), url);
+  // Wait for post tasks.
+  EXPECT_TRUE(base::test::RunUntil(
+      [&]() { return service_->GetJoinControllersForTesting().size() == 1; }));
   const std::map<data_sharing::GroupToken,
                  std::unique_ptr<CollaborationController>>& join_flows =
       service_->GetJoinControllersForTesting();
-  EXPECT_EQ(join_flows.size(), 1u);
   EXPECT_TRUE(join_flows.find(data_sharing::GroupToken()) != join_flows.end());
 
   // New join flow will be appended with a valid url parsing and will stop all
@@ -159,15 +166,15 @@ TEST_F(CollaborationServiceImplTest, StartJoinFlow) {
       .WillRepeatedly(Return(base::ok(token)));
   std::unique_ptr<MockCollaborationControllerDelegate> mock_delegate =
       std::make_unique<MockCollaborationControllerDelegate>();
-  EXPECT_CALL(*mock_delegate, PromoteCurrentScreen());
+  EXPECT_CALL(*mock_delegate, OnFlowFinished());
   service_->StartJoinFlow(std::move(mock_delegate), url);
 
   // Wait for post tasks.
   EXPECT_TRUE(base::test::RunUntil(
       [&]() { return service_->GetJoinControllersForTesting().size() == 1; }));
 
-  // Existing join flow should not start a new flow and should promote the
-  // existing flow's delegate.
+  // Existing join flow will stop all conflicting flows and will be appended
+  // similar to a new join flow.
   service_->StartJoinFlow(
       std::make_unique<MockCollaborationControllerDelegate>(), url);
   EXPECT_EQ(service_->GetJoinControllersForTesting().size(), 1u);
@@ -214,6 +221,53 @@ TEST_F(CollaborationServiceImplTest, SigninStatusChanges) {
   identity_test_env_.SetRefreshTokenForPrimaryAccount();
   EXPECT_EQ(service_->GetServiceStatus().signin_status,
             SigninStatus::kSignedIn);
+}
+
+TEST_F(CollaborationServiceImplTest, DeleteGroup) {
+  data_sharing::GroupId group_id = data_sharing::GroupId(kGroupId);
+  EXPECT_CALL(mock_tab_group_sync_service_, OnCollaborationRemoved(kGroupId));
+  EXPECT_CALL(mock_data_sharing_service_, DeleteGroup(group_id, _))
+      .WillOnce(Invoke(
+          [](const data_sharing::GroupId&,
+             base::OnceCallback<void(
+                 data_sharing::DataSharingService::PeopleGroupActionOutcome)>
+                 callback) {
+            std::move(callback).Run(data_sharing::DataSharingService::
+                                        PeopleGroupActionOutcome::kSuccess);
+          }));
+
+  base::RunLoop run_loop;
+  service_->DeleteGroup(group_id,
+                        base::BindOnce(
+                            [](base::RunLoop* run_loop, bool success) {
+                              ASSERT_TRUE(success);
+                              run_loop->Quit();
+                            },
+                            &run_loop));
+  run_loop.Run();
+}
+
+TEST_F(CollaborationServiceImplTest, LeaveGroup) {
+  data_sharing::GroupId group_id = data_sharing::GroupId(kGroupId);
+  EXPECT_CALL(mock_tab_group_sync_service_, OnCollaborationRemoved(kGroupId));
+  EXPECT_CALL(mock_data_sharing_service_, LeaveGroup(group_id, _))
+      .WillOnce(Invoke(
+          [](const data_sharing::GroupId&,
+             base::OnceCallback<void(
+                 data_sharing::DataSharingService::PeopleGroupActionOutcome)>
+                 callback) {
+            std::move(callback).Run(data_sharing::DataSharingService::
+                                        PeopleGroupActionOutcome::kSuccess);
+          }));
+
+  base::RunLoop run_loop;
+  service_->LeaveGroup(group_id, base::BindOnce(
+                                     [](base::RunLoop* run_loop, bool success) {
+                                       ASSERT_TRUE(success);
+                                       run_loop->Quit();
+                                     },
+                                     &run_loop));
+  run_loop.Run();
 }
 
 }  // namespace collaboration

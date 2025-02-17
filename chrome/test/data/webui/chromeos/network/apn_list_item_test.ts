@@ -8,12 +8,14 @@ import 'chrome://resources/ash/common/cr_elements/cr_action_menu/cr_action_menu.
 
 import type {CrActionMenuElement} from 'chrome://resources/ash/common/cr_elements/cr_action_menu/cr_action_menu.js';
 import type {CrIconButtonElement} from 'chrome://resources/ash/common/cr_elements/cr_icon_button/cr_icon_button.js';
-import {ApnListItemElement} from 'chrome://resources/ash/common/network/apn_list_item.js';
-import {ApnDetailDialogMode, ApnEventData} from 'chrome://resources/ash/common/network/cellular_utils.js';
+import type {ApnListItemElement} from 'chrome://resources/ash/common/network/apn_list_item.js';
+import type {ApnEventData} from 'chrome://resources/ash/common/network/cellular_utils.js';
+import {ApnDetailDialogMode} from 'chrome://resources/ash/common/network/cellular_utils.js';
 import {MojoInterfaceProviderImpl} from 'chrome://resources/ash/common/network/mojo_interface_provider.js';
 import {OncMojo} from 'chrome://resources/ash/common/network/onc_mojo.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
-import {ApnAuthenticationType, ApnIpType, ApnProperties, ApnSource, ApnState, ApnType} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
+import type {ApnProperties} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
+import {ApnAuthenticationType, ApnIpType, ApnSource, ApnState, ApnType} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/cros_network_config.mojom-webui.js';
 import {NetworkType, PortalState} from 'chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
@@ -21,8 +23,9 @@ import {eventToPromise} from 'chrome://webui-test/test_util.js';
 
 import {FakeNetworkConfig} from '../fake_network_config_mojom.js';
 
-const TEST_APN_EVENT_DATA_GUID = 'test_guid'
+const TEST_APN_EVENT_DATA_GUID = 'test_guid';
 
+// TODO(crbug.com/367734332): Move into cellular_utils.ts.
 const TEST_APN_EVENT_DATA: ApnEventData = {
   apn: {
     accessPointName: 'test_apn',
@@ -47,7 +50,7 @@ suite('ApnListItemTest', function() {
 
   let mojoApi_: FakeNetworkConfig;
 
-  setup(async () => {
+  setup(() => {
     mojoApi_ = new FakeNetworkConfig();
     MojoInterfaceProviderImpl.getInstance().setMojoServiceRemoteForTest(
         mojoApi_);
@@ -79,6 +82,7 @@ suite('ApnListItemTest', function() {
     return flushTasks();
   }
 
+  // TODO(crbug.com/367734332): Move into cellular_utils.ts.
   function createTestApnWithOverridenValues(overrides: Partial<ApnProperties>):
       ApnProperties {
     return {...TEST_APN_EVENT_DATA.apn, ...overrides};
@@ -92,7 +96,7 @@ suite('ApnListItemTest', function() {
     });
     await flushTasks();
     assertEquals(
-        apnListItem.shadowRoot!.querySelector<HTMLDivElement>(
+        apnListItem.shadowRoot!.querySelector<HTMLElement>(
                                    '#apnName')!.innerText,
         apnListItem.apn.accessPointName);
 
@@ -102,7 +106,7 @@ suite('ApnListItemTest', function() {
     });
     await flushTasks();
     assertEquals(
-        apnListItem.shadowRoot!.querySelector<HTMLDivElement>(
+        apnListItem.shadowRoot!.querySelector<HTMLElement>(
                                    '#apnName')!.innerText,
         apnListItem.apn.name);
 
@@ -111,7 +115,7 @@ suite('ApnListItemTest', function() {
     });
     await flushTasks();
     assertEquals(
-        apnListItem.shadowRoot!.querySelector<HTMLDivElement>(
+        apnListItem.shadowRoot!.querySelector<HTMLElement>(
                                    '#apnName')!.innerText,
         apnListItem.i18n('apnNameModem'));
   });
@@ -122,7 +126,7 @@ suite('ApnListItemTest', function() {
     await flushTasks();
 
     const subLabel =
-        apnListItem.shadowRoot!.querySelector<HTMLDivElement>('#subLabel');
+        apnListItem.shadowRoot!.querySelector<HTMLElement>('#subLabel');
     assertTrue(!!subLabel);
     assertTrue(subLabel.hasAttribute('hidden'), 'fails to hide sublabel');
     apnListItem.isApnConnected = true;
@@ -298,9 +302,8 @@ suite('ApnListItemTest', function() {
           apnListItem.apn = TEST_APN_EVENT_DATA.apn;
           apnListItem.guid = TEST_APN_EVENT_DATA_GUID;
 
-          const subLabel =
-              apnListItem.shadowRoot!.querySelector<HTMLDivElement>(
-                  '#autoDetected');
+          const subLabel = apnListItem.shadowRoot!.querySelector<HTMLElement>(
+              '#autoDetected');
           assertTrue(!!subLabel);
           assertFalse(subLabel.hasAttribute('hidden'));
           assertEquals(apnListItem.i18n('apnAutoDetected'), subLabel.innerText);

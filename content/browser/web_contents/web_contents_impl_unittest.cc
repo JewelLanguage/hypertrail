@@ -18,7 +18,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
 #include "base/test/gtest_util.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -160,7 +159,7 @@ class TestWebContentsObserver : public WebContentsObserver {
 
   MOCK_METHOD(void,
               OnCapabilityTypesChanged,
-              (WebContents::CapabilityType capability_type, bool used),
+              (WebContentsCapabilityType capability_type, bool used),
               (override));
 
   void OnCaptureHandleConfigUpdate(
@@ -723,7 +722,15 @@ TEST_F(WebContentsImplTest, CrossSiteBoundaries) {
 
 // Test that navigating across a site boundary after a crash creates a new
 // RFH without requiring a cross-site transition (i.e., PENDING state).
-TEST_F(WebContentsImplTest, DISABLED_CrossSiteBoundariesAfterCrash) {
+// TODO(crbug.com/375057184): Determine why this test crashes on Android and
+// re-enable it.
+#if BUILDFLAG(IS_ANDROID)
+#define MAYBE_CrossSiteBoundariesAfterCrash \
+  DISABLED_CrossSiteBoundariesAfterCrash
+#else
+#define MAYBE_CrossSiteBoundariesAfterCrash CrossSiteBoundariesAfterCrash
+#endif
+TEST_F(WebContentsImplTest, MAYBE_CrossSiteBoundariesAfterCrash) {
   // Ensure that the cross-site transition will also be cross-process on
   // Android.
   IsolateAllSitesForTesting(base::CommandLine::ForCurrentProcess());
@@ -2935,152 +2942,142 @@ TEST_F(WebContentsImplTest, RegisterProtocolHandlerInvalidURLSyntax) {
 
 TEST_F(WebContentsImplTest, Usb) {
   testing::StrictMock<TestWebContentsObserver> observer(contents());
-  EXPECT_FALSE(
-      contents()->IsCapabilityActive(WebContents::CapabilityType::kUSB));
+  EXPECT_FALSE(contents()->IsCapabilityActive(WebContentsCapabilityType::kUSB));
 
   EXPECT_CALL(observer,
-              OnCapabilityTypesChanged(WebContents::CapabilityType::kUSB, true))
+              OnCapabilityTypesChanged(WebContentsCapabilityType::kUSB, true))
       .WillOnce(testing::Invoke([&]() {
         // Accessor must return the updated state when the observer is notified.
         EXPECT_TRUE(
-            contents()->IsCapabilityActive(WebContents::CapabilityType::kUSB));
+            contents()->IsCapabilityActive(WebContentsCapabilityType::kUSB));
       }));
   contents()->TestIncrementUsbActiveFrameCount();
   testing::Mock::VerifyAndClearExpectations(&observer);
-  EXPECT_TRUE(
-      contents()->IsCapabilityActive(WebContents::CapabilityType::kUSB));
+  EXPECT_TRUE(contents()->IsCapabilityActive(WebContentsCapabilityType::kUSB));
 
   // Additional increment/decrement don't modify state.
   contents()->TestIncrementUsbActiveFrameCount();
-  EXPECT_TRUE(
-      contents()->IsCapabilityActive(WebContents::CapabilityType::kUSB));
+  EXPECT_TRUE(contents()->IsCapabilityActive(WebContentsCapabilityType::kUSB));
   contents()->TestDecrementUsbActiveFrameCount();
-  EXPECT_TRUE(
-      contents()->IsCapabilityActive(WebContents::CapabilityType::kUSB));
+  EXPECT_TRUE(contents()->IsCapabilityActive(WebContentsCapabilityType::kUSB));
 
-  EXPECT_CALL(observer, OnCapabilityTypesChanged(
-                            WebContents::CapabilityType::kUSB, false))
+  EXPECT_CALL(observer,
+              OnCapabilityTypesChanged(WebContentsCapabilityType::kUSB, false))
       .WillOnce(testing::Invoke([&]() {
         EXPECT_FALSE(
-            contents()->IsCapabilityActive(WebContents::CapabilityType::kUSB));
+            contents()->IsCapabilityActive(WebContentsCapabilityType::kUSB));
       }));
   contents()->TestDecrementUsbActiveFrameCount();
   testing::Mock::VerifyAndClearExpectations(&observer);
-  EXPECT_FALSE(
-      contents()->IsCapabilityActive(WebContents::CapabilityType::kUSB));
+  EXPECT_FALSE(contents()->IsCapabilityActive(WebContentsCapabilityType::kUSB));
 }
 
 TEST_F(WebContentsImplTest, Hid) {
   testing::StrictMock<TestWebContentsObserver> observer(contents());
-  EXPECT_FALSE(
-      contents()->IsCapabilityActive(WebContents::CapabilityType::kHID));
+  EXPECT_FALSE(contents()->IsCapabilityActive(WebContentsCapabilityType::kHID));
 
   EXPECT_CALL(observer,
-              OnCapabilityTypesChanged(WebContents::CapabilityType::kHID, true))
+              OnCapabilityTypesChanged(WebContentsCapabilityType::kHID, true))
       .WillOnce(testing::Invoke([&]() {
         // Accessor must return the updated state when the observer is notified.
         EXPECT_TRUE(
-            contents()->IsCapabilityActive(WebContents::CapabilityType::kHID));
+            contents()->IsCapabilityActive(WebContentsCapabilityType::kHID));
       }));
   contents()->TestIncrementHidActiveFrameCount();
   testing::Mock::VerifyAndClearExpectations(&observer);
-  EXPECT_TRUE(
-      contents()->IsCapabilityActive(WebContents::CapabilityType::kHID));
+  EXPECT_TRUE(contents()->IsCapabilityActive(WebContentsCapabilityType::kHID));
 
   // Additional increment/decrement don't modify state.
   contents()->TestIncrementHidActiveFrameCount();
-  EXPECT_TRUE(
-      contents()->IsCapabilityActive(WebContents::CapabilityType::kHID));
+  EXPECT_TRUE(contents()->IsCapabilityActive(WebContentsCapabilityType::kHID));
   contents()->TestDecrementHidActiveFrameCount();
-  EXPECT_TRUE(
-      contents()->IsCapabilityActive(WebContents::CapabilityType::kHID));
+  EXPECT_TRUE(contents()->IsCapabilityActive(WebContentsCapabilityType::kHID));
 
-  EXPECT_CALL(observer, OnCapabilityTypesChanged(
-                            WebContents::CapabilityType::kHID, false))
+  EXPECT_CALL(observer,
+              OnCapabilityTypesChanged(WebContentsCapabilityType::kHID, false))
       .WillOnce(testing::Invoke([&]() {
         EXPECT_FALSE(
-            contents()->IsCapabilityActive(WebContents::CapabilityType::kHID));
+            contents()->IsCapabilityActive(WebContentsCapabilityType::kHID));
       }));
   contents()->TestDecrementHidActiveFrameCount();
   testing::Mock::VerifyAndClearExpectations(&observer);
-  EXPECT_FALSE(
-      contents()->IsCapabilityActive(WebContents::CapabilityType::kHID));
+  EXPECT_FALSE(contents()->IsCapabilityActive(WebContentsCapabilityType::kHID));
 }
 
 TEST_F(WebContentsImplTest, Serial) {
   testing::StrictMock<TestWebContentsObserver> observer(contents());
   EXPECT_FALSE(
-      contents()->IsCapabilityActive(WebContents::CapabilityType::kSerial));
+      contents()->IsCapabilityActive(WebContentsCapabilityType::kSerial));
 
   EXPECT_CALL(observer, OnCapabilityTypesChanged(
-                            WebContents::CapabilityType::kSerial, true))
+                            WebContentsCapabilityType::kSerial, true))
       .WillOnce(testing::Invoke([&]() {
         // Accessor must return the updated state when the observer is notified.
-        EXPECT_TRUE(contents()->IsCapabilityActive(
-            WebContents::CapabilityType::kSerial));
+        EXPECT_TRUE(
+            contents()->IsCapabilityActive(WebContentsCapabilityType::kSerial));
       }));
   contents()->TestIncrementSerialActiveFrameCount();
   testing::Mock::VerifyAndClearExpectations(&observer);
   EXPECT_TRUE(
-      contents()->IsCapabilityActive(WebContents::CapabilityType::kSerial));
+      contents()->IsCapabilityActive(WebContentsCapabilityType::kSerial));
 
   // Additional increment/decrement don't modify state.
   contents()->TestIncrementSerialActiveFrameCount();
   EXPECT_TRUE(
-      contents()->IsCapabilityActive(WebContents::CapabilityType::kSerial));
+      contents()->IsCapabilityActive(WebContentsCapabilityType::kSerial));
   contents()->TestDecrementSerialActiveFrameCount();
   EXPECT_TRUE(
-      contents()->IsCapabilityActive(WebContents::CapabilityType::kSerial));
+      contents()->IsCapabilityActive(WebContentsCapabilityType::kSerial));
 
   EXPECT_CALL(observer, OnCapabilityTypesChanged(
-                            WebContents::CapabilityType::kSerial, false))
+                            WebContentsCapabilityType::kSerial, false))
       .WillOnce(testing::Invoke([&]() {
-        EXPECT_FALSE(contents()->IsCapabilityActive(
-            WebContents::CapabilityType::kSerial));
+        EXPECT_FALSE(
+            contents()->IsCapabilityActive(WebContentsCapabilityType::kSerial));
       }));
   contents()->TestDecrementSerialActiveFrameCount();
   testing::Mock::VerifyAndClearExpectations(&observer);
   EXPECT_FALSE(
-      contents()->IsCapabilityActive(WebContents::CapabilityType::kSerial));
+      contents()->IsCapabilityActive(WebContentsCapabilityType::kSerial));
 }
 
 TEST_F(WebContentsImplTest, Bluetooth) {
   testing::StrictMock<TestWebContentsObserver> observer(contents());
   EXPECT_FALSE(contents()->IsCapabilityActive(
-      WebContents::CapabilityType::kBluetoothConnected));
+      WebContentsCapabilityType::kBluetoothConnected));
 
   EXPECT_CALL(observer,
               OnCapabilityTypesChanged(
-                  WebContents::CapabilityType::kBluetoothConnected, true))
+                  WebContentsCapabilityType::kBluetoothConnected, true))
       .WillOnce(testing::Invoke([&]() {
         // Accessor must return the updated state when the observer is notified.
         EXPECT_TRUE(contents()->IsCapabilityActive(
-            WebContents::CapabilityType::kBluetoothConnected));
+            WebContentsCapabilityType::kBluetoothConnected));
       }));
   contents()->TestIncrementBluetoothConnectedDeviceCount();
   testing::Mock::VerifyAndClearExpectations(&observer);
   EXPECT_TRUE(contents()->IsCapabilityActive(
-      WebContents::CapabilityType::kBluetoothConnected));
+      WebContentsCapabilityType::kBluetoothConnected));
 
   // Additional increment/decrement don't modify state.
   contents()->TestIncrementBluetoothConnectedDeviceCount();
   EXPECT_TRUE(contents()->IsCapabilityActive(
-      WebContents::CapabilityType::kBluetoothConnected));
+      WebContentsCapabilityType::kBluetoothConnected));
   contents()->TestDecrementBluetoothConnectedDeviceCount();
   EXPECT_TRUE(contents()->IsCapabilityActive(
-      WebContents::CapabilityType::kBluetoothConnected));
+      WebContentsCapabilityType::kBluetoothConnected));
 
   EXPECT_CALL(observer,
               OnCapabilityTypesChanged(
-                  WebContents::CapabilityType::kBluetoothConnected, false))
+                  WebContentsCapabilityType::kBluetoothConnected, false))
       .WillOnce(testing::Invoke([&]() {
         EXPECT_FALSE(contents()->IsCapabilityActive(
-            WebContents::CapabilityType::kBluetoothConnected));
+            WebContentsCapabilityType::kBluetoothConnected));
       }));
   contents()->TestDecrementBluetoothConnectedDeviceCount();
   testing::Mock::VerifyAndClearExpectations(&observer);
   EXPECT_FALSE(contents()->IsCapabilityActive(
-      WebContents::CapabilityType::kBluetoothConnected));
+      WebContentsCapabilityType::kBluetoothConnected));
 }
 
 TEST_F(WebContentsImplTest, BadDownloadImageResponseFromRenderer) {
@@ -3088,7 +3085,7 @@ TEST_F(WebContentsImplTest, BadDownloadImageResponseFromRenderer) {
   // exercising the code in WebContentsImpl.
   scoped_refptr<SiteInstance> instance =
       SiteInstance::Create(GetBrowserContext());
-  instance->GetProcess()->Init();
+  instance->GetOrCreateProcess()->Init();
   WebContents::CreateParams create_params(GetBrowserContext(),
                                           std::move(instance));
   create_params.desired_renderer_state = WebContents::CreateParams::
@@ -3479,7 +3476,7 @@ TEST_F(WebContentsImplTest, BadDownloadImageFromAXNodeId) {
   // exercising the code in WebContentsImpl.
   scoped_refptr<SiteInstance> instance =
       SiteInstance::Create(GetBrowserContext());
-  instance->GetProcess()->Init();
+  instance->GetOrCreateProcess()->Init();
   WebContents::CreateParams create_params(GetBrowserContext(),
                                           std::move(instance));
   create_params.desired_renderer_state = WebContents::CreateParams::

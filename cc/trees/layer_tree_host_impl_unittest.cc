@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <memory>
@@ -17,7 +18,6 @@
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/ptr_util.h"
 #include "base/numerics/angle_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
@@ -34,6 +34,7 @@
 #include "cc/input/page_scale_animation.h"
 #include "cc/input/scroll_utils.h"
 #include "cc/input/scrollbar_controller.h"
+#include "cc/layers/append_quads_context.h"
 #include "cc/layers/append_quads_data.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/layers/nine_patch_thumb_scrollbar_layer_impl.h"
@@ -67,6 +68,7 @@
 #include "cc/trees/draw_property_utils.h"
 #include "cc/trees/effect_node.h"
 #include "cc/trees/latency_info_swap_promise.h"
+#include "cc/trees/layer_tree_host_impl_client.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/mutator_host.h"
 #include "cc/trees/render_frame_metadata.h"
@@ -74,6 +76,7 @@
 #include "cc/trees/scroll_node.h"
 #include "cc/trees/transform_node.h"
 #include "cc/view_transition/view_transition_request.h"
+#include "components/viz/client/client_resource_provider.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/frame_sinks/copy_output_result.h"
@@ -183,12 +186,6 @@ class LayerTreeHostImplTestBase : public testing::Test,
   }
 
   void SetUp() override {
-    LayerTreeSettings settings = DefaultSettings();
-    if (settings.UseLayerContextForDisplay()) {
-      GTEST_SKIP() << "TODO(crbug.com/389147356) TreesInViz: Implement single "
-                      "threaded mode";
-    }
-
     CreateHostImpl(DefaultSettings(), CreateLayerTreeFrameSink());
 
     // TODO(bokan): Mac wheel scrolls don't cause smooth scrolling in the real
@@ -862,15 +859,6 @@ class LayerTreeHostImplTestBase : public testing::Test,
 
   InputHandler& GetInputHandler() { return host_impl_->GetInputHandler(); }
 
-  class StubGpuBacking : public ResourcePool::GpuBacking {
-   public:
-    void OnMemoryDump(
-        base::trace_event::ProcessMemoryDump* pmd,
-        const base::trace_event::MemoryAllocatorDumpGuid& buffer_dump_guid,
-        uint64_t tracing_process_id,
-        int importance) const override {}
-  };
-
   FakeImplTaskRunnerProvider task_runner_provider_;
   DebugScopedSetMainThreadBlocked always_main_thread_blocked_;
 
@@ -941,13 +929,7 @@ INSTANTIATE_COMMIT_TO_TREE_TEST_P(
 class LayerTreeHostImplTimelinesTest : public LayerTreeHostImplTest {
  public:
   void SetUp() override {
-    LayerTreeSettings settings = DefaultSettings();
-    if (settings.UseLayerContextForDisplay()) {
-      GTEST_SKIP() << "TODO(crbug.com/389147356) TreesInViz: Implement single "
-                      "threaded mode";
-    }
-
-    CreateHostImpl(settings, CreateLayerTreeFrameSink());
+    CreateHostImpl(DefaultSettings(), CreateLayerTreeFrameSink());
 
     // TODO(bokan): Mac wheel scrolls don't cause smooth scrolling in the real
     // world. In tests, we force it on for consistency. Can be removed when
@@ -969,10 +951,6 @@ class FluentOverlayScrollbarLayerTreeHostImplTest
     settings.scrollbar_fade_delay = base::Milliseconds(500);
     settings.scrollbar_fade_duration = base::Milliseconds(300);
     settings.idle_thickness_scale = 0.4f;
-    if (settings.UseLayerContextForDisplay()) {
-      GTEST_SKIP() << "TODO(crbug.com/389147356) TreesInViz: Implement single "
-                      "threaded mode";
-    }
     CreateHostImpl(settings, CreateLayerTreeFrameSink());
   }
 
@@ -1032,7 +1010,8 @@ class FluentOverlayScrollbarOpacityLayerTreeHostImplTest
     scrollbar->SetThumbThicknessScaleFactor(thickness);
     auto render_pass = viz::CompositorRenderPass::Create();
     AppendQuadsData append_quads_data;
-    scrollbar->AppendQuads(render_pass.get(), &append_quads_data);
+    scrollbar->AppendQuads(AppendQuadsContext{DRAW_MODE_HARDWARE, {}, false},
+                           render_pass.get(), &append_quads_data);
     if (expected_opacity == 0.f) {
       // If the opacity of the track is expected to be zero, the layer code
       // makes an early return and doesn't append the track's quads.
@@ -3749,7 +3728,8 @@ class IncompleteRecordingLayer : public LayerImpl {
   IncompleteRecordingLayer(LayerTreeImpl* layer_tree_impl, int id)
       : LayerImpl(layer_tree_impl, id) {}
 
-  void AppendQuads(viz::CompositorRenderPass* render_pass,
+  void AppendQuads(const AppendQuadsContext& context,
+                   viz::CompositorRenderPass* render_pass,
                    AppendQuadsData* append_quads_data) override {
     append_quads_data->checkerboarded_needs_record = true;
     append_quads_data->visible_layer_area += 200;
@@ -6531,10 +6511,11 @@ class DidDrawCheckLayer : public LayerImpl {
     return true;
   }
 
-  void AppendQuads(viz::CompositorRenderPass* render_pass,
+  void AppendQuads(const AppendQuadsContext& context,
+                   viz::CompositorRenderPass* render_pass,
                    AppendQuadsData* append_quads_data) override {
     append_quads_called_ = true;
-    LayerImpl::AppendQuads(render_pass, append_quads_data);
+    LayerImpl::AppendQuads(context, render_pass, append_quads_data);
   }
 
   void DidDraw(viz::ClientResourceProvider* provider) override {
@@ -6788,9 +6769,10 @@ class MissingTextureAnimatingLayer : public DidDrawCheckLayer {
         tree_impl, id, tile_missing, had_incomplete_tile, animating, timeline));
   }
 
-  void AppendQuads(viz::CompositorRenderPass* render_pass,
+  void AppendQuads(const AppendQuadsContext& context,
+                   viz::CompositorRenderPass* render_pass,
                    AppendQuadsData* append_quads_data) override {
-    LayerImpl::AppendQuads(render_pass, append_quads_data);
+    LayerImpl::AppendQuads(context, render_pass, append_quads_data);
     if (had_incomplete_tile_) {
       append_quads_data->checkerboarded_needs_raster = true;
     }
@@ -10713,7 +10695,8 @@ class BlendStateCheckLayer : public LayerImpl {
     resource_provider_->RemoveImportedResource(resource_id_);
   }
 
-  void AppendQuads(viz::CompositorRenderPass* render_pass,
+  void AppendQuads(const AppendQuadsContext& context,
+                   viz::CompositorRenderPass* render_pass,
                    AppendQuadsData* append_quads_data) override {
     quads_appended_ = true;
 
@@ -11401,7 +11384,8 @@ class FakeLayerWithQuads : public LayerImpl {
     return base::WrapUnique(new FakeLayerWithQuads(tree_impl, id));
   }
 
-  void AppendQuads(viz::CompositorRenderPass* render_pass,
+  void AppendQuads(const AppendQuadsContext& context,
+                   viz::CompositorRenderPass* render_pass,
                    AppendQuadsData* append_quads_data) override {
     viz::SharedQuadState* shared_quad_state =
         render_pass->CreateAndAppendSharedQuadState();
@@ -11874,14 +11858,8 @@ TEST_P(LayerTreeHostImplTestDrawAndTestDamage,
 class LayerTreeHostImplTestPrepareTiles : public LayerTreeHostImplTest {
  public:
   void SetUp() override {
-    LayerTreeSettings settings = LayerTreeSettings();
-    if (settings.UseLayerContextForDisplay()) {
-      GTEST_SKIP() << "TODO(crbug.com/389147356) TreesInViz: Implement single "
-                      "threaded mode";
-    }
-
     fake_host_impl_ = new FakeLayerTreeHostImpl(
-        settings, &task_runner_provider_, &task_graph_runner_);
+        LayerTreeSettings(), &task_runner_provider_, &task_graph_runner_);
     host_impl_.reset(fake_host_impl_);
     layer_tree_frame_sink_ = CreateLayerTreeFrameSink();
     host_impl_->SetVisible(true);
@@ -12264,12 +12242,7 @@ TEST_P(LayerTreeHostImplTest, SimpleSwapPromiseMonitor) {
 class LayerTreeHostImplWithBrowserControlsTest : public LayerTreeHostImplTest {
  public:
   void SetUp() override {
-    LayerTreeSettings settings = DefaultSettings();
-    if (settings.UseLayerContextForDisplay()) {
-      GTEST_SKIP() << "TODO(crbug.com/389147356) TreesInViz: Implement single "
-                      "threaded mode";
-    }
-    CreateHostImpl(settings, CreateLayerTreeFrameSink());
+    CreateHostImpl(DefaultSettings(), CreateLayerTreeFrameSink());
     host_impl_->active_tree()->SetBrowserControlsParams(
         {static_cast<float>(top_controls_height_), 0, 0, 0, false, false});
     host_impl_->active_tree()->SetCurrentBrowserControlsShownRatio(1.f, 1.f);
@@ -13128,7 +13101,7 @@ TEST_P(LayerTreeHostImplTest, OnMemoryPressure) {
       host_impl_->resource_pool()->GetTotalMemoryUsageForTesting();
   EXPECT_EQ(current_memory_usage, 0u);
 
-  resource.set_gpu_backing(std::make_unique<StubGpuBacking>());
+  resource.set_backing(std::make_unique<ResourcePool::Backing>());
 
   host_impl_->resource_pool()->ReleaseResource(std::move(resource));
 
@@ -15894,7 +15867,7 @@ TEST_P(LayerTreeHostImplCountingLostSurfaces, TwiceLostSurface) {
 
 size_t CountRenderPassesWithId(const viz::CompositorRenderPassList& list,
                                viz::CompositorRenderPassId id) {
-  return base::ranges::count(list, id, &viz::CompositorRenderPass::id);
+  return std::ranges::count(list, id, &viz::CompositorRenderPass::id);
 }
 
 TEST_P(LayerTreeHostImplTest, RemoveUnreferencedRenderPass) {
@@ -17806,11 +17779,6 @@ class UnifiedScrollingTest : public LayerTreeHostImplTest {
   }
 
   void SetUp() override {
-    LayerTreeSettings settings = DefaultSettings();
-    if (settings.UseLayerContextForDisplay()) {
-      GTEST_SKIP() << "TODO(crbug.com/389147356) TreesInViz: Implement single "
-                      "threaded mode";
-    }
     LayerTreeHostImplTest::SetUp();
 
     cur_time_ = base::TimeTicks() + base::Milliseconds(100);
@@ -19163,11 +19131,6 @@ class ConcurrentImplOnlyScrollAnimationsTest : public LayerTreeHostImplTest {
   void SetUp() override {
     scoped_feature_list_.InitAndEnableFeature(
         features::kMultipleImplOnlyScrollAnimations);
-    LayerTreeSettings settings = DefaultSettings();
-    if (settings.UseLayerContextForDisplay()) {
-      GTEST_SKIP() << "TODO(crbug.com/389147356) TreesInViz: Implement single "
-                      "threaded mode";
-    }
     LayerTreeHostImplTest::SetUp();
   }
   gfx::PointF CreateAndTickScrollAnimations();
@@ -19320,11 +19283,6 @@ class ConcurrentSnapAnimationsTest : public LayerTreeHostImplTest {
   void SetUp() override {
     scoped_feature_list_.InitAndEnableFeature(
         features::kMultipleImplOnlyScrollAnimations);
-    LayerTreeSettings settings = DefaultSettings();
-    if (settings.UseLayerContextForDisplay()) {
-      GTEST_SKIP() << "TODO(crbug.com/389147356) TreesInViz: Implement single "
-                      "threaded mode";
-    }
     LayerTreeHostImplTest::SetUp();
     gfx::Size viewport_size(100, 100);
     gfx::Size content_size(100, 5000);

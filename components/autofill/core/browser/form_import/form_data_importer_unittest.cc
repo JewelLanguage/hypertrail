@@ -23,7 +23,6 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/not_fatal_until.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -259,8 +258,8 @@ TypeValuePairs GetDefaultProfileTypeValuePairs() {
 void SetValueForType(TypeValuePairs& pairs,
                      FieldType type,
                      const std::string& value) {
-  auto it = base::ranges::find(pairs, type,
-                               [](const auto& pair) { return pair.first; });
+  auto it = std::ranges::find(pairs, type,
+                              [](const auto& pair) { return pair.first; });
   CHECK(it != pairs.end());
   if (value.empty()) {
     pairs.erase(it);
@@ -421,7 +420,7 @@ std::unique_ptr<FormStructure> ConstructShippingAndBillingFormStructure() {
   TypeValuePairs a = GetDefaultProfileTypeValuePairs();
   TypeValuePairs b = GetSecondProfileTypeValuePairs();
   a.reserve(a.size() + b.size());
-  base::ranges::move(b, std::back_inserter(a));
+  std::ranges::move(b, std::back_inserter(a));
   return ConstructFormStructureFromTypeValuePairs(a);
 }
 
@@ -443,7 +442,7 @@ FormData ConstructDefaultFormDataWithTwoAddresses() {
   TypeValuePairs a = GetDefaultProfileTypeValuePairs();
   TypeValuePairs b = GetSecondProfileTypeValuePairs();
   a.reserve(a.size() + b.size());
-  base::ranges::move(b, std::back_inserter(a));
+  std::ranges::move(b, std::back_inserter(a));
   return ConstructFormDateFromTypeValuePairs(a);
 }
 
@@ -4147,6 +4146,93 @@ TEST_F(FormDataImporterTest_ExtractCreditCardFromForm, PartialFirstLastNames) {
       r.card.GetInfo(FieldType::CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR, kLocale),
       u"12/2020");
   EXPECT_FALSE(r.has_duplicate_credit_card_field_type);
+}
+
+// Test fixture with flag "AutofillRelaxAddressImport" enabled.
+class FormDataImporterTest_RelaxAddressImport : public FormDataImporterTest {
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_{
+      features::kAutofillRelaxAddressImport};
+};
+
+// Tests that duplicate fields with identical field values are valid. They would
+// thus not abandon the import of the address.
+TEST_F(FormDataImporterTest_RelaxAddressImport,
+       DuplicateFieldsWithIdenticalValuesAreValid) {
+  AutofillField field;
+  field.SetTypeTo(AutofillType(NAME_FIRST));
+  field.set_value(u"First");
+  AutofillField field2;
+  field2.SetTypeTo(AutofillType(NAME_FIRST));
+  field2.set_value(u"First");
+  EXPECT_FALSE(test_api(form_data_importer())
+                   .HasInvalidFieldTypes(
+                       std::to_array<const AutofillField*>({&field, &field2})));
+}
+
+// Tests that duplicate fields with different field values are invalid. They
+// would thus abandon the import of the address.
+TEST_F(FormDataImporterTest_RelaxAddressImport,
+       DuplicateFieldsWithDifferentValuesAreInvalid) {
+  AutofillField field;
+  field.SetTypeTo(AutofillType(NAME_FIRST));
+  field.set_value(u"First");
+  AutofillField field2;
+  field2.SetTypeTo(AutofillType(NAME_FIRST));
+  field2.set_value(u"Other value");
+  EXPECT_TRUE(test_api(form_data_importer())
+                  .HasInvalidFieldTypes(
+                      std::to_array<const AutofillField*>({&field, &field2})));
+}
+
+// Tests that duplicate fields with identical field values are valid for the
+// case where a <select> field follows an <input> field and the input field's
+// value is the selected option's value. They would thus not abandon the import
+// of the address.
+TEST_F(FormDataImporterTest_RelaxAddressImport,
+       InputFollowedBySelectWithIdenticalValuesAreValid) {
+  AutofillField field;
+  field.SetTypeTo(AutofillType(ADDRESS_HOME_COUNTRY));
+  field.set_value(u"US");
+  AutofillField field2(
+      test::CreateTestSelectField("Country", "country", "US", "country",
+                                  {"DE", "US"}, {"Germany", "United States"}));
+  field2.SetTypeTo(AutofillType(ADDRESS_HOME_COUNTRY));
+  const std::array<const autofill::AutofillField*, 2> section_fields =
+      std::to_array<const AutofillField*>({&field, &field2});
+
+  EXPECT_FALSE(
+      test_api(form_data_importer()).HasInvalidFieldTypes(section_fields));
+  EXPECT_THAT(
+      test_api(form_data_importer()).GetObservedFieldValues(section_fields),
+      ::testing::ElementsAre(
+          ::testing::Pair(::testing::Eq(ADDRESS_HOME_COUNTRY),
+                          ::testing::Eq(u"United States"))));
+}
+
+// Tests that duplicate fields with identical field values are valid for the
+// case where a <select> field is followed by an <input> field and the input
+// field's value is the selected option's value. They would thus not abandon the
+// import of the address.
+TEST_F(FormDataImporterTest_RelaxAddressImport,
+       SelectFollowedByInputWithIdenticalValuesAreValid) {
+  AutofillField field(
+      test::CreateTestSelectField("Country", "country", "US", "country",
+                                  {"DE", "US"}, {"Germany", "United States"}));
+  field.SetTypeTo(AutofillType(ADDRESS_HOME_COUNTRY));
+  AutofillField field2;
+  field2.SetTypeTo(AutofillType(ADDRESS_HOME_COUNTRY));
+  field2.set_value(u"US");
+  const std::array<const autofill::AutofillField*, 2> section_fields =
+      std::to_array<const AutofillField*>({&field, &field2});
+
+  EXPECT_FALSE(
+      test_api(form_data_importer()).HasInvalidFieldTypes(section_fields));
+  EXPECT_THAT(
+      test_api(form_data_importer()).GetObservedFieldValues(section_fields),
+      ::testing::ElementsAre(
+          ::testing::Pair(::testing::Eq(ADDRESS_HOME_COUNTRY),
+                          ::testing::Eq(u"United States"))));
 }
 
 }  // namespace

@@ -16,11 +16,10 @@
 #include <utility>
 
 #include "base/check.h"
-#include "base/cpu_reduction_experiment.h"
 #include "base/debug/alias.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
+#include "base/rand_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
@@ -86,7 +85,7 @@ static_assert(std::size(kReportTypeNames) == kFrameReportTypeCount,
 
 // This value should be recalculated in case of changes to the number of values
 // in CompositorFrameReporter::DroppedFrameReportType or in
-// CompositorFrameReporter::StageType
+// CompositorFrameReporter::StageType.
 constexpr int kStagesWithBreakdownCount = kStageTypeCount + kAllBreakdownCount;
 constexpr int kMaxCompositorLatencyHistogramIndex =
     kFrameReportTypeCount *
@@ -192,15 +191,6 @@ void ReportEventLatencyMetric(
             kEventLatencyHistogramBucketCount,
             base::HistogramBase::kUmaTargetedHistogramFlag));
   }
-}
-
-constexpr char kTraceCategory[] =
-    "cc,benchmark," TRACE_DISABLED_BY_DEFAULT("devtools.timeline.frame");
-
-bool IsTracingEnabled() {
-  bool enabled;
-  TRACE_EVENT_CATEGORY_GROUP_ENABLED(kTraceCategory, &enabled);
-  return enabled;
 }
 
 base::TimeTicks ComputeSafeDeadlineForFrame(const viz::BeginFrameArgs& args) {
@@ -362,7 +352,7 @@ void ReportTopControlsMetric(
         base::Histogram::FactoryMicrosecondsTimeGet(
             versioned_name, bucketing->min, bucketing->max, bucketing->count,
             base::HistogramBase::kUmaTargetedHistogramFlag));
-  } else if (base::ShouldLogHistogramForCpuReductionExperiment()) {
+  } else if (base::ShouldRecordSubsampledMetric(0.001)) {
     // We want to sub-sample the reports with top controls not moving. As they
     // dominate in volume.
     std::string versioned_name = name + kTopControlsDidNotMoveName;
@@ -1017,8 +1007,8 @@ void CompositorFrameReporter::EndCurrentStage(base::TimeTicks end_time) {
 }
 
 void CompositorFrameReporter::ReportCompositorLatencyMetrics() const {
-  // Subsampling these metrics reduced CPU utilization (crbug.com/1295441).
-  if (!base::ShouldLogHistogramForCpuReductionExperiment()) {
+  // Subsampling these metrics to reduce CPU utilization.
+  if (!base::ShouldRecordSubsampledMetric(0.001)) {
     return;
   }
 
@@ -1464,7 +1454,11 @@ void CompositorFrameReporter::ReportCompositorLatencyTraceEvents(
         has_partial_update_);
   }
 
-  if (!IsTracingEnabled()) {
+  static constexpr char kTraceCategory[] =
+      "cc,benchmark," TRACE_DISABLED_BY_DEFAULT("devtools.timeline.frame");
+  bool enabled;
+  TRACE_EVENT_CATEGORY_GROUP_ENABLED(kTraceCategory, &enabled);
+  if (!enabled) {
     return;
   }
 
@@ -1544,6 +1538,13 @@ void CompositorFrameReporter::ReportCompositorLatencyTraceEvents(
 
         for (auto stage : high_latency_substages_) {
           reporter->add_high_latency_contribution_stage(stage);
+        }
+
+        reporter->set_surface_frame_trace_id(args_.trace_id);
+        const std::optional<int64_t>& display_trace_id =
+            viz_breakdown_.presentation_feedback.display_trace_id;
+        if (display_trace_id) {
+          reporter->set_display_trace_id(*display_trace_id);
         }
 
         // TODO(crbug.com/40132773): Set 'drop reason' if applicable.
@@ -1752,8 +1753,9 @@ void CompositorFrameReporter::ReportPaintMetric() const {
 void CompositorFrameReporter::ReportEventLatencyTraceEvents() const {
   for (const auto& event_metrics : events_metrics_) {
     EventLatencyTracingRecorder::RecordEventLatencyTraceEvent(
-        event_metrics.get(), frame_termination_time_, args_.interval,
-        &stage_history_, processed_viz_breakdown_.get());
+        event_metrics.get(), frame_termination_time_, &args_, &stage_history_,
+        processed_viz_breakdown_.get(),
+        viz_breakdown_.presentation_feedback.display_trace_id);
   }
 }
 
@@ -1916,7 +1918,7 @@ void CompositorFrameReporter::CalculateEventLatencyPrediction(
   // TODO(crbug.com/40228308): Explore calculating predictions for multiple
   // events. Currently only kGestureScrollUpdate event predictions
   // are being calculated, consider including other stages in future changes.
-  auto event_it = base::ranges::find_if(
+  auto event_it = std::ranges::find_if(
       events_metrics_, [](const std::unique_ptr<EventMetrics>& event) {
         return event &&
                event->type() == EventMetrics::EventType::kGestureScrollUpdate;
@@ -1979,9 +1981,9 @@ void CompositorFrameReporter::CalculateEventLatencyPrediction(
   }
 
   // Determine dispatch-to-compositor transition stage duration.
-  auto stage_it = base::ranges::lower_bound(
-      stage_history_, dispatch_end_time, {},
-      &CompositorFrameReporter::StageData::start_time);
+  auto stage_it =
+      std::ranges::lower_bound(stage_history_, dispatch_end_time, {},
+                               &CompositorFrameReporter::StageData::start_time);
   if (stage_it != stage_history_.end()) {
     if (dispatch_end_time < stage_it->start_time) {
       base::TimeDelta stage_duration = stage_it->start_time - dispatch_end_time;

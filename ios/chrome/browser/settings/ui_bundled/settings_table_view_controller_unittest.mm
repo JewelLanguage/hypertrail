@@ -199,7 +199,7 @@ class SettingsTableViewControllerTest
             GetApplicationContext()->GetSystemIdentityManager());
     system_identity_manager->AddIdentity(fake_identity_);
     auth_service_->SignIn(fake_identity_,
-                          signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+                          signin_metrics::AccessPoint::kUnknown);
 
     // Make sure there is no pre-existing policy present.
     [[NSUserDefaults standardUserDefaults]
@@ -247,17 +247,6 @@ class SettingsTableViewControllerTest
     controller.snackbarHandler =
         HandlerForProtocol(dispatcher, SnackbarCommands);
     return controller;
-  }
-
-  void SetupSyncServiceEnabledExpectations() {
-    ON_CALL(*sync_service_mock_, GetTransportState())
-        .WillByDefault(Return(syncer::SyncService::TransportState::ACTIVE));
-    ON_CALL(*sync_service_mock_->GetMockUserSettings(),
-            IsInitialSyncFeatureSetupComplete())
-        .WillByDefault(Return(true));
-    ON_CALL(*sync_service_mock_->GetMockUserSettings(), GetSelectedTypes())
-        .WillByDefault(Return(syncer::UserSelectableTypeSet::All()));
-    ON_CALL(*sync_service_mock_, HasSyncConsent()).WillByDefault(Return(true));
   }
 
   void AddSigninDisabledEnterprisePolicy() {
@@ -312,100 +301,6 @@ class SettingsTableViewControllerTest
   id<PopupMenuCommands> mock_popup_menu_handler_;
 };
 
-// Verifies that the Sync icon displays the on state when the user has turned
-// on sync during sign-in.
-TEST_F(SettingsTableViewControllerTest, SyncOn) {
-  SetupSyncServiceEnabledExpectations();
-  auth_service_->SignIn(fake_identity_,
-                        signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
-
-  CreateController();
-  CheckController();
-
-  NSArray* account_items = [controller().tableViewModel
-      itemsInSectionWithIdentifier:SettingsSectionIdentifier::
-                                       SettingsSectionIdentifierAccount];
-  ASSERT_EQ(3U, account_items.count);
-
-  TableViewDetailIconItem* sync_item =
-      static_cast<TableViewDetailIconItem*>(account_items[1]);
-  ASSERT_NSEQ(sync_item.text,
-              l10n_util::GetNSString(IDS_IOS_GOOGLE_SYNC_SETTINGS_TITLE));
-  ASSERT_NSEQ(l10n_util::GetNSString(IDS_IOS_SETTING_ON), sync_item.detailText);
-  ASSERT_EQ(UILayoutConstraintAxisHorizontal,
-            sync_item.textLayoutConstraintAxis);
-}
-
-// Verifies that the Sync icon displays the sync password error when the user
-// has turned on sync during sign-in, but not entered an existing encryption
-// password.
-TEST_F(SettingsTableViewControllerTest, SyncPasswordError) {
-  SetupSyncServiceEnabledExpectations();
-  // Set missing password error in Sync service.
-  ON_CALL(*sync_service_mock_, GetUserActionableError())
-      .WillByDefault(
-          Return(syncer::SyncService::UserActionableError::kNeedsPassphrase));
-  auth_service_->SignIn(fake_identity_,
-                        signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
-
-  CreateController();
-  CheckController();
-
-  NSArray* account_items = [controller().tableViewModel
-      itemsInSectionWithIdentifier:SettingsSectionIdentifier::
-                                       SettingsSectionIdentifierAccount];
-  ASSERT_EQ(3U, account_items.count);
-
-  TableViewDetailIconItem* sync_item =
-      static_cast<TableViewDetailIconItem*>(account_items[1]);
-  ASSERT_NSEQ(sync_item.text,
-              l10n_util::GetNSString(IDS_IOS_GOOGLE_SYNC_SETTINGS_TITLE));
-  ASSERT_NSEQ(sync_item.detailText,
-              l10n_util::GetNSString(IDS_IOS_SYNC_ENCRYPTION_DESCRIPTION));
-  ASSERT_EQ(UILayoutConstraintAxisVertical, sync_item.textLayoutConstraintAxis);
-
-  // Verify that the account item does not hold the error when done through the
-  // sync item.
-  TableViewAccountItem* identityAccountItem =
-      base::apple::ObjCCast<TableViewAccountItem>(account_items[0]);
-  EXPECT_FALSE(identityAccountItem.shouldDisplayError);
-
-  // Check that there is no sign-in promo when there is a sync error.
-  ASSERT_FALSE([controller().tableViewModel
-      hasSectionForSectionIdentifier:SettingsSectionIdentifier::
-                                         SettingsSectionIdentifierSignIn]);
-}
-
-// Verifies that the Sync icon displays the off state (and no detail text) when
-// the user has completed the sign-in and sync flow then explicitly turned off
-// all data types in the Sync settings.
-// This case can only happen for pre-MICE users who migrated with MICE.
-TEST_F(SettingsTableViewControllerTest,
-       DisablesAllSyncSettingsAfterFirstSetup) {
-  ON_CALL(*sync_service_mock_->GetMockUserSettings(), GetSelectedTypes())
-      .WillByDefault(Return(syncer::UserSelectableTypeSet()));
-  ON_CALL(*sync_service_mock_->GetMockUserSettings(),
-          IsInitialSyncFeatureSetupComplete())
-      .WillByDefault(Return(true));
-  ON_CALL(*sync_service_mock_, HasSyncConsent()).WillByDefault(Return(true));
-  auth_service_->SignIn(fake_identity_,
-                        signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
-
-  CreateController();
-  CheckController();
-
-  NSArray* account_items = [controller().tableViewModel
-      itemsInSectionWithIdentifier:SettingsSectionIdentifier::
-                                       SettingsSectionIdentifierAccount];
-  ASSERT_EQ(3U, account_items.count);
-
-  TableViewDetailIconItem* sync_item =
-      static_cast<TableViewDetailIconItem*>(account_items[1]);
-  ASSERT_NSEQ(l10n_util::GetNSString(IDS_IOS_GOOGLE_SYNC_SETTINGS_TITLE),
-              sync_item.text);
-  ASSERT_EQ(nil, sync_item.detailText);
-}
-
 // Verifies that the sign-in setting row is removed if sign-in is disabled
 // through the "Allow Chrome Sign-in" option.
 TEST_F(SettingsTableViewControllerTest, SigninDisabled) {
@@ -424,8 +319,7 @@ TEST_F(SettingsTableViewControllerTest, AccountSectionIfSignedInNonSyncing) {
   ON_CALL(*sync_service_mock_->GetMockUserSettings(),
           IsInitialSyncFeatureSetupComplete())
       .WillByDefault(Return(false));
-  auth_service_->SignIn(fake_identity_,
-                        signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+  auth_service_->SignIn(fake_identity_, signin_metrics::AccessPoint::kUnknown);
 
   CreateController();
   CheckController();
@@ -475,8 +369,7 @@ TEST_F(SettingsTableViewControllerTest, HoldAccountStorageErrorWhenEligible) {
       .WillByDefault(
           Return(syncer::SyncService::UserActionableError::kNeedsPassphrase));
 
-  auth_service_->SignIn(fake_identity_,
-                        signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+  auth_service_->SignIn(fake_identity_, signin_metrics::AccessPoint::kUnknown);
 
   CreateController();
   CheckController();
@@ -500,8 +393,7 @@ TEST_F(SettingsTableViewControllerTest, ClearAccountStorageErrorWhenResolved) {
       .WillByDefault(
           Return(syncer::SyncService::UserActionableError::kNeedsPassphrase));
 
-  auth_service_->SignIn(fake_identity_,
-                        signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+  auth_service_->SignIn(fake_identity_, signin_metrics::AccessPoint::kUnknown);
 
   CreateController();
   CheckController();
@@ -533,35 +425,6 @@ TEST_F(SettingsTableViewControllerTest, ClearAccountStorageErrorWhenResolved) {
   EXPECT_FALSE(identityAccountItem.shouldDisplayError);
 }
 
-// Verifies that when ineligible the account item model doesn't hold the Account
-// Storage error.
-TEST_F(SettingsTableViewControllerTest, DontHoldAccountErrorWhenIneligible) {
-  // Enable Sync to make the account item ineligible to indicate errors.
-  SetupSyncServiceEnabledExpectations();
-
-  // Set account error that would be in the model when eligible.
-  ON_CALL(*sync_service_mock_, GetUserActionableError())
-      .WillByDefault(
-          Return(syncer::SyncService::UserActionableError::kNeedsPassphrase));
-
-  auth_service_->SignIn(fake_identity_,
-                        signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
-
-  CreateController();
-  CheckController();
-
-  NSArray* account_items = [controller().tableViewModel
-      itemsInSectionWithIdentifier:SettingsSectionIdentifier::
-                                       SettingsSectionIdentifierAccount];
-  ASSERT_EQ(3U, account_items.count);
-
-  // Verify that the account item is not in an error state.
-  TableViewAccountItem* identityAccountItem =
-      base::apple::ObjCCast<TableViewAccountItem>(account_items[0]);
-  ASSERT_TRUE(identityAccountItem != nil);
-  EXPECT_FALSE(identityAccountItem.shouldDisplayError);
-}
-
 // Verifies that when eligible the account item model doesn't have the Account
 // Storage error when there is no error.
 TEST_F(SettingsTableViewControllerTest, DontHoldAccountErrorWhenNoError) {
@@ -569,8 +432,7 @@ TEST_F(SettingsTableViewControllerTest, DontHoldAccountErrorWhenNoError) {
   ON_CALL(*sync_service_mock_, GetUserActionableError())
       .WillByDefault(Return(syncer::SyncService::UserActionableError::kNone));
 
-  auth_service_->SignIn(fake_identity_,
-                        signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+  auth_service_->SignIn(fake_identity_, signin_metrics::AccessPoint::kUnknown);
 
   CreateController();
   CheckController();

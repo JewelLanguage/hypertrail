@@ -342,23 +342,6 @@ Current expiration date for histograms owned by cros-families-eng@google.com:
   </summary>
 </histogram>
 
-<histogram
-    name="FamilyLinkUser.BlockedSiteVerifyItsYouInterstitialSigninTab.{TabState}Count"
-    units="Number of tabs" expires_after="2025-02-10">
-  <owner>anthie@google.com</owner>
-  <owner>chrome-kids-eng@google.com</owner>
-  <summary>
-    Records the number of spawned sign-in tabs that the blocked site
-    re-authentication interstitial {TabState}. The re-authentication
-    interstitial will close the sign-in tab, unless the user has used to this
-    tab to navigate to a new url.
-  </summary>
-  <token key="TabState">
-    <variant name="Closed" summary="closes"/>
-    <variant name="SkippedClosing" summary="leaves open"/>
-  </token>
-</histogram>
-
 <histogram name="FamilyLinkUser.BlockedSiteVerifyItsYouInterstitialState"
     enum="FamilyLinkUserReauthenticationInterstitialState"
     expires_after="2025-06-08">
@@ -460,7 +443,8 @@ Current expiration date for histograms owned by cros-families-eng@google.com:
 </histogram>
 
 <histogram name="FamilyLinkUser.SubframeYoutubeReauthenticationInterstitial"
-    enum="FamilyLinkUserLocalWebApprovalResult" expires_after="2025-03-09">
+    enum="FamilyLinkUserReauthenticationInterstitialState"
+    expires_after="2025-03-09">
   <owner>anthie@google.com</owner>
   <owner>ljjlee@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
@@ -663,7 +647,7 @@ Current expiration date for histograms owned by cros-families-eng@google.com:
 </histogram>
 
 <histogram name="FamilyUser.WebFilterType.PerRecord"
-    enum="FamilyLinkWebFilterType" expires_after="2025-06-08">
+    enum="FamilyLinkWebFilterType" expires_after="2025-08-10">
   <owner>fernandex@chromium.org</owner>
   <owner>agawronska@chromium.org</owner>
   <owner>chrome-kids-eng@google.com</owner>
@@ -827,7 +811,7 @@ Current expiration date for histograms owned by cros-families-eng@google.com:
 </histogram>
 
 <histogram name="SupervisedUsers.ClassifyUrlThrottle.FinalStatus"
-    enum="ClassifyUrlThrottleFinalStatus" expires_after="2025-05-04">
+    enum="ClassifyUrlThrottleFinalStatus" expires_after="2025-07-27">
   <owner>tju@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
   <summary>
@@ -1143,7 +1127,7 @@ Current expiration date for histograms owned by cros-families-eng@google.com:
   <token key="RequestType" variants="ProtoFetcherRequestType"/>
 </histogram>
 
-<histogram name="{RequestType}.Latency" units="ms" expires_after="2025-06-08">
+<histogram name="{RequestType}.Latency" units="ms" expires_after="2025-08-10">
   <owner>tju@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
   <summary>
@@ -1157,7 +1141,7 @@ Current expiration date for histograms owned by cros-families-eng@google.com:
 </histogram>
 
 <histogram name="{RequestType}.Status" enum="SupervisedUserProtoFetcherStatus"
-    expires_after="2025-06-08">
+    expires_after="2025-08-10">
   <owner>tju@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
   <summary>The status of the fetch in calls to {RequestType}.</summary>

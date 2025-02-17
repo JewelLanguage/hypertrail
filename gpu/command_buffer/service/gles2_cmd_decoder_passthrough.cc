@@ -9,6 +9,7 @@
 
 #include "gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -17,7 +18,6 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_split.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -35,6 +35,7 @@
 #include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
 #include "gpu/config/gpu_finch_features.h"
+#include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_utils.h"
 #include "ui/gl/gl_version_info.h"
 #include "ui/gl/gpu_switching_manager.h"
@@ -799,6 +800,9 @@ gpu::ContextResult GLES2DecoderPassthroughImpl::Initialize(
     const DisallowedFeatures& disallowed_features,
     const ContextCreationAttribs& attrib_helper) {
   TRACE_EVENT0("gpu", "GLES2DecoderPassthroughImpl::Initialize");
+  CHECK(gl::GetGLImplementation() == gl::kGLImplementationEGLANGLE)
+      << "Running WebGL through passthrough command decoder without ANGLE's "
+      << "validation is a security risk";
   DCHECK(context->IsCurrent(surface.get()));
   api_ = gl::g_current_gl_context;
   // Take ownership of the context and surface. The surface can be replaced
@@ -1408,7 +1412,7 @@ gpu::Capabilities GLES2DecoderPassthroughImpl::GetCapabilities() {
   caps.angle_rgbx_internal_format =
       feature_info_->feature_flags().angle_rgbx_internal_format;
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   PopulateDRMCapabilities(&caps, feature_info_.get());
 #endif
 
@@ -2211,7 +2215,7 @@ bool GLES2DecoderPassthroughImpl::IsEmulatedQueryTarget(GLenum target) const {
 }
 
 bool GLES2DecoderPassthroughImpl::OnlyHasPendingProgramCompletionQueries() {
-  return base::ranges::all_of(pending_queries_, [](const auto& query) {
+  return std::ranges::all_of(pending_queries_, [](const auto& query) {
     return query.target == GL_PROGRAM_COMPLETION_QUERY_CHROMIUM;
   });
 }
@@ -2401,8 +2405,8 @@ error::Error GLES2DecoderPassthroughImpl::ProcessQueries(bool did_finish) {
 }
 
 void GLES2DecoderPassthroughImpl::RemovePendingQuery(GLuint service_id) {
-  auto pending_iter = base::ranges::find(pending_queries_, service_id,
-                                         &PendingQuery::service_id);
+  auto pending_iter = std::ranges::find(pending_queries_, service_id,
+                                        &PendingQuery::service_id);
   if (pending_iter != pending_queries_.end()) {
     QuerySync* sync = pending_iter->sync;
     sync->result = 0;

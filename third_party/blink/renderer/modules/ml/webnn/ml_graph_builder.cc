@@ -11,12 +11,12 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/notimplemented.h"
 #include "base/numerics/checked_math.h"
-#include "base/ranges/algorithm.h"
 #include "base/types/expected.h"
 #include "base/types/expected_macros.h"
 #include "base/types/pass_key.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "services/webnn/public/cpp/operand_descriptor.h"
+#include "services/webnn/public/cpp/supported_tensors.h"
 #include "services/webnn/public/cpp/webnn_errors.h"
 #include "services/webnn/public/cpp/webnn_trace.h"
 #include "services/webnn/public/mojom/features.mojom-blink.h"
@@ -968,20 +968,19 @@ MLOperand* BuildElementWiseBinary(
   return output;
 }
 
-MLOperand* BuildUnaryOperator(
-    MLGraphBuilder* builder,
-    ExceptionState& exception_state,
-    blink_mojom::Operation::Tag kind,
-    const webnn::SupportedDataTypes& data_type_constraint,
-    MLOperand* input,
-    const MLOperatorOptions* options) {
+MLOperand* BuildUnaryOperator(MLGraphBuilder* builder,
+                              ExceptionState& exception_state,
+                              blink_mojom::Operation::Tag kind,
+                              const webnn::SupportedTensors& tensor_constraint,
+                              MLOperand* input,
+                              const MLOperatorOptions* options) {
   // The output tensor of unary operator has the same data type and dimensions
   // as its input tensor.
-  if (!data_type_constraint.Has(input->DataType())) {
+  if (!tensor_constraint.Supports(input->Descriptor())) {
     exception_state.ThrowTypeError(
         String::FromUTF8(webnn::GetErrorLabelPrefix(options->label().Utf8())) +
-        String(NotSupportedInputArgumentTypeError(input->DataType(),
-                                                  data_type_constraint)));
+        String(NotSupportedInputArgumentError(input->Descriptor(),
+                                              tensor_constraint)));
     return nullptr;
   }
 
@@ -997,15 +996,15 @@ MLOperand* BuildElementWiseUnaryOperator(
     MLGraphBuilder* builder,
     ExceptionState& exception_state,
     blink_mojom::ElementWiseUnary::Kind kind,
-    const webnn::SupportedDataTypes& data_type_constraint,
+    const webnn::SupportedTensors& tensor_constraint,
     MLOperand* input,
     const MLOperatorOptions* options) {
   const std::string label = options->label().Utf8();
-  if (!data_type_constraint.Has(input->DataType())) {
+  if (!tensor_constraint.Supports(input->Descriptor())) {
     exception_state.ThrowTypeError(
         String::FromUTF8(webnn::GetErrorLabelPrefix(options->label().Utf8())) +
-        String(NotSupportedInputArgumentTypeError(input->DataType(),
-                                                  data_type_constraint)));
+        String(webnn::NotSupportedInputArgumentError(input->Descriptor(),
+                                                     tensor_constraint)));
     return nullptr;
   }
 
@@ -1538,7 +1537,7 @@ void FoldReshapableConstants(blink_mojom::GraphInfo& graph_info) {
     // For each constant operand, keep walking down the dependencies until no
     // reshape is found.
     while (true) {
-      auto reshape_operation_it = base::ranges::find_if(
+      auto reshape_operation_it = std::ranges::find_if(
           graph_info.operations,
           [&constant_operand_id](const blink_mojom::OperationPtr& operation) {
             return operation->is_reshape() &&
@@ -1556,7 +1555,7 @@ void FoldReshapableConstants(blink_mojom::GraphInfo& graph_info) {
       //
       // TODO(crbug.com/364348897): Consider handling the case where a constant
       // operand is reshaped by multiple identical reshape operators.
-      if (base::ranges::count_if(
+      if (std::ranges::count_if(
               graph_info.operations,
               [&constant_operand_id](
                   const blink_mojom::OperationPtr& operation) {
@@ -1799,9 +1798,8 @@ MLOperand* MLGraphBuilder::concat(const HeapVector<Member<MLOperand>>& inputs,
 
   std::vector<webnn::OperandDescriptor> input_component_operands;
   input_component_operands.reserve(inputs.size());
-  base::ranges::transform(
-      inputs, std::back_inserter(input_component_operands),
-      [](const auto& input) { return input->Descriptor(); });
+  std::ranges::transform(inputs, std::back_inserter(input_component_operands),
+                         [](const auto& input) { return input->Descriptor(); });
 
   const std::string label = options->label().Utf8();
   ASSIGN_OR_THROW_AND_RETURN_IF_ERROR(
@@ -2014,12 +2012,12 @@ MLOperand* MLGraphBuilder::cast(MLOperand* input,
 
   const std::string label = options->label().Utf8();
 
-  if (!ml_context_->GetProperties().data_type_limits.cast_input.Has(
-          input->DataType())) {
+  if (!ml_context_->GetProperties().data_type_limits.cast_input.Supports(
+          input->Descriptor())) {
     exception_state.ThrowTypeError(
         String::FromUTF8(webnn::GetErrorLabelPrefix(label)) +
-        String(NotSupportedInputArgumentTypeError(
-            input->DataType(),
+        String(NotSupportedInputArgumentError(
+            input->Descriptor(),
             ml_context_->GetProperties().data_type_limits.cast_input)));
     return nullptr;
   }
@@ -2027,13 +2025,13 @@ MLOperand* MLGraphBuilder::cast(MLOperand* input,
   const webnn::OperandDataType cast_data_type =
       FromBlinkDataType(output_data_type.AsEnum());
 
-  if (!ml_context_->GetProperties().data_type_limits.cast_input.Has(
+  if (!ml_context_->GetProperties().data_type_limits.cast_input.data_types.Has(
           cast_data_type)) {
     exception_state.ThrowTypeError(
         String::FromUTF8(webnn::GetErrorLabelPrefix(label)) +
         String(NotSupportedOpOutputTypeError(
-            cast_data_type,
-            ml_context_->GetProperties().data_type_limits.cast_input)));
+            cast_data_type, ml_context_->GetProperties()
+                                .data_type_limits.cast_input.data_types)));
     return nullptr;
   }
 
@@ -2122,13 +2120,13 @@ MLOperand* MLGraphBuilder::expand(MLOperand* input,
 
   const std::string label = options->label().Utf8();
 
-  const webnn::SupportedDataTypes& data_type_constraint =
+  const webnn::SupportedTensors& tensor_constraint =
       ml_context_->GetProperties().data_type_limits.expand_input;
-  if (!data_type_constraint.Has(input->DataType())) {
+  if (!tensor_constraint.Supports(input->Descriptor())) {
     exception_state.ThrowTypeError(
         String::FromUTF8(webnn::GetErrorLabelPrefix(options->label().Utf8())) +
-        String(NotSupportedInputArgumentTypeError(input->DataType(),
-                                                  data_type_constraint)));
+        String(NotSupportedInputArgumentError(input->Descriptor(),
+                                              tensor_constraint)));
     return nullptr;
   }
 
@@ -2140,7 +2138,7 @@ MLOperand* MLGraphBuilder::expand(MLOperand* input,
         "The input shape is not broadcastable to the new shape.");
     return nullptr;
   }
-  CHECK(base::ranges::equal(*output_shape, new_shape));
+  CHECK(std::ranges::equal(*output_shape, new_shape));
 
   ASSIGN_OR_THROW_AND_RETURN_IF_ERROR(
       webnn::OperandDescriptor output_descriptor,
@@ -2799,12 +2797,12 @@ MLOperand* MLGraphBuilder::reshape(MLOperand* input,
 
   const std::string label = options->label().Utf8();
 
-  if (!ml_context_->GetProperties().data_type_limits.reshape_input.Has(
-          input->DataType())) {
+  if (!ml_context_->GetProperties().data_type_limits.reshape_input.Supports(
+          input->Descriptor())) {
     exception_state.ThrowTypeError(
         String::FromUTF8(webnn::GetErrorLabelPrefix(label)) +
-        String(NotSupportedInputArgumentTypeError(
-            input->DataType(),
+        String(NotSupportedInputArgumentError(
+            input->Descriptor(),
             ml_context_->GetProperties().data_type_limits.reshape_input)));
     return nullptr;
   }
@@ -3274,7 +3272,7 @@ ScriptPromise<MLGraph> MLGraphBuilder::build(
   }
 
   HeapVector<Member<MLOperand>> outputs(named_outputs.size());
-  base::ranges::transform(
+  std::ranges::transform(
       named_outputs, outputs.begin(),
       [](const auto& named_output) { return named_output.second; });
   THROW_AND_RETURN_TYPE_IF_ERROR(ValidateInputs(outputs),

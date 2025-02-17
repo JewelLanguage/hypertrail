@@ -161,6 +161,10 @@ class FrameNodeImpl
                              bool same_document,
                              bool is_served_from_back_forward_cache);
 
+  // Traverses the frame tree and notifies all frames that their embedding
+  // primary page is about to be discarded.
+  void OnPrimaryPageAboutToBeDiscarded();
+
   // Invoked by |worker_node| when it starts/stops being a child of this frame.
   void AddChildWorker(WorkerNodeImpl* worker_node);
   void RemoveChildWorker(WorkerNodeImpl* worker_node);
@@ -168,7 +172,6 @@ class FrameNodeImpl
   // Invoked to set the frame priority, and the reason behind it.
   void SetPriorityAndReason(const PriorityAndReason& priority_and_reason);
 
-  base::WeakPtr<FrameNodeImpl> GetWeakPtrOnUIThread();
   base::WeakPtr<FrameNodeImpl> GetWeakPtr();
 
   void SeverPageRelationshipsAndMaybeReparentForTesting() {
@@ -440,7 +443,6 @@ class FrameNodeImpl
   // true, frame visibility updates are ignored.
   bool has_viewport_intersection_updates_ = false;
 
-  base::WeakPtr<FrameNodeImpl> weak_this_;
   base::WeakPtrFactory<FrameNodeImpl> weak_factory_
       GUARDED_BY_CONTEXT(sequence_checker_){this};
 };

@@ -7,7 +7,6 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "gpu/config/gpu_switches.h"
 #include "ui/gl/gl_features.h"
 #include "ui/gl/gl_surface_egl.h"
@@ -17,11 +16,11 @@
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/android_image_reader_compat.h"
 #include "base/android/build_info.h"
-#include "base/android/sys_utils.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "base/system/sys_info.h"
 #include "ui/gfx/android/android_surface_control_compat.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
@@ -272,6 +271,10 @@ BASE_FEATURE(kWebGPUUseTintIR,
 #endif
 );
 
+BASE_FEATURE(kWebGPUUseVulkanMemoryModel,
+             "WebGPUUseVulkanMemoryModel",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 #if BUILDFLAG(IS_ANDROID)
 
 const base::FeatureParam<std::string> kVulkanBlockListByHardware{
@@ -348,7 +351,11 @@ BASE_FEATURE(kSharedImageSupportScanoutOnOzoneOnlyIfOverlaysSupported,
 // --enable-skia-graphite & --disable-skia-graphite.
 BASE_FEATURE(kSkiaGraphite,
              "SkiaGraphite",
+#if BUILDFLAG(IS_MAC) && defined(ARCH_CPU_ARM64)
+             base::FEATURE_ENABLED_BY_DEFAULT
+#else
              base::FEATURE_DISABLED_BY_DEFAULT
+#endif
 );
 
 // Enable Skia Graphite's Pipeline precompilation feature.
@@ -379,6 +386,13 @@ const base::FeatureParam<bool> kSkiaGraphiteDawnSkipValidation{
 const base::FeatureParam<bool> kSkiaGraphiteDawnBackendValidation{
     &kSkiaGraphite, "dawn_backend_validation", false};
 
+// Whether Dawn backend debug labels are enabled for Skia Graphite.
+// Only enable backend labels by default on Windows or DCHECK builds on other
+// platforms since it can have non-trivial performance overhead e.g. with Metal.
+const base::FeatureParam<bool> kSkiaGraphiteDawnBackendDebugLabels{
+    &kSkiaGraphite, "dawn_backend_debug_labels",
+    BUILDFLAG(IS_WIN) || DCHECK_IS_ON()};
+
 #if BUILDFLAG(IS_WIN)
 BASE_FEATURE(kSkiaGraphiteDawnUseD3D12,
              "SkiaGraphiteDawnUseD3D12",
@@ -394,10 +408,6 @@ BASE_FEATURE(kSkiaGraphiteDawnUseD3D12,
 BASE_FEATURE(kExoBufferAddScanoutUsageOnlyIfSupportedBySharedImage,
              "ExoBufferAddScanoutUsageOnlyIfSupportedBySharedImage",
              base::FEATURE_ENABLED_BY_DEFAULT);
-BASE_FEATURE(
-    kCameraVideoFrameHandlerAddScanoutUsageOnlyIfSupportedBySharedImage,
-    "CameraVideoFrameHandlerAddScanoutUsageOnlyIfSupportedBySharedImage",
-    base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kFastInkHostAddScanoutUsageOnlyIfSupportedBySharedImage,
              "FastInkHostAddScanoutUsageOnlyIfSupportedBySharedImage",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -670,9 +680,20 @@ bool IsSkiaGraphiteSupportedByDevice(const base::CommandLine* command_line) {
   }
 #endif  // BUILDFLAG(IS_MAC)
   return true;
-#elif BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
-  // Graphite on Android and ChromeOS uses the Dawn Vulkan backend. Only enable
-  // Graphite if device would already be using Ganesh/Vulkan.
+#elif BUILDFLAG(IS_ANDROID)
+  // Desktop Android isn't ready to pick up the fieldtrial_testing_config.json
+  // change that enables graphite. However, it's the same platform as regular
+  // Android and does. Skip enabling the feature there for now.
+  if (base::android::BuildInfo::GetInstance()->is_desktop()) {
+    return false;
+  }
+
+  // Graphite on Android uses the Dawn Vulkan backend. Only enable Graphite if
+  // device would already be using Ganesh/Vulkan.
+  return IsUsingVulkan();
+#elif BUILDFLAG(IS_CHROMEOS)
+  // Graphite on ChromeOS uses the Dawn Vulkan backend. Only enable Graphite if
+  // device would already be using Ganesh/Vulkan.
   return IsUsingVulkan();
 #elif BUILDFLAG(IS_WIN)
   return true;
@@ -839,13 +860,13 @@ bool IncreaseBufferCountForHighFrameRate() {
   // of buffers. So these checks, espeically the RAM one, is to limit the impact
   // of more buffers to devices that can handle them.
   // 8GB of ram with large margin for error.
-  constexpr int RAM_8GB_CUTOFF = 7200 * 1024;
+  constexpr int RAM_8GB_CUTOFF = 7200;
   static bool increase =
       base::android::BuildInfo::GetInstance()->sdk_int() >=
           base::android::SdkVersion::SDK_VERSION_R &&
       IsAndroidSurfaceControlEnabled() &&
       base::android::EnableAndroidImageReader() &&
-      base::android::SysUtils::AmountOfPhysicalMemoryKB() > RAM_8GB_CUTOFF;
+      base::SysInfo::AmountOfPhysicalMemoryMB() > RAM_8GB_CUTOFF;
   return increase;
 }
 

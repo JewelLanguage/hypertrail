@@ -9,11 +9,11 @@
 #include <memory>
 
 #include "base/containers/contains.h"
+#include "base/debug/crash_logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "build/build_config.h"
 #include "build/chromecast_buildflags.h"
-#include "build/chromeos_buildflags.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
 #include "gpu/command_buffer/common/shared_image_trace_utils.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
@@ -204,8 +204,7 @@ SharedImageFactory::SharedImageFactory(
   if (!feature_info) {
     // For some unit tests like SharedImageFactoryTest, |shared_context_state_|
     // could be nullptr.
-    bool use_passthrough = gpu_preferences.use_passthrough_cmd_decoder &&
-                           gles2::PassthroughCommandDecoderSupported();
+    bool use_passthrough = gpu_preferences.use_passthrough_cmd_decoder;
     feature_info = new gles2::FeatureInfo(workarounds_, gpu_feature_info);
     feature_info->Initialize(ContextType::CONTEXT_TYPE_OPENGLES2,
                              use_passthrough, gles2::DisallowedFeatures());
@@ -556,6 +555,10 @@ bool SharedImageFactory::CreateSharedImage(
     // Check if CompoundImageBacking can hold shared memory buffer plus
     // another GPU backing type to satisfy requirements.
     if (CompoundImageBacking::IsValidSharedMemoryBufferFormat(size, format)) {
+      // Set debug_label crash key for the CompoundSharedImage with NV12 format
+      // which can have large sizes.
+      SCOPED_CRASH_KEY_STRING32("shared image factory", "debug label",
+                                debug_label);
       factory =
           GetFactoryByUsage(CompoundImageBacking::GetGpuSharedImageUsage(
                                 SharedImageUsageSet(usage)),

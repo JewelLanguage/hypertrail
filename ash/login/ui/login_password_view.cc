@@ -209,6 +209,15 @@ class LoginPasswordView::LoginTextfield : public views::Textfield {
     views::Textfield::OnFocus();
   }
 
+  // views::Textfield:
+  void ShowContextMenuForViewImpl(
+      View* source,
+      const gfx::Point& point,
+      ui::mojom::MenuSourceType source_type) override {
+    // Prevent context menu on password input fields.
+    return;
+  }
+
   void AboutToRequestFocusFromTabTraversal(bool reverse) override {
     if (!GetText().empty()) {
       SelectAll(/*reversed=*/false);
@@ -457,7 +466,7 @@ void LoginPasswordView::Reset() {
   textfield_->ClearEditHistory();
   // |ContentsChanged| won't be called by |Textfield| if the text is changed
   // by |Textfield::SetText()|.
-  ContentsChanged(textfield_, textfield_->GetText());
+  ContentsChanged(textfield_, std::u16string(textfield_->GetText()));
 }
 
 void LoginPasswordView::InsertNumber(int value) {

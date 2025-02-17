@@ -16,9 +16,16 @@
 #include "base/threading/thread_restrictions.h"
 #include "chromeos/ash/services/recording/public/mojom/recording_service.mojom.h"
 #include "chromeos/ash/services/recording/recording_service_test_api.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
 namespace ash {
+
+namespace {
+
+using ::testing::Return;
+
+}  // namespace
 
 TestCaptureModeDelegate::TestCaptureModeDelegate()
     : video_source_provider_(std::make_unique<FakeVideoSourceProvider>()) {
@@ -33,6 +40,7 @@ TestCaptureModeDelegate::TestCaptureModeDelegate()
   DCHECK(created_dir);
   created_dir = fake_one_drive_mount_path_.CreateUniqueTempDir();
   DCHECK(created_dir);
+  ON_CALL(*this, IsNetworkConnectionOffline).WillByDefault(Return(false));
 }
 
 TestCaptureModeDelegate::~TestCaptureModeDelegate() = default;
@@ -235,8 +243,12 @@ std::unique_ptr<AshWebView> TestCaptureModeDelegate::CreateSearchResultsView()
 void TestCaptureModeDelegate::SendRegionSearch(
     const SkBitmap& image,
     const gfx::Rect& region,
-    OnSearchUrlFetchedCallback callback) {
-  std::move(callback).Run(GURL("kTestUrl"));
+    ash::OnSearchUrlFetchedCallback search_callback,
+    ash::OnTextDetectionComplete text_callback) {
+  if (!lens_detected_text_.empty()) {
+    std::move(text_callback).Run(lens_detected_text_);
+  }
+  std::move(search_callback).Run(GURL("kTestUrl"));
 }
 
 void TestCaptureModeDelegate::SendMultimodalSearch(

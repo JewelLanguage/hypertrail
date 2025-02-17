@@ -7,7 +7,6 @@
 #include <memory>
 #include <utility>
 
-#include "ash/components/arc/arc_features.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/display/refresh_rate_controller.h"
@@ -24,6 +23,7 @@
 #include "ash/webui/sanitize_ui/url_constants.h"
 #include "ash/webui/system_apps/public/system_web_app_type.h"
 #include "base/check.h"
+#include "base/check_deref.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/functional/callback.h"
@@ -38,7 +38,6 @@
 #include "chrome/browser/ash/growth/campaigns_manager_client_impl.h"
 #include "chrome/browser/ash/growth/campaigns_manager_session.h"
 #include "chrome/browser/ash/input_device_settings/peripherals_app_delegate_impl.h"
-#include "chrome/browser/ash/login/demo_mode/demo_login_controller.h"
 #include "chrome/browser/ash/login/signin/signin_error_notifier_factory.h"
 #include "chrome/browser/ash/magic_boost/magic_boost_state_ash.h"
 #include "chrome/browser/ash/mahi/mahi_manager_impl.h"
@@ -77,6 +76,7 @@
 #include "chrome/browser/ui/ash/network/mobile_data_notifications.h"
 #include "chrome/browser/ui/ash/network/network_connect_delegate.h"
 #include "chrome/browser/ui/ash/network/network_portal_notification_controller.h"
+#include "chrome/browser/ui/ash/network/network_portal_signin_controller.h"
 #include "chrome/browser/ui/ash/new_window/chrome_new_window_client.h"
 #include "chrome/browser/ui/ash/projector/projector_app_client_impl.h"
 #include "chrome/browser/ui/ash/projector/projector_client_impl.h"
@@ -107,6 +107,7 @@
 #include "chromeos/ash/components/login/readahead/login_readahead_performer.h"
 #include "chromeos/ash/components/network/network_connect.h"
 #include "chromeos/ash/components/network/portal_detector/network_portal_detector.h"
+#include "chromeos/ash/experiences/arc/arc_features.h"
 #include "chromeos/ash/experiences/arc/window/arc_window_watcher.h"
 #include "chromeos/ash/services/bluetooth_config/fast_pair_delegate.h"
 #include "chromeos/ash/services/bluetooth_config/in_process_instance.h"
@@ -227,7 +228,8 @@ void ChromeBrowserMainExtraPartsAsh::PreProfileInit() {
     }
   }
 
-  ash_shell_init_ = std::make_unique<AshShellInit>();
+  ash_shell_init_ = std::make_unique<AshShellInit>(
+      CHECK_DEREF(g_browser_process->local_state()));
   ash::Shell::Get()
       ->login_unlock_throughput_recorder()
       ->post_login_deferred_task_runner()
@@ -281,7 +283,10 @@ void ChromeBrowserMainExtraPartsAsh::PreProfileInit() {
   // listeners, so inform the session manager that Ash is initialized.
   session_controller_client_->EmitAshInitialized();
 
-  system_tray_client_ = std::make_unique<SystemTrayClientImpl>();
+  system_tray_client_ = std::make_unique<SystemTrayClientImpl>(
+      CHECK_DEREF(g_browser_process->platform_part()->GetSystemClock()),
+      CHECK_DEREF(
+          g_browser_process->platform_part()->browser_policy_connector_ash()));
   network_connect_delegate_->SetSystemTrayClient(system_tray_client_.get());
 
   if (ash::features::IsCoralFeatureEnabled()) {
@@ -377,10 +382,6 @@ void ChromeBrowserMainExtraPartsAsh::PostProfileInit(Profile* profile,
   }
 
   login_screen_client_ = std::make_unique<LoginScreenClientImpl>();
-  if (ash::features::IsDemoModeSignInEnabled()) {
-    demo_login_controller_ =
-        std::make_unique<ash::DemoLoginController>(login_screen_client_.get());
-  }
 
   management_disclosure_client_ =
       std::make_unique<ManagementDisclosureClientImpl>(
@@ -410,6 +411,9 @@ void ChromeBrowserMainExtraPartsAsh::PostProfileInit(Profile* profile,
   display_settings_handler_->RegisterHandler(
       std::make_unique<policy::DisplayRotationDefaultHandler>());
   display_settings_handler_->Start();
+
+  ash::NetworkPortalSigninController::Init(
+      CHECK_DEREF(g_browser_process->local_state()));
 
   // Do not create a NetworkPortalNotificationController for tests since the
   // NetworkPortalDetector instance may be replaced.
@@ -502,7 +506,6 @@ void ChromeBrowserMainExtraPartsAsh::PostMainMessageLoopRun() {
   // uninstall correctly.
   exo_parts_.reset();
 
-  demo_login_controller_.reset();
   mahi_manager_.reset();
   mobile_data_notifications_.reset();
   chrome_shelf_controller_initializer_.reset();
@@ -528,6 +531,7 @@ void ChromeBrowserMainExtraPartsAsh::PostMainMessageLoopRun() {
   quick_insert_client_.reset();
   ash_web_view_factory_.reset();
   network_portal_notification_controller_.reset();
+  ash::NetworkPortalSigninController::Shutdown();
   display_settings_handler_.reset();
   media_client_.reset();
   login_screen_client_.reset();

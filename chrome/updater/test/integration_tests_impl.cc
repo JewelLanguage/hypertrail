@@ -4,6 +4,7 @@
 
 #include "chrome/updater/test/integration_tests_impl.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <map>
@@ -33,7 +34,6 @@
 #include "base/path_service.h"
 #include "base/process/launch.h"
 #include "base/process/process.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -51,6 +51,7 @@
 #include "build/build_config.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/enterprise_companion/device_management_storage/dm_storage.h"
+#include "chrome/enterprise_companion/enterprise_companion_version.h"
 #include "chrome/enterprise_companion/global_constants.h"
 #include "chrome/enterprise_companion/installer_paths.h"
 #include "chrome/updater/activity.h"
@@ -533,7 +534,7 @@ void ExpectVersionActive(UpdaterScope scope, const std::string& version) {
                                 Wow6432(KEY_READ))
                   .ReadValue(kRegValueVersion, &version),
               ERROR_SUCCESS);
-    return base::WideToASCII(version);
+    return base::WideToUTF8(version);
   }());
 #endif  // IS_WIN
 }
@@ -548,7 +549,7 @@ void Install(UpdaterScope scope, const base::Value::List& switches) {
   const base::FilePath path = GetSetupExecutablePath();
   ASSERT_FALSE(path.empty());
   base::CommandLine command_line(path);
-  command_line.AppendSwitchASCII(kInstallSwitch, "usagestats=1");
+  command_line.AppendSwitchUTF8(kInstallSwitch, "usagestats=1");
   for (const base::Value& cmd_line_switch : switches) {
     command_line.AppendSwitch(cmd_line_switch.GetString());
   }
@@ -571,9 +572,9 @@ void InstallUpdaterAndApp(UpdaterScope scope,
                           const base::FilePath& updater_path) {
   ASSERT_FALSE(updater_path.empty());
   base::CommandLine command_line(updater_path);
-  command_line.AppendSwitchASCII(kInstallSwitch, tag);
+  command_line.AppendSwitchUTF8(kInstallSwitch, tag);
   if (!app_id.empty()) {
-    command_line.AppendSwitchASCII(kAppIdSwitch, app_id);
+    command_line.AppendSwitchUTF8(kAppIdSwitch, app_id);
   }
   if (is_silent_install) {
     ASSERT_TRUE(child_window_text_to_find.empty());
@@ -598,13 +599,15 @@ void InstallUpdaterAndApp(UpdaterScope scope,
     Run(scope, command_line, nullptr);
 
     std::u16string bundle_name;
+    std::wstring lang;
     if (!tag.empty()) {
       tagging::TagArgs tag_args;
       ASSERT_EQ(tagging::ErrorCode::kSuccess,
                 tagging::Parse(tag, {}, tag_args));
       bundle_name = base::UTF8ToUTF16(tag_args.bundle_name);
+      lang = base::UTF8ToWide(tag_args.language);
     }
-    CloseInstallCompleteDialog(bundle_name,
+    CloseInstallCompleteDialog(bundle_name, lang,
                                base::UTF8ToWide(child_window_text_to_find),
                                verify_app_logo_loaded);
 #else
@@ -882,7 +885,7 @@ void RunServer(UpdaterScope scope, int expected_exit_code, bool internal) {
   ASSERT_TRUE(base::PathExists(*installed_executable_path));
   base::CommandLine command_line(*installed_executable_path);
   command_line.AppendSwitch(kServerSwitch);
-  command_line.AppendSwitchASCII(
+  command_line.AppendSwitchUTF8(
       kServerServiceSwitch, internal ? kServerUpdateServiceInternalSwitchValue
                                      : kServerUpdateServiceSwitchValue);
   int exit_code = -1;
@@ -1027,7 +1030,7 @@ void GetAppStates(UpdaterScope updater_scope,
        &loop](const std::vector<updater::UpdateService::AppState>& states) {
         for (const auto [expected_app_id, expected_state] :
              expected_app_states) {
-          const auto& it = base::ranges::find_if(
+          const auto& it = std::ranges::find_if(
               states, [&expected_app_id](const auto& state) {
                 return base::EqualsCaseInsensitiveASCII(state.app_id,
                                                         expected_app_id);
@@ -1040,9 +1043,9 @@ void GetAppStates(UpdaterScope updater_scope,
           EXPECT_EQ(it->ap, *expected->FindString("ap"));
           EXPECT_EQ(it->brand_code, *expected->FindString("brand_code"));
 #if BUILDFLAG(IS_WIN)
-          EXPECT_EQ(base::WideToASCII(it->brand_path.value()),
+          EXPECT_EQ(base::WideToUTF8(it->brand_path.value()),
                     *expected->FindString("brand_path"));
-          EXPECT_EQ(base::WideToASCII(it->ecp.value()),
+          EXPECT_EQ(base::WideToUTF8(it->ecp.value()),
                     *expected->FindString("ecp"));
 #else
           EXPECT_EQ(it->brand_path.value(),
@@ -1435,7 +1438,7 @@ void ExpectEnterpriseCompanionAppOTAInstallSequence(ScopedServer* test_server) {
       UpdaterScope::kSystem, test_server, enterprise_companion::kCompanionAppId,
       /*install_data_index=*/{}, UpdateService::Priority::kForeground,
       /*event_type=*/2, base::Version({0, 0, 0, 0}),
-      base::Version({1, 0, 0, 0}),
+      base::Version(kEnterpriseCompanionVersion),
       /*do_fault_injection=*/false, /*skip_download=*/false, crx_path,
       kEnterpriseCompanionCRXRun, kEnterpriseCompanionCRXArguments);
 }
@@ -1542,8 +1545,8 @@ void RunRecoveryComponent(UpdaterScope scope,
                           const std::string& app_id,
                           const base::Version& version) {
   base::CommandLine command(GetSetupExecutablePath());
-  command.AppendSwitchASCII(kBrowserVersionSwitch, version.GetString());
-  command.AppendSwitchASCII(kAppGuidSwitch, app_id);
+  command.AppendSwitchUTF8(kBrowserVersionSwitch, version.GetString());
+  command.AppendSwitchUTF8(kAppGuidSwitch, app_id);
   int exit_code = -1;
   Run(scope, command, &exit_code);
   ASSERT_EQ(exit_code, kErrorOk);
@@ -1585,7 +1588,7 @@ std::set<base::FilePath::StringType> GetTestProcessNames() {
         const base::FilePath test_executable =
             base::FilePath::FromASCII(kExecutableName).BaseName();
         return base::StrCat({test_executable.RemoveExtension().value(),
-                             base::ASCIIToWide(kExecutableSuffix),
+                             base::UTF8ToWide(kExecutableSuffix),
                              test_executable.Extension()});
       }(),
   };
@@ -1675,7 +1678,8 @@ void RunOfflineInstall(UpdaterScope scope,
 
 void RunOfflineInstallOsNotSupported(UpdaterScope scope,
                                      bool is_legacy_install,
-                                     bool is_silent_install) {
+                                     bool is_silent_install,
+                                     const std::string& language) {
   ADD_FAILURE();
 }
 #endif  // !BUILDFLAG(IS_WIN)
@@ -1927,6 +1931,17 @@ void ExpectDeviceManagementPolicyFetchRequestViaCompanionApp(
         return dm_response->SerializeAsString();
       }(),
       target_url);
+}
+
+void ExpectDeviceManagementPolicyValidationRequestViaCompanionApp(
+    ScopedServer* test_server,
+    const std::string& dm_token) {
+  enterprise_management::DeviceManagementResponse dm_response;
+  *dm_response.mutable_policy_validation_report_response() =
+      enterprise_management::PolicyValidationReportResponse();
+  ExpectDeviceManagementRequestViaCompanionApp(
+      test_server, "policy_validation_report", "GoogleDMToken", dm_token,
+      net::HTTP_OK, dm_response.SerializeAsString());
 }
 
 void ExpectProxyPacScriptRequest(ScopedServer* test_server) {

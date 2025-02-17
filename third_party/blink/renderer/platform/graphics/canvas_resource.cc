@@ -89,6 +89,60 @@ void CanvasResource::Release() {
   }
 }
 
+void CanvasResource::UploadSoftwareRenderingResults(SkSurface* sk_surface) {
+  auto scoped_mapping = GetClientSharedImage()->Map();
+  if (!scoped_mapping) {
+    LOG(ERROR) << "MapSharedImage failed.";
+    return;
+  }
+
+  sk_surface->readPixels(
+      scoped_mapping->GetSkPixmapForPlane(0, CreateSkImageInfo()), 0, 0);
+
+  // Making the below call is not necessary for the case where the the software
+  // compositor is being used, as all accesses to the SI's backing happen via
+  // shared memory. It's also not currently trivial to add in this case as
+  // setting the sync token here would require it to later be verified before it
+  // is sent to the display compositor.
+  if (GetClientSharedImage()->is_software()) {
+    return;
+  }
+
+  // Unmap the SI, inform the service that the SharedImage's backing memory was
+  // written to on the CPU and update this resource's sync token to ensure
+  // proper sequencing of future accesses to the SI with respect to this call on
+  // the service side.
+  scoped_mapping.reset();
+  SetSyncToken(
+      GetClientSharedImage()->BackingWasExternallyUpdated(gpu::SyncToken()));
+}
+
+scoped_refptr<StaticBitmapImage> CanvasResource::CreateUnacceleratedBitmap() {
+  if (!IsValid()) {
+    return nullptr;
+  }
+
+  // Construct an SkImage that references the shared memory buffer.
+  auto mapping = GetClientSharedImage()->Map();
+  if (!mapping) {
+    LOG(ERROR) << "MapSharedImage Failed.";
+    return nullptr;
+  }
+
+  auto sk_image = SkImages::RasterFromPixmapCopy(
+      mapping->GetSkPixmapForPlane(0, CreateSkImageInfo()));
+
+  // Unmap the underlying buffer.
+  mapping.reset();
+  if (!sk_image) {
+    return nullptr;
+  }
+
+  auto image = UnacceleratedStaticBitmapImage::Create(sk_image);
+  image->SetOriginClean(OriginClean());
+  return image;
+}
+
 gpu::InterfaceBase* CanvasResource::InterfaceBase() const {
   if (!ContextProviderWrapper())
     return nullptr;
@@ -126,15 +180,15 @@ static void ReleaseFrameResources(
     scoped_refptr<CanvasResource>&& resource,
     const gpu::SyncToken& sync_token,
     bool lost_resource) {
+  if (!resource) {
+    return;
+  }
+
   // If there is a LastUnrefCallback, we need to abort because recycling the
   // resource now will prevent the LastUnrefCallback from ever being called.
   // In such cases, ReleaseFrameResources will be called again when
   // CanvasResourceDispatcher destroys the corresponding FrameResource object,
   // at which time this resource will be safely recycled.
-  if (!resource) {
-    return;
-  }
-
   if (resource->HasLastUnrefCallback()) {
     // Currently, there is no code path that should end up here with
     // a viz_release_callback, but if we ever change ExternalCanvasResource's
@@ -189,41 +243,29 @@ bool CanvasResource::PrepareTransferableResource(
     return false;
   }
 
-  if (!CreatesAcceleratedTransferableResources()) {
-    // Create a TransferableResource to be used with the software compositor.
-    TRACE_EVENT0("blink",
-                 "CanvasResource::PrepareUnacceleratedTransferableResource");
+  TRACE_EVENT0("blink", "CanvasResource::PrepareTransferableResource");
 
-    *out_resource = viz::TransferableResource::Make(
-        client_shared_image, viz::TransferableResource::ResourceSource::kCanvas,
-        GetSyncToken());
-
-    return true;
-  }
-
-  TRACE_EVENT0("blink",
-               "CanvasResource::PrepareAcceleratedTransferableResource");
-
-  // Gpu compositing is a prerequisite for compositing an accelerated resource
-  DCHECK(SharedGpuContext::IsGpuCompositingEnabled());
-  if (!ContextProviderWrapper())
+  if (CreatesAcceleratedTransferableResources() && !ContextProviderWrapper()) {
     return false;
+  }
 
   *out_resource = viz::TransferableResource::Make(
       client_shared_image, GetTransferableResourceSource(),
-      GetSyncTokenWithOptionalVerification(needs_verified_synctoken),
-      /*override=*/{.is_overlay_candidate = IsOverlayCandidate()});
+      GetSyncTokenWithOptionalVerification(needs_verified_synctoken));
 
   out_resource->hdr_metadata = GetHDRMetadata();
 
-  // When a resource is returned by the display compositor, a sync token is
-  // provided to indicate when the compositor's commands using the resource are
-  // executed on the GPU thread. However, if the *CPU* is used for raster we
-  // need to ensure that the display compositor's GPU-side reads have actually
-  // completed before the compositor returns the resource for reuse, as after
-  // that point the resource will be written via the CPU without any further
-  // synchronization with those GPU-side reads.
-  if (!UsesAcceleratedRaster()) {
+  // When the compositor returns an accelerated resource, it provides a sync
+  // token to allow subsequent accelerated raster operations to properly
+  // sequence their usage of the resource within the GPU service. However, if
+  // the compositor is accelerated but raster is *not*, sync tokens are not
+  // sufficient for ordering: We must instead ensure that the compositor's
+  // GPU-side reads have actually *completed* before the compositor returns the
+  // resource for reuse, as after that point subsequent raster operations will
+  // start writing to the resource via the CPU without any subsequent
+  // synchronization with the GPU service.
+  if (!UsesAcceleratedRaster() && CreatesAcceleratedTransferableResources()) {
+    DCHECK(SharedGpuContext::IsGpuCompositingEnabled());
     out_resource->synchronization_type =
         viz::TransferableResource::SynchronizationType::kGpuCommandsCompleted;
   }
@@ -267,6 +309,10 @@ CanvasResourceSharedBitmap::CanvasResourceSharedBitmap(
           {viz::SinglePlaneFormat::kBGRA_8888, size, gfx::ColorSpace(),
            gpu::SHARED_IMAGE_USAGE_CPU_WRITE_ONLY,
            "CanvasResourceSharedBitmap"});
+
+  // This class doesn't currently have a way of verifying the sync token at the
+  // time of vending it in GetSyncTokenWithOptionalVerification(), so we
+  // instead ensure that it is verified now.
   sync_token_ = shared_image_interface->GenVerifiedSyncToken();
 }
 
@@ -289,27 +335,7 @@ bool CanvasResourceSharedBitmap::IsValid() const {
 }
 
 scoped_refptr<StaticBitmapImage> CanvasResourceSharedBitmap::Bitmap() {
-  if (!IsValid())
-    return nullptr;
-  // Construct an SkImage that references the shared memory buffer.
-  // The release callback holds a reference to |this| to ensure that the
-  // canvas resource that owns the shared memory stays alive at least until
-  // the SkImage is destroyed.
-  SkImageInfo image_info = CreateSkImageInfo();
-  auto scoped_mapping = shared_image_->Map();
-
-  auto sk_image = SkImages::RasterFromPixmapCopy(
-      scoped_mapping->GetSkPixmapForPlane(0, CreateSkImageInfo()));
-
-  // Unmap the underlying buffer.
-  scoped_mapping.reset();
-  if (!sk_image) {
-    return nullptr;
-  }
-
-  auto image = UnacceleratedStaticBitmapImage::Create(sk_image);
-  image->SetOriginClean(OriginClean());
-  return image;
+  return CreateUnacceleratedBitmap();
 }
 
 scoped_refptr<CanvasResourceSharedBitmap> CanvasResourceSharedBitmap::Create(
@@ -327,25 +353,7 @@ scoped_refptr<CanvasResourceSharedBitmap> CanvasResourceSharedBitmap::Create(
 }
 
 void CanvasResourceSharedBitmap::NotifyResourceLost() {
-  // Release our reference to the SharedImage since the resource can
-  // no longer be safely recycled and its memory is needed for copy-on-write.
-  shared_image_.reset();
-}
-
-void CanvasResourceSharedBitmap::UploadSoftwareRenderingResults(
-    SkSurface* sk_surface) {
-  auto image = sk_surface->makeImageSnapshot();
-  if (!image) {
-    return;
-  }
-
-  SkImageInfo image_info = CreateSkImageInfo();
-  auto scoped_mapping = shared_image_->Map();
-  base::span<uint8_t> bytes = scoped_mapping->GetMemoryForPlane(0);
-  CHECK_GE(bytes.size(), image_info.computeByteSize(image_info.minRowBytes()));
-  bool read_pixels_successful = image->readPixels(
-      image_info, bytes.data(), image_info.minRowBytes(), 0, 0);
-  DCHECK(read_pixels_successful);
+  is_lost_ = true;
 }
 
 // CanvasResourceSharedImage
@@ -367,10 +375,6 @@ CanvasResourceSharedImage::CanvasResourceSharedImage(
                      color_space),
       context_provider_wrapper_(std::move(context_provider_wrapper)),
       is_accelerated_(is_accelerated),
-      is_overlay_candidate_(
-          shared_image_usage_flags.Has(gpu::SHARED_IMAGE_USAGE_SCANOUT)),
-      supports_display_compositing_(
-          shared_image_usage_flags.Has(gpu::SHARED_IMAGE_USAGE_DISPLAY_READ)),
       use_oop_rasterization_(is_accelerated &&
                              context_provider_wrapper_->ContextProvider()
                                  .GetCapabilities()
@@ -594,19 +598,7 @@ scoped_refptr<StaticBitmapImage> CanvasResourceSharedImage::Bitmap() {
 
   SkImageInfo image_info = CreateSkImageInfo();
   if (!is_accelerated_) {
-    std::unique_ptr<gpu::ClientSharedImage::ScopedMapping> mapping =
-        GetClientSharedImage()->Map();
-    if (!mapping) {
-      LOG(ERROR) << "MapSharedImage Failed.";
-      return nullptr;
-    }
-    auto sk_image = SkImages::RasterFromPixmapCopy(
-        mapping->GetSkPixmapForPlane(0, CreateSkImageInfo()));
-
-    // Unmap the underlying buffer.
-    mapping.reset();
-    return sk_image ? UnacceleratedStaticBitmapImage::Create(sk_image)
-                    : nullptr;
+    return CreateUnacceleratedBitmap();
   }
 
   // In order to avoid creating multiple representations for this shared image
@@ -647,41 +639,10 @@ scoped_refptr<StaticBitmapImage> CanvasResourceSharedImage::Bitmap() {
   image = AcceleratedStaticBitmapImage::CreateFromCanvasSharedImage(
       std::move(client_shared_image), GetSyncToken(), texture_id_for_image,
       image_info, context_provider_wrapper_, owning_thread_ref_,
-      owning_thread_task_runner_, std::move(release_callback),
-      supports_display_compositing_, is_overlay_candidate_);
+      owning_thread_task_runner_, std::move(release_callback));
 
   DCHECK(image);
   return image;
-}
-
-void CanvasResourceSharedImage::UploadSoftwareRenderingResults(
-    SkSurface* sk_surface) {
-  DCHECK(!is_cross_thread());
-
-  const sk_sp<SkImage>& image = sk_surface->makeImageSnapshot();
-
-  if (!ContextProviderWrapper()) {
-    return;
-  }
-  auto* sii =
-      ContextProviderWrapper()->ContextProvider().SharedImageInterface();
-  std::unique_ptr<gpu::ClientSharedImage::ScopedMapping> mapping =
-      GetClientSharedImage()->Map();
-  if (!mapping) {
-    LOG(ERROR) << "MapSharedImage failed.";
-    return;
-  }
-
-  auto surface = SkSurfaces::WrapPixels(
-      mapping->GetSkPixmapForPlane(0, CreateSkImageInfo()));
-  SkPixmap pixmap;
-  image->peekPixels(&pixmap);
-  surface->writePixels(pixmap, 0, 0);
-
-  // Unmap the underlying buffer.
-  mapping.reset();
-  sii->UpdateSharedImage(gpu::SyncToken(), GetClientSharedImage()->mailbox());
-  owning_thread_data().sync_token = sii->GenUnverifiedSyncToken();
 }
 
 scoped_refptr<gpu::ClientSharedImage>
@@ -846,8 +807,7 @@ scoped_refptr<StaticBitmapImage> ExternalCanvasResource::Bitmap() {
   return AcceleratedStaticBitmapImage::CreateFromCanvasSharedImage(
       client_si_, GetSyncToken(), /*shared_image_texture_id=*/0u,
       CreateSkImageInfo(), context_provider_wrapper_, owning_thread_ref_,
-      owning_thread_task_runner_, std::move(release_callback),
-      /*supports_display_compositing=*/true, is_overlay_candidate_);
+      owning_thread_task_runner_, std::move(release_callback));
 }
 
 const gpu::SyncToken
@@ -899,8 +859,6 @@ ExternalCanvasResource::ExternalCanvasResource(
       sync_token_(sync_token),
       resource_source_(resource_source),
       hdr_metadata_(hdr_metadata),
-      is_overlay_candidate_(
-          client_si_->usage().Has(gpu::SHARED_IMAGE_USAGE_SCANOUT)),
       release_callback_(std::move(out_callback)) {
   CHECK(client_si_);
   DCHECK(!release_callback_ || sync_token_.HasData());
@@ -978,8 +936,7 @@ scoped_refptr<StaticBitmapImage> CanvasResourceSwapChain::Bitmap() {
   return AcceleratedStaticBitmapImage::CreateFromCanvasSharedImage(
       back_buffer_shared_image_, GetSyncToken(), shared_texture_id, image_info,
       context_provider_wrapper_, owning_thread_ref_, owning_thread_task_runner_,
-      std::move(release_callback), /*supports_display_compositing=*/true,
-      /*is_overlay_candidate=*/true);
+      std::move(release_callback));
 }
 
 scoped_refptr<gpu::ClientSharedImage>

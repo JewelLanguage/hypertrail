@@ -90,7 +90,7 @@ void RecordAlternativeNameSeparatorUsage(
       saved_alternative_name != existing_alternative_name) {
     const bool has_name_separator =
         re2::RE2::PartialMatch(base::UTF16ToUTF8(saved_alternative_name),
-                               autofill::kCjkNameSeperatorsRe);
+                               autofill::kCjkNameSeparatorsRe);
     base::UmaHistogramBoolean(
         "Autofill.Settings.EditedAlternativeNameContainsASeparator",
         has_name_separator);
@@ -719,18 +719,18 @@ PersonalDataManagerAndroid::CreateJavaIbanFromNative(JNIEnv* env,
                                                      const Iban& iban) {
   switch (iban.record_type()) {
     case Iban::kLocalIban:
-      return Java_Iban_createLocal(
-          env, iban.guid(), iban.GetIdentifierStringForAutofillDisplay(),
-          iban.nickname(), iban.GetRawInfo(IBAN_VALUE));
+      return Java_Iban_createLocal(env, iban.guid(),
+                                   iban.GetIdentifierStringForAutofillDisplay(),
+                                   iban.nickname(), iban.value());
     case Iban::kServerIban:
       return Java_Iban_createServer(
           env, iban.instrument_id(),
           iban.GetIdentifierStringForAutofillDisplay(), iban.nickname(),
-          iban.GetRawInfo(IBAN_VALUE));
+          iban.value());
     case Iban::kUnknown:
       return Java_Iban_createEphemeral(
           env, iban.GetIdentifierStringForAutofillDisplay(), iban.nickname(),
-          iban.GetRawInfo(IBAN_VALUE));
+          iban.value());
   }
 }
 
@@ -739,7 +739,7 @@ void PersonalDataManagerAndroid::PopulateNativeIbanFromJava(
     JNIEnv* env,
     Iban* iban) {
   iban->set_nickname(Java_Iban_getNickname(env, jiban));
-  iban->SetRawInfo(IBAN_VALUE, Java_Iban_getValue(env, jiban));
+  iban->set_value(Java_Iban_getValue(env, jiban));
   // Only set the GUID if it is an existing local IBAN.
   Iban::RecordType record_type =
       static_cast<Iban::RecordType>(Java_Iban_getRecordType(env, jiban));

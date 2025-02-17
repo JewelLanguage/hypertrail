@@ -354,8 +354,8 @@ TEST_F(AccessibilityControllerTest, PrefsAreRegistered) {
       prefs()->FindPreference(prefs::kAccessibilityFlashNotificationsEnabled));
   EXPECT_TRUE(
       prefs()->FindPreference(prefs::kAccessibilityFlashNotificationsColor));
-  EXPECT_TRUE(
-      prefs()->FindPreference(prefs::kAccessibilityOverlayScrollbarEnabled));
+  EXPECT_TRUE(prefs()->FindPreference(
+      prefs::kAccessibilityAlwaysShowScrollbarsEnabled));
 }
 
 TEST_F(AccessibilityControllerTest, SetAlwaysShowScrollbarEnabled) {
@@ -396,6 +396,26 @@ TEST_F(AccessibilityControllerTest, SetAutoclickEnabled) {
   EXPECT_FALSE(controller()->autoclick().enabled());
   EXPECT_EQ(2, observer.status_changed_count_);
   ExpectSessionDurationMetricCount("CrosAutoclick", 1);
+
+  controller()->RemoveObserver(&observer);
+}
+
+TEST_F(AccessibilityControllerTest, SetBounceKeysEnabled) {
+  EXPECT_FALSE(controller()->bounce_keys().enabled());
+
+  TestAccessibilityObserver observer;
+  controller()->AddObserver(&observer);
+  EXPECT_EQ(0, observer.status_changed_count_);
+
+  controller()->bounce_keys().SetEnabled(true);
+  EXPECT_TRUE(controller()->bounce_keys().enabled());
+  EXPECT_EQ(1, observer.status_changed_count_);
+  ExpectSessionDurationMetricCount("CrosBounceKeys", 0);
+
+  controller()->bounce_keys().SetEnabled(false);
+  EXPECT_FALSE(controller()->bounce_keys().enabled());
+  EXPECT_EQ(2, observer.status_changed_count_);
+  ExpectSessionDurationMetricCount("CrosBounceKeys", 1);
 
   controller()->RemoveObserver(&observer);
 }
@@ -488,7 +508,8 @@ TEST_F(AccessibilityControllerTest, SetCursorColorEnabled) {
   EXPECT_EQ(1, observer.status_changed_count_);
   ExpectSessionDurationMetricCount("CrosCursorColor", 0);
 
-  prefs()->SetInteger(prefs::kAccessibilityCursorColor, kDefaultCursorColor);
+  prefs()->SetInteger(prefs::kAccessibilityCursorColor,
+                      ui::kDefaultCursorColor);
   EXPECT_EQ(2, observer.status_changed_count_);
   ExpectSessionDurationMetricCount("CrosCursorColor", 1);
 
@@ -498,7 +519,8 @@ TEST_F(AccessibilityControllerTest, SetCursorColorEnabled) {
   EXPECT_EQ(3, observer.status_changed_count_);
   ExpectSessionDurationMetricCount("CrosCursorColor", 1);
 
-  prefs()->SetInteger(prefs::kAccessibilityCursorColor, kDefaultCursorColor);
+  prefs()->SetInteger(prefs::kAccessibilityCursorColor,
+                      ui::kDefaultCursorColor);
   EXPECT_EQ(4, observer.status_changed_count_);
   ExpectSessionDurationMetricCount("CrosCursorColor", 2);
 
@@ -1379,9 +1401,10 @@ TEST_F(AccessibilityControllerTest, ChangingCursorColorPrefChangesCursorColor) {
 
   // Simulate using chrome settings webui to set cursor color to black, which
   // which also turns off the cursor color enabled pref.
-  prefs()->SetInteger(prefs::kAccessibilityCursorColor, kDefaultCursorColor);
+  prefs()->SetInteger(prefs::kAccessibilityCursorColor,
+                      ui::kDefaultCursorColor);
 
-  EXPECT_EQ(kDefaultCursorColor,
+  EXPECT_EQ(ui::kDefaultCursorColor,
             cursor_window_controller->GetCursorColorForTest());
 }
 
@@ -1401,6 +1424,26 @@ TEST_F(AccessibilityControllerTest, SetMonoAudioEnabled) {
   EXPECT_FALSE(controller()->mono_audio().enabled());
   EXPECT_EQ(2, observer.status_changed_count_);
   ExpectSessionDurationMetricCount("CrosMonoAudio", 1);
+
+  controller()->RemoveObserver(&observer);
+}
+
+TEST_F(AccessibilityControllerTest, SetSlowKeysEnabled) {
+  EXPECT_FALSE(controller()->slow_keys().enabled());
+
+  TestAccessibilityObserver observer;
+  controller()->AddObserver(&observer);
+  EXPECT_EQ(0, observer.status_changed_count_);
+
+  controller()->slow_keys().SetEnabled(true);
+  EXPECT_TRUE(controller()->slow_keys().enabled());
+  EXPECT_EQ(1, observer.status_changed_count_);
+  ExpectSessionDurationMetricCount("CrosSlowKeys", 0);
+
+  controller()->slow_keys().SetEnabled(false);
+  EXPECT_FALSE(controller()->slow_keys().enabled());
+  EXPECT_EQ(2, observer.status_changed_count_);
+  ExpectSessionDurationMetricCount("CrosSlowKeys", 1);
 
   controller()->RemoveObserver(&observer);
 }

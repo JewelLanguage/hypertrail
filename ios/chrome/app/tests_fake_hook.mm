@@ -2,10 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#import "ios/chrome/app/tests_hook.h"
-
 #import "base/time/time.h"
+#import "components/feature_engagement/public/feature_activation.h"
 #import "components/signin/internal/identity_manager/profile_oauth2_token_service_delegate.h"
+#import "ios/chrome/app/tests_hook.h"
 
 namespace tests_hook {
 
@@ -48,8 +48,14 @@ bool DisableUpdateService() {
 bool DelayAppLaunchPromos() {
   return false;
 }
+bool NeverPurgeDiscardedSessionsData() {
+  return false;
+}
 policy::ConfigurationPolicyProvider* GetOverriddenPlatformPolicyProvider() {
   return nullptr;
+}
+bool SimulatePostDeviceRestore() {
+  return false;
 }
 std::unique_ptr<SystemIdentityManager> CreateSystemIdentityManager() {
   return nullptr;
@@ -97,8 +103,8 @@ std::unique_ptr<drive::DriveService> GetOverriddenDriveService() {
   return nullptr;
 }
 
-std::optional<std::string> FETDemoModeOverride() {
-  return std::nullopt;
+feature_engagement::FeatureActivation FETDemoModeOverride() {
+  return feature_engagement::FeatureActivation::AllEnabled();
 }
 
 void WipeProfileIfRequested(int argc, char* argv[]) {

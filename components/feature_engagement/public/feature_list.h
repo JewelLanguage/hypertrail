@@ -11,7 +11,7 @@
 #include "base/feature_list.h"
 #include "build/build_config.h"
 #include "components/feature_engagement/public/feature_constants.h"
-#include "components/flags_ui/feature_entry.h"
+#include "components/webui/flags/feature_entry.h"
 #include "extensions/buildflags/buildflags.h"
 
 namespace feature_engagement {
@@ -47,6 +47,8 @@ inline constexpr char kIPHDemoModeFeatureChoiceParam[] = "chosen_feature";
 // Defines a flags_ui::FeatureEntry::FeatureParam for each feature.
 DEFINE_VARIATION_PARAM(kIPHDummyFeature, "IPH_Dummy");
 #if BUILDFLAG(IS_ANDROID)
+DEFINE_VARIATION_PARAM(kIPHAccountSettingsHistorySync,
+                       "IPH_AccountSettingsHistorySync");
 DEFINE_VARIATION_PARAM(kIPHAndroidTabDeclutter, "IPH_AndroidTabDeclutter");
 DEFINE_VARIATION_PARAM(kIPHAdaptiveButtonInTopToolbarCustomizationNewTabFeature,
                        "IPH_AdaptiveButtonInTopToolbarCustomization_NewTab");
@@ -154,6 +156,8 @@ DEFINE_VARIATION_PARAM(kIPHTabGroupCreationDialogSyncTextFeature,
                        "IPH_TabGroupCreationDialogSyncText");
 DEFINE_VARIATION_PARAM(kIPHTabGroupsDragAndDropFeature,
                        "IPH_TabGroupsDragAndDrop");
+DEFINE_VARIATION_PARAM(kIPHTabGroupShareNoticeFeature,
+                       "IPH_TabGroupShareNotice");
 DEFINE_VARIATION_PARAM(kIPHTabGroupShareNotificationBubbleOnStripFeature,
                        "IPH_TabGroupSharedNotificationBubbleOnStrip");
 DEFINE_VARIATION_PARAM(kIPHTabGroupsRemoteGroupFeature,
@@ -239,6 +243,8 @@ DEFINE_VARIATION_PARAM(kIPHiOSHistoryOnOverflowMenuFeature,
                        "IPH_iOSHistoryOnOverflowMenuFeature");
 DEFINE_VARIATION_PARAM(kIPHiOSPromoPostRestoreDefaultBrowserFeature,
                        "IPH_iOSPromoPostRestoreDefaultBrowser");
+DEFINE_VARIATION_PARAM(kIPHiOSPromoNonModalUrlPasteDefaultBrowserFeature,
+                       "IPH_iOSPromoNonModalUrlPasteDefaultBrowser");
 DEFINE_VARIATION_PARAM(kIPHiOSPromoPasswordManagerWidgetFeature,
                        "IPH_iOSPromoPasswordManagerWidget");
 DEFINE_VARIATION_PARAM(kIPHiOSParcelTrackingFeature,
@@ -280,6 +286,8 @@ DEFINE_VARIATION_PARAM(kIPHiOSSharedTabGroupForeground,
                        "IPH_iOSSharedTabGroupForeground");
 DEFINE_VARIATION_PARAM(kIPHiOSDefaultBrowserBannerPromoFeature,
                        "IPH_iOSDefaultBrowserBannerPromoFeature");
+DEFINE_VARIATION_PARAM(kIPHiOSReminderNotificationsOverflowMenuBubbleFeature,
+                       "IPH_iOSReminderNotificationsOverflowMenuBubbleFeature");
 #endif  // BUILDFLAG(IS_IOS)
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) || \
@@ -370,8 +378,6 @@ DEFINE_VARIATION_PARAM(kIPHSignoutWebInterceptFeature,
                        "IPH_SignoutWebIntercept");
 DEFINE_VARIATION_PARAM(kIPHPwaQuietNotificationFeature,
                        "IPH_PwaQuietNotification");
-DEFINE_VARIATION_PARAM(kIPHSupervisedUserProfileSigninFeature,
-                       "IPH_SupervisedUserProfileSignin");
 DEFINE_VARIATION_PARAM(kIPHTabAudioMutingFeature, "IPH_TabAudioMuting");
 DEFINE_VARIATION_PARAM(kIPHTabOrganizationSuccessFeature,
                        "IPH_TabOrganizationSuccess");
@@ -390,6 +396,10 @@ DEFINE_VARIATION_PARAM(kIPHTabGroupsSaveV2IntroFeature,
                        "IPH_TabGroupsSaveV2Intro");
 DEFINE_VARIATION_PARAM(kIPHTabGroupsSaveV2CloseGroupFeature,
                        "IPH_TabGroupsSaveV2CloseGroup");
+DEFINE_VARIATION_PARAM(kIPHTabGroupsSharedTabChangedFeature,
+                       "IPH_TabGroupsSharedTabChanged");
+DEFINE_VARIATION_PARAM(kIPHTabGroupsSharedTabFeedbackFeature,
+                       "IPH_TabGroupsSharedTabFeedback");
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) ||
         // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
 
@@ -493,6 +503,8 @@ DEFINE_VARIATION_PARAM(kIPHDesktopPWAsLinkCapturingLaunch,
                        "IPH_DesktopPWAsLinkCapturingLaunch");
 DEFINE_VARIATION_PARAM(kIPHDesktopPWAsLinkCapturingLaunchAppInTab,
                        "IPH_DesktopPWAsLinkCapturingLaunchAppInTab");
+DEFINE_VARIATION_PARAM(kIPHSupervisedUserProfileSigninFeature,
+                       "IPH_SupervisedUserProfileSignin");
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -510,6 +522,7 @@ DEFINE_VARIATION_PARAM(kIPHiOSPaymentPromoDesktopFeature,
 inline constexpr flags_ui::FeatureEntry::FeatureVariation
     kIPHDemoModeChoiceVariations[] = {
 #if BUILDFLAG(IS_ANDROID)
+        VARIATION_ENTRY(kIPHAccountSettingsHistorySync),
         VARIATION_ENTRY(
             kIPHAdaptiveButtonInTopToolbarCustomizationNewTabFeature),
         VARIATION_ENTRY(
@@ -575,6 +588,7 @@ inline constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHShoppingListMenuItemFeature),
         VARIATION_ENTRY(kIPHShoppingListSaveFlowFeature),
         VARIATION_ENTRY(kIPHTabGroupCreationDialogSyncTextFeature),
+        VARIATION_ENTRY(kIPHTabGroupShareNoticeFeature),
         VARIATION_ENTRY(kIPHTabGroupsDragAndDropFeature),
         VARIATION_ENTRY(kIPHTabGroupsRemoteGroupFeature),
         VARIATION_ENTRY(kIPHTabGroupsSurfaceFeature),
@@ -627,6 +641,7 @@ inline constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHiOSPromoCredentialProviderExtensionFeature),
         VARIATION_ENTRY(kIPHiOSHistoryOnOverflowMenuFeature),
         VARIATION_ENTRY(kIPHiOSPromoPostRestoreDefaultBrowserFeature),
+        VARIATION_ENTRY(kIPHiOSPromoNonModalUrlPasteDefaultBrowserFeature),
         VARIATION_ENTRY(kIPHiOSPromoPasswordManagerWidgetFeature),
         VARIATION_ENTRY(kIPHiOSParcelTrackingFeature),
         VARIATION_ENTRY(kIPHiOSPullToRefreshFeature),
@@ -649,6 +664,7 @@ inline constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHiOSLensOverlayEntrypointTipFeature),
         VARIATION_ENTRY(kIPHiOSSharedTabGroupForeground),
         VARIATION_ENTRY(kIPHiOSDefaultBrowserBannerPromoFeature),
+        VARIATION_ENTRY(kIPHiOSReminderNotificationsOverflowMenuBubbleFeature),
 #elif BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
         VARIATION_ENTRY(kIPHBatterySaverModeFeature),
@@ -695,9 +711,10 @@ inline constexpr flags_ui::FeatureEntry::FeatureVariation
         VARIATION_ENTRY(kIPHSideSearchAutoTriggeringFeature),
         VARIATION_ENTRY(kIPHSideSearchPageActionLabelFeature),
         VARIATION_ENTRY(kIPHSignoutWebInterceptFeature),
-        VARIATION_ENTRY(kIPHSupervisedUserProfileSigninFeature),
         VARIATION_ENTRY(kIPHTabAudioMutingFeature),
         VARIATION_ENTRY(kIPHTabSearchFeature),
+        VARIATION_ENTRY(kIPHTabGroupsSharedTabChangedFeature),
+        VARIATION_ENTRY(kIPHTabGroupsSharedTabFeedbackFeature),
         VARIATION_ENTRY(kIPHTabOrganizationSuccessFeature),
         VARIATION_ENTRY(kIPHWebUITabStripFeature),
         VARIATION_ENTRY(kIPHDesktopPwaInstallFeature),
@@ -765,6 +782,7 @@ inline constexpr flags_ui::FeatureEntry::FeatureVariation
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
         VARIATION_ENTRY(kIPHDesktopPWAsLinkCapturingLaunch),
         VARIATION_ENTRY(kIPHDesktopPWAsLinkCapturingLaunchAppInTab),
+        VARIATION_ENTRY(kIPHSupervisedUserProfileSigninFeature),
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 
 #if !BUILDFLAG(IS_ANDROID)

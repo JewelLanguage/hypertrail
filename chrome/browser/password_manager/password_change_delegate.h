@@ -17,26 +17,33 @@ class WebContents;
 // This class is responsible for controlling password change process.
 class PasswordChangeDelegate {
  public:
-  // Internal state of a password change flow.
+  // Internal state of a password change flow. Corresponds to
+  // `PasswordChangeFlowState` in enums.xml. These values are persisted to logs.
+  // Entries should not be renumbered and numeric values should never be reused.
   enum class State {
+    // Password change is being offered to the user, waiting from the to accept
+    // or reject it.
+    kOfferingPasswordChange = 0,
+
     // Waiting for the user to accept privacy notice.
-    kWaitingForAgreement,
+    kWaitingForAgreement = 1,
 
     // Delegate is waiting for change password form to appear.
-    kWaitingForChangePasswordForm,
+    kWaitingForChangePasswordForm = 2,
 
     // Change password form wasn't found.
-    kChangePasswordFormNotFound,
+    kChangePasswordFormNotFound = 3,
 
     // Change password form is detected. Generating and filling password fields.
     // Delegate waits for submission confirmation.
-    kChangingPassword,
+    kChangingPassword = 4,
 
     // Password is successfully updated.
-    kPasswordSuccessfullyChanged,
+    kPasswordSuccessfullyChanged = 5,
 
     // Password change failed.
-    kPasswordChangeFailed,
+    kPasswordChangeFailed = 6,
+    kMaxValue = kPasswordChangeFailed,
   };
 
   // An interface used to notify clients (observers) of delegate state. Register
@@ -52,6 +59,10 @@ class PasswordChangeDelegate {
 
   virtual ~PasswordChangeDelegate() = default;
 
+  // Starts the password change flow (including showing the privacy notice
+  // agreement if necessary).
+  virtual void StartPasswordChangeFlow() = 0;
+
   // Responds whether password change is ongoing for a given |web_contents|.
   // This is true both for originator and a tab where password change is
   // performed.
@@ -63,6 +74,10 @@ class PasswordChangeDelegate {
   // Terminates password change operation immediately. Delegate shouldn't be
   // invoked after this function is called as the object will soon be destroyed.
   virtual void Stop() = 0;
+
+  // Restarts password change flow only if the flow failed due to inability to
+  // find change password form. In all other scenarios it's unsafe to restart.
+  virtual void Restart() = 0;
 
 #if !BUILDFLAG(IS_ANDROID)
   // Brings a tab where password change is ongoing. Does nothing if the tab

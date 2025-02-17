@@ -160,6 +160,8 @@ class ScopedAllowRendererCrashes;
 class ToRenderFrameHost;
 class WebContents;
 
+double GetPendingZoomLevel(RenderWidgetHost* render_widget_host);
+
 // This encapsulates the pattern of waiting for an event and returning whether
 // that event was received from `Wait`. This makes it easy to do the right thing
 // in Wait, i.e. return with `[[nodiscard]]`.
@@ -1503,8 +1505,8 @@ class RenderFrameSubmissionObserver
   // OnRenderFrameMetadataChangedAfterActivation.
   bool break_on_any_frame_ = false;
 
-  raw_ptr<RenderFrameMetadataProviderImpl> render_frame_metadata_provider_ =
-      nullptr;
+  const raw_ptr<RenderFrameMetadataProviderImpl>
+      render_frame_metadata_provider_;
   base::OnceClosure quit_closure_;
   // If non-null, run when metadata changes.
   base::OnceClosure metadata_change_closure_;
@@ -2473,6 +2475,11 @@ RegisterWebContentsCreationCallback(
 // and/or main. This can be useful to enable when the process hosting the window
 // is a standalone executable without an Info.plist.
 bool EnableNativeWindowActivation();
+
+// Ensures that if no key window is set (can happen in apps that are not
+// frontmost), we simulate the frontmost window becoming key, which triggers
+// any logic that would normally run in this case.
+void HandleMissingKeyWindow();
 #endif  // BUILDFLAG(IS_MAC)
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)

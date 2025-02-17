@@ -54,24 +54,12 @@ namespace {
 constexpr ui::InteractionSequence::ContextMode kDefaultWebContentsContextMode =
     ui::InteractionSequence::ContextMode::kAny;
 
-// Matcher that determines whether a particular value is truthy.
-class IsTruthyMatcher : public testing::MatcherInterface<const base::Value&> {
- public:
-  using is_gtest_matcher = void;
-
-  bool MatchAndExplain(const base::Value& x,
-                       testing::MatchResultListener* listener) const override {
-    return WebContentsInteractionTestUtil::IsTruthy(x);
-  }
-
-  void DescribeTo(std::ostream* os) const override { *os << "is truthy"; }
-
-  void DescribeNegationTo(std::ostream* os) const override {
-    *os << "is falsy";
-  }
-};
-
 }  // namespace
+
+DEFINE_CLASS_CUSTOM_ELEMENT_EVENT_TYPE(InteractiveBrowserTestApi,
+                                       kDefaultWaitForJsResultEvent);
+DEFINE_CLASS_CUSTOM_ELEMENT_EVENT_TYPE(InteractiveBrowserTestApi,
+                                       kDefaultWaitForJsResultAtEvent);
 
 InteractiveBrowserTestApi::InteractiveBrowserTestApi()
     : InteractiveBrowserTestApi(
@@ -176,8 +164,7 @@ InteractiveBrowserTestApi::InstrumentNextTab(ui::ElementIdentifier id,
   return std::move(
       WithElement(
           ui::test::internal::kInteractiveTestPivotElementId,
-          base::BindLambdaForTesting([this, id,
-                                      in_browser](ui::TrackedElement* el) {
+          [this, id, in_browser](ui::TrackedElement* el) {
             Browser* const browser = GetBrowserFor(el->context(), in_browser);
             test_impl().AddInstrumentedWebContents(
                 browser
@@ -185,7 +172,7 @@ InteractiveBrowserTestApi::InstrumentNextTab(ui::ElementIdentifier id,
                           browser, id)
                     : WebContentsInteractionTestUtil::ForNextTabInAnyBrowser(
                           id));
-          }))
+          })
           .AddDescriptionPrefix(
               base::StrCat({"InstrumentTab( ", id.GetName(), " )"})));
 }
@@ -249,6 +236,42 @@ InteractiveBrowserTestApi::InstrumentNonTabWebView(
             InstrumentNonTabWebView(id, kTemporaryElementName, wait_for_ready));
   AddDescriptionPrefix(steps, "InstrumentNonTabWebView()");
   return steps;
+}
+
+InteractiveBrowserTestApi::MultiStep
+InteractiveBrowserTestApi::InstrumentInnerWebContents(
+    ui::ElementIdentifier inner_id,
+    ui::ElementIdentifier outer_id,
+    size_t inner_contents_index,
+    bool wait_for_ready) {
+  MultiStep steps;
+  steps.emplace_back(Do([this, inner_id, outer_id, inner_contents_index]() {
+    test_impl().AddInstrumentedWebContents(
+        WebContentsInteractionTestUtil::ForInnerWebContents(
+            outer_id, inner_contents_index, inner_id));
+  }));
+  if (wait_for_ready) {
+    steps.push_back(WaitForWebContentsReady(inner_id));
+  }
+  AddDescriptionPrefix(
+      steps, base::StringPrintf("InstrumentInnerWebContents( %s, %s, %u, %d )",
+                                inner_id.GetName(), outer_id.GetName(),
+                                inner_contents_index, wait_for_ready));
+  return steps;
+}
+
+InteractiveBrowserTestApi::StepBuilder
+InteractiveBrowserTestApi::UninstrumentWebContents(
+    ui::ElementIdentifier id,
+    bool fail_if_not_instrumented) {
+  return std::move(
+      (fail_if_not_instrumented
+           ? Check([this, id]() {
+               return test_impl().UninstrumentWebContents(id);
+             })
+           : Do([this, id]() { test_impl().UninstrumentWebContents(id); }))
+          .SetDescription(
+              base::StringPrintf("UninstrumentWebContents(%s)", id.GetName())));
 }
 
 // static
@@ -711,8 +734,7 @@ ui::InteractionSequence::StepBuilder InteractiveBrowserTestApi::ExecuteJsAt(
 ui::InteractionSequence::StepBuilder InteractiveBrowserTestApi::CheckJsResult(
     ui::ElementIdentifier webcontents_id,
     const std::string& function) {
-  return CheckJsResult(webcontents_id, function,
-                       testing::Matcher<base::Value>(IsTruthyMatcher()));
+  return CheckJsResult(webcontents_id, function, internal::IsTruthyMatcher());
 }
 
 // static
@@ -721,7 +743,21 @@ ui::InteractionSequence::StepBuilder InteractiveBrowserTestApi::CheckJsResultAt(
     const DeepQuery& where,
     const std::string& function) {
   return CheckJsResultAt(webcontents_id, where, function,
-                         testing::Matcher<base::Value>(IsTruthyMatcher()));
+                         internal::IsTruthyMatcher());
+}
+
+InteractiveBrowserTestApi::MultiStep InteractiveBrowserTestApi::WaitForJsResult(
+    ui::ElementIdentifier webcontents_id,
+    const std::string& function) {
+  return WaitForJsResult(webcontents_id, function, IsTruthy());
+}
+
+InteractiveBrowserTestApi::MultiStep
+InteractiveBrowserTestApi::WaitForJsResultAt(
+    ui::ElementIdentifier webcontents_id,
+    const DeepQuery& where,
+    const std::string& function) {
+  return WaitForJsResultAt(webcontents_id, where, function, IsTruthy());
 }
 
 InteractiveBrowserTestApi::MultiStep InteractiveBrowserTestApi::MoveMouseTo(
@@ -752,6 +788,34 @@ ui::InteractionSequence::StepBuilder InteractiveBrowserTestApi::ScrollIntoView(
       ExecuteJsAt(web_contents, where,
                   "(el) => { el.scrollIntoView({ behavior: 'instant' }); }")
           .SetDescription("ScrollIntoView()"));
+}
+
+InteractiveBrowserTestApi::MultiStep
+InteractiveBrowserTestApi::WaitForElementVisible(
+    ui::ElementIdentifier web_contents,
+    const DeepQuery& where) {
+  DEFINE_LOCAL_CUSTOM_ELEMENT_EVENT_TYPE(kWaitforElementVisibleCompleteEvent);
+  const std::string function =
+      R"(
+        function(el) {
+          const rect = el.getBoundingClientRect();
+          const left = Math.max(0, rect.x);
+          const top = Math.max(0, rect.y);
+          const right = Math.min(rect.x + rect.width, window.innerWidth);
+          const bottom = Math.min(rect.y + rect.height, window.innerHeight);
+          return right > left && bottom > top;
+        }
+      )";
+
+  StateChange change;
+  change.event = kWaitforElementVisibleCompleteEvent;
+  change.test_function = function;
+  change.type = StateChange::Type::kExistsAndConditionTrue;
+  change.where = where;
+
+  auto steps = WaitForStateChange(web_contents, change);
+  AddDescriptionPrefix(steps, "WaitForElementVisible()");
+  return steps;
 }
 
 ui::InteractionSequence::StepBuilder InteractiveBrowserTestApi::ClickElement(

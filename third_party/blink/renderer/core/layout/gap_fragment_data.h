@@ -7,6 +7,7 @@
 
 #include <optional>
 
+#include "third_party/blink/renderer/core/style/grid_enums.h"
 #include "third_party/blink/renderer/platform/geometry/layout_unit.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
 
@@ -38,9 +39,26 @@ class GapFragmentData {
                 std::optional<LayoutUnit> end_offset = std::nullopt)
         : index(index), start_offset(start_offset), end_offset(end_offset) {}
 
+    void Trace(Visitor* visitor) const { visitor->Trace(intersection_points); }
+
     wtf_size_t index;
     std::optional<LayoutUnit> start_offset;
     std::optional<LayoutUnit> end_offset;
+
+    // Intersection points are used to paint gap decorations. An
+    // intersection point occurs:
+    // 1. At the center of an intersection between a gap and the container edge.
+    // 2. At the center of an intersection between gaps in different directions.
+    // https://drafts.csswg.org/css-gaps-1/#layout-painting
+    //
+    // TODO(samomekarajr): Potential optimization for grid. Consider if the list
+    // of intersection points needs to be stored for each `GapBoundary`. We can
+    // use two lists on the `GapGeometry` to store the intersection points for
+    // the entire grid. This might reduce the memory overhead. Also consider
+    // storing the intersection points as a list of pairs (inline_offset,
+    // block_offset), eliminating the need for the GapBoundary data structure.
+
+    HeapVector<LayoutUnit> intersection_points;
   };
 
   using GapBoundaries = HeapVector<GapBoundary>;
@@ -51,6 +69,16 @@ class GapFragmentData {
     GapBoundaries columns;
     GapBoundaries rows;
 
+    void AddGapBoundary(GridTrackSizingDirection track_direction,
+                        GapBoundary gap) {
+      (track_direction == kForColumns) ? columns.push_back(gap)
+                                       : rows.push_back(gap);
+    }
+
+    GapBoundaries& GetGapBoundaries(GridTrackSizingDirection track_direction) {
+      return track_direction == kForColumns ? columns : rows;
+    }
+
     void Trace(Visitor* visitor) const {
       visitor->Trace(rows);
       visitor->Trace(columns);
@@ -59,4 +87,7 @@ class GapFragmentData {
 };
 
 }  // namespace blink
-#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_GAP_DECORATIONS_FRAGMENT_GEOMETRY_H_
+
+WTF_ALLOW_CLEAR_UNUSED_SLOTS_WITH_MEM_FUNCTIONS(
+    blink::GapFragmentData::GapBoundary)
+#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_GAP_FRAGMENT_DATA_H_

@@ -14,6 +14,7 @@
 #import "ios/chrome/browser/settings/ui_bundled/google_services/manage_sync_settings_constants.h"
 #import "ios/chrome/browser/settings/ui_bundled/google_services/manage_sync_settings_service_delegate.h"
 #import "ios/chrome/browser/settings/ui_bundled/google_services/manage_sync_settings_table_view_controller_model_delegate.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_info_button_cell.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_cell.h"
@@ -236,7 +237,6 @@ CGFloat kDefaultSectionFooterHeightPointSize = 10.;
 
 - (CGFloat)tableView:(UITableView*)tableView
     heightForHeaderInSection:(NSInteger)section {
-  if (self.isAccountStateSignedIn) {
     NSInteger sectionIdentifier =
         [self.tableViewModel sectionIdentifierForSectionIndex:section];
     switch (sectionIdentifier) {
@@ -253,24 +253,30 @@ CGFloat kDefaultSectionFooterHeightPointSize = 10.;
       case SyncErrorsSectionIdentifier:
       case BatchUploadSectionIdentifier:
         return kDefaultSectionHeaderHeightPointSize;
-    }
   }
   return ChromeTableViewHeightForHeaderInSection(section);
 }
 
 - (CGFloat)tableView:(UITableView*)tableView
     heightForFooterInSection:(NSInteger)section {
-  if (self.isAccountStateSignedIn) {
     NSInteger sectionIdentifier =
         [self.tableViewModel sectionIdentifierForSectionIndex:section];
     switch (sectionIdentifier) {
       case SyncDataTypeSectionIdentifier:
-      case ManageAndSignOutSectionIdentifier:
         return UITableViewAutomaticDimension;
+      case ManageAndSignOutSectionIdentifier: {
+        if (AreSeparateProfilesForManagedAccountsEnabled()) {
+          break;
+        }
+        return UITableViewAutomaticDimension;
+      }
+      case SwitchAccountAndSignOutSectionIdentifier: {
+        CHECK(AreSeparateProfilesForManagedAccountsEnabled());
+        return UITableViewAutomaticDimension;
+      }
       case AdvancedSettingsSectionIdentifier:
       case SyncErrorsSectionIdentifier:
         break;
-    }
   }
   return kDefaultSectionFooterHeightPointSize;
 }
@@ -282,11 +288,8 @@ CGFloat kDefaultSectionFooterHeightPointSize = 10.;
 - (void)didTapManagedUIInfoButton:(UIButton*)buttonView {
   EnterpriseInfoPopoverViewController* bubbleViewController =
       [[EnterpriseInfoPopoverViewController alloc]
-          initWithMessage:self.isAccountStateSignedIn
-                              ? l10n_util::GetNSString(
-                                    IDS_IOS_ENTERPRISE_MANAGED_SAVE_IN_ACCOUNT)
-                              : l10n_util::GetNSString(
-                                    IDS_IOS_ENTERPRISE_MANAGED_SYNC)
+          initWithMessage:l10n_util::GetNSString(
+                              IDS_IOS_ENTERPRISE_MANAGED_SAVE_IN_ACCOUNT)
            enterpriseName:nil];
   [self presentViewController:bubbleViewController animated:YES completion:nil];
 

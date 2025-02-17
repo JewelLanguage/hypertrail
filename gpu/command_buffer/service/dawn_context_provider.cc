@@ -100,14 +100,12 @@ std::vector<const char*> GetEnabledToggles(
   for (const auto& toggle : gpu_preferences.enabled_dawn_features_list) {
     enabled_toggles.push_back(toggle.c_str());
   }
+
   // The following toggles are all device-scoped toggles so it's not necessary
   // to pass them when creating the Instance above.
-
-  // Only enable backend labels on Windows or DCHECK builds on other platforms
-  // since it can have non-trivial performance overhead e.g. with Metal.
-#if DCHECK_IS_ON() || BUILDFLAG(IS_WIN)
-  enabled_toggles.push_back("use_user_defined_labels_in_backend");
-#endif
+  if (features::kSkiaGraphiteDawnBackendDebugLabels.Get()) {
+    enabled_toggles.push_back("use_user_defined_labels_in_backend");
+  }
 
   if (features::kSkiaGraphiteDawnSkipValidation.Get()) {
     enabled_toggles.push_back("skip_validation");
@@ -429,16 +427,9 @@ class DawnSharedContext : public base::RefCountedThreadSafe<DawnSharedContext>,
   }
 
   // Provided to wgpu::Device as logging callback.
-#ifdef WGPU_BREAKING_CHANGE_LOGGING_CALLBACK_TYPE
   static void LogInfo(wgpu::LoggingType type,
                       wgpu::StringView message,
                       DawnSharedContext* shared_context) {
-#else
-  static void LogInfo(WGPULoggingType type,
-                      WGPUStringView message,
-                      void* userdata) {
-    auto* shared_context = static_cast<DawnSharedContext*>(userdata);
-#endif
     std::string_view view = {message.data, message.length};
     switch (static_cast<wgpu::LoggingType>(type)) {
       case wgpu::LoggingType::Warning:
@@ -517,11 +508,8 @@ DawnSharedContext::~DawnSharedContext() {
       base::trace_event::MemoryDumpManager::GetInstance()
           ->UnregisterDumpProvider(this);
     }
-#ifdef WGPU_BREAKING_CHANGE_LOGGING_CALLBACK_TYPE
     device_.SetLoggingCallback([](wgpu::LoggingType, wgpu::StringView) {});
-#else
-    device_.SetLoggingCallback(nullptr, nullptr);
-#endif
+
     // Destroy the device now so that the lost callback, which references this
     // class, is fired now before we clean up the rest of this class.
     device_.Destroy();
@@ -541,22 +529,11 @@ bool DawnSharedContext::Initialize(
   // instance doesn't exit the GPU process.
   // LogInfo will be used to receive instance level errors. For example failures
   // of loading libraries, initializing backend, etc
-#ifdef WGPU_BREAKING_CHANGE_LOGGING_CALLBACK_TYPE
   dawn::native::DawnInstanceDescriptor dawn_instance_desc;
-  dawn_instance_desc.SetLoggingCallback(
-      [](wgpu::LoggingType type, wgpu::StringView message,
-         DawnSharedContext* context) {
-        DawnSharedContext::LogInfo(type, message, context);
-      },
-      this);
+  dawn_instance_desc.SetLoggingCallback(&DawnSharedContext::LogInfo, this);
   instance_ = webgpu::DawnInstance::Create(&platform_, gpu_preferences,
                                            webgpu::SafetyLevel::kUnsafe,
                                            &dawn_instance_desc);
-#else
-  instance_ = webgpu::DawnInstance::Create(&platform_, gpu_preferences,
-                                           webgpu::SafetyLevel::kUnsafe,
-                                           &DawnSharedContext::LogInfo, this);
-#endif
 
   std::vector<const char*> enabled_toggles =
       GetEnabledToggles(backend_type, force_fallback_adapter, gpu_preferences);
@@ -668,7 +645,7 @@ bool DawnSharedContext::Initialize(
       [](const wgpu::Device&, wgpu::DeviceLostReason reason,
          wgpu::StringView message, DawnSharedContext* state) {
         if (reason != wgpu::DeviceLostReason::Destroyed) {
-          state->OnError(wgpu::ErrorType::DeviceLost, message);
+          state->OnError(wgpu::ErrorType::Unknown, message);
         }
       },
       this);
@@ -680,6 +657,16 @@ bool DawnSharedContext::Initialize(
   descriptor.requiredFeatureCount = std::size(features);
 
   // Use best limits for the device.
+#ifdef WGPU_BREAKING_CHANGE_FLATTEN_LIMITS
+  wgpu::Limits supportedLimits = {};
+  if (adapter_.GetLimits(&supportedLimits) != wgpu::Status::Success) {
+    LogInitFailure("Failed to call adapter.GetLimits().",
+                   /*generate_crash_report=*/true, backend_type,
+                   force_fallback_adapter);
+    return false;
+  }
+  descriptor.requiredLimits = &supportedLimits;
+#else
   wgpu::SupportedLimits supportedLimits = {};
   if (adapter_.GetLimits(&supportedLimits) != wgpu::Status::Success) {
     LogInitFailure("Failed to call adapter.GetLimits().",
@@ -691,6 +678,7 @@ bool DawnSharedContext::Initialize(
   wgpu::RequiredLimits deviceCreationLimits = {};
   deviceCreationLimits.limits = supportedLimits.limits;
   descriptor.requiredLimits = &deviceCreationLimits;
+#endif  // WGPU_BREAKING_CHANGE_FLATTEN_LIMITS
 
   // ANGLE always tries creating D3D11 device with debug layer when dcheck is
   // on, so tries creating dawn device with backend validation as well.
@@ -729,16 +717,7 @@ bool DawnSharedContext::Initialize(
     return false;
   }
 
-#ifdef WGPU_BREAKING_CHANGE_LOGGING_CALLBACK_TYPE
-  // TODO(369445924): fix this code once the new callback type is about to be
-  // landed in dawn.
-  device_.SetLoggingCallback(
-      [this](wgpu::LoggingType type, wgpu::StringView message) {
-        DawnSharedContext::LogInfo(type, message, this);
-      });
-#else
   device_.SetLoggingCallback(&DawnSharedContext::LogInfo, this);
-#endif
 
   backend_type_ = backend_type;
   is_vulkan_swiftshader_adapter_ =

@@ -585,6 +585,11 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
 
         // Only display quick delete divider line on the regular mode page menu.
         menu.findItem(R.id.quick_delete_divider_line_id).setVisible(!isIncognito);
+
+        menu.findItem(R.id.download_page_id).setVisible(shouldShowDownloadPageMenuItem(currentTab));
+
+        menu.findItem(R.id.ntp_customization_id)
+                .setVisible(ChromeFeatureList.sNewTabPageCustomization.isEnabled());
     }
 
     /**
@@ -875,6 +880,16 @@ public class AppMenuPropertiesDelegateImpl implements AppMenuPropertiesDelegate 
      */
     protected boolean shouldShowManagedByMenuItem(Tab currentTab) {
         return false;
+    }
+
+    /**
+     * @param currentTab Current tab being displayed.
+     * Returns whether the "Download page" menu item should be displayed.
+     */
+    protected boolean shouldShowDownloadPageMenuItem(Tab currentTab) {
+        return ChromeFeatureList.sHideTabletToolbarDownloadButton.isEnabled()
+                && isTabletSizeScreen()
+                && shouldEnableDownloadPage(currentTab);
     }
 
     /** Sets the visibility and labels of the "Add to Home screen" and "Open WebAPK" menu items. */

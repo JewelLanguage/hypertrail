@@ -36,6 +36,7 @@
 #include "third_party/blink/renderer/core/css/properties/css_property.h"
 #include "third_party/blink/renderer/core/css/style_color.h"
 #include "third_party/blink/renderer/core/css_value_keywords.h"
+#include "third_party/blink/renderer/core/html/forms/html_select_element.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/style_property_shorthand.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
@@ -1237,6 +1238,11 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
       return value_id == CSSValueID::kAuto ||
              value_id == CSSValueID::kOptimizespeed ||
              value_id == CSSValueID::kOptimizequality;
+    case CSSPropertyID::kColumnRuleBreak:
+    case CSSPropertyID::kRowRuleBreak:
+      return value_id == CSSValueID::kNone ||
+             value_id == CSSValueID::kSpanningItem ||
+             value_id == CSSValueID::kIntersection;
     case CSSPropertyID::kDirection:
       return value_id == CSSValueID::kLtr || value_id == CSSValueID::kRtl;
     case CSSPropertyID::kDominantBaseline:
@@ -1468,7 +1474,8 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
               value_id == CSSValueID::kSearchfield ||
               value_id == CSSValueID::kTextfield ||
               value_id == CSSValueID::kTextarea) ||
-             (RuntimeEnabledFeatures::CustomizableSelectEnabled() &&
+             /* This can't check for origin trials, unfortunately. */
+             (HTMLSelectElement::CustomizableSelectEnabledNoDocument() &&
               value_id == CSSValueID::kBaseSelect) ||
              (RuntimeEnabledFeatures::
                   NonStandardAppearanceValueSliderVerticalEnabled() &&
@@ -1669,15 +1676,11 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
       return value_id >= CSSValueID::kHorizontalTb &&
              value_id <= CSSValueID::kVerticalLr;
     case CSSPropertyID::kWritingMode:
-      if (RuntimeEnabledFeatures::SidewaysWritingModesEnabled()) {
-        if (value_id == CSSValueID::kSidewaysRl ||
-            value_id == CSSValueID::kSidewaysLr) {
-          return true;
-        }
-      }
       return value_id == CSSValueID::kHorizontalTb ||
              value_id == CSSValueID::kVerticalRl ||
              value_id == CSSValueID::kVerticalLr ||
+             value_id == CSSValueID::kSidewaysRl ||
+             value_id == CSSValueID::kSidewaysLr ||
              value_id == CSSValueID::kLrTb || value_id == CSSValueID::kRlTb ||
              value_id == CSSValueID::kTbRl || value_id == CSSValueID::kLr ||
              value_id == CSSValueID::kRl || value_id == CSSValueID::kTb;
@@ -1743,6 +1746,7 @@ CSSBitset CSSParserFastPaths::handled_by_keyword_fast_paths_properties_{{
     CSSPropertyID::kColorInterpolation,
     CSSPropertyID::kColorInterpolationFilters,
     CSSPropertyID::kColorRendering,
+    CSSPropertyID::kColumnRuleBreak,
     CSSPropertyID::kDirection,
     CSSPropertyID::kDominantBaseline,
     CSSPropertyID::kEmptyCells,
@@ -1778,6 +1782,7 @@ CSSBitset CSSParserFastPaths::handled_by_keyword_fast_paths_properties_{{
     CSSPropertyID::kPositionTryOrder,
     CSSPropertyID::kReadingFlow,
     CSSPropertyID::kResize,
+    CSSPropertyID::kRowRuleBreak,
     CSSPropertyID::kScrollMarkerGroup,
     CSSPropertyID::kScrollBehavior,
     CSSPropertyID::kOverscrollBehaviorInline,

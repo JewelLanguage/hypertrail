@@ -41,10 +41,10 @@
 #include "build/build_config.h"
 #include "cc/trees/raster_context_provider_wrapper.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
+#include "components/input/input_constants.h"
 #include "components/url_formatter/url_formatter.h"
 #include "components/viz/common/features.h"
 #include "content/child/child_process.h"
-#include "content/common/content_constants_internal.h"
 #include "content/common/features.h"
 #include "content/common/user_level_memory_pressure_signal_features.h"
 #include "content/public/common/content_features.h"
@@ -110,7 +110,6 @@
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/public/platform/web_v8_value_converter.h"
-#include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/modules/media/audio/audio_device_factory.h"
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_media_inspector.h"
@@ -150,7 +149,6 @@ using blink::WebAudioSinkDescriptor;
 using blink::WebMediaStreamTrack;
 using blink::WebString;
 using blink::WebURL;
-using blink::WebVector;
 
 namespace content {
 
@@ -214,8 +212,12 @@ RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
 #endif
 
 #if BUILDFLAG(IS_WIN)
-    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kUseFontDataManager)) {
+    // Create a FontDataManager if it's enabled, and if we're not in a
+    // single-process environment. In single process, the SkFontMgr is already
+    // installed by browser process code at this point.
+    if (base::FeatureList::IsEnabled(
+            features::kFontDataServiceAllWebContents) &&
+        sandboxEnabled()) {
       sk_sp<font_data_service::FontDataManager> font_data_manager =
           sk_make_sp<font_data_service::FontDataManager>();
 
@@ -499,7 +501,7 @@ unsigned RendererBlinkPlatformImpl::AudioHardwareOutputChannels() {
 }
 
 base::TimeDelta RendererBlinkPlatformImpl::GetHungRendererDelay() {
-  return kHungRendererDelay;
+  return input::kHungRendererDelay;
 }
 
 std::unique_ptr<WebAudioDevice> RendererBlinkPlatformImpl::CreateAudioDevice(
@@ -1060,14 +1062,20 @@ bool RendererBlinkPlatformImpl::DisallowV8FeatureFlagOverrides() const {
 
 void RendererBlinkPlatformImpl::AppendContentSecurityPolicy(
     const blink::WebURL& url,
-    blink::WebVector<blink::WebContentSecurityPolicyHeader>* csp) {
+    std::vector<blink::WebContentSecurityPolicyHeader>* csp) {
   GetContentClient()->renderer()->AppendContentSecurityPolicy(url, csp);
+}
+
+bool RendererBlinkPlatformImpl::IsFilePickerAllowedForCrossOriginSubframe(
+    const blink::WebSecurityOrigin& origin) {
+  return GetContentClient()->IsFilePickerAllowedForCrossOriginSubframe(origin);
 }
 
 base::PlatformThreadId RendererBlinkPlatformImpl::GetIOThreadId() const {
   auto io_task_runner = GetIOTaskRunner();
-  if (!io_task_runner)
+  if (!io_task_runner) {
     return base::kInvalidThreadId;
+  }
   // Cannot be called from IO thread due to potential deadlock.
   CHECK(!io_task_runner->BelongsToCurrentThread());
   {

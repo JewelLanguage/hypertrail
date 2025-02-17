@@ -200,11 +200,9 @@ ImageBitmap::ParsedOptions ParseOptions(
     const ImageBitmapOptions* options,
     std::optional<gfx::Rect> crop_rect,
     scoped_refptr<StaticBitmapImage> input) {
-  auto info = input->GetSkImageInfo();
-  return ParseOptions(options, crop_rect,
-                      gfx::Size(info.width(), info.height()),
+  return ParseOptions(options, crop_rect, input->GetSize(),
                       input->CurrentFrameOrientation(),
-                      info.alphaType() == kUnpremul_SkAlphaType);
+                      input->GetAlphaType() == kUnpremul_SkAlphaType);
 }
 
 // The function dstBufferSizeHasOverflow() is being called at the beginning of
@@ -453,10 +451,9 @@ ImageBitmap::ImageBitmap(const SkPixmap& pixmap,
 ImageBitmap::ImageBitmap(ImageData* data,
                          std::optional<gfx::Rect> crop_rect,
                          const ImageBitmapOptions* options) {
-  const ParsedOptions parsed_options =
-      ParseOptions(options, crop_rect, data->BitmapSourceSize(),
-                   ImageOrientationEnum::kOriginTopLeft,
-                   /*source_is_unpremul=*/true);
+  const ParsedOptions parsed_options = ParseOptions(
+      options, crop_rect, data->Size(), ImageOrientationEnum::kOriginTopLeft,
+      /*source_is_unpremul=*/true);
   if (DstBufferSizeHasOverflow(parsed_options))
     return;
 
@@ -752,6 +749,13 @@ gfx::Size ImageBitmap::Size() const {
   DCHECK_GT(image_->width(), 0);
   DCHECK_GT(image_->height(), 0);
   return image_->PreferredDisplaySize();
+}
+
+ImageBitmapSourceStatus ImageBitmap::CheckUsability() const {
+  if (is_neutered_) {
+    return base::unexpected(ImageBitmapSourceError::kInvalid);
+  }
+  return base::ok();
 }
 
 ScriptPromise<ImageBitmap> ImageBitmap::CreateImageBitmap(

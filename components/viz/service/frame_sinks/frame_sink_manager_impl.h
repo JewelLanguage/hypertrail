@@ -195,6 +195,7 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl
   void NotifyRendererBlockStateChanged(
       bool blocked,
       const std::vector<FrameSinkId>& render_input_routers) override;
+  void RequestInputBack() override;
 
   // mojom::FrameSinksMetricsTracker implementation:
   void StartFrameCounting(base::TimeTicks start_time,
@@ -214,6 +215,9 @@ class VIZ_SERVICE_EXPORT FrameSinkManagerImpl
   void GetForceEnableZoomState(
       const FrameSinkId& frame_sink_id,
       GetForceEnableZoomStateCallback callback) override;
+  void WaitForSurfaceAnimationManager(
+      const FrameSinkId& frame_sink_id,
+      WaitForSurfaceAnimationManagerCallback callback) override;
 
   void DestroyFrameSinkBundle(const FrameSinkBundleId& id);
 

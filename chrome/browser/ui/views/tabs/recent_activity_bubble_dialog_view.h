@@ -17,12 +17,12 @@ namespace content {
 class WebContents;
 }  // namespace content
 
-class GURL;
 class Profile;
 
 class RecentActivityRowView;
 class RecentActivityRowImageView;
-class CollaborationMessagingPageActionIconView;
+
+using collaboration::messaging::ActivityLogItem;
 
 DECLARE_ELEMENT_IDENTIFIER_VALUE(kRecentActivityBubbleDialogId);
 
@@ -32,21 +32,48 @@ class RecentActivityBubbleDialogView : public LocationBarBubbleDelegateView {
   METADATA_HEADER(RecentActivityBubbleDialogView, LocationBarBubbleDelegateView)
 
  public:
-  RecentActivityBubbleDialogView(
-      View* anchor_view,
-      content::WebContents* web_contents,
-      std::vector<collaboration::messaging::ActivityLogItem> activity_log,
-      Profile* profile);
+  RecentActivityBubbleDialogView(View* anchor_view,
+                                 content::WebContents* web_contents,
+                                 std::optional<int> current_tab_activity_index,
+                                 std::vector<ActivityLogItem> activity_log,
+                                 Profile* profile);
   ~RecentActivityBubbleDialogView() override;
 
   // The maximum number of rows that can be displayed in this dialog.
   static constexpr int kMaxNumberRows = 5;
 
-  // Returns the row's view at the given index.
+  // Creates a state indicating there is no activity to show.
+  void CreateEmptyState();
+
+  // Creates a view containing the single most recent tab activity.
+  void CreateTabActivity();
+
+  // Creates a view containing the most recent activity for the group.
+  void CreateGroupActivity();
+
+  // Returns the row's view at the given index. This will look in both
+  // the tab activity container and the group activity container.
   RecentActivityRowView* GetRowForTesting(int n);
 
+  views::View* tab_activity_container() const {
+    return tab_activity_container_;
+  }
+  views::View* group_activity_container() const {
+    return group_activity_container_;
+  }
+
  private:
-  const GURL url_;
+  // Close this bubble.
+  void Close();
+
+  // Containers will always be non-null. Visibility is toggled based on
+  // whether rows are added to each container.
+  raw_ptr<views::View> tab_activity_container_ = nullptr;
+  raw_ptr<views::View> group_activity_container_ = nullptr;
+
+  std::vector<ActivityLogItem> activity_log_;
+  std::optional<int> current_tab_activity_index_;
+  const raw_ptr<Profile> profile_;
 
   base::WeakPtrFactory<RecentActivityBubbleDialogView> weak_factory_{this};
 };
@@ -57,20 +84,36 @@ class RecentActivityRowView : public views::View {
   METADATA_HEADER(RecentActivityRowView, View)
 
  public:
-  RecentActivityRowView(collaboration::messaging::ActivityLogItem item,
-                        Profile* profile);
+  RecentActivityRowView(ActivityLogItem item,
+                        bool is_current_tab,
+                        Profile* profile,
+                        base::OnceCallback<void()> close_callback);
   ~RecentActivityRowView() override;
 
+  // views::Views
+  bool OnMousePressed(const ui::MouseEvent& event) override;
+
   RecentActivityRowImageView* image_view() const { return image_view_; }
-
   const std::u16string& activity_text() const { return activity_text_; }
-
   const std::u16string& metadata_text() const { return metadata_text_; }
+
+  // RecentActivityAction handlers.
+  // Focuses the open tab in the tab strip.
+  void FocusTab();
+  // Reopens the tab at the end of the group.
+  void ReopenTab();
+  // Opens the Tab Group editor bubble for the group.
+  void OpenTabGroupEditDialog();
+  // Opens the Data Sharing management bubble for the group.
+  void ManageSharing();
 
  private:
   std::u16string activity_text_;
   std::u16string metadata_text_;
   raw_ptr<RecentActivityRowImageView> image_view_ = nullptr;
+  ActivityLogItem item_;
+  const raw_ptr<Profile> profile_ = nullptr;
+  base::OnceCallback<void()> close_callback_;
 };
 
 // View containing the avatar image and, if the event refers to a tab, the
@@ -79,8 +122,7 @@ class RecentActivityRowImageView : public views::View {
   METADATA_HEADER(RecentActivityRowImageView, View)
 
  public:
-  RecentActivityRowImageView(collaboration::messaging::ActivityLogItem item,
-                             Profile* profile);
+  RecentActivityRowImageView(ActivityLogItem item, Profile* profile);
   ~RecentActivityRowImageView() override;
 
   // Returns whether there is an avatar image to show.
@@ -105,8 +147,10 @@ class RecentActivityRowImageView : public views::View {
   base::CancelableTaskTracker favicon_fetching_task_tracker_;
   gfx::ImageSkia avatar_image_;
   gfx::ImageSkia resized_favicon_image_;
-  collaboration::messaging::ActivityLogItem item_;
+  ActivityLogItem item_;
   const raw_ptr<Profile> profile_ = nullptr;
+
+  base::WeakPtrFactory<RecentActivityRowImageView> weak_factory_{this};
 };
 
 // The bubble coordinator for Shared Tab Group Recent Activity.
@@ -125,15 +169,15 @@ class RecentActivityBubbleCoordinator : public views::WidgetObserver {
   // Calls ShowCommon with the default arrow.
   void Show(views::View* anchor_view,
             content::WebContents* web_contents,
-            std::vector<collaboration::messaging::ActivityLogItem> activity_log,
+            std::vector<ActivityLogItem> activity_log,
             Profile* profile);
   // Same as above, but provides a default arrow for anchoring to the
   // page action. The default for location bar bubbles is to have a
   // TOP_RIGHT arrow.
-  void Show(CollaborationMessagingPageActionIconView* anchor_view,
-            content::WebContents* web_contents,
-            std::vector<collaboration::messaging::ActivityLogItem> activity_log,
-            Profile* profile);
+  void ShowForCurrentTab(views::View* anchor_view,
+                         content::WebContents* web_contents,
+                         std::vector<ActivityLogItem> activity_log,
+                         Profile* profile);
   void Hide();
 
   RecentActivityBubbleDialogView* GetBubble() const;
@@ -141,12 +185,7 @@ class RecentActivityBubbleCoordinator : public views::WidgetObserver {
 
  private:
   // Show a bubble containing the given activity log.
-  void ShowCommon(
-      views::View* anchor_view,
-      content::WebContents* web_contents,
-      std::vector<collaboration::messaging::ActivityLogItem> activity_log,
-      Profile* profile,
-      views::BubbleBorder::Arrow arrow);
+  void ShowCommon(std::unique_ptr<RecentActivityBubbleDialogView> bubble);
 
   views::ViewTracker tracker_;
   base::ScopedObservation<views::Widget, views::WidgetObserver>

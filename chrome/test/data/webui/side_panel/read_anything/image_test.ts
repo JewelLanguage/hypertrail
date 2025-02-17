@@ -9,7 +9,8 @@ import {IMAGES_TOGGLE_BUTTON_ID} from 'chrome-untrusted://read-anything-side-pan
 import {assertEquals,assertFalse, assertTrue} from 'chrome-untrusted://webui-test/chai_assert.js';
 import {microtasksFinished} from 'chrome-untrusted://webui-test/test_util.js';
 
-import {suppressInnocuousErrors} from './common.js';
+import {createApp} from './common.js';
+
 
 suite('Images', () => {
   let app: AppElement;
@@ -37,7 +38,7 @@ suite('Images', () => {
   }
 
   setup(async () => {
-    suppressInnocuousErrors();
+    // Clearing the DOM should always be done first.
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
     chrome.readingMode.onConnected = () => {};
 
@@ -47,10 +48,8 @@ suite('Images', () => {
       chrome.readingMode.onImageDownloaded(nodeId);
     };
 
-    app = document.createElement('read-anything-app');
-    document.body.appendChild(app);
+    app = await createApp();
     assertTrue(chrome.readingMode.imagesFeatureEnabled);
-    await microtasksFinished();
     imagesToggleButton =
         app.$.toolbar.shadowRoot!.querySelector<CrIconButtonElement>(
             '#' + IMAGES_TOGGLE_BUTTON_ID);

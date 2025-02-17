@@ -43,44 +43,10 @@
 
 namespace cc {
 
-// Subclass for InUsePoolResource that holds ownership of a gpu-rastered backing
-// and does cleanup of the backing when destroyed.
-class GpuRasterBufferProvider::GpuRasterBacking
-    : public ResourcePool::GpuBacking {
- public:
-  ~GpuRasterBacking() override {
-    if (!shared_image) {
-      return;
-    }
-    auto* sii = worker_context_provider->SharedImageInterface();
-    if (returned_sync_token.HasData())
-      sii->DestroySharedImage(returned_sync_token, std::move(shared_image));
-    else if (mailbox_sync_token.HasData())
-      sii->DestroySharedImage(mailbox_sync_token, std::move(shared_image));
-  }
-
-  void OnMemoryDump(
-      base::trace_event::ProcessMemoryDump* pmd,
-      const base::trace_event::MemoryAllocatorDumpGuid& buffer_dump_guid,
-      uint64_t tracing_process_id,
-      int importance) const override {
-    if (!shared_image) {
-      return;
-    }
-
-    auto tracing_guid = shared_image->GetGUIDForTracing();
-    pmd->CreateSharedGlobalAllocatorDump(tracing_guid);
-    pmd->AddOwnershipEdge(buffer_dump_guid, tracing_guid, importance);
-  }
-
-  // The context used to clean up the mailbox
-  raw_ptr<viz::RasterContextProvider> worker_context_provider = nullptr;
-};
-
 GpuRasterBufferProvider::RasterBufferImpl::RasterBufferImpl(
     GpuRasterBufferProvider* client,
     const ResourcePool::InUsePoolResource& in_use_resource,
-    GpuRasterBacking* backing,
+    ResourcePool::Backing* backing,
     bool resource_has_previous_content,
     bool depends_on_at_raster_decodes,
     bool depends_on_hardware_accelerated_jpeg_candidates,
@@ -182,16 +148,14 @@ std::unique_ptr<RasterBuffer> GpuRasterBufferProvider::AcquireBufferForRaster(
     bool depends_on_at_raster_decodes,
     bool depends_on_hardware_accelerated_jpeg_candidates,
     bool depends_on_hardware_accelerated_webp_candidates) {
-  if (!resource.gpu_backing()) {
-    auto backing = std::make_unique<GpuRasterBacking>();
-    backing->worker_context_provider = worker_context_provider_;
+  if (!resource.backing()) {
+    auto backing = std::make_unique<ResourcePool::Backing>();
     backing->overlay_candidate = tile_overlay_candidate_;
     backing->is_using_raw_draw =
         !backing->overlay_candidate && is_using_raw_draw_;
-    resource.set_gpu_backing(std::move(backing));
+    resource.set_backing(std::move(backing));
   }
-  GpuRasterBacking* backing =
-      static_cast<GpuRasterBacking*>(resource.gpu_backing());
+  ResourcePool::Backing* backing = resource.backing();
   bool resource_has_previous_content =
       resource_content_id && resource_content_id == previous_content_id;
   return std::make_unique<RasterBufferImpl>(
@@ -216,7 +180,7 @@ bool GpuRasterBufferProvider::IsResourcePremultiplied() const {
 bool GpuRasterBufferProvider::IsResourceReadyToDraw(
     const ResourcePool::InUsePoolResource& resource) {
   FlushIfNeeded();
-  const gpu::SyncToken& sync_token = resource.gpu_backing()->mailbox_sync_token;
+  const gpu::SyncToken& sync_token = resource.backing()->mailbox_sync_token;
   // This SyncToken() should have been set by calling OrderingBarrier() before
   // calling this.
   DCHECK(sync_token.HasData());
@@ -237,8 +201,7 @@ uint64_t GpuRasterBufferProvider::SetReadyToDrawCallback(
   FlushIfNeeded();
   gpu::SyncToken latest_sync_token;
   for (const auto* in_use : resources) {
-    const gpu::SyncToken& sync_token =
-        in_use->gpu_backing()->mailbox_sync_token;
+    const gpu::SyncToken& sync_token = in_use->backing()->mailbox_sync_token;
     if (sync_token.release_count() > latest_sync_token.release_count())
       latest_sync_token = sync_token;
   }
@@ -363,7 +326,7 @@ void GpuRasterBufferProvider::RasterBufferImpl::RasterizeSource(
   gpu::raster::RasterInterface* ri =
       client_->worker_context_provider_->RasterInterface();
   bool mailbox_needs_clear = false;
-  if (!backing_->shared_image) {
+  if (!backing_->shared_image()) {
     DCHECK(!backing_->returned_sync_token.HasData());
     auto* sii = client_->worker_context_provider_->SharedImageInterface();
 
@@ -377,11 +340,11 @@ void GpuRasterBufferProvider::RasterBufferImpl::RasterizeSource(
     } else if (client_->is_using_raw_draw_) {
       flags |= gpu::SHARED_IMAGE_USAGE_RAW_DRAW;
     }
-    backing_->shared_image =
+    backing_->set_shared_image(
         sii->CreateSharedImage({shared_image_format_, resource_size_,
                                 color_space_, flags, "GpuRasterTile"},
-                               gpu::kNullSurfaceHandle);
-    CHECK(backing_->shared_image);
+                               gpu::kNullSurfaceHandle));
+    CHECK(backing_->shared_image());
     mailbox_needs_clear = true;
     ri->WaitSyncTokenCHROMIUM(sii->GenUnverifiedSyncToken().GetConstData());
   } else {
@@ -413,7 +376,7 @@ void GpuRasterBufferProvider::RasterBufferImpl::RasterizeSource(
       raster_source->background_color(), mailbox_needs_clear,
       playback_settings.msaa_sample_count, msaa_mode, use_lcd_text,
       playback_settings.visible, color_space_, playback_settings.hdr_headroom,
-      backing_->shared_image->mailbox().name);
+      backing_->shared_image()->mailbox().name);
 
   gfx::Vector2dF recording_to_raster_scale = transform.scale();
   recording_to_raster_scale.InvScale(raster_source->recording_scale_factor());

@@ -4,11 +4,14 @@
 
 #include "remoting/protocol/ice_config_fetcher_cloud.h"
 
+#include <algorithm>
+#include <memory>
+#include <optional>
 #include <utility>
 
 #include "base/functional/bind.h"
 #include "base/numerics/checked_math.h"
-#include "remoting/base/protobuf_http_status.h"
+#include "remoting/base/http_status.h"
 #include "remoting/proto/google/internal/remoting/cloud/v1alpha/network_traversal_service.pb.h"
 #include "remoting/protocol/ice_config.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -22,21 +25,23 @@ namespace remoting::protocol {
 IceConfigFetcherCloud::IceConfigFetcherCloud(
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     OAuthTokenGetter* oauth_token_getter)
-    : service_client_(oauth_token_getter, url_loader_factory) {}
+    : service_client_(CloudServiceClient::CreateForChromotingRobotAccount(
+          oauth_token_getter,
+          url_loader_factory)) {}
 
 IceConfigFetcherCloud::~IceConfigFetcherCloud() = default;
 
 void IceConfigFetcherCloud::GetIceConfig(OnIceConfigCallback callback) {
   CHECK(callback);
 
-  service_client_.GenerateIceConfig(
+  service_client_->GenerateIceConfig(
       base::BindOnce(&IceConfigFetcherCloud::OnResponse,
                      weak_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void IceConfigFetcherCloud::OnResponse(
     OnIceConfigCallback callback,
-    const ProtobufHttpStatus& status,
+    const HttpStatus& status,
     std::unique_ptr<GenerateIceConfigResponse> response) {
   if (!status.ok()) {
     LOG(ERROR) << "GenerateIceConfig request failed.  Error code: "

@@ -8,14 +8,20 @@ import './file_suggestion.js';
 
 import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
 
+import type {File} from '../../../file_suggestion.mojom-webui.js';
 import {I18nMixinLit, loadTimeData} from '../../../i18n_setup.js';
+import type {MicrosoftFilesPageHandlerRemote} from '../../../microsoft_files.mojom-webui.js';
+import {ParentTrustedDocumentProxy} from '../../microsoft_auth_frame_connector.js';
 import {ModuleDescriptor} from '../../module_descriptor.js';
 import type {MenuItem, ModuleHeaderElement} from '../module_header.js';
 
+import type {FileSuggestionElement} from './file_suggestion.js';
 import {getHtml} from './microsoft_files_module.html.js';
+import {MicrosoftFilesProxyImpl} from './microsoft_files_proxy.js';
 
 export interface MicrosoftFilesModuleElement {
   $: {
+    fileSuggestion: FileSuggestionElement,
     moduleHeaderElementV2: ModuleHeaderElement,
   };
 }
@@ -38,11 +44,21 @@ export class MicrosoftFilesModuleElement extends
 
   static override get properties() {
     return {
+      files_: {type: Array},
       showInfoDialog_: {type: Boolean},
     };
   }
 
+  protected files_: File[] = [];
   protected showInfoDialog_: boolean = false;
+
+  private handler_: MicrosoftFilesPageHandlerRemote;
+
+  constructor(files: File[]) {
+    super();
+    this.handler_ = MicrosoftFilesProxyImpl.getInstance().handler;
+    this.files_ = files;
+  }
 
   protected getMenuItemGroups_(): MenuItem[][] {
     return [
@@ -50,18 +66,19 @@ export class MicrosoftFilesModuleElement extends
         {
           action: 'dismiss',
           icon: 'modules:visibility_off',
-          // TODO(crbug.com/372724129): Rename `modulesDriveDismissButtonText`
-          // to accommodate both sharepoint and drive modules, or replace it
-          // with a sharepoint-specific string.
-          text: this.i18n('modulesDriveDismissButtonText'),
+          text: this.i18nRecursive(
+              '', 'modulesDismissForHoursButtonText',
+              'fileSuggestionDismissHours'),
         },
         {
           action: 'disable',
           icon: 'modules:block',
-          // TODO(crbug.com/372724129): Rename `modulesDriveDisableButtonTextV2`
-          // to accommodate both sharepoint and drive modules, or replace it
-          // with a sharepoint-specific string.
-          text: this.i18n('modulesDriveDisableButtonTextV2'),
+          text: this.i18n('modulesMicrosoftFilesDisableButtonText'),
+        },
+        {
+          action: 'signout',
+          icon: 'modules:logout',
+          text: this.i18n('modulesMicrosoftSignOutButtonText'),
         },
         {
           action: 'info',
@@ -85,14 +102,25 @@ export class MicrosoftFilesModuleElement extends
       detail: {
         message: loadTimeData.getStringF(
             'disableModuleToastMessage',
-            loadTimeData.getString('modulesSharepointName')),
+            loadTimeData.getString('modulesMicrosoftFilesName')),
       },
     });
     this.dispatchEvent(disableEvent);
   }
 
   protected onDismissButtonClick_() {
-    // TODO(crbug.com/372729916): Handle dismiss button click.
+    // TODO(crbug.com/372724129): Update dismiss message.
+    this.handler_.dismissModule();
+    this.dispatchEvent(new CustomEvent('dismiss-module-instance', {
+      bubbles: true,
+      composed: true,
+      detail: {
+        message: loadTimeData.getStringF(
+            'dismissModuleToastMessage',
+            loadTimeData.getString('modulesFilesSentence')),
+        restoreCallback: () => this.handler_.restoreModule(),
+      },
+    }));
   }
 
   protected onInfoButtonClick_() {
@@ -102,16 +130,20 @@ export class MicrosoftFilesModuleElement extends
   protected onInfoDialogClose_() {
     this.showInfoDialog_ = false;
   }
+
+  protected onSignOutButtonClick_() {
+    ParentTrustedDocumentProxy.getInstance()?.getChildDocument().signOut();
+  }
 }
 
 customElements.define(
     MicrosoftFilesModuleElement.is, MicrosoftFilesModuleElement);
 
 async function createMicrosoftFilesElement():
-    Promise<MicrosoftFilesModuleElement> {
-  // TODO(crbug.com/329492316): Retrieve files from the backend, and return null
-  // if there are no files.
-  return new MicrosoftFilesModuleElement();
+    Promise<MicrosoftFilesModuleElement|null> {
+  const {files} =
+      await MicrosoftFilesProxyImpl.getInstance().handler.getFiles();
+  return files.length > 0 ? new MicrosoftFilesModuleElement(files) : null;
 }
 
 export const microsoftFilesModuleDescriptor: ModuleDescriptor =

@@ -7,20 +7,20 @@
 #include <tuple>
 #include <utility>
 
-#include "ash/components/arc/arc_browser_context_keyed_service_factory_base.h"
-#include "ash/components/arc/arc_util.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
 #include "ash/public/cpp/app_types_util.h"
-#include "ash/public/cpp/external_arc/message_center/arc_notification_content_view.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chromeos/ash/experiences/arc/arc_browser_context_keyed_service_factory_base.h"
+#include "chromeos/ash/experiences/arc/arc_util.h"
 #include "chromeos/ash/experiences/arc/ime/arc_ime_bridge_impl.h"
 #include "chromeos/ash/experiences/arc/ime/arc_ime_util.h"
 #include "chromeos/ash/experiences/arc/ime/key_event_result_receiver.h"
+#include "chromeos/ash/experiences/arc/message_center/arc_notification_content_view.h"
 #include "components/exo/wm_helper.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"

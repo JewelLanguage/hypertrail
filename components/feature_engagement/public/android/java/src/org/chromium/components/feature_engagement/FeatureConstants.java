@@ -69,6 +69,7 @@ import java.lang.annotation.RetentionPolicy;
     FeatureConstants.TAB_SWITCHER_BUTTON_SWITCH_INCOGNITO,
     FeatureConstants.FEED_CARD_MENU_FEATURE,
     FeatureConstants.IDENTITY_DISC_FEATURE,
+    FeatureConstants.TAB_GROUP_SHARE_NOTICE_FEATURE,
     FeatureConstants.TAB_GROUPS_DRAG_AND_DROP_FEATURE,
     FeatureConstants.TAB_GROUPS_REMOTE_GROUP,
     FeatureConstants.TAB_GROUPS_SURFACE,
@@ -116,6 +117,8 @@ import java.lang.annotation.RetentionPolicy;
 @Retention(RetentionPolicy.SOURCE)
 @NullMarked
 public @interface FeatureConstants {
+
+    String ACCOUNT_SETTINGS_HISTORY_SYNC = "IPH_AccountSettingsHistorySync";
     String ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_NEW_TAB_FEATURE =
             "IPH_AdaptiveButtonInTopToolbarCustomization_NewTab";
     String ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_CUSTOMIZATION_SHARE_FEATURE =
@@ -222,6 +225,12 @@ public @interface FeatureConstants {
      * about tab group sync and save functionality.
      */
     String TAB_GROUP_CREATION_DIALOG_SYNC_TEXT_FEATURE = "IPH_TabGroupCreationDialogSyncText";
+
+    /**
+     * An IPH feature that explains through a bottom sheet that changes to shared tab groups are
+     * visible to everyone.
+     */
+    String TAB_GROUP_SHARE_NOTICE_FEATURE = "IPH_TabGroupShareNotice";
 
     /**
      * An IPH feature that shows a notification bubble for updated tab groups. The bubble appears on

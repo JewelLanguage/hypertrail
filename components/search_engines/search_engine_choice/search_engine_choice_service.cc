@@ -32,7 +32,7 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/regional_capabilities/regional_capabilities_service.h"
-#include "components/search_engines/eea_countries_ids.h"
+#include "components/regional_capabilities/regional_capabilities_utils.h"
 #include "components/search_engines/search_engine_choice/search_engine_choice_metrics_service_accessor.h"
 #include "components/search_engines/search_engine_choice/search_engine_choice_utils.h"
 #include "components/search_engines/search_engine_type.h"
@@ -179,11 +179,13 @@ SearchEngineChoiceService::SearchEngineChoiceService(
     PrefService& profile_prefs,
     PrefService* local_state,
     regional_capabilities::RegionalCapabilitiesService& regional_capabilities,
+    TemplateURLPrepopulateData::Resolver& prepopulate_data_resolver,
     bool is_profile_eligbile_for_dse_guest_propagation,
     int variations_country_id)
     : profile_prefs_(profile_prefs),
       local_state_(local_state),
       regional_capabilities_service_(regional_capabilities),
+      prepopulate_data_resolver_(prepopulate_data_resolver),
       variations_country_id_(variations_country_id) {
 #if BUILDFLAG(IS_IOS) || BUILDFLAG(IS_ANDROID)
   // No guest mode on IOS or Android.
@@ -193,7 +195,7 @@ SearchEngineChoiceService::SearchEngineChoiceService(
       is_profile_eligbile_for_dse_guest_propagation &&
       base::FeatureList::IsEnabled(
           switches::kSearchEngineChoiceGuestExperience) &&
-      IsEeaChoiceCountry(GetCountryId());
+      regional_capabilities_service_->IsInEeaCountry();
 
   ProcessPendingChoiceScreenDisplayState();
   PreprocessPrefsForReprompt();
@@ -203,11 +205,13 @@ SearchEngineChoiceService::SearchEngineChoiceService(
     PrefService& profile_prefs,
     PrefService* local_state,
     regional_capabilities::RegionalCapabilitiesService& regional_capabilities,
+    TemplateURLPrepopulateData::Resolver& prepopulate_data_resolver,
     bool is_profile_eligible_for_dse_guest_propagation,
     variations::VariationsService* variations_service)
     : SearchEngineChoiceService(profile_prefs,
                                 local_state,
                                 regional_capabilities,
+                                prepopulate_data_resolver,
                                 is_profile_eligible_for_dse_guest_propagation,
                                 GetVariationsCountryId(variations_service)) {}
 
@@ -242,7 +246,7 @@ SearchEngineChoiceService::GetStaticChoiceScreenConditions(
     return SearchEngineChoiceScreenConditions::kAlreadyCompleted;
   }
 
-  if (!IsEeaChoiceCountry(GetCountryId())) {
+  if (!regional_capabilities_service_->IsInEeaCountry()) {
     return SearchEngineChoiceScreenConditions::kNotInRegionalScope;
   }
 
@@ -311,14 +315,12 @@ SearchEngineChoiceService::GetDynamicChoiceScreenConditions(
         kHasDistributionCustomSearchEngine;
   }
 
-  if (!TemplateURLPrepopulateData::GetPrepopulatedEngineFromFullList(
-          &profile_prefs_.get(), this,
+  if (!prepopulate_data_resolver_->GetEngineFromFullList(
           default_search_engine->prepopulate_id())) {
     // The current default search engine was at some point part of the
     // prepopulated data (it has a "normal"-looking ID), but it has since been
     // removed. Follow what we do for custom search engines, don't show the
     // choice screen.
-    RecordUnexpectedSearchProvider(default_search_engine->data());
     return SearchEngineChoiceScreenConditions::
         kHasRemovedPrepopulatedSearchEngine;
   }
@@ -331,13 +333,35 @@ int SearchEngineChoiceService::GetCountryId() {
   return regional_capabilities_service_->GetCountryId();
 }
 
+std::unique_ptr<search_engines::ChoiceScreenData>
+SearchEngineChoiceService::GetChoiceScreenData(
+    const SearchTermsData& search_terms_data) {
+  TemplateURLService::OwnedTemplateURLVector owned_template_urls;
+
+  // We call `GetPrepopulatedEngines` instead of
+  // `GetSearchProvidersUsingLoadedEngines` because the latter will return the
+  // list of search engines that might have been modified by the user (by
+  // changing the engine's keyword in settings for example).
+  // Changing this will cause issues in the icon generation behavior that's
+  // handled by `generate_search_engine_icons.py`.
+  std::vector<std::unique_ptr<TemplateURLData>> engines =
+      prepopulate_data_resolver_->GetPrepopulatedEngines();
+  for (const auto& engine : engines) {
+    owned_template_urls.push_back(std::make_unique<TemplateURL>(*engine));
+  }
+
+  return std::make_unique<search_engines::ChoiceScreenData>(
+      std::move(owned_template_urls),
+      regional_capabilities_service_->GetCountryId(), search_terms_data);
+}
+
 void SearchEngineChoiceService::RecordChoiceMade(
     ChoiceMadeLocation choice_location,
     TemplateURLService* template_url_service) {
   CHECK_NE(choice_location, ChoiceMadeLocation::kOther);
 
   // Don't modify the pref if the user is not in the EEA region.
-  if (!IsEeaChoiceCountry(GetCountryId())) {
+  if (!regional_capabilities_service_->IsInEeaCountry()) {
     return;
   }
 

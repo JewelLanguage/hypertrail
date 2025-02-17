@@ -18,7 +18,7 @@ targets.bundle(
 )
 
 targets.bundle(
-    name = "android_10_emulator_fyi_gtests",
+    name = "android_10_emulator_gtests",
     targets = [
         "android_emulator_specific_chrome_public_tests",
         "android_trichrome_smoke_tests",
@@ -36,6 +36,13 @@ targets.bundle(
             ],
         ),
         "webview_ui_instrumentation_tests",
+    ],
+)
+
+targets.bundle(
+    name = "android_10_emulator_fyi_gtests",
+    targets = [
+        "android_content_browsertests_fyi",
     ],
 )
 
@@ -99,10 +106,10 @@ targets.bundle(
 targets.bundle(
     name = "android_12l_rel_cq_gtests",
     targets = [
-        "tablet_sensitive_chrome_public_test_apk",
+        "chrome_public_test_apk_tablet",
     ],
     per_test_modifications = {
-        "tablet_sensitive_chrome_public_test_apk": targets.mixin(
+        "chrome_public_test_apk_tablet": targets.mixin(
             swarming = targets.swarming(
                 shards = 2,
             ),
@@ -334,6 +341,27 @@ targets.bundle(
     ],
 )
 
+# Android desktop FYI tests that run on AVDs or devices. Specific emulator or
+# device mixins should be added where this is used.
+targets.bundle(
+    name = "android_desktop_fyi_tests",
+    targets = [
+        "chrome_public_test_apk",
+    ],
+    mixins = [
+        "has_native_resultdb_integration",
+        "linux-jammy",
+        "x86-64",
+    ],
+    per_test_modifications = {
+        "chrome_public_test_apk": targets.mixin(
+            swarming = targets.swarming(
+                shards = 15,
+            ),
+        ),
+    },
+)
+
 # Android desktop tests that run on a Linux host.
 targets.bundle(
     name = "android_desktop_junit_tests",
@@ -354,7 +382,6 @@ targets.bundle(
     name = "android_desktop_tests",
     targets = [
         "android_browsertests",
-        "chrome_public_test_apk",
         "chrome_public_unit_test_apk",
         "extensions_unittests",
         "unit_tests",
@@ -365,12 +392,6 @@ targets.bundle(
         "x86-64",
     ],
     per_test_modifications = {
-        "chrome_public_test_apk": targets.mixin(
-            swarming = targets.swarming(
-                shards = 15,
-            ),
-            experiment_percentage = 100,
-        ),
         "chrome_public_unit_test_apk": targets.mixin(
             swarming = targets.swarming(
                 shards = 2,
@@ -2011,6 +2032,32 @@ targets.bundle(
     ],
 )
 
+# This test suite contains the exact same tests as
+# chromium_mac_gtests_no_nacl, with some tests default to run on mac vm.
+targets.bundle(
+    name = "chromium_mac_gtests_no_nacl_mac14_arm",
+    targets = [
+        "chromium_gtests",
+        "chromium_mac_gtests_vm_optional",
+        "non_android_and_cast_and_chromeos_chromium_gtests",
+        "non_android_chromium_gtests_no_nacl",
+    ],
+)
+
+# A subsuite tests of chromium_mac_gtests_no_nacl which
+# are safe to run on VMs
+targets.bundle(
+    name = "chromium_mac_gtests_vm_optional",
+    targets = [
+        "chromium_gtests_for_devices_with_graphical_output",
+        "chromium_gtests_for_linux_and_mac_only",
+        "mac_specific_chromium_gtests",
+    ],
+    mixins = [
+        "mac_14_vm_optional",
+    ],
+)
+
 targets.bundle(
     name = "chromium_mac_osxbeta_rel_isolated_scripts",
     targets = [
@@ -2126,7 +2173,7 @@ targets.bundle(
         "brfetch_blink_wpt_tests": targets.mixin(
             ci_only = True,
             swarming = targets.swarming(
-                shards = 3,
+                shards = 1,
             ),
             experiment_percentage = 100,
         ),
@@ -2461,6 +2508,45 @@ targets.bundle(
 )
 
 targets.bundle(
+    name = "dawn_chromeos_release_telemetry_tests_volteer_skylab",
+    targets = [
+        # TODO(crbug.com/340815322): Add gpu_dawn_webgpu_compat_cts once
+        # compat works properly on ChromeOS.
+        targets.bundle(
+            targets = "gpu_dawn_webgpu_cts",
+            variants = [
+                "CROS_VOLTEER_PUBLIC_RELEASE_ASH_LKGM",
+            ],
+        ),
+    ],
+)
+
+targets.bundle(
+    name = "dawn_chromeos_release_tests_volteer_skylab",
+    targets = [
+        # gtests
+        targets.bundle(
+            targets = "gpu_common_gtests_passthrough",
+            variants = [
+                "CROS_VOLTEER_PUBLIC_RELEASE_ASH_LKGM",
+            ],
+        ),
+        targets.bundle(
+            targets = "gpu_dawn_gtests",
+            variants = [
+                "CROS_VOLTEER_PUBLIC_RELEASE_ASH_LKGM",
+            ],
+        ),
+        targets.bundle(
+            targets = "gpu_dawn_gtests_with_validation",
+            variants = [
+                "CROS_VOLTEER_PUBLIC_RELEASE_ASH_LKGM",
+            ],
+        ),
+    ],
+)
+
+targets.bundle(
     name = "desktop_chromium_mac_osxbeta_scripts",
     targets = [
         "content_shell_crash_test",
@@ -2729,6 +2815,7 @@ targets.bundle(
         "boringssl_crypto_tests",
         "boringssl_ssl_tests",
         "capture_unittests",
+        "cast_unittests",
         "cc_unittests",
         "components_browsertests",
         "components_unittests",
@@ -2739,6 +2826,8 @@ targets.bundle(
         "display_unittests",
         "events_unittests",
         "filesystem_service_unittests",
+        # TODO(crbug.com/40821369): Enable this suite.
+        # "flatbuffers_unittests",
         "gcm_unit_tests",
         "gfx_unittests",
         "gin_unittests",
@@ -2749,6 +2838,8 @@ targets.bundle(
         "headless_unittests",
         "ipc_tests",
         "latency_unittests",
+        "liburlpattern_unittests",
+        "libjingle_xmpp_unittests",
         "media_unittests",
         "message_center_unittests",
         "midi_unittests",
@@ -2758,8 +2849,7 @@ targets.bundle(
         "ozone_gl_unittests",
         "ozone_unittests",
         "perfetto_unittests",
-        # TODO(crbug.com/40274401): Enable this.
-        # "rust_gtest_interop_unittests",
+        "rust_gtest_interop_unittests",
         "services_unittests",
         "shell_dialogs_unittests",
         "skia_unittests",
@@ -2878,6 +2968,7 @@ targets.bundle(
     name = "fuchsia_isolated_scripts",
     targets = [
         "chromium_webkit_isolated_scripts",
+        # TODO(crbug.com/40821367): Enable content_shell_crash_test
         "gpu_angle_fuchsia_unittests_isolated_scripts",
     ],
 )
@@ -3187,6 +3278,50 @@ targets.bundle(
     ],
 )
 
+# GPU gtests which run on both the main and FYI waterfalls.
+targets.bundle(
+    name = "gpu_common_gtests_passthrough",
+    targets = [
+        "gl_tests_passthrough",
+        "gl_unittests",
+    ],
+    per_test_modifications = {
+        "gl_tests_passthrough": targets.mixin(
+            args = [
+                "--use-gl=angle",
+            ],
+            chromeos_args = [
+                "--stop-ui",
+                targets.magic_args.CROS_GTEST_FILTER_FILE,
+            ],
+            desktop_args = [
+                "--use-gpu-in-tests",
+            ],
+            linux_args = [
+                "--no-xvfb",
+            ],
+            swarming = targets.swarming(
+                shards = 2,
+            ),
+        ),
+        "gl_unittests": [
+            targets.mixin(
+                chromeos_args = [
+                    "--stop-ui",
+                    "--test-launcher-filter-file=../../testing/buildbot/filters/chromeos.gl_unittests.filter",
+                ],
+                desktop_args = [
+                    "--use-gpu-in-tests",
+                ],
+                linux_args = [
+                    "--no-xvfb",
+                ],
+            ),
+            "skia_gold_test",
+        ],
+    },
+)
+
 targets.bundle(
     name = "gpu_common_gtests_validating",
     targets = [
@@ -3316,6 +3451,52 @@ targets.bundle(
     ],
 )
 
+# GPU gtests that test only Dawn
+targets.bundle(
+    name = "gpu_dawn_gtests",
+    targets = [
+        "dawn_end2end_implicit_device_sync_tests",
+        "dawn_end2end_skip_validation_tests",
+        "dawn_end2end_tests",
+        "dawn_end2end_wire_tests",
+    ],
+    per_test_modifications = {
+        "dawn_end2end_implicit_device_sync_tests": targets.mixin(
+            linux_args = [
+                "--no-xvfb",
+            ],
+            ci_only = True,  # https://crbug.com/dawn/1749
+            swarming = targets.swarming(
+                shards = 2,
+            ),
+        ),
+        "dawn_end2end_skip_validation_tests": targets.mixin(
+            linux_args = [
+                "--no-xvfb",
+            ],
+            swarming = targets.swarming(
+                shards = 2,
+            ),
+        ),
+        "dawn_end2end_tests": targets.mixin(
+            linux_args = [
+                "--no-xvfb",
+            ],
+            swarming = targets.swarming(
+                shards = 2,
+            ),
+        ),
+        "dawn_end2end_wire_tests": targets.mixin(
+            linux_args = [
+                "--no-xvfb",
+            ],
+            swarming = targets.swarming(
+                shards = 2,
+            ),
+        ),
+    },
+)
+
 targets.bundle(
     name = "gpu_dawn_gtests_no_dxc",
     targets = [
@@ -3372,6 +3553,24 @@ targets.bundle(
     },
 )
 
+# GPU gtests that test only Dawn with backend validation layers
+targets.bundle(
+    name = "gpu_dawn_gtests_with_validation",
+    targets = [
+        "dawn_end2end_validation_layers_tests",
+    ],
+    per_test_modifications = {
+        "dawn_end2end_validation_layers_tests": targets.mixin(
+            linux_args = [
+                "--no-xvfb",
+            ],
+            swarming = targets.swarming(
+                shards = 2,
+            ),
+        ),
+    },
+)
+
 targets.bundle(
     name = "gpu_dawn_integration_asan_gtests_passthrough",
     targets = [
@@ -3388,17 +3587,6 @@ targets.bundle(
     targets = [
         "gpu_common_gtests_passthrough",
         "gpu_dawn_gtests",
-        "gpu_dawn_gtests_with_validation",
-    ],
-)
-
-# TODO(crbug.com/364675466): Remove this when Tint IR is launched on macOS.
-targets.bundle(
-    name = "gpu_dawn_integration_gtests_passthrough_macos",
-    targets = [
-        "gpu_common_gtests_passthrough",
-        "gpu_dawn_gtests",
-        "gpu_dawn_gtests_use_tint_ir",
         "gpu_dawn_gtests_with_validation",
     ],
 )
@@ -3568,6 +3756,7 @@ targets.bundle(
     name = "gpu_dawn_webgpu_compat_cts",
     targets = [
         "webgpu_cts_compat_tests",
+        "webgpu_cts_compat_min_es31_tests",
     ],
     per_test_modifications = {
         # Worker versions of compat tests intentionally omitted since it is
@@ -3592,6 +3781,125 @@ targets.bundle(
             ),
             "gpu_integration_test_common_args",
             "webgpu_telemetry_cts",
+        ],
+        "webgpu_cts_compat_min_es31_tests": [
+            targets.mixin(
+                args = [
+                    "--extra-browser-args=--enable-features=WebGPUExperimentalFeatures --use-webgpu-adapter=opengles --enable-dawn-features=gl_force_es_31_and_no_extensions",
+                ],
+                android_args = [
+                    "--extra-browser-args=--use-angle=gles --disable-features=Vulkan",
+                ],
+                linux_args = [
+                    "--extra-browser-args=--use-angle=gl",
+                ],
+                swarming = targets.swarming(
+                    shards = 14,
+                ),
+                android_swarming = targets.swarming(
+                    shards = 36,
+                ),
+            ),
+            "gpu_integration_test_common_args",
+            "webgpu_telemetry_cts",
+        ],
+    },
+)
+
+targets.bundle(
+    name = "gpu_dawn_webgpu_cts",
+    targets = [
+        "webgpu_cts_dedicated_worker_tests",
+        "webgpu_cts_service_worker_tests",
+        "webgpu_cts_shared_worker_tests",
+        "webgpu_cts_tests",
+        "webgpu_cts_with_validation_tests",
+        # We intentionally do not have validation + worker tests since
+        # no validation + worker should provide sufficient coverage.
+    ],
+    per_test_modifications = {
+        "webgpu_cts_dedicated_worker_tests": [
+            targets.mixin(
+                swarming = targets.swarming(
+                    shards = 1,
+                ),
+                android_swarming = targets.swarming(
+                    shards = 2,
+                ),
+                skylab = targets.skylab(
+                    shards = 1,
+                ),
+            ),
+            "gpu_integration_test_common_args",
+            "webgpu_telemetry_cts",
+            "linux_vulkan",
+        ],
+        "webgpu_cts_service_worker_tests": [
+            targets.mixin(
+                swarming = targets.swarming(
+                    shards = 1,
+                ),
+                android_swarming = targets.swarming(
+                    shards = 2,
+                ),
+                skylab = targets.skylab(
+                    shards = 1,
+                ),
+            ),
+            "gpu_integration_test_common_args",
+            "webgpu_telemetry_cts",
+            "linux_vulkan",
+        ],
+        "webgpu_cts_shared_worker_tests": [
+            targets.mixin(
+                swarming = targets.swarming(
+                    shards = 1,
+                ),
+                android_swarming = targets.swarming(
+                    shards = 2,
+                ),
+                skylab = targets.skylab(
+                    shards = 1,
+                ),
+            ),
+            "gpu_integration_test_common_args",
+            "webgpu_telemetry_cts",
+            "linux_vulkan",
+        ],
+        "webgpu_cts_tests": [
+            targets.mixin(
+                swarming = targets.swarming(
+                    shards = 14,
+                ),
+                android_swarming = targets.swarming(
+                    shards = 36,
+                ),
+                skylab = targets.skylab(
+                    shards = 14,
+                ),
+            ),
+            "gpu_integration_test_common_args",
+            "webgpu_telemetry_cts",
+            "linux_vulkan",
+        ],
+        "webgpu_cts_with_validation_tests": [
+            targets.mixin(
+                args = [
+                    "--enable-dawn-backend-validation",
+                ],
+                swarming = targets.swarming(
+                    shards = 14,
+                ),
+                android_swarming = targets.swarming(
+                    shards = 36,
+                ),
+                skylab = targets.skylab(
+                    shards = 14,
+                ),
+            ),
+            "gpu_integration_test_common_args",
+            "webgpu_telemetry_cts",
+            "linux_vulkan",
         ],
     },
 )
@@ -4162,7 +4470,7 @@ targets.bundle(
         "gpu_validating_telemetry_tests",
         "gpu_webcodecs_validating_ganesh_telemetry_test",
         "gpu_webgl_conformance_gles_passthrough_ganesh_telemetry_tests",
-        "gpu_webgl_conformance_validating_telemetry_tests",
+        "gpu_webgl_conformance_validating_ganesh_telemetry_tests",
     ],
 )
 
@@ -4178,58 +4486,10 @@ targets.bundle(
         "screenshot_sync_passthrough_ganesh_tests",
     ],
     per_test_modifications = {
-        "context_lost_passthrough_ganesh_tests": [
-            targets.mixin(
-                args = [
-                    "--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --disable-features=SkiaGraphite",
-                ],
-            ),
-            "gpu_integration_test_common_args",
-        ],
-        "expected_color_pixel_passthrough_ganesh_test": [
-            targets.mixin(
-                args = [
-                    "--dont-restore-color-profile-after-test",
-                    "--test-machine-name",
-                    "${buildername}",
-                    "--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --disable-features=SkiaGraphite",
-                ],
-                android_args = [
-                    "--extra-browser-args=--force-online-connection-state-for-indicator",
-                ],
-            ),
-            "gpu_integration_test_common_args",
-        ],
         "gpu_process_launch_tests": [
             "gpu_integration_test_common_args",
         ],
         "hardware_accelerated_feature_tests": [
-            "gpu_integration_test_common_args",
-        ],
-        "pixel_skia_gold_passthrough_ganesh_test": [
-            targets.mixin(
-                args = [
-                    "--dont-restore-color-profile-after-test",
-                    "--test-machine-name",
-                    "${buildername}",
-                    "--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --disable-features=SkiaGraphite",
-                ],
-                android_args = [
-                    "--extra-browser-args=--force-online-connection-state-for-indicator",
-                ],
-            ),
-            "gpu_integration_test_common_args",
-        ],
-        "screenshot_sync_passthrough_ganesh_tests": [
-            targets.mixin(
-                args = [
-                    "--dont-restore-color-profile-after-test",
-                    "--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --disable-features=SkiaGraphite",
-                ],
-                android_args = [
-                    "--extra-browser-args=--force-online-connection-state-for-indicator",
-                ],
-            ),
             "gpu_integration_test_common_args",
         ],
     },
@@ -4245,7 +4505,7 @@ targets.bundle(
         "gpu_webgl2_conformance_gles_passthrough_telemetry_tests",
         "gpu_webgl2_conformance_validating_telemetry_tests",
         "gpu_webgl_conformance_gles_passthrough_ganesh_telemetry_tests",
-        "gpu_webgl_conformance_validating_telemetry_tests",
+        "gpu_webgl_conformance_validating_ganesh_telemetry_tests",
     ],
 )
 
@@ -4262,7 +4522,8 @@ targets.bundle(
         "gpu_webgl2_conformance_validating_telemetry_tests",
         "gpu_webgl_conformance_gles_passthrough_ganesh_telemetry_tests",
         "gpu_webgl_conformance_gles_passthrough_graphite_telemetry_tests",
-        "gpu_webgl_conformance_validating_telemetry_tests",
+        "gpu_webgl_conformance_validating_ganesh_telemetry_tests",
+        "gpu_webgl_conformance_validating_graphite_telemetry_tests",
     ],
 )
 
@@ -4302,7 +4563,6 @@ targets.bundle(
                     "--extra-browser-args=--use-cmd-decoder=validating --disable-features=SkiaGraphite",
                 ],
             ),
-            "gpu_integration_test_common_args",
         ],
     },
 )
@@ -4312,14 +4572,43 @@ targets.bundle(
     targets = [
         "webcodecs_graphite_tests",
     ],
+)
+
+targets.bundle(
+    name = "gpu_webgl_conformance_validating_ganesh_telemetry_tests",
+    targets = [
+        "webgl_conformance_validating_ganesh_tests",
+    ],
     per_test_modifications = {
-        "webcodecs_graphite_tests": [
+        "webgl_conformance_validating_ganesh_tests": [
             targets.mixin(
-                args = [
-                    "--extra-browser-args=--use-cmd-decoder=validating --enable-features=SkiaGraphite",
-                ],
+                swarming = targets.swarming(
+                    shards = 2,
+                ),
+                android_swarming = targets.swarming(
+                    shards = 6,
+                ),
             ),
-            "gpu_integration_test_common_args",
+        ],
+    },
+)
+
+targets.bundle(
+    name = "gpu_webgl_conformance_validating_graphite_telemetry_tests",
+    targets = [
+        "webgl_conformance_validating_graphite_tests",
+    ],
+    per_test_modifications = {
+        "webgl_conformance_validating_graphite_tests": [
+            targets.mixin(
+                ci_only = True,
+                swarming = targets.swarming(
+                    shards = 2,
+                ),
+                android_swarming = targets.swarming(
+                    shards = 6,
+                ),
+            ),
         ],
     },
 )
@@ -4332,19 +4621,12 @@ targets.bundle(
     per_test_modifications = {
         "webgl2_conformance_validating_tests": [
             targets.mixin(
-                args = [
-                    "--webgl-conformance-version=2.0.1",
-                    targets.magic_args.GPU_WEBGL_RUNTIME_FILE,
-                    # On dual-GPU devices we want the high-performance GPU to be active
-                    "--extra-browser-args=--use-cmd-decoder=validating --force_high_performance_gpu",
-                ],
                 swarming = targets.swarming(
                     # These tests currently take about an hour and fifteen minutes
                     # to run. Split them into roughly 5-minute shards.
                     shards = 20,
                 ),
             ),
-            "gpu_integration_test_common_args",
         ],
     },
 )
@@ -4357,15 +4639,10 @@ targets.bundle(
     per_test_modifications = {
         "webgl_conformance_gles_passthrough_ganesh_tests": [
             targets.mixin(
-                args = [
-                    "--extra-browser-args=--use-gl=angle --use-angle=gles --use-cmd-decoder=passthrough --force_high_performance_gpu --disable-features=SkiaGraphite",
-                    targets.magic_args.GPU_WEBGL_RUNTIME_FILE,
-                ],
                 swarming = targets.swarming(
                     shards = 6,
                 ),
             ),
-            "gpu_integration_test_common_args",
         ],
     },
 )
@@ -4378,15 +4655,10 @@ targets.bundle(
     per_test_modifications = {
         "webgl_conformance_gles_passthrough_graphite_tests": [
             targets.mixin(
-                args = [
-                    "--extra-browser-args=--use-gl=angle --use-angle=gles --use-cmd-decoder=passthrough --force_high_performance_gpu --enable-features=SkiaGraphite",
-                    targets.magic_args.GPU_WEBGL_RUNTIME_FILE,
-                ],
                 swarming = targets.swarming(
                     shards = 3,
                 ),
             ),
-            "gpu_integration_test_common_args",
         ],
     },
 )
@@ -4400,14 +4672,12 @@ targets.bundle(
         "webgl_conformance_swangle_passthrough_tests": [
             targets.mixin(
                 args = [
-                    "--extra-browser-args=--use-gl=angle --use-angle=swiftshader --use-cmd-decoder=passthrough",
                     "--xvfb",
                 ],
                 swarming = targets.swarming(
                     shards = 1,
                 ),
             ),
-            "gpu_integration_test_common_args",
         ],
     },
 )
@@ -4420,11 +4690,6 @@ targets.bundle(
     per_test_modifications = {
         "webgl_conformance_tests": [
             targets.mixin(
-                args = [
-                    # On dual-GPU devices we want the high-performance GPU to be active
-                    "--extra-browser-args=--force_high_performance_gpu",
-                    targets.magic_args.GPU_WEBGL_RUNTIME_FILE,
-                ],
                 swarming = targets.swarming(
                     shards = 2,
                 ),
@@ -4435,7 +4700,6 @@ targets.bundle(
                     shards = 20,
                 ),
             ),
-            "gpu_integration_test_common_args",
         ],
     },
 )
@@ -4461,12 +4725,12 @@ targets.bundle(
 targets.bundle(
     name = "headless_shell_wpt_tests_isolated_scripts",
     targets = [
-        "headless_shell_wpt_tests_include_all",
+        "headless_shell_wpt_tests_inverted",
     ],
     per_test_modifications = {
-        "headless_shell_wpt_tests_include_all": targets.mixin(
+        "headless_shell_wpt_tests_inverted": targets.mixin(
             swarming = targets.swarming(
-                shards = 10,
+                shards = 5,
             ),
         ),
     },
@@ -5265,6 +5529,9 @@ targets.bundle(
     targets = [
         targets.bundle(
             targets = "ios_common_tests",
+            mixins = [
+                "mac_14_vm_optional",
+            ],
             variants = [
                 "SIM_IPHONE_14_17_5",
                 "SIM_IPHONE_15_18_2",
@@ -6037,8 +6304,38 @@ targets.bundle(
 targets.bundle(
     name = "trees_in_viz_fyi_gtests",
     targets = [
-        "trees_in_viz_cc_unittests",
+        "blink_unittests",
+        "blink_platform_unittests",
+        "cc_unittests",
+        "content_browsertests",
     ],
+    mixins = [
+        targets.mixin(
+            args = [
+                "--enable-features=TreesInViz",
+            ],
+        ),
+    ],
+    per_test_modifications = {
+        "blink_unittests": targets.mixin(
+            args = [
+                "--test-launcher-filter-file=../../testing/buildbot/filters/trees_in_viz.blink_unittests.filter",
+            ],
+        ),
+        "cc_unittests": targets.mixin(
+            args = [
+                "--test-launcher-filter-file=../../testing/buildbot/filters/trees_in_viz.cc_unittests.filter",
+            ],
+        ),
+        "content_browsertests": targets.mixin(
+            args = [
+                "--test-launcher-filter-file=../../testing/buildbot/filters/trees_in_viz.content_browsertests.filter",
+            ],
+            swarming = targets.swarming(
+                shards = 8,
+            ),
+        ),
+    },
 )
 targets.bundle(
     name = "site_isolation_android_fyi_gtests",

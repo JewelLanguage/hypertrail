@@ -11,7 +11,6 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/values_test_util.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
@@ -76,6 +75,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/events/event_utils.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/toggle_button.h"
 #include "ui/views/controls/combobox/combobox.h"
 #include "ui/views/controls/label.h"
@@ -89,11 +89,11 @@
 #include "chrome/browser/plugins/chrome_plugin_service_filter.h"
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/scoped_user_manager.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 const char* kUrl = "http://www.example.com/index.html";
 const char* kSecureUrl = "https://www.example.com/index.html";
@@ -127,7 +127,7 @@ class PageInfoBubbleViewTestApi {
             base::DoNothing(),
             base::BindOnce(&PageInfoBubbleViewTestApi::OnPageInfoBubbleClosed,
                            base::Unretained(this), run_loop_.QuitClosure()),
-            /*allow_about_this_site=*/true));
+            /*allow_extended_site_info=*/true));
     presenter_ = bubble->presenter_for_testing();
     navigation_handler_ = bubble;
     bubble_delegate_ = bubble;
@@ -221,7 +221,7 @@ class PageInfoBubbleViewTestApi {
     return GetPermissionToggleRowAt(index)->state_label_;
   }
 
-  std::u16string GetCookiesSubpageTitle() {
+  std::u16string_view GetCookiesSubpageTitle() {
     navigation_handler()->OpenCookiesPage();
     auto* title_label = bubble_delegate_->GetViewByID(
         PageInfoViewFactory::VIEW_ID_PAGE_INFO_SUBPAGE_TITLE);
@@ -232,7 +232,7 @@ class PageInfoBubbleViewTestApi {
   std::u16string GetTextOnView(views::View* view) {
     EXPECT_TRUE(view);
     ui::AXNodeData data;
-    view->GetAccessibleNodeData(&data);
+    view->GetViewAccessibility().GetAccessibleNodeData(&data);
     const std::string& name =
         data.GetStringAttribute(ax::mojom::StringAttribute::kName);
     return base::ASCIIToUTF16(name);
@@ -243,7 +243,7 @@ class PageInfoBubbleViewTestApi {
   std::u16string GetCookiesLinkText() {
     EXPECT_TRUE(cookie_button());
     ui::AXNodeData data;
-    cookie_button()->GetAccessibleNodeData(&data);
+    cookie_button()->GetViewAccessibility().GetAccessibleNodeData(&data);
     const std::string& name =
         data.GetStringAttribute(ax::mojom::StringAttribute::kName);
     return base::ASCIIToUTF16(name);
@@ -256,7 +256,7 @@ class PageInfoBubbleViewTestApi {
     return static_cast<RichHoverButton*>(button)->GetTitleText();
   }
 
-  std::u16string GetSecuritySummaryText() {
+  std::u16string_view GetSecuritySummaryText() {
     EXPECT_TRUE(security_summary_label());
     return static_cast<views::StyledLabel*>(security_summary_label())
         ->GetText();
@@ -268,7 +268,7 @@ class PageInfoBubbleViewTestApi {
     return static_cast<RichHoverButton*>(button)->GetTitleText();
   }
 
-  std::u16string GetPermissionLabelTextAt(int index) {
+  std::u16string_view GetPermissionLabelTextAt(int index) {
     return GetPermissionToggleRowAt(index)->row_view_->GetTitleForTesting();
   }
 
@@ -372,7 +372,7 @@ class ScopedWebContentsTestHelper {
  public:
   explicit ScopedWebContentsTestHelper(bool off_the_record)
       : testing_profile_manager_(TestingBrowserProcess::GetGlobal()) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     auto fake_user_manager = std::make_unique<ash::FakeChromeUserManager>();
     auto* fake_user_manager_ptr = fake_user_manager.get();
     scoped_user_manager_ = std::make_unique<user_manager::ScopedUserManager>(
@@ -384,7 +384,7 @@ class ScopedWebContentsTestHelper {
     fake_user_manager_ptr->AddUserWithAffiliation(account_id,
                                                   /*is_affiliated=*/true);
     fake_user_manager_ptr->LoginUser(account_id);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
     EXPECT_TRUE(testing_profile_manager_.SetUp());
     profile_ = testing_profile_manager_.CreateTestingProfile(
@@ -412,7 +412,7 @@ class ScopedWebContentsTestHelper {
  private:
   content::BrowserTaskEnvironment task_environment_;
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   std::unique_ptr<user_manager::ScopedUserManager> scoped_user_manager_;
 #endif
 
@@ -431,6 +431,8 @@ class PageInfoBubbleViewTest : public testing::Test {
 
   // testing::Test:
   void SetUp() override {
+    TestingBrowserProcess::GetGlobal()->CreateGlobalFeaturesForTesting();
+
     if (!web_contents_helper_) {
       web_contents_helper_ =
           std::make_unique<ScopedWebContentsTestHelper>(false);

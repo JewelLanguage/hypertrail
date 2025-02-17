@@ -236,7 +236,7 @@ const char kCookieDeprecationTestingDisableAdsAPIsName[] = "disable_ads_apis";
 // When enabled, the DevTools Privacy UI is displayed.
 BASE_FEATURE(kDevToolsPrivacyUI,
              "DevToolsPrivacyUI",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables deferring the creation of the speculative RFH when the navigation
 // starts. The creation of a speculative RFH consumes about 2ms and is blocking
@@ -381,7 +381,7 @@ BASE_FEATURE(kDrawCutoutEdgeToEdge,
 // Enable establishing the GPU channel early in renderer startup.
 BASE_FEATURE(kEarlyEstablishGpuChannel,
              "EarlyEstablishGpuChannel",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables canvas 2d methods BeginLayer and EndLayer.
 BASE_FEATURE(kEnableCanvas2DLayers,
@@ -636,6 +636,15 @@ const base::FeatureParam<MBIMode> kMBIModeParam {
       &mbi_mode_types
 };
 
+// Controls the configurablity of the navigation confidence noise level.
+// If the feature is not enabled, then the epsilon value will be 1.1.
+BASE_FEATURE(kNavigationConfidenceEpsilon,
+             "NavigationConfidenceEpsilon",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+// The epsilon value returned if `kNavigationConfidenceNoise` is enabled.
+const base::FeatureParam<double> kNavigationConfidenceEpsilonValue{
+    &kNavigationConfidenceEpsilon, "navigation-confidence-epsilon-value", 1.1};
+
 // When NavigationNetworkResponseQueue is enabled, the browser will schedule
 // some tasks related to navigation network responses in a kHigh priority
 // queue.
@@ -704,6 +713,13 @@ BASE_FEATURE(kPeriodicBackgroundSync,
 // Please see crbug.com/40946257 for more details.
 BASE_FEATURE(kPrefetchBrowserInitiatedTriggers,
              "PrefetchBrowserInitiatedTriggers",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// This was used for enabling a new limit and scheduler for prerender triggers
+// (crbug.com/40275452). Now the new implementation is used by default and this
+// flag is just for injecting parameters through field trials.
+BASE_FEATURE(kPrerender2NewLimitAndScheduler,
+             "Prerender2NewLimitAndScheduler",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables exposure of ads APIs in the renderer: Attribution Reporting,
@@ -988,6 +1004,13 @@ BASE_FEATURE(kSiteInstanceGroupsForDataUrls,
              "SiteInstanceGroupsForDataUrls",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// When enabled, puts non-isolated sites in separate SiteInstances in a default
+// SiteInstanceGroup (per BrowsingInstance), rather than sharing a default
+// SiteInstance.
+BASE_FEATURE(kDefaultSiteInstanceGroups,
+             "DefaultSiteInstanceGroups",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Controls whether to isolate sites of documents that specify an eligible
 // Cross-Origin-Opener-Policy header.  Note that this is only intended to be
 // used on Android, which does not use strict site isolation. See
@@ -1024,17 +1047,15 @@ const base::FeatureParam<base::TimeDelta>
 // fetch fonts from the Browser's FontDataService. It is currently scoped to
 // just Windows. See crbug.com/335680565.
 #if BUILDFLAG(IS_WIN)
-BASE_FEATURE(kFontDataService,
-             "FontDataService",
+BASE_FEATURE(kFontDataServiceAllWebContents,
+             "FontDataServiceAllWebContents",
              base::FEATURE_DISABLED_BY_DEFAULT);
 const base::FeatureParam<FontDataServiceTypefaceType>::Option
     font_data_service_typeface[] = {
         {FontDataServiceTypefaceType::kDwrite, "DWrite"},
-        {FontDataServiceTypefaceType::kInternal, "Internal"},
-        {FontDataServiceTypefaceType::kControlWithoutSpareRenderer,
-         "ControlWithoutSpareRenderer"}};
+        {FontDataServiceTypefaceType::kInternal, "Internal"}};
 const base::FeatureParam<FontDataServiceTypefaceType>
-    kFontDataServiceTypefaceType{&kFontDataService, "typeface",
+    kFontDataServiceTypefaceType{&kFontDataServiceAllWebContents, "typeface",
                                  FontDataServiceTypefaceType::kDwrite,
                                  &font_data_service_typeface};
 
@@ -1069,7 +1090,7 @@ BASE_FEATURE(kStrictOriginIsolation,
 // much memory is not attempted to be reused.
 BASE_FEATURE(kSubframeProcessReuseThresholds,
              "SubframeProcessReuseThresholds",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Specifies the memory threshold for the `kSubframeProcessReuseThresholds`
 // feature, which only allows a process to be reused for another subframe if the
@@ -1079,7 +1100,7 @@ BASE_FEATURE(kSubframeProcessReuseThresholds,
 // process reuse experiments.
 constexpr base::FeatureParam<double> kSubframeProcessReuseMemoryThreshold{
     &kSubframeProcessReuseThresholds, "SubframeProcessReuseMemoryThreshold",
-    2 * 1024 * 1024 * 1024u};
+    512 * 1024 * 1024u};
 
 // Disallows window.{alert, prompt, confirm} if triggered inside a subframe that
 // is not same origin with the main frame.
@@ -1179,11 +1200,6 @@ BASE_FEATURE(kWebAssemblyLazyCompilation,
              "WebAssemblyLazyCompilation",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Enable WebAssembly Memory64.
-BASE_FEATURE(kWebAssemblyMemory64,
-             "WebAssemblyMemory64",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Enable WebAssembly tiering (Liftoff -> TurboFan).
 BASE_FEATURE(kWebAssemblyTiering,
              "WebAssemblyTiering",
@@ -1271,13 +1287,6 @@ BASE_FEATURE(kAccessibilityDeprecateTypeAnnounce,
 // the web contents accessibility tree.
 BASE_FEATURE(kAccessibilityIncludeLongClickAction,
              "AccessibilityIncludeLongClickAction",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Enables the use of enhancements to the Page Zoom feature based on user
-// feedback from the v1 version (e.g. reset button, Site Settings, etc).
-// This flag is the fast-follow for the AccessibilityPageZoom experiment.
-BASE_FEATURE(kAccessibilityPageZoomEnhancements,
-             "AccessibilityPageZoomEnhancements",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables the second iteration of AccessibilityPageZoom, which continues

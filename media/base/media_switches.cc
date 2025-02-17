@@ -13,7 +13,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
 #include "build/chromecast_buildflags.h"
-#include "build/chromeos_buildflags.h"
 #include "components/system_media_controls/linux/buildflags/buildflags.h"
 #include "gpu/config/gpu_finch_features.h"
 #include "media/media_buildflags.h"
@@ -231,18 +230,6 @@ const char kEnableLiveCaptionPrefForTesting[] =
     "enable-live-caption-pref-for-testing";
 
 #if BUILDFLAG(IS_CHROMEOS)
-// These are flags passed from ash-chrome to lacros-chrome that correspond to
-// buildflags for the platform we are running on. lacros-chrome only builds for
-// x86/arm differences, so we unconditionally build in the below features into
-// the relevant parts of lacros-chrome and then filter the functionality based
-// on these command line flags.
-MEDIA_EXPORT extern const char kLacrosEnablePlatformHevc[] =
-    "lacros-enable-platform-hevc";
-MEDIA_EXPORT extern const char kLacrosUseChromeosProtectedMedia[] =
-    "lacros-use-chromeos-protected-media";
-MEDIA_EXPORT extern const char kLacrosUseChromeosProtectedAv1[] =
-    "lacros-use-chromeos-protected-av1";
-
 // Allows remote attestation (RA) in dev mode for testing purpose. Usually RA
 // is disabled in dev mode because it will always fail. However, there are cases
 // in testing where we do want to go through the permission flow even in dev
@@ -343,7 +330,7 @@ BASE_FEATURE(kPlatformHEVCEncoderSupport,
 // Enables HEVC MediaRecorder muxer support.
 BASE_FEATURE(kMediaRecorderHEVCSupport,
              "MediaRecorderHEVCSupport",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
 
 // Let videos be resumed via remote controls (for example, the notification)
@@ -413,12 +400,9 @@ BASE_FEATURE(kUseAndroidOverlayForSecureOnly,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Allows usage of OS-level (platform) audio encoders.
-// TODO(crbug.com/41495931): re-enable platform audio encoders on arm64 win when
-//                          querying for OS support works as expected.
 BASE_FEATURE(kPlatformAudioEncoder,
              "PlatformAudioEncoder",
-#if (BUILDFLAG(IS_WIN) && !defined(ARCH_CPU_ARM64)) || BUILDFLAG(IS_MAC) || \
-    BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_ANDROID)
              base::FEATURE_ENABLED_BY_DEFAULT
 #else
              base::FEATURE_DISABLED_BY_DEFAULT
@@ -464,7 +448,7 @@ BASE_FEATURE(kChromeWideEchoCancellation,
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
-#if BUILDFLAG(IS_MAC)
+#if (BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN))
 // Enforces the use of system echo cancellation.
 BASE_FEATURE(kEnforceSystemEchoCancellation,
              "EnforceSystemEchoCancellation",
@@ -662,7 +646,7 @@ BASE_FEATURE(kMediaRemotingWithoutFullscreen,
 BASE_FEATURE(kGlobalMediaControlsPictureInPicture,
              "GlobalMediaControlsPictureInPicture",
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
-    BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_CHROMEOS_LACROS)
+    BUILDFLAG(IS_CHROMEOS)
              base::FEATURE_ENABLED_BY_DEFAULT
 #else
              base::FEATURE_DISABLED_BY_DEFAULT
@@ -765,9 +749,6 @@ BASE_FEATURE(kGlobalVaapiLock,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if defined(ARCH_CPU_X86_FAMILY) && BUILDFLAG(IS_CHROMEOS)
-// TODO(b/214589754): revisit the need for the BUILDFLAG(IS_CHROMEOS) guard (as
-// opposed to BUILDFLAG(IS_CHROMEOS_ASH)) when the final design for HW
-// encoding is implemented for lacros-chrome.
 // Enable H264 temporal layer encoding with HW encoder on ChromeOS.
 BASE_FEATURE(kVaapiH264TemporalLayerHWEncoding,
              "VaapiH264TemporalLayerEncoding",
@@ -990,7 +971,7 @@ const base::FeatureParam<bool>
 // Enables handling of hardware media keys for controlling media.
 BASE_FEATURE(kHardwareMediaKeyHandling,
              "HardwareMediaKeyHandling",
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || \
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || \
     BUILDFLAG(USE_MPRIS)
              base::FEATURE_ENABLED_BY_DEFAULT
 #else
@@ -1116,7 +1097,12 @@ BASE_FEATURE(kAllowMediaCodecCallsInSeparateProcess,
 #if BUILDFLAG(ENABLE_HLS_DEMUXER)
 BASE_FEATURE(kBuiltInHlsPlayer,
              "BuiltInHlsPlayer",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+#if BUILDFLAG(IS_ANDROID)
+             base::FEATURE_ENABLED_BY_DEFAULT
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+);
 
 BASE_FEATURE(kBuiltInHlsMP4,
              "BuiltInHlsMP4",
@@ -1320,18 +1306,12 @@ BASE_FEATURE(kAllowClearDolbyVisionInMseWhenPlatformEncryptedDvEnabled,
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-// Expose the out-of-process video decoding feature from ash-chrome to
-// lacros-chrome through the crosapi.
-BASE_FEATURE(kExposeOutOfProcessVideoDecodingToLacros,
-             "ExposeOutOfProcessVideoDecodingToLacros",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
+#if BUILDFLAG(IS_CHROMEOS)
 // Enables the new media player features.
 BASE_FEATURE(kBackgroundListening,
              "BackgroundListening",
              base::FEATURE_DISABLED_BY_DEFAULT);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(ALLOW_OOP_VIDEO_DECODER)
 // Spawn utility processes to perform hardware decode acceleration on behalf of
@@ -1521,7 +1501,7 @@ const base::FeatureParam<int> kAudioDuckingAttenuation{&kAudioDucking,
 // has audio focus enabled.
 BASE_FEATURE(kAudioFocusDuckFlash,
              "AudioFocusDuckFlash",
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
              base::FEATURE_ENABLED_BY_DEFAULT
 #else
              base::FEATURE_DISABLED_BY_DEFAULT
@@ -1692,6 +1672,11 @@ BASE_FEATURE(kMediaFoundationSharedImageEncode,
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
+// Controls whether muted media stream audio should continue to render.
+BASE_FEATURE(kRenderMutedAudio,
+             "RenderMutedAudio",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 bool IsChromeWideEchoCancellationEnabled() {
 #if BUILDFLAG(CHROME_WIDE_ECHO_CANCELLATION)
   return base::FeatureList::IsEnabled(kChromeWideEchoCancellation) &&
@@ -1702,7 +1687,7 @@ bool IsChromeWideEchoCancellationEnabled() {
 }
 
 bool IsSystemEchoCancellationEnforced() {
-#if BUILDFLAG(IS_MAC)
+#if (BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN))
   return base::FeatureList::IsEnabled(kEnforceSystemEchoCancellation);
 #else
   return false;
@@ -1743,7 +1728,7 @@ bool IsVideoCaptureAcceleratedJpegDecodingEnabled() {
           switches::kUseFakeMjpegDecodeAccelerator)) {
     return true;
   }
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   return true;
 #else
   return false;

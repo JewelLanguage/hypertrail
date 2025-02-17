@@ -1441,17 +1441,12 @@ if (!is_robolectric && enable_java_templates) {
   #     output = "$root_build_dir/MyLibrary.jar"
   #   }
   template("dist_jar") {
-    # TODO(crbug.com/40114668): Remove.
-    not_needed(invoker, [ "no_build_hooks" ])
     forward_variables_from(invoker, TESTONLY_AND_VISIBILITY)
+
+    # TODO: Remove uses.
+    not_needed(invoker, [ "use_unprocessed_jars" ])
     _use_interface_jars =
         defined(invoker.use_interface_jars) && invoker.use_interface_jars
-    _use_unprocessed_jars =
-        defined(invoker.use_unprocessed_jars) && invoker.use_unprocessed_jars
-    _direct_deps_only =
-        defined(invoker.direct_deps_only) && invoker.direct_deps_only
-    assert(!(_use_unprocessed_jars && _use_interface_jars),
-           "Cannot set both use_interface_jars and use_unprocessed_jars")
     _supports_android =
         !defined(invoker.supports_android) || invoker.supports_android
     _requires_android =
@@ -1500,8 +1495,9 @@ if (!is_robolectric && enable_java_templates) {
       java_library_impl(target_name) {
         forward_variables_from(invoker,
                                [
-                                 "jar_excluded_patterns",
                                  "deps",
+                                 "direct_deps_only",
+                                 "jar_excluded_patterns",
                                ])
         type = "dist_jar"
         if (!defined(deps)) {
@@ -1513,14 +1509,17 @@ if (!is_robolectric && enable_java_templates) {
         requires_android = _requires_android
         jar_path = invoker.output
         enable_bytecode_checks = false
+        use_interface_jars = _use_interface_jars
       }
     } else {
       write_build_config(_build_config_target_name) {
         type = "dist_jar"
+        forward_variables_from(invoker, [ "direct_deps_only" ])
         supports_android = _supports_android
         requires_android = _requires_android
         possible_config_deps = invoker.deps
         build_config = _build_config
+        use_interface_jars = _use_interface_jars
       }
     }
 
@@ -1556,29 +1555,8 @@ if (!is_robolectric && enable_java_templates) {
         "--output",
         rebase_path(_zip_jar_path, root_build_dir),
         "--no-compress",
+        "--input-zips=@FileArg($_rebased_build_config:dist_jar:jars)",
       ]
-
-      if (_direct_deps_only) {
-        if (_use_interface_jars) {
-          args += [ "--input-zips=@FileArg($_rebased_build_config:javac:interface_classpath)" ]
-        } else if (_use_unprocessed_jars) {
-          args += [
-            "--input-zips=@FileArg($_rebased_build_config:javac:classpath)",
-          ]
-        } else {
-          assert(
-              false,
-              "direct_deps_only does not work without use_interface_jars or use_unprocessed_jars")
-        }
-      } else {
-        if (_use_interface_jars) {
-          args += [ "--input-zips=@FileArg($_rebased_build_config:dist_jar:all_interface_jars)" ]
-        } else if (_use_unprocessed_jars) {
-          args += [ "--input-zips=@FileArg($_rebased_build_config:deps_info:javac_full_classpath)" ]
-        } else {
-          args += [ "--input-zips=@FileArg($_rebased_build_config:deps_info:device_classpath)" ]
-        }
-      }
 
       _excludes = []
       if (defined(invoker.jar_excluded_patterns)) {
@@ -3289,8 +3267,6 @@ if (!is_robolectric && enable_java_templates) {
   #     ]
   #   }
   template("android_apk") {
-    # TODO(crbug.com/40114668): Remove.
-    not_needed(invoker, [ "no_build_hooks" ])
     android_apk_or_module(target_name) {
       forward_variables_from(
           invoker,
@@ -3318,6 +3294,7 @@ if (!is_robolectric && enable_java_templates) {
             "deps",
             "enable_lint",
             "enable_proguard_checks",
+            "errorprone_args",
             "disable_strict_mode_context",
             "enforce_resource_overlays_in_tests",
             "expected_android_manifest",
@@ -3677,16 +3654,7 @@ if (!is_robolectric && enable_java_templates) {
       apk_target = invoker.android_test_apk
       incremental_apk = _incremental_apk
 
-      public_deps = [
-        ":$_apk_operations_target_name",
-        apk_target,
-      ]
-      if (defined(invoker.apk_under_test)) {
-        public_deps += [ invoker.apk_under_test ]
-      }
-      if (defined(invoker.additional_apks)) {
-        public_deps += invoker.additional_apks
-      }
+      public_deps = [ ":$_apk_operations_target_name" ]
       if (use_rts) {
         if (!defined(data_deps)) {
           data_deps = []
@@ -4295,6 +4263,12 @@ if (!is_robolectric && enable_java_templates) {
            _scanned_files.native_libraries != [])
     assert(_scanned_files.has_classes_jar || _scanned_files.subjars == [])
 
+    if (_extract_native_libraries && defined(_scanned_files.prefab_headers)) {
+      _output_headers_paths = get_path_info(
+              rebase_path(_scanned_files.prefab_headers, "", _output_path),
+              "abspath")
+    }
+
     action_with_pydeps(_unpack_target_name) {
       script = "//build/android/gyp/aar.py"  # Unzips the AAR
       args = [
@@ -4332,6 +4306,9 @@ if (!is_robolectric && enable_java_templates) {
         outputs += get_path_info(
                 rebase_path(_scanned_files.native_libraries, "", _output_path),
                 "abspath")
+      }
+      if (defined(_output_headers_paths)) {
+        outputs += _output_headers_paths
       }
       if (_use_scanned_assets) {
         outputs +=
@@ -4468,6 +4445,22 @@ if (!is_robolectric && enable_java_templates) {
           }
         }
         public_target_label = _target_label
+      }
+    }
+
+    if (defined(_output_headers_paths)) {
+      _config_name = "${target_name}__include_dirs_config"
+      config(_config_name) {
+        include_dirs =
+            get_path_info(rebase_path(_scanned_files.prefab_include_dirs,
+                                      "",
+                                      _output_path),
+                          "abspath")
+      }
+      source_set("${target_name}_headers") {
+        sources = _output_headers_paths
+        public_configs = [ ":$_config_name" ]
+        deps = [ ":$_unpack_target_name" ]
       }
     }
 

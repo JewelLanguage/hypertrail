@@ -34,6 +34,7 @@
 #include <utility>
 
 #include "base/auto_reset.h"
+#include "base/containers/to_vector.h"
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/functional/callback_helpers.h"
@@ -47,7 +48,7 @@
 #include "build/build_config.h"
 #include "cc/animation/animation_host.h"
 #include "cc/base/features.h"
-#include "cc/input/browser_controls_offset_tags_info.h"
+#include "cc/input/browser_controls_offset_tag_modifications.h"
 #include "cc/trees/compositor_commit_data.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/swap_promise.h"
@@ -1901,12 +1902,10 @@ void WebFrameWidgetImpl::UpdateVisualProperties(
     }
   }
 
-  gfx::Size old_visible_viewport_size_in_dips =
-      widget_base_->VisibleViewportSizeInDIPs();
+  gfx::Size old_visible_viewport_size = widget_base_->VisibleViewportSize();
   ApplyVisualPropertiesSizing(visual_properties);
 
-  if (old_visible_viewport_size_in_dips !=
-      widget_base_->VisibleViewportSizeInDIPs()) {
+  if (old_visible_viewport_size != widget_base_->VisibleViewportSize()) {
     ForEachLocalFrameControlledByWidget(
         local_root_->GetFrame(),
         &WebLocalFrameImpl::ResetHasScrolledFocusedEditableIntoView);
@@ -1914,8 +1913,8 @@ void WebFrameWidgetImpl::UpdateVisualProperties(
     // Propagate changes down to child local root RenderWidgets and
     // BrowserPlugins in other frame trees/processes.
     ForEachRemoteFrameControlledByWidget(
-        [visible_viewport_size = widget_base_->VisibleViewportSizeInDIPs()](
-            RemoteFrame* remote_frame) {
+        [visible_viewport_size =
+             widget_base_->VisibleViewportSize()](RemoteFrame* remote_frame) {
           remote_frame->DidChangeVisibleViewportSize(visible_viewport_size);
         });
   }
@@ -2015,8 +2014,8 @@ void WebFrameWidgetImpl::ApplyVisualPropertiesSizing(
   // Store this even when auto-resizing, it is the size of the full viewport
   // used for clipping, and this value is propagated down the Widget
   // hierarchy via the VisualProperties waterfall.
-  widget_base_->SetVisibleViewportSizeInDIPs(
-      visual_properties.visible_viewport_size);
+  widget_base_->SetVisibleViewportSize(
+      visual_properties.visible_viewport_size_device_px);
 
   virtual_keyboard_resize_height_physical_px_ =
       visual_properties.virtual_keyboard_resize_height_physical_px;
@@ -2027,9 +2026,7 @@ void WebFrameWidgetImpl::ApplyVisualPropertiesSizing(
       size_ = new_size;
 
       View()->ResizeWithBrowserControls(
-          size_.value(),
-          widget_base_->DIPsToCeiledBlinkSpace(
-              widget_base_->VisibleViewportSizeInDIPs()),
+          size_.value(), widget_base_->VisibleViewportSize(),
           visual_properties.browser_controls_params);
     }
 
@@ -2040,16 +2037,15 @@ void WebFrameWidgetImpl::ApplyVisualPropertiesSizing(
 
   } else {
     // Widgets in a WebView's frame tree without a local main frame
-    // set the size of the WebView to be the |visible_viewport_size|, in order
-    // to limit compositing in (out of process) child frames to what is
+    // set the size of the WebView to be the |visible_viewport_size_device_px|,
+    // in order to limit compositing in (out of process) child frames to what is
     // visible.
     //
     // Note that child frames in the same process/WebView frame tree as the
     // main frame do not do this in order to not clobber the source of truth
     // in the main frame.
     if (!View()->MainFrameImpl()) {
-      View()->Resize(widget_base_->DIPsToCeiledBlinkSpace(
-          widget_base_->VisibleViewportSizeInDIPs()));
+      View()->Resize(widget_base_->VisibleViewportSize());
     }
 
     Resize(new_size);
@@ -2085,11 +2081,11 @@ void WebFrameWidgetImpl::UpdateBrowserControlsState(
     cc::BrowserControlsState constraints,
     cc::BrowserControlsState current,
     bool animate,
-    base::optional_ref<const cc::BrowserControlsOffsetTagsInfo>
-        offset_tags_info) {
+    base::optional_ref<const cc::BrowserControlsOffsetTagModifications>
+        offset_tag_modifications) {
   DCHECK(View()->does_composite());
   widget_base_->LayerTreeHost()->UpdateBrowserControlsState(
-      constraints, current, animate, offset_tags_info);
+      constraints, current, animate, offset_tag_modifications);
 }
 
 void WebFrameWidgetImpl::SetHaveScrollEventHandlers(bool has_handlers) {
@@ -2147,7 +2143,7 @@ bool WebFrameWidgetImpl::Resizable() const {
   return resizable_;
 }
 
-const WebVector<gfx::Rect>& WebFrameWidgetImpl::ViewportSegments() const {
+const std::vector<gfx::Rect>& WebFrameWidgetImpl::ViewportSegments() const {
   return viewport_segments_;
 }
 
@@ -2337,8 +2333,8 @@ void WebFrameWidgetImpl::EnableDeviceEmulation(
 
     device_emulator_ = MakeGarbageCollected<ScreenMetricsEmulator>(
         this, widget_base_->screen_infos(), size_in_dips,
-        widget_base_->VisibleViewportSizeInDIPs(),
-        widget_base_->WidgetScreenRect(), widget_base_->WindowScreenRect());
+        widget_base_->VisibleViewportSize(), widget_base_->WidgetScreenRect(),
+        widget_base_->WindowScreenRect());
   }
   device_emulator_->ChangeEmulationParams(parameters);
 }
@@ -3005,8 +3001,8 @@ void WebFrameWidgetImpl::DisableDevicePostureOverrideForEmulation() {
 
 void WebFrameWidgetImpl::SetViewportSegments(
     const std::vector<gfx::Rect>& viewport_segments_param) {
-  WebVector<gfx::Rect> viewport_segments(viewport_segments_param);
-  if (!viewport_segments_.Equals(viewport_segments)) {
+  std::vector<gfx::Rect> viewport_segments(viewport_segments_param);
+  if (viewport_segments_ != viewport_segments) {
     viewport_segments_ = viewport_segments;
     LocalFrame* frame = LocalRootImpl()->GetFrame();
     frame->ViewportSegmentsChanged(viewport_segments_);
@@ -3347,8 +3343,8 @@ void WebFrameWidgetImpl::SetScreenRects(const gfx::Rect& widget_screen_rect,
   widget_base_->SetScreenRects(widget_screen_rect, window_screen_rect);
 }
 
-gfx::Size WebFrameWidgetImpl::VisibleViewportSizeInDIPs() {
-  return widget_base_->VisibleViewportSizeInDIPs();
+gfx::Size WebFrameWidgetImpl::VisibleViewportSize() {
+  return widget_base_->VisibleViewportSize();
 }
 
 void WebFrameWidgetImpl::SetPendingWindowRect(
@@ -3790,13 +3786,6 @@ WebFrameWidgetImpl::GetLastVirtualKeyboardVisibilityRequest() {
   return controller->GetLastVirtualKeyboardVisibilityRequest();
 }
 
-bool WebFrameWidgetImpl::ShouldSuppressKeyboardForFocusedElement() {
-  WebLocalFrame* focused_frame = FocusedWebLocalFrameInWidget();
-  if (!focused_frame)
-    return false;
-  return focused_frame->ShouldSuppressKeyboardForFocusedElement();
-}
-
 void WebFrameWidgetImpl::GetEditContextBoundsInWindow(
     std::optional<gfx::Rect>* edit_context_control_bounds,
     std::optional<gfx::Rect>* edit_context_selection_bounds) {
@@ -3960,7 +3949,7 @@ bool WebFrameWidgetImpl::SetComposition(
     return false;
 
   return controller->SetComposition(
-      text, ime_text_spans,
+      text, base::ToVector(ime_text_spans),
       replacement_range.IsValid()
           ? WebRange(base::checked_cast<int>(replacement_range.start()),
                      base::checked_cast<int>(replacement_range.length()))
@@ -3977,7 +3966,7 @@ void WebFrameWidgetImpl::CommitText(
   if (!controller)
     return;
   controller->CommitText(
-      text, ime_text_spans,
+      text, base::ToVector(ime_text_spans),
       replacement_range.IsValid()
           ? WebRange(base::checked_cast<int>(replacement_range.start()),
                      base::checked_cast<int>(replacement_range.length()))
@@ -4153,7 +4142,7 @@ void WebFrameWidgetImpl::GetCompositionCharacterBoundsInWindow(
     return;
   blink::WebInputMethodController* controller =
       focused_frame->GetInputMethodController();
-  blink::WebVector<gfx::Rect> bounds_from_blink;
+  std::vector<gfx::Rect> bounds_from_blink;
   if (!controller->GetCompositionCharacterBounds(bounds_from_blink))
     return;
 
@@ -4286,12 +4275,13 @@ void WebFrameWidgetImpl::AddImeTextSpansToExistingText(
   WebLocalFrame* focused_frame = FocusedWebLocalFrameInWidget();
   if (!focused_frame)
     return;
-  focused_frame->AddImeTextSpansToExistingText(ime_text_spans, start, end);
+  focused_frame->AddImeTextSpansToExistingText(base::ToVector(ime_text_spans),
+                                               start, end);
 }
 
 Vector<ui::mojom::blink::ImeTextSpanInfoPtr>
 WebFrameWidgetImpl::GetImeTextSpansInfo(
-    const WebVector<ui::ImeTextSpan>& ime_text_spans) {
+    const std::vector<ui::ImeTextSpan>& ime_text_spans) {
   auto* focused_frame = FocusedWebLocalFrameInWidget();
   if (!focused_frame)
     return Vector<ui::mojom::blink::ImeTextSpanInfoPtr>();
@@ -4328,7 +4318,8 @@ void WebFrameWidgetImpl::SetCompositionFromExistingText(
   WebLocalFrame* focused_frame = FocusedWebLocalFrameInWidget();
   if (!focused_frame)
     return;
-  focused_frame->SetCompositionFromExistingText(start, end, ime_text_spans);
+  focused_frame->SetCompositionFromExistingText(start, end,
+                                                base::ToVector(ime_text_spans));
 }
 
 void WebFrameWidgetImpl::ExtendSelectionAndDelete(int32_t before,
@@ -4721,12 +4712,12 @@ void WebFrameWidgetImpl::SetScreenMetricsEmulationParameters(
 void WebFrameWidgetImpl::SetScreenInfoAndSize(
     const display::ScreenInfos& screen_infos,
     const gfx::Size& widget_size_in_dips,
-    const gfx::Size& visible_viewport_size_in_dips) {
+    const gfx::Size& visible_viewport_size) {
   // Emulation happens on regular main frames which don't use auto-resize mode.
   DCHECK(!AutoResizeMode());
 
   UpdateScreenInfo(screen_infos);
-  widget_base_->SetVisibleViewportSizeInDIPs(visible_viewport_size_in_dips);
+  widget_base_->SetVisibleViewportSize(visible_viewport_size);
   Resize(widget_base_->DIPsToCeiledBlinkSpace(widget_size_in_dips));
 }
 

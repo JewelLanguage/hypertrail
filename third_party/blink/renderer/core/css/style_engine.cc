@@ -29,10 +29,11 @@
 
 #include "third_party/blink/renderer/core/css/style_engine.h"
 
+#include <algorithm>
+
 #include "base/auto_reset.h"
 #include "base/containers/adapters.h"
 #include "base/hash/hash.h"
-#include "base/ranges/algorithm.h"
 #include "third_party/blink/public/mojom/timing/resource_timing.mojom-blink.h"
 #include "third_party/blink/renderer/core/css/cascade_layer_map.h"
 #include "third_party/blink/renderer/core/css/check_pseudo_has_cache_scope.h"
@@ -54,6 +55,7 @@
 #include "third_party/blink/renderer/core/css/out_of_flow_data.h"
 #include "third_party/blink/renderer/core/css/property_registration.h"
 #include "third_party/blink/renderer/core/css/property_registry.h"
+#include "third_party/blink/renderer/core/css/resolver/media_query_result.h"
 #include "third_party/blink/renderer/core/css/resolver/scoped_style_resolver.h"
 #include "third_party/blink/renderer/core/css/resolver/selector_filter_parent_scope.h"
 #include "third_party/blink/renderer/core/css/resolver/style_builder_converter.h"
@@ -335,7 +337,7 @@ void StyleEngine::RemoveInjectedSheet(const StyleSheetKey& key,
           origin == WebCssOrigin::kUser ? injected_user_style_sheets_
                                         : injected_author_style_sheets_;
   // Remove the last sheet that matches.
-  const auto& it = base::ranges::find(
+  const auto& it = std::ranges::find(
       base::Reversed(injected_style_sheets), key,
       &std::pair<StyleSheetKey, Member<CSSStyleSheet>>::first);
   if (it != injected_style_sheets.rend()) {
@@ -348,21 +350,18 @@ void StyleEngine::RemoveInjectedSheet(const StyleSheetKey& key,
   }
 }
 
-CSSStyleSheet& StyleEngine::EnsureInspectorStyleSheet() {
-  if (inspector_style_sheet_) {
-    return *inspector_style_sheet_;
-  }
-
+CSSStyleSheet& StyleEngine::CreateInspectorStyleSheet() {
   auto* contents = MakeGarbageCollected<StyleSheetContents>(
       MakeGarbageCollected<CSSParserContext>(*document_));
-  inspector_style_sheet_ =
+  auto* inspector_style_sheet =
       MakeGarbageCollected<CSSStyleSheet>(contents, *document_);
+  inspector_style_sheet_list_.emplace_back(inspector_style_sheet);
   MarkDocumentDirty();
   // TODO(futhark@chromium.org): Making the active stylesheets up-to-date here
   // is required by some inspector tests, at least. I theory this should not be
   // necessary. Need to investigate to figure out if/why.
   UpdateActiveStyle();
-  return *inspector_style_sheet_;
+  return *inspector_style_sheet;
 }
 
 void StyleEngine::AddPendingBlockingSheet(Node& style_sheet_candidate_node,
@@ -518,9 +517,14 @@ void StyleEngine::MediaQueryAffectingValueChanged(TreeScope& tree_scope,
                                                   MediaValueChange change) {
   auto* collection = StyleSheetCollectionFor(tree_scope);
   DCHECK(collection);
+  // Regular media queries are invalidated through rebuilding of the RuleSets.
   if (AffectedByMediaValueChange(collection->ActiveStyleSheets(), change)) {
     SetNeedsActiveStyleUpdate(tree_scope);
   }
+
+  // Styles that use functional media queries (those within @function)
+  // are invalidated by marking the affected elements for recalc directly.
+  InvalidateFunctionalMediaDependentStylesIfNeeded();
 }
 
 void StyleEngine::WatchedSelectorsChanged() {
@@ -903,9 +907,10 @@ void StyleEngine::SetRuleUsageTracker(StyleRuleUsageTracker* tracker) {
   }
 }
 
-Font StyleEngine::ComputeFont(Element& element,
-                              const ComputedStyle& font_style,
-                              const CSSPropertyValueSet& font_properties) {
+const Font* StyleEngine::ComputeFont(
+    Element& element,
+    const ComputedStyle& font_style,
+    const CSSPropertyValueSet& font_properties) {
   UpdateActiveStyle();
   return GetStyleResolver().ComputeFont(element, font_style, font_properties);
 }
@@ -979,6 +984,7 @@ void StyleEngine::DidDetach() {
   }
   environment_variables_ = nullptr;
   style_containment_scope_tree_ = nullptr;
+  inspector_style_sheet_list_.clear();
 }
 
 bool StyleEngine::ClearFontFaceCacheAndAddUserFonts(
@@ -2087,16 +2093,6 @@ static bool AnyRuleCausesInvalidation(const MatchRequest& match_request,
   return false;
 }
 
-namespace {
-
-bool CanRejectRuleSet(ElementRuleCollector& collector,
-                      const RuleSet& rule_set) {
-  const StyleScope* scope = rule_set.SingleScope();
-  return scope && collector.CanRejectScope(*scope);
-}
-
-}  // namespace
-
 // See if a given element needs to be recalculated after RuleSet changes
 // (see ApplyRuleSetInvalidation()).
 void StyleEngine::ApplyRuleSetInvalidationForElement(
@@ -2129,22 +2125,24 @@ void StyleEngine::ApplyRuleSetInvalidationForElement(
   ElementRuleCollector collector(element_resolve_context, style_recalc_context,
                                  selector_filter, match_result, inside_link);
 
-  MatchRequest match_request{&tree_scope.RootNode()};
+  unsigned rule_set_group_index = 0;
+  RuleSetGroup rule_set_group(rule_set_group_index++);
   bool matched_any = false;
   for (const Member<RuleSet>& rule_set : rule_sets) {
-    if (CanRejectRuleSet(collector, *rule_set)) {
-      continue;
-    }
-    match_request.AddRuleSet(rule_set.Get());
-    if (match_request.IsFull()) {
+    rule_set_group.AddRuleSet(rule_set.Get());
+    if (rule_set_group.IsFull()) {
+      MatchRequest match_request(rule_set_group, &tree_scope.RootNode(),
+                                 collector);
       if (AnyRuleCausesInvalidation(match_request, collector, is_shadow_host)) {
         matched_any = true;
         break;
       }
-      match_request.ClearAfterMatching();
+      rule_set_group = RuleSetGroup(rule_set_group_index++);
     }
   }
-  if (!match_request.IsEmpty() && !matched_any) {
+  if (!rule_set_group.IsEmpty() && !matched_any) {
+    MatchRequest match_request(rule_set_group, &tree_scope.RootNode(),
+                               collector);
     matched_any =
         AnyRuleCausesInvalidation(match_request, collector, is_shadow_host);
   }
@@ -2370,6 +2368,14 @@ void StyleEngine::InvalidateSlottedElements(
       node->SetNeedsStyleRecalc(kLocalStyleChange, reason);
     }
   }
+}
+
+bool StyleEngine::HasViewportDependentMediaQueries() {
+  DCHECK(global_rule_set_);
+  UpdateActiveStyle();
+  return global_rule_set_->GetRuleFeatureSet()
+             .HasViewportDependentMediaQueries() ||
+         functional_media_query_result_flags_.is_viewport_dependent;
 }
 
 bool StyleEngine::HasViewportDependentPropertyRegistrations() {
@@ -2914,6 +2920,11 @@ void StyleEngine::ApplyUserRuleSetChanges(
     rule_set->CompactRulesIfNeeded();
   }
 
+  user_rule_set_groups_.clear();
+  for (const auto& [_, rule_set] : new_style_sheets) {
+    AddRuleSetToRuleSetGroupList(rule_set, user_rule_set_groups_);
+  }
+
   InvalidateForRuleSetChanges(GetDocument(), changed_rule_sets,
                               changed_rule_flags, kInvalidateAllScopes);
 }
@@ -3109,6 +3120,27 @@ void StyleEngine::ApplyVisionDeficiencyStyle(
   }
 }
 
+bool StyleEngine::EvaluateFunctionalMediaQuery(const MediaQuerySet& query_set) {
+  bool result = EnsureMediaQueryEvaluator().Eval(
+      query_set, &functional_media_query_result_flags_);
+  functional_media_query_results_.insert(&query_set, result);
+  return result;
+}
+
+void StyleEngine::InvalidateFunctionalMediaDependentStylesIfNeeded() {
+  if (!EnsureMediaQueryEvaluator().DidResultsChange(
+          functional_media_query_results_)) {
+    return;
+  }
+  functional_media_query_results_.clear();
+  functional_media_query_result_flags_.Clear();
+  const auto& reason =
+      StyleChangeReasonForTracing::Create(style_change_reason::kMediaQuery);
+  MarkElementsForRecalc(GetDocument(), reason, [](const ComputedStyle& style) {
+    return style.AffectedByFunctionalMedia();
+  });
+}
+
 const MediaQueryEvaluator& StyleEngine::EnsureMediaQueryEvaluator() {
   if (!media_query_evaluator_) {
     if (GetDocument().GetFrame()) {
@@ -3254,18 +3286,11 @@ void StyleEngine::ChildrenRemoved(ContainerNode& parent) {
   style_recalc_root_.SubtreeModified(parent);
 }
 
-void StyleEngine::CollectMatchingUserRules(
-    ElementRuleCollector& collector) const {
-  MatchRequest match_request;
-  for (const ActiveStyleSheet& style_sheet : active_user_style_sheets_) {
-    match_request.AddRuleSet(style_sheet.second);
-    if (match_request.IsFull()) {
-      collector.CollectMatchingRules(match_request, /*part_names*/ nullptr);
-      match_request.ClearAfterMatching();
-    }
-  }
-  if (!match_request.IsEmpty()) {
-    collector.CollectMatchingRules(match_request, /*part_names*/ nullptr);
+void StyleEngine::CollectMatchingUserRules(ElementRuleCollector& collector) {
+  for (RuleSetGroup& rule_set_group : user_rule_set_groups_) {
+    collector.CollectMatchingRules(
+        MatchRequest(rule_set_group, /*new_scope=*/nullptr),
+        /*part_names*/ nullptr);
   }
 }
 
@@ -4375,6 +4400,9 @@ void StyleEngine::MarkAllElementsForStyleRecalc(
   if (Element* root = GetDocument().documentElement()) {
     root->SetNeedsStyleRecalc(kSubtreeStyleChange, reason);
   }
+
+  functional_media_query_results_.clear();
+  functional_media_query_result_flags_.Clear();
 }
 
 void StyleEngine::UpdateViewportStyle() {
@@ -4451,7 +4479,7 @@ void StyleEngine::Trace(Visitor* visitor) const {
   visitor->Trace(user_cascade_layer_map_);
   visitor->Trace(environment_variables_);
   visitor->Trace(initial_data_);
-  visitor->Trace(inspector_style_sheet_);
+  visitor->Trace(inspector_style_sheet_list_);
   visitor->Trace(document_style_sheet_collection_);
   visitor->Trace(style_sheet_collection_map_);
   visitor->Trace(dirty_tree_scopes_);
@@ -4477,6 +4505,8 @@ void StyleEngine::Trace(Visitor* visitor) const {
   visitor->Trace(style_containment_scope_tree_);
   visitor->Trace(try_value_flips_);
   visitor->Trace(anchored_element_dirty_set_);
+  visitor->Trace(user_rule_set_groups_);
+  visitor->Trace(functional_media_query_results_);
   FontSelectorClient::Trace(visitor);
 }
 
@@ -4650,6 +4680,8 @@ void StyleEngine::RevisitActiveStyleSheetsForInspector() {
     // we may throw out the global rule set data and rebuild it from the
     // individual sheets' data, so the inspector needs to know about both.
     StyleSheetContents* contents = sheet.first->Contents();
+    InvalidationSetToSelectorMap::StyleSheetContentsScope contents_scope(
+        contents);
     RevisitStyleRulesForInspector(global_features, contents->ChildRules());
     if (contents->HasRuleSet()) {
       RevisitStyleRulesForInspector(contents->GetRuleSet().Features(),

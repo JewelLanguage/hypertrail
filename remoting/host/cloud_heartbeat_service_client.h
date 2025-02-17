@@ -5,6 +5,7 @@
 #ifndef REMOTING_HOST_CLOUD_HEARTBEAT_SERVICE_CLIENT_H_
 #define REMOTING_HOST_CLOUD_HEARTBEAT_SERVICE_CLIENT_H_
 
+#include <memory>
 #include <optional>
 #include <string>
 
@@ -12,7 +13,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "remoting/base/cloud_service_client.h"
-#include "remoting/base/protobuf_http_status.h"
+#include "remoting/base/http_status.h"
 #include "remoting/host/heartbeat_service_client.h"
 
 namespace google::internal::remoting::cloud::v1alpha {
@@ -53,18 +54,18 @@ class CloudHeartbeatServiceClient : public HeartbeatServiceClient {
  private:
   void OnSendHeartbeatResponse(
       HeartbeatResponseCallback callback,
-      const ProtobufHttpStatus& status,
+      const HttpStatus& status,
       std::unique_ptr<::google::internal::remoting::cloud::v1alpha::Empty>);
 
   void OnUpdateRemoteAccessHostResponse(
       HeartbeatResponseCallback callback,
-      const ProtobufHttpStatus& status,
+      const HttpStatus& status,
       std::unique_ptr<
           ::google::internal::remoting::cloud::v1alpha::RemoteAccessHost>);
 
   void OnReportHostOffline(
       HeartbeatResponseCallback callback,
-      const ProtobufHttpStatus& status,
+      const HttpStatus& status,
       std::unique_ptr<
           ::google::internal::remoting::cloud::v1alpha::RemoteAccessHost>);
 
@@ -74,12 +75,12 @@ class CloudHeartbeatServiceClient : public HeartbeatServiceClient {
       CloudServiceClient::UpdateRemoteAccessHostCallback callback);
 
   void RunHeartbeatResponseCallback(HeartbeatResponseCallback callback,
-                                    const ProtobufHttpStatus& status);
+                                    const HttpStatus& status);
 
   // The entity to update in Directory service.
   std::string directory_id_;
 
-  CloudServiceClient client_;
+  std::unique_ptr<CloudServiceClient> client_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

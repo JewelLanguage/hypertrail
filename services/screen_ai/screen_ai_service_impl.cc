@@ -354,12 +354,14 @@ ScreenAIService::PerformOcrAndRecordMetrics(const SkBitmap& image) {
     base::UmaHistogramCounts10M("Accessibility.ScreenAI.OCR.ImageSize.PDF",
                                 image.width() * image.height());
 
-    std::optional<uint64_t> most_detected_language =
-        GetMostDetectedLanguageInOcrData(*result);
-    if (most_detected_language.has_value()) {
-      base::UmaHistogramSparse(
-          "Accessibility.ScreenAI.OCR.MostDetectedLanguage.PDF",
-          most_detected_language.value());
+    if (result.has_value()) {
+      std::optional<uint64_t> most_detected_language =
+          GetMostDetectedLanguageInOcrData(*result);
+      if (most_detected_language.has_value()) {
+        base::UmaHistogramSparse(
+            "Accessibility.ScreenAI.OCR.MostDetectedLanguage.PDF",
+            most_detected_language.value());
+      }
     }
   }
 

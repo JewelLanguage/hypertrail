@@ -6,14 +6,12 @@
 
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/glic/glic_keyed_service_factory.h"
 #include "chrome/browser/glic/glic_pref_names.h"
 #include "chrome/browser/glic/launcher/glic_background_mode_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
-#include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
-#include "chrome/browser/ui/views/tabs/glic_button.h"
-#include "chrome/browser/ui/views/tabs/tab_strip_action_container.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "ui/base/accelerators/accelerator.h"
@@ -26,7 +24,7 @@ GlicProfileConfiguration::GlicProfileConfiguration(Profile* profile)
     : profile_(*profile) {
   pref_registrar_.Init(profile_->GetPrefs());
   pref_registrar_.Add(
-      prefs::kGlicEnabledByPolicy,
+      prefs::kGlicSettingsPolicy,
       base::BindRepeating(&GlicProfileConfiguration::OnEnabledByPolicyChanged,
                           base::Unretained(this)));
 }
@@ -37,8 +35,9 @@ GlicProfileConfiguration::~GlicProfileConfiguration() = default;
 void GlicProfileConfiguration::RegisterProfilePrefs(
     PrefRegistrySimple* registry) {
   registry->RegisterIntegerPref(
-      prefs::kGlicEnabledByPolicy,
-      static_cast<int>(prefs::EnabledByPolicyState::kEnabled));
+      prefs::kGlicSettingsPolicy,
+      static_cast<int>(prefs::SettingsPolicyState::kEnabled));
+  registry->RegisterBooleanPref(prefs::kGlicPinnedToTabstrip, true);
   registry->RegisterBooleanPref(prefs::kGlicMicrophoneEnabled, false);
   registry->RegisterBooleanPref(prefs::kGlicGeolocationEnabled, false);
   registry->RegisterBooleanPref(prefs::kGlicTabContextEnabled, false);
@@ -46,22 +45,25 @@ void GlicProfileConfiguration::RegisterProfilePrefs(
 }
 
 bool GlicProfileConfiguration::IsEnabledByPolicy() const {
-  return profile_->GetPrefs()->GetInteger(prefs::kGlicEnabledByPolicy) ==
-         static_cast<int>(prefs::EnabledByPolicyState::kEnabled);
+  return profile_->GetPrefs()->GetInteger(prefs::kGlicSettingsPolicy) ==
+         static_cast<int>(prefs::SettingsPolicyState::kEnabled);
 }
 
 void GlicProfileConfiguration::OnEnabledByPolicyChanged() {
   // Note: the pref listener can sometimes fire even if the value from
   // GetInteger doesn't change (e.g. value was set from multiple sources). See
   // GlicPolicyTest.PrefDisabledByPolicy for an example.
-  for (Browser* const browser : *BrowserList::GetInstance()) {
-    if (browser->profile() == &profile_.get()) {
-      TabStripRegionView* tab_strip_region_view =
-          browser->window()->AsBrowserView()->tab_strip_region_view();
-      CHECK(tab_strip_region_view);
-      tab_strip_region_view->GetTabStripActionContainer()->UpdateGlicButton();
-    }
+
+  if (!IsEnabledByPolicy()) {
+    // If the policy becomes disabled, ensure an open Glic window is closed.  Do
+    // this before updating the Glic button since closing the panel starts an
+    // animation that relies on the button geometry for the animation.
+    // TODO(https://crbug.com/391337606): Longer term, we may want to handle
+    // this more gracefully but that'd require the client being aware that it's
+    // been disabled while it's active.
+    GlicKeyedServiceFactory::GetGlicKeyedService(&profile_.get())->ClosePanel();
   }
+
   GlicBackgroundModeManager::GetInstance()->OnPolicyChanged();
 }
 

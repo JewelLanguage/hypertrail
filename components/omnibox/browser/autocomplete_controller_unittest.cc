@@ -20,6 +20,7 @@
 #include "components/omnibox/browser/actions/omnibox_answer_action.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
 #include "components/omnibox/browser/autocomplete_match.h"
+#include "components/omnibox/browser/autocomplete_match_test_util.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/browser/fake_autocomplete_controller.h"
@@ -37,22 +38,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/omnibox_proto/answer_type.pb.h"
 #include "third_party/omnibox_proto/rich_answer_template.pb.h"
-
-namespace {
-
-bool ParseAnswer(const std::string& answer_json,
-                 omnibox::AnswerType answer_type,
-                 omnibox::RichAnswerTemplate* answer) {
-  std::optional<base::Value> value = base::JSONReader::Read(answer_json);
-  if (!value || !value->is_dict()) {
-    return false;
-  }
-
-  return omnibox::answer_data_parser::ParseJsonToAnswerData(value->GetDict(),
-                                                            answer);
-}
-
-}  // namespace
 
 class AutocompleteControllerTest : public testing::Test {
  public:
@@ -73,171 +58,6 @@ class AutocompleteControllerTest : public testing::Test {
                ->image_dominant_color.empty();
   }
 
-  AutocompleteMatch CreateHistoryURLMatch(std::string destination_url) {
-    AutocompleteMatch match;
-    match.type = AutocompleteMatchType::Type::HISTORY_URL;
-    match.destination_url = GURL(destination_url);
-    return match;
-  }
-
-  AutocompleteMatch CreateCompanyEntityMatch(std::string website_uri) {
-    AutocompleteMatch match;
-    match.type = AutocompleteMatchType::Type::SEARCH_SUGGEST_ENTITY;
-    match.website_uri = website_uri;
-    match.image_url = GURL("https://url");
-    match.image_dominant_color = "#000000";
-    return match;
-  }
-
-  AutocompleteMatch CreateSearchMatch(std::u16string contents = u"text") {
-    AutocompleteMatch match;
-    match.type = AutocompleteMatchType::Type::SEARCH_SUGGEST;
-    match.contents = contents;
-    return match;
-  }
-
-  AutocompleteMatch CreateStarterPackMatch(std::u16string keyword) {
-    AutocompleteMatch match;
-    match.type = AutocompleteMatchType::Type::STARTER_PACK;
-    match.contents = keyword;
-    match.keyword = keyword;
-    match.associated_keyword = std::make_unique<AutocompleteMatch>(
-        nullptr, 1000, false, AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED);
-    match.associated_keyword->keyword = keyword;
-    return match;
-  }
-
-  AutocompleteMatch CreateFeaturedEnterpriseSearch(std::u16string keyword) {
-    AutocompleteMatch match;
-    match.type = AutocompleteMatchType::Type::FEATURED_ENTERPRISE_SEARCH;
-    match.contents = keyword;
-    match.keyword = keyword;
-    match.associated_keyword = std::make_unique<AutocompleteMatch>(
-        nullptr, 1000, false, AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED);
-    match.associated_keyword->keyword = keyword;
-    return match;
-  }
-
-  AutocompleteMatch CreateSearchMatch(std::string name,
-                                      bool allowed_to_be_default_match,
-                                      int traditional_relevance) {
-    auto match =
-        CreateAutocompleteMatch(name, AutocompleteMatchType::SEARCH_SUGGEST,
-                                allowed_to_be_default_match, false,
-                                traditional_relevance, std::nullopt);
-    match.keyword = u"keyword";
-    match.search_terms_args = std::make_unique<TemplateURLRef::SearchTermsArgs>(
-        base::UTF8ToUTF16(name));
-    return match;
-  }
-
-  AutocompleteMatch CreatePersonalizedZeroPrefixMatch(
-      std::string name,
-      int traditional_relevance) {
-    auto match = CreateAutocompleteMatch(
-        name, AutocompleteMatchType::SEARCH_SUGGEST_PERSONALIZED, false, false,
-        traditional_relevance, std::nullopt);
-    match.keyword = u"keyword";
-    match.search_terms_args =
-        std::make_unique<TemplateURLRef::SearchTermsArgs>(std::u16string());
-    match.suggestion_group_id = omnibox::GROUP_PERSONALIZED_ZERO_SUGGEST;
-    match.subtypes.emplace(omnibox::SUBTYPE_PERSONAL);
-    match.subtypes.emplace(omnibox::SUBTYPE_ZERO_PREFIX);
-    return match;
-  }
-
-  AutocompleteMatch CreateHistoryUrlMlScoredMatch(
-      std::string name,
-      bool allowed_to_be_default_match,
-      int traditional_relevance,
-      float ml_output) {
-    return CreateMlScoredMatch(name, AutocompleteMatchType::HISTORY_URL,
-                               allowed_to_be_default_match,
-                               traditional_relevance, ml_output);
-  }
-
-  AutocompleteMatch CreateAnswerMlScoredMatch(std::string name,
-                                              omnibox::AnswerType answer_type,
-                                              std::string answer_json,
-                                              bool allowed_to_be_default_match,
-                                              int traditional_relevance,
-                                              float ml_output) {
-    AutocompleteMatch match = CreateSearchMlScoredMatch(
-        name, allowed_to_be_default_match, traditional_relevance, ml_output);
-    match.answer_type = answer_type;
-    omnibox::RichAnswerTemplate answer;
-    EXPECT_TRUE(ParseAnswer(answer_json, match.answer_type, &answer));
-    match.answer_template = answer;
-    return match;
-  }
-
-  AutocompleteMatch CreateSearchMlScoredMatch(std::string name,
-                                              bool allowed_to_be_default_match,
-                                              int traditional_relevance,
-                                              float ml_output) {
-    AutocompleteMatch match = CreateMlScoredMatch(
-        name, AutocompleteMatchType::SEARCH_SUGGEST,
-        allowed_to_be_default_match, traditional_relevance, ml_output);
-    match.keyword = u"keyword";
-    match.search_terms_args = std::make_unique<TemplateURLRef::SearchTermsArgs>(
-        base::UTF8ToUTF16(name));
-    return match;
-  }
-
-  AutocompleteMatch CreateMlScoredMatch(std::string name,
-                                        AutocompleteMatchType::Type type,
-                                        bool allowed_to_be_default_match,
-                                        int traditional_relevance,
-                                        float ml_output) {
-    return CreateAutocompleteMatch(name, type, allowed_to_be_default_match,
-                                   false, traditional_relevance, ml_output);
-  }
-
-  AutocompleteMatch CreateBoostedShortcutMatch(std::string name,
-                                               int traditional_relevance,
-                                               float ml_output) {
-    return CreateAutocompleteMatch(name, AutocompleteMatchType::HISTORY_URL,
-                                   true, true, traditional_relevance,
-                                   ml_output);
-  }
-
-  AutocompleteMatch CreateKeywordHintMatch(std::string name,
-                                           int traditional_relevance) {
-    auto match = CreateAutocompleteMatch(
-        name, AutocompleteMatchType::SEARCH_SUGGEST, false, false,
-        traditional_relevance, std::nullopt);
-    match.keyword = u"keyword";
-    match.associated_keyword = std::make_unique<AutocompleteMatch>(
-        nullptr, 1000, false, AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED);
-    return match;
-  }
-
-  AutocompleteMatch CreateHistoryClusterMatch(std::string name,
-                                              int traditional_relevance) {
-    return CreateAutocompleteMatch(name, AutocompleteMatchType::HISTORY_CLUSTER,
-                                   false, false, traditional_relevance,
-                                   std::nullopt);
-  }
-
-  AutocompleteMatch CreateAutocompleteMatch(std::string name,
-                                            AutocompleteMatchType::Type type,
-                                            bool allowed_to_be_default_match,
-                                            bool shortcut_boosted,
-                                            int traditional_relevance,
-                                            std::optional<float> ml_output) {
-    AutocompleteMatch match{nullptr, traditional_relevance, false, type};
-    match.shortcut_boosted = shortcut_boosted;
-    match.allowed_to_be_default_match = allowed_to_be_default_match;
-    match.destination_url = GURL{"https://google.com/" + name};
-    match.stripped_destination_url = GURL{"https://google.com/" + name};
-    match.contents = base::UTF8ToUTF16(name);
-    match.contents_class = {{0, 1}};
-    if (ml_output.has_value()) {
-      match.scoring_signals = {{}};
-      match.scoring_signals->set_site_engagement(ml_output.value());
-    }
-    return match;
-  }
 
   FakeAutocompleteProviderClient* provider_client() {
     return static_cast<FakeAutocompleteProviderClient*>(
@@ -2312,15 +2132,38 @@ TEST_F(AutocompleteControllerTest,
   auto aggregator_provider = base::MakeRefCounted<FakeAutocompleteProvider>(
       AutocompleteProvider::Type::TYPE_ENTERPRISE_SEARCH_AGGREGATOR);
   controller_.providers_.push_back(aggregator_provider);
+  auto document_provider = base::MakeRefCounted<FakeAutocompleteProvider>(
+      AutocompleteProvider::Type::TYPE_DOCUMENT);
+  controller_.providers_.push_back(document_provider);
+  omnibox_feature_configs::ScopedConfigForTesting<
+      omnibox_feature_configs::SearchAggregatorProvider>
+      scoped_config;
 
-  // Aggregator not ran when not in keyword mode.
+  // In unscoped mode (not keyword mode), aggregator is run when
+  // `require_shortcut` policy field is false, and is not run when
+  // `require_shortcut` policy field is true. When it is run, the document
+  // provider should not be run and vice versa.
   controller_.input_ = AutocompleteInput(
-      u"a", 1u, metrics::OmniboxEventProto::OTHER, TestSchemeClassifier());
-  EXPECT_FALSE(controller_.ShouldRunProvider(aggregator_provider.get()));
+      u"query", 1u, metrics::OmniboxEventProto::OTHER, TestSchemeClassifier());
+  EXPECT_TRUE(controller_.ShouldRunProvider(aggregator_provider.get()));
+  EXPECT_FALSE(controller_.ShouldRunProvider(document_provider.get()));
 
-  // Aggregator not ran when in site search mode.
+  scoped_config.Get().require_shortcut = true;
+  EXPECT_FALSE(controller_.ShouldRunProvider(aggregator_provider.get()));
+  EXPECT_TRUE(controller_.ShouldRunProvider(document_provider.get()));
+
+  // Enter keyword mode.
   controller_.input_.set_keyword_mode_entry_method(
       metrics::OmniboxEventProto_KeywordModeEntryMethod_TAB);
+
+  // Aggregator not ran when in site search mode, regardless of
+  // `require_shortcut` value.
+  controller_.input_.UpdateText(u"site_search_not_featured", 0, {});
+  EXPECT_FALSE(controller_.ShouldRunProvider(aggregator_provider.get()));
+  controller_.input_.UpdateText(u"site_search_featured", 0, {});
+  EXPECT_FALSE(controller_.ShouldRunProvider(aggregator_provider.get()));
+
+  scoped_config.Get().require_shortcut = false;
   controller_.input_.UpdateText(u"site_search_not_featured", 0, {});
   EXPECT_FALSE(controller_.ShouldRunProvider(aggregator_provider.get()));
   controller_.input_.UpdateText(u"site_search_featured", 0, {});

@@ -20,6 +20,8 @@ import org.chromium.base.ObserverList;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.browser_controls.BottomControlsStacker;
+import org.chromium.chrome.browser.browser_controls.BottomControlsStacker.LayerType;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider.ControlsPosition;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.PanelState;
@@ -31,6 +33,8 @@ import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateMa
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
+
+import java.util.Observer;
 
 /** Base abstract class for the Overlay Panel. */
 abstract class OverlayPanelBase implements OverlayPanelStateProvider, AppHeaderObserver {
@@ -151,6 +155,7 @@ abstract class OverlayPanelBase implements OverlayPanelStateProvider, AppHeaderO
     // State provider for Desktop Window.
     private final DesktopWindowStateManager mDesktopWindowStateManager;
     private final BrowserControlsStateProvider mBrowserControlsStateProvider;
+    private final BottomControlsStacker mBottomControlsStacker;
     private float mAppHeaderHeightDp;
 
     // ============================================================================================
@@ -163,16 +168,20 @@ abstract class OverlayPanelBase implements OverlayPanelStateProvider, AppHeaderO
      * @param desktopWindowStateManager Manager to get desktop window and app header state.
      * @param browserControlsStateProvider The {@link BrowserControlsStateProvider} for measuring
      *     controls.
+     * @param bottomControlsStacker The {@link BottomControlsStacker} for observing and changing
+     *     browser controls heights.
      */
     public OverlayPanelBase(
             Context context,
             float toolbarHeightDp,
             DesktopWindowStateManager desktopWindowStateManager,
-            @NonNull BrowserControlsStateProvider browserControlsStateProvider) {
+            @NonNull BrowserControlsStateProvider browserControlsStateProvider,
+            @NonNull BottomControlsStacker bottomControlsStacker) {
         mContext = context;
         mToolbarHeightDp = toolbarHeightDp;
         mDesktopWindowStateManager = desktopWindowStateManager;
         mBrowserControlsStateProvider = browserControlsStateProvider;
+        mBottomControlsStacker = bottomControlsStacker;
         mPxToDp = 1.f / mContext.getResources().getDisplayMetrics().density;
 
         mBarMarginSide = BAR_ICON_SIDE_PADDING_DP;
@@ -327,9 +336,17 @@ abstract class OverlayPanelBase implements OverlayPanelStateProvider, AppHeaderO
      * @return The current Y-position of the Overlay Panel.
      */
     protected float calculateOverlayPanelY() {
+        // The panel should only stack on top of the toolbar when it's peeking; beyond that height,
+        // it overlays the toolbar and thus does not need an upwards adjustment.
+        @PanelState int panelStateForHeight = findLargestPanelStateFromHeight(mHeight);
         float bottomControlsHeight =
-                mBrowserControlsStateProvider.getControlsPosition() == ControlsPosition.BOTTOM
-                        ? mBrowserControlsStateProvider.getBottomControlsHeight()
+                panelStateForHeight == PanelState.PEEKED
+                                && mBrowserControlsStateProvider.getControlsPosition()
+                                        == ControlsPosition.BOTTOM
+                        ? (mBottomControlsStacker != null
+                                        ? mBottomControlsStacker.getHeightFromLayerToBottom(
+                                                LayerType.BOTTOM_TOOLBAR)
+                                        : 0)
                                 * (1 - mBrowserControlsStateProvider.getBrowserControlHiddenRatio())
                         : 0;
         return getTabHeight()

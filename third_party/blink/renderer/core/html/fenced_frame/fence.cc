@@ -4,10 +4,10 @@
 
 #include "third_party/blink/renderer/core/html/fenced_frame/fence.h"
 
+#include <algorithm>
 #include <optional>
 
 #include "base/feature_list.h"
-#include "base/ranges/algorithm.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/fenced_frame/fenced_frame_utils.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
@@ -136,8 +136,8 @@ void Fence::reportEventToDestinationEnum(const FenceEvent* event,
 
   const auto& properties =
       frame->GetDocument()->Loader()->FencedFrameProperties();
-  if (!properties.has_value() || !properties->has_fenced_frame_reporting()) {
-    AddConsoleMessage("This frame did not register reporting metadata.");
+  if (!properties.has_value()) {
+    AddConsoleMessage("This frame was not loaded with a FencedFrameConfig.");
     return;
   }
 
@@ -160,9 +160,8 @@ void Fence::reportEventToDestinationEnum(const FenceEvent* event,
 
   WTF::Vector<blink::FencedFrame::ReportingDestination> destinations;
   destinations.reserve(event->destination().size());
-  base::ranges::transform(event->destination(),
-                          std::back_inserter(destinations),
-                          ToPublicDestination);
+  std::ranges::transform(event->destination(), std::back_inserter(destinations),
+                         ToPublicDestination);
 
   frame->GetLocalFrameHostRemote().SendFencedFrameReportingBeacon(
       event->getEventDataOr(String{""}), event->eventType(), destinations,
@@ -221,8 +220,8 @@ void Fence::reportEventToDestinationURL(const FenceEvent* event,
 
   const auto& properties =
       frame->GetDocument()->Loader()->FencedFrameProperties();
-  if (!properties.has_value() || !properties->has_fenced_frame_reporting()) {
-    AddConsoleMessage("This frame did not register reporting metadata.");
+  if (!properties.has_value()) {
+    AddConsoleMessage("This frame was not loaded with a FencedFrameConfig.");
     return;
   }
 
@@ -289,8 +288,8 @@ void Fence::setReportEventDataForAutomaticBeacons(
 
   const auto& properties =
       frame->GetDocument()->Loader()->FencedFrameProperties();
-  if (!properties.has_value() || !properties->has_fenced_frame_reporting()) {
-    AddConsoleMessage("This frame did not register reporting metadata.");
+  if (!properties.has_value()) {
+    AddConsoleMessage("This frame was not loaded with a FencedFrameConfig.");
     return;
   }
 
@@ -313,9 +312,8 @@ void Fence::setReportEventDataForAutomaticBeacons(
 
   WTF::Vector<blink::FencedFrame::ReportingDestination> destinations;
   destinations.reserve(event->destination().size());
-  base::ranges::transform(event->destination(),
-                          std::back_inserter(destinations),
-                          ToPublicDestination);
+  std::ranges::transform(event->destination(), std::back_inserter(destinations),
+                         ToPublicDestination);
 
   frame->GetLocalFrameHostRemote().SetFencedFrameAutomaticBeaconReportEventData(
       beacon_type.value(), event->getEventDataOr(String{""}), destinations,
@@ -407,8 +405,8 @@ void Fence::reportPrivateAggregationEvent(const String& event,
 
   const auto& properties =
       frame->GetDocument()->Loader()->FencedFrameProperties();
-  if (!properties.has_value() || !properties->has_fenced_frame_reporting()) {
-    AddConsoleMessage("This frame did not register reporting metadata.");
+  if (!properties.has_value()) {
+    AddConsoleMessage("This frame was not loaded with a FencedFrameConfig.");
     return;
   }
 

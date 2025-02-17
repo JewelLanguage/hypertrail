@@ -787,7 +787,7 @@ class AutofillInteractiveTestBase : public AutofillUiTest {
     content::DOMMessageQueue msg_queue(GetWebContents());
     for (char16_t character : value) {
       ui::DomKey dom_key = ui::DomKey::FromCharacter(character);
-      const ui::PrintableCodeEntry* code_entry = base::ranges::find_if(
+      const ui::PrintableCodeEntry* code_entry = std::ranges::find_if(
           ui::kPrintableCodeMap,
           [character](const ui::PrintableCodeEntry& entry) {
             return entry.character[0] == character ||
@@ -3116,7 +3116,7 @@ IN_PROC_BROWSER_TEST_F(AutofillInteractiveTestDynamicForm,
   // Short hand for ExpectBucketCount:
   auto expect_count = [&](std::string_view name,
                           base::HistogramBase::Sample32 sample,
-                          base::HistogramBase::Count expected_count) {
+                          base::HistogramBase::Count32 expected_count) {
     histogram_tester().ExpectBucketCount(name, sample, expected_count);
   };
   expect_count("Autofill.KeyMetrics.FillingReadiness.CreditCard", 1, 1);
@@ -3370,8 +3370,7 @@ class AutofillInteractiveFormSubmissionTest
           ASSERT_TRUE(waiter.Wait(1));
           break;
         }
-        case kSelectOne:
-        case kSelectMultiple: {
+        case kSelectOne: {
           auto& waiter = autofill_manager()->select_field_change_waiter();
           ASSERT_TRUE(waiter.Wait(1));
           break;

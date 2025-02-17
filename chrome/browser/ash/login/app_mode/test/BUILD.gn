@@ -2,9 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/chromeos/ui_mode.gni")
-
-assert(is_chromeos_ash)
+assert(is_chromeos)
 
 static_library("test_support") {
   testonly = true
@@ -56,7 +54,6 @@ static_library("test_support") {
     "//chrome/browser/ash/app_mode/test:test_support",
     "//chrome/browser/ash/app_mode/web_app",
     "//chrome/browser/ash/crosapi",
-    "//chrome/browser/ash/crosapi:browser_util",
     "//chrome/browser/ash/login",
     "//chrome/browser/ash/policy/core",
     "//chrome/browser/ash/settings:test_support",
@@ -88,7 +85,6 @@ source_set("browser_tests") {
     "kiosk_enterprise_input_api_browsertest.cc",
     "kiosk_remote_command_browsertest.cc",
     "kiosk_sku_browsertest.cc",
-    "kiosk_update_browsertest.cc",
     "web_kiosk_browser_permissions_browsertest.cc",
     "web_kiosk_device_attributes_browsertest.cc",
     "web_kiosk_media_ui_browsertest.cc",
@@ -115,7 +111,6 @@ source_set("browser_tests") {
     "//chrome/browser/ash/app_mode/test:test_support",
     "//chrome/browser/ash/app_mode/web_app",
     "//chrome/browser/ash/crosapi",
-    "//chrome/browser/ash/crosapi:browser_util",
     "//chrome/browser/ash/login",
     "//chrome/browser/ash/login/screens",
     "//chrome/browser/ash/login/test:test_support",

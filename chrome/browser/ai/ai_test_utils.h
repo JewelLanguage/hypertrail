@@ -92,7 +92,7 @@ class AITestUtils {
         void,
         OnResult,
         (mojo::PendingRemote<blink::mojom::AILanguageModel> language_model,
-         blink::mojom::AILanguageModelInfoPtr info),
+         blink::mojom::AILanguageModelInstanceInfoPtr info),
         (override));
 
     MOCK_METHOD(void,
@@ -114,9 +114,10 @@ class AITestUtils {
     void TearDown() override;
 
    protected:
-    void SetupMockOptimizationGuideKeyedService();
-    void SetupNullOptimizationGuideKeyedService();
+    virtual void SetupMockOptimizationGuideKeyedService();
+    virtual void SetupNullOptimizationGuideKeyedService();
 
+    blink::mojom::AIManager* GetAIManagerInterface();
     mojo::Remote<blink::mojom::AIManager> GetAIManagerRemote();
     size_t GetAIManagerContextBoundObjectSetSize();
     size_t GetAIManagerDownloadProgressObserversSize();
@@ -140,6 +141,10 @@ class AITestUtils {
       const optimization_guide::proto::WritingAssistanceApiOptions&
           expected_options,
       const std::string& expected_input);
+
+  // Converts string language codes to AILanguageCode mojo struct.
+  static std::vector<blink::mojom::AILanguageCodePtr> ToMojoLanguageCodes(
+      const std::vector<std::string>& language_codes);
 };
 
 #endif  // CHROME_BROWSER_AI_AI_TEST_UTILS_H_

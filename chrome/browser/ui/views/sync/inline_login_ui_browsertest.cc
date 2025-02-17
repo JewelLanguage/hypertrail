@@ -4,12 +4,13 @@
 
 #include "chrome/browser/ui/webui/signin/inline_login_ui.h"
 
+#include <algorithm>
+
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -126,7 +127,7 @@ ACTION(ReturnNewWebUI) {
 
 GURL GetSigninPromoURL() {
   return signin::GetEmbeddedPromoURL(
-      signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE,
+      signin_metrics::AccessPoint::kStartPage,
       signin_metrics::Reason::kForcedSigninPrimaryAccount, false);
 }
 
@@ -851,9 +852,9 @@ class HtmlRequestTracker {
       return false;
     }
 
-    return base::ranges::all_of(
+    return std::ranges::all_of(
         it->second, [&required_params](const QueryParamSet& request_params) {
-          return base::ranges::includes(request_params, required_params);
+          return std::ranges::includes(request_params, required_params);
         });
   }
 
@@ -906,7 +907,7 @@ class InlineLoginCorrectGaiaUrlBrowserTest : public InProcessBrowserTest {
 IN_PROC_BROWSER_TEST_F(InlineLoginCorrectGaiaUrlBrowserTest,
                        FetchLstOnlyEndpointForSignin) {
   signin_metrics::AccessPoint access_point =
-      signin_metrics::AccessPoint::ACCESS_POINT_MACHINE_LOGON;
+      signin_metrics::AccessPoint::kMachineLogon;
   signin_metrics::Reason reason = signin_metrics::Reason::kFetchLstOnly;
 
   auto signin_url = signin::GetEmbeddedPromoURL(access_point, reason, false);
@@ -929,7 +930,7 @@ IN_PROC_BROWSER_TEST_F(InlineLoginCorrectGaiaUrlBrowserTest,
 IN_PROC_BROWSER_TEST_F(InlineLoginCorrectGaiaUrlBrowserTest,
                        FetchLstOnlyEndpointForReauth) {
   signin_metrics::AccessPoint access_point =
-      signin_metrics::AccessPoint::ACCESS_POINT_MACHINE_LOGON;
+      signin_metrics::AccessPoint::kMachineLogon;
   signin_metrics::Reason reason = signin_metrics::Reason::kFetchLstOnly;
 
   static const std::string email = "foo@gmail.com";

@@ -218,13 +218,50 @@ public class TabStateFlatBufferTest {
                         temporaryFolder.getRoot(),
                         /* tabId= */ 4,
                         /* encrypted= */ true,
-                        /* isFlatBuffer= */ true),
+                        /* isFlatbuffer= */ true),
                 state,
-                /* isEncrypted= */ true,
+                /* encrypted= */ true,
                 sCipherFactory);
         TabState restored =
                 TabStateFileManager.restoreTabState(temporaryFolder.getRoot(), 4, sCipherFactory);
         Assert.assertTrue(restored.isIncognito);
+    }
+
+    @Test
+    @LargeTest
+    @EnableFeatures(ChromeFeatureList.LEGACY_TAB_STATE_DEPRECATION)
+    public void testLegacyTabStateFileDeletion() throws ExecutionException {
+        TabState state = getTestTabState(/* isIncognito= */ true);
+        File legacyTabStateFile =
+                TabStateFileManager.getTabStateFile(
+                        temporaryFolder.getRoot(),
+                        /* tabId= */ 4,
+                        /* encrypted= */ false,
+                        /* isFlatbuffer= */ false);
+        File flatBufferTabStateFile =
+                TabStateFileManager.getTabStateFile(
+                        temporaryFolder.getRoot(),
+                        /* tabId= */ 4,
+                        /* encrypted= */ false,
+                        /* isFlatbuffer= */ true);
+        Assert.assertFalse(legacyTabStateFile.exists());
+        TabStateFileManager.saveStateInternal(
+                legacyTabStateFile, state, /* encrypted= */ true, sCipherFactory);
+        Assert.assertTrue(legacyTabStateFile.exists());
+        TabStateFileManager.saveState(
+                temporaryFolder.getRoot(),
+                state,
+                /* tabId= */ 4,
+                /* isEncrypted= */ false,
+                sCipherFactory);
+        Assert.assertTrue(flatBufferTabStateFile.exists());
+        CriteriaHelper.pollInstrumentationThread(
+                () -> {
+                    Criteria.checkThat(
+                            "File " + legacyTabStateFile + " should not exist.",
+                            legacyTabStateFile.exists(),
+                            Matchers.is(false));
+                });
     }
 
     private static TabState getTestTabState(boolean isIncognito) throws ExecutionException {

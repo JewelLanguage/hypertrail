@@ -135,13 +135,10 @@ D3DImageBacking::GLTextureHolder::~GLTextureHolder() = default;
 scoped_refptr<D3DImageBacking::GLTextureHolder>
 D3DImageBacking::CreateGLTexture(
     const GLFormatDesc& gl_format_desc,
-    const gfx::Size& size,
-    const gfx::ColorSpace& color_space,
     Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11_texture,
     GLenum texture_target,
     unsigned array_slice,
-    unsigned plane_index,
-    Microsoft::WRL::ComPtr<IDXGISwapChain1> swap_chain) {
+    unsigned plane_index) {
   gl::GLApi* const api = gl::g_current_gl_context;
   gl::ScopedRestoreTexture scoped_restore(api, texture_target);
 
@@ -639,6 +636,16 @@ std::unique_ptr<VideoImageRepresentation> D3DImageBacking::ProduceVideo(
     SharedImageManager* manager,
     MemoryTypeTracker* tracker,
     VideoDevice device) {
+  if (texture_d3d11_device_ != device && !dxgi_shared_handle_state_) {
+    // Readback is the only option for a caller cannot create a representation
+    // for this shared image.  When the caller cannot use a shared device
+    // (GL/Ganesh) create a copy since this is much more efficient than forcing
+    // readback.
+    return D3D11VideoImageCopyRepresentation::CreateFromD3D(
+        manager, this, tracker, device.Get(), d3d11_texture_.Get(),
+        debug_label(), texture_d3d11_device_.Get());
+  }
+
   return std::make_unique<D3D11VideoImageRepresentation>(
       manager, this, tracker, device, d3d11_texture_);
 }
@@ -960,13 +967,12 @@ void D3DImageBacking::EndAccessD3D11(
   D3DSharedFenceSet signaled_fence;
   if (use_cross_device_fence_synchronization()) {
     auto& d3d11_signal_fence = d3d11_signaled_fence_map_[d3d11_device];
-    if (!d3d11_signal_fence) {
-      d3d11_signal_fence = gfx::D3DSharedFence::CreateForD3D11(d3d11_device);
-    }
-    if (d3d11_signal_fence && d3d11_signal_fence->IncrementAndSignalD3D11()) {
-      signaled_fence.insert(d3d11_signal_fence);
-    } else {
-      LOG(ERROR) << "Failed to signal D3D11 device fence on EndAccess";
+    if (d3d11_signal_fence) {
+      if (d3d11_signal_fence->IncrementAndSignalD3D11()) {
+        signaled_fence.insert(d3d11_signal_fence);
+      } else {
+        LOG(ERROR) << "Failed to signal D3D11 device fence on EndAccess";
+      }
     }
   }
 
@@ -1011,6 +1017,20 @@ D3DImageBacking::GetDCompTextureAvailabilityFenceForCurrentFrame() const {
   return gfx::D3DSharedFence::CreateFromD3D11Fence(
       /*d3d11_signal_device=*/nullptr, std::move(d3d11_fence), fence_value);
 }
+
+#if DCHECK_IS_ON()
+void D3DImageBacking::CheckDCompTextureIsAvailableIfNoReaders() const {
+  AutoLock auto_lock(this);
+
+  if (num_readers_ == 0) {
+    // Sanity check that we can get the availability fence, meaning that the
+    // texture is either immediately available or soon-to-be available. We
+    // should not cache this since the eventual wait may be one or more frames
+    // later and the fence becomes invalidated by DComp commit.
+    std::ignore = GetDCompTextureAvailabilityFenceForCurrentFrame();
+  }
+}
+#endif
 
 std::unique_ptr<DawnBufferRepresentation> D3DImageBacking::ProduceDawnBuffer(
     SharedImageManager* manager,
@@ -1164,7 +1184,7 @@ void D3DImageBacking::BeginAccessCommon(bool write_access) {
 
 void D3DImageBacking::EndAccessCommon(
     const D3DSharedFenceSet& signaled_fences) {
-  DCHECK(base::ranges::all_of(
+  DCHECK(std::ranges::all_of(
       signaled_fences,
       [](const scoped_refptr<gfx::D3DSharedFence>& fence) { return !!fence; }));
   if (in_write_access_) {
@@ -1266,12 +1286,10 @@ D3DImageBacking::ProduceGLTexturePassthrough(SharedImageManager* manager,
             gl_format_caps_.ToGLFormatDesc(format(), /*plane_index=*/0);
       }
 
-      gfx::Size plane_size = format().GetPlaneSize(plane, size());
       // Creating the GL texture doesn't require exclusive access to the
       // underlying D3D11 texture.
-      holder = CreateGLTexture(gl_format_desc, plane_size, color_space(),
-                               d3d11_texture, texture_target_, array_slice_,
-                               plane, swap_chain_);
+      holder = CreateGLTexture(gl_format_desc, d3d11_texture, texture_target_,
+                               array_slice_, plane);
       if (!holder) {
         LOG(ERROR) << "Failed to create GL texture for plane: " << plane;
         return nullptr;

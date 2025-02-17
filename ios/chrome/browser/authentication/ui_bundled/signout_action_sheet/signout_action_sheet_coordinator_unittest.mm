@@ -25,6 +25,7 @@
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
+#import "ios/chrome/browser/shared/model/profile/test/test_profile_manager_ios.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
@@ -67,7 +68,7 @@ class SignoutActionSheetCoordinatorTest : public PlatformTest {
             std::make_unique<FakeAuthenticationServiceDelegate>()));
     builder.AddTestingFactory(SyncServiceFactory::GetInstance(),
                               base::BindRepeating(&CreateMockSyncService));
-    profile_ = std::move(builder).Build();
+    profile_ = profile_manager_.AddProfileWithBuilder(std::move(builder));
     AppState* app_state = [[AppState alloc] initWithStartupInformation:nil];
     SceneState* scene_state = [[SceneState alloc] initWithAppState:app_state];
     browser_ = std::make_unique<TestBrowser>(profile_.get(), scene_state);
@@ -137,7 +138,8 @@ class SignoutActionSheetCoordinatorTest : public PlatformTest {
   SceneState* scene_state_mock_;
   StubBrowserProviderInterface* stub_browser_interface_provider_;
   std::unique_ptr<Browser> browser_;
-  std::unique_ptr<TestProfileIOS> profile_;
+  raw_ptr<TestProfileIOS> profile_;
+  TestProfileManagerIOS profile_manager_;
   id<SystemIdentity> identity_ = nil;
   id<SystemIdentity> managed_identity_ = nil;
   id<SnackbarCommands> snackbar_handler_ =
@@ -147,50 +149,10 @@ class SignoutActionSheetCoordinatorTest : public PlatformTest {
   raw_ptr<syncer::MockSyncService> sync_service_mock_ = nullptr;
 };
 
-// Tests that a signed-in user with Sync enabled will have an action sheet with
-// a sign-out title.
-// TODO(crbug.com/40066949): Remove this test once ConsentLevel::kSync does not
-// exist on iOS anymore.
-TEST_F(SignoutActionSheetCoordinatorTest, SignedInUserWithSync) {
-  authentication_service()->SignIn(
-      identity_, signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
-  authentication_service()->GrantSyncConsent(
-      identity_, signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
-  ON_CALL(*sync_service_mock_->GetMockUserSettings(),
-          IsInitialSyncFeatureSetupComplete())
-      .WillByDefault(testing::Return(true));
-
-  CreateCoordinator();
-  [signout_coordinator_ start];
-
-  ASSERT_NE(nil, signout_coordinator_.title);
-}
-
-// Tests that a signed-in managed user with Sync enabled will have an action
-// sheet with a sign-out title.
-// TODO(crbug.com/40066949): Remove this test once ConsentLevel::kSync does not
-// exist on iOS anymore.
-TEST_F(SignoutActionSheetCoordinatorTest, SignedInManagedUserWithSync) {
-  authentication_service()->SignIn(
-      managed_identity_, signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
-  authentication_service()->GrantSyncConsent(
-      managed_identity_, signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
-  ASSERT_TRUE(authentication_service()->HasPrimaryIdentityManaged(
-      signin::ConsentLevel::kSync));
-  ON_CALL(*sync_service_mock_->GetMockUserSettings(),
-          IsInitialSyncFeatureSetupComplete())
-      .WillByDefault(testing::Return(true));
-
-  CreateCoordinator();
-  [signout_coordinator_ start];
-
-  ASSERT_NE(nil, signout_coordinator_.title);
-}
-
 TEST_F(SignoutActionSheetCoordinatorTest,
        ShouldNotShowActionSheetIfNoUnsyncedData) {
-  authentication_service()->SignIn(
-      identity_, signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+  authentication_service()->SignIn(identity_,
+                                   signin_metrics::AccessPoint::kUnknown);
 
   CreateCoordinator();
   // Mock returning no unsynced datatype.
@@ -211,8 +173,8 @@ TEST_F(SignoutActionSheetCoordinatorTest,
 }
 
 TEST_F(SignoutActionSheetCoordinatorTest, ShouldShowActionSheetIfUnsyncedData) {
-  authentication_service()->SignIn(
-      identity_, signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+  authentication_service()->SignIn(identity_,
+                                   signin_metrics::AccessPoint::kUnknown);
 
   CreateCoordinator();
   // Mock returning unsynced datatypes.
@@ -246,8 +208,8 @@ TEST_F(SignoutActionSheetCoordinatorTest, ShouldShowActionSheetIfUnsyncedData) {
 TEST_F(SignoutActionSheetCoordinatorTest,
        ShouldShowActionSheetForManagedUserMigratedFromSyncing) {
   // Sign in with a *managed* account.
-  authentication_service()->SignIn(
-      managed_identity_, signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+  authentication_service()->SignIn(managed_identity_,
+                                   signin_metrics::AccessPoint::kUnknown);
   ASSERT_TRUE(authentication_service()->HasPrimaryIdentityManaged(
       signin::ConsentLevel::kSignin));
   // Mark the user as "migrated from previously syncing".
@@ -277,8 +239,8 @@ TEST_F(SignoutActionSheetCoordinatorTest,
 TEST_F(SignoutActionSheetCoordinatorTest,
        ShouldShowActionSheetForManagedUserWithClearDataonSignoutFeature) {
   // Sign in with a *managed* account.
-  authentication_service()->SignIn(
-      managed_identity_, signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+  authentication_service()->SignIn(managed_identity_,
+                                   signin_metrics::AccessPoint::kUnknown);
   ASSERT_TRUE(authentication_service()->HasPrimaryIdentityManaged(
       signin::ConsentLevel::kSignin));
 

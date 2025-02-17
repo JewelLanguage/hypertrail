@@ -11,8 +11,8 @@
 #include "base/task/single_thread_task_runner.h"
 #include "media/mojo/mojom/media_player.mojom-blink.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
 #include "third_party/blink/public/common/media/display_type.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink.h"
 #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
@@ -89,7 +89,7 @@ PictureInPictureControllerImpl::IsDocumentAllowed(bool report_failure) const {
   // If document is not allowed to use the policy-controlled feature named
   // "picture-in-picture", return kDisabledByPermissionsPolicy status.
   if (!GetSupplementable()->GetExecutionContext()->IsFeatureEnabled(
-          blink::mojom::blink::PermissionsPolicyFeature::kPictureInPicture,
+          network::mojom::PermissionsPolicyFeature::kPictureInPicture,
           report_failure ? ReportOptions::kReportOnFailure
                          : ReportOptions::kDoNotReport)) {
     return Status::kDisabledByPermissionsPolicy;

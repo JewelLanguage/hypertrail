@@ -129,6 +129,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   gfx::Rect GetViewBounds() override;
   bool IsPointerLocked() override;
   gfx::Size GetVisibleViewportSize() override;
+  gfx::Size GetVisibleViewportSizeDevicePx() override;
   void SetInsets(const gfx::Insets& insets) override;
   TouchSelectionControllerClientManager*
   GetTouchSelectionControllerClientManager() override;
@@ -198,6 +199,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void OnOldViewDidNavigatePreCommit() override;
   void OnNewViewDidNavigatePostCommit() override;
   void DidEnterBackForwardCache() override;
+  void ActivatedOrEvictedFromBackForwardCache() override;
   const viz::FrameSinkId& GetFrameSinkId() const override;
   const viz::LocalSurfaceId& GetLocalSurfaceId() const override;
   bool TransformPointToCoordSpaceForView(

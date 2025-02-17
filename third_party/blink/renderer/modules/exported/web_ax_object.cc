@@ -30,7 +30,9 @@
 
 #include "third_party/blink/public/web/web_ax_object.h"
 
-#include "base/ranges/algorithm.h"
+#include <algorithm>
+
+#include "base/containers/to_vector.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/web/web_document.h"
@@ -338,7 +340,7 @@ WebString WebAXObject::LiveRegionStatus() const {
   return private_->LiveRegionStatus();
 }
 
-bool WebAXObject::AriaOwns(WebVector<WebAXObject>& owns_elements) const {
+bool WebAXObject::AriaOwns(std::vector<WebAXObject>& owns_elements) const {
   // aria-owns rearranges the accessibility tree rather than just
   // exposing an attribute.
 
@@ -629,8 +631,9 @@ WebURL WebAXObject::Url() const {
   return private_->Url();
 }
 
-WebString WebAXObject::GetName(ax::mojom::NameFrom& out_name_from,
-                               WebVector<WebAXObject>& out_name_objects) const {
+WebString WebAXObject::GetName(
+    ax::mojom::blink::NameFrom& out_name_from,
+    std::vector<WebAXObject>& out_name_objects) const {
   out_name_from = ax::mojom::blink::NameFrom::kNone;
 
   if (IsDetached())
@@ -643,7 +646,7 @@ WebString WebAXObject::GetName(ax::mojom::NameFrom& out_name_from,
 
   out_name_objects.reserve(name_objects.size());
   out_name_objects.resize(name_objects.size());
-  base::ranges::copy(name_objects, out_name_objects.begin());
+  std::ranges::copy(name_objects, out_name_objects.begin());
 
   return result;
 }
@@ -662,7 +665,7 @@ WebString WebAXObject::GetName() const {
 WebString WebAXObject::Description(
     ax::mojom::NameFrom name_from,
     ax::mojom::DescriptionFrom& out_description_from,
-    WebVector<WebAXObject>& out_description_objects) const {
+    std::vector<WebAXObject>& out_description_objects) const {
   out_description_from = ax::mojom::blink::DescriptionFrom::kNone;
 
   if (IsDetached())
@@ -674,7 +677,7 @@ WebString WebAXObject::Description(
 
   out_description_objects.reserve(description_objects.size());
   out_description_objects.resize(description_objects.size());
-  base::ranges::copy(description_objects, out_description_objects.begin());
+  std::ranges::copy(description_objects, out_description_objects.begin());
 
   return result;
 }
@@ -792,7 +795,7 @@ WebAXObject WebAXObject::CellForColumnAndRow(unsigned column,
 }
 
 void WebAXObject::RowHeaders(
-    WebVector<WebAXObject>& row_header_elements) const {
+    std::vector<WebAXObject>& row_header_elements) const {
   if (IsDetached())
     return;
 
@@ -803,11 +806,11 @@ void WebAXObject::RowHeaders(
   private_->RowHeaders(headers);
   row_header_elements.reserve(headers.size());
   row_header_elements.resize(headers.size());
-  base::ranges::copy(headers, row_header_elements.begin());
+  std::ranges::copy(headers, row_header_elements.begin());
 }
 
 void WebAXObject::ColumnHeaders(
-    WebVector<WebAXObject>& column_header_elements) const {
+    std::vector<WebAXObject>& column_header_elements) const {
   if (IsDetached())
     return;
 
@@ -818,7 +821,7 @@ void WebAXObject::ColumnHeaders(
   private_->ColumnHeaders(headers);
   column_header_elements.reserve(headers.size());
   column_header_elements.resize(headers.size());
-  base::ranges::copy(headers, column_header_elements.begin());
+  std::ranges::copy(headers, column_header_elements.begin());
 }
 
 unsigned WebAXObject::CellColumnIndex() const {
@@ -884,17 +887,17 @@ WebAXObject WebAXObject::PreviousOnLine() const {
   return WebAXObject(private_.Get()->PreviousOnLine());
 }
 
-void WebAXObject::CharacterOffsets(WebVector<int>& offsets) const {
+void WebAXObject::CharacterOffsets(std::vector<int>& offsets) const {
   if (IsDetached())
     return;
 
   Vector<int> offsets_vector;
   private_->TextCharacterOffsets(offsets_vector);
-  offsets = offsets_vector;
+  offsets = base::ToVector(offsets_vector);
 }
 
-void WebAXObject::GetWordBoundaries(WebVector<int>& starts,
-                                    WebVector<int>& ends) const {
+void WebAXObject::GetWordBoundaries(std::vector<int>& starts,
+                                    std::vector<int>& ends) const {
   if (IsDetached())
     return;
 
@@ -903,8 +906,8 @@ void WebAXObject::GetWordBoundaries(WebVector<int>& starts,
   private_->GetWordBoundaries(src_starts, src_ends);
   DCHECK_EQ(src_starts.size(), src_ends.size());
 
-  WebVector<int> word_start_offsets(src_starts.size());
-  WebVector<int> word_end_offsets(src_ends.size());
+  std::vector<int> word_start_offsets(src_starts.size());
+  std::vector<int> word_end_offsets(src_ends.size());
   for (wtf_size_t i = 0; i < src_starts.size(); ++i) {
     word_start_offsets[i] = src_starts[i];
     word_end_offsets[i] = src_ends[i];

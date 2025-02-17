@@ -11,6 +11,7 @@
 #include "base/time/time.h"
 #include "base/types/expected.h"
 #include "components/optimization_guide/core/model_execution/feature_keys.h"
+#include "components/optimization_guide/core/model_execution/multimodal_message.h"
 #include "components/optimization_guide/core/model_execution/optimization_guide_model_execution_error.h"
 #include "components/optimization_guide/core/model_quality/model_quality_log_entry.h"
 #include "components/optimization_guide/proto/model_execution.pb.h"
@@ -132,6 +133,7 @@ struct SessionConfigParams {
 //
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
+// LINT.IfChange(OnDeviceModelEligibilityReason)
 enum class OnDeviceModelEligibilityReason {
   kUnknown = 0,
   // Success.
@@ -149,8 +151,9 @@ enum class OnDeviceModelEligibilityReason {
   kGpuBlocked = 5,
   // The on-device model process crashed too many times for this version.
   kTooManyRecentCrashes = 6,
+  // DEPRECATED
   // The on-device model took too long too many times for this version.
-  kTooManyRecentTimeouts = 7,
+  // kTooManyRecentTimeouts = 7,
   // The on-device safety model was required but not available.
   kSafetyModelNotAvailable = 8,
   // The on-device safety model was available but there was not a safety config
@@ -178,12 +181,10 @@ enum class OnDeviceModelEligibilityReason {
   // downloaded yet.
   kNoOnDeviceFeatureUsed = 18,
 
-  // This must be kept in sync with
-  // OptimizationGuideOnDeviceModelEligibilityReason in optimization/enums.xml.
-
   // Insert new values before this line.
   kMaxValue = kNoOnDeviceFeatureUsed,
 };
+// LINT.ThenChange(//tools/metrics/histograms/metadata/optimization/enums.xml:OptimizationGuideOnDeviceModelEligibilityReason)
 
 std::ostream& operator<<(std::ostream& out,
                          const OnDeviceModelEligibilityReason& val);
@@ -219,10 +220,9 @@ struct TokenLimits {
 };
 
 // The configuration that specifies the default sampling params.
-// TODO(crbug.com/367771112): support `max_top_k` and `max_temperature`.
 struct SamplingParamsConfig {
-  std::optional<uint32_t> default_top_k;
-  std::optional<float> default_temperature;
+  uint32_t default_top_k;
+  float default_temperature;
 };
 
 // Interface for model execution.
@@ -236,6 +236,15 @@ class OptimizationGuideModelExecutor {
     virtual ~Session() = default;
 
     virtual const TokenLimits& GetTokenLimits() const = 0;
+
+    // Sets the input context for this session, replacing any previous context.
+    // This will generate prompt text from the feature config's
+    // "input_context_substitutions". Data provided here (including images) will
+    // be merged with data provided to an ExecuteModel() call and be available
+    // for use in later prompt templates based on the request. Calling this will
+    // cancel any ongoing executions and invoke their 'callback' methods with
+    // the 'kCancelled' error.
+    virtual void SetInput(MultimodalMessage request) = 0;
 
     // Adds context to this session. This will be saved for future Execute()
     // calls. Calling multiple times will replace previous calls to

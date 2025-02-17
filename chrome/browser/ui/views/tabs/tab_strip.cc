@@ -33,7 +33,6 @@
 #include "base/not_fatal_until.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/observer_list.h"
-#include "base/ranges/algorithm.h"
 #include "base/scoped_observation.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -358,10 +357,12 @@ class TabStrip::TabDragContextImpl : public TabDragContext,
     views::View::ConvertPointToScreen(view, &screen_location);
 
     // Note: `tab_strip_` can be destroyed during drag, also destroying `this`.
-    base::WeakPtr<TabDragContext> weak_ptr(weak_factory_.GetWeakPtr());
-    drag_controller_->Drag(screen_location);
+    const TabDragController::Liveness drag_controller_alive =
+        drag_controller_->Drag(screen_location);
 
-    return weak_ptr ? Liveness::kAlive : Liveness::kDeleted;
+    return drag_controller_alive == TabDragController::Liveness::ALIVE
+               ? Liveness::kAlive
+               : Liveness::kDeleted;
   }
 
   bool EndDrag(EndDragReason reason) {
@@ -681,8 +682,8 @@ class TabStrip::TabDragContextImpl : public TabDragContext,
     // The index of `source_view` in the TabStrip's viewmodel.
     std::optional<int> source_view_model_index = GetIndexOf(source_view);
     // The index of `source_view` as a child of this TabDragContext.
-    int source_view_index = static_cast<int>(
-        base::ranges::find(views, source_view) - views.begin());
+    int source_view_index =
+        static_cast<int>(std::ranges::find(views, source_view) - views.begin());
 
     const auto should_animate_tab = [&](size_t index_in_views) {
       // If the tab at `index_in_views` is already animating, don't interrupt
@@ -1398,11 +1399,20 @@ void TabStrip::OnWidgetActivationChanged(views::Widget* widget, bool active) {
     tab_at(selected_tabs_.active().value())
         ->GetViewAccessibility()
         .SetIsSelected(true);
-  } else if (!active && selected_tabs_.active().has_value()) {
+
+    // When the browser window is activated, fire a selection event on the
+    // currently active tab, to help enable per-tab modes in assistive
+    // technologies.
+    // We need to make sure we fire the event manually here, because even
+    // though we set the tab to selected above, there are cases where the
+    // event will not be fired since the selected state was already set
+    // on the tab. Nevertheless, JAWS needs the event to be fired regardless,
+    // as per https://crbug.com/41450089.
     tab_at(selected_tabs_.active().value())
-        ->GetViewAccessibility()
-        .SetIsSelected(false);
+        ->NotifyAccessibilityEventDeprecated(ax::mojom::Event::kSelection,
+                                             true);
   }
+
   UpdateHoverCard(nullptr, HoverCardUpdateType::kEvent);
 }
 
@@ -1601,7 +1611,7 @@ void TabStrip::CloseTab(Tab* tab, CloseTabSource source) {
   if (index_to_close.has_value() && IsValidModelIndex(index_to_close.value())) {
     auto callback =
         base::BindOnce(&TabStrip::CloseTabInternal, base::Unretained(this),
-                       index_to_close.value(), source);
+                       index_to_close.value());
     controller_->OnCloseTab(index_to_close.value(), source,
                             std::move(callback));
   }

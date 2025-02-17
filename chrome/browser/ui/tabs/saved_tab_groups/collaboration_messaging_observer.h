@@ -54,6 +54,15 @@ class CollaborationMessagingObserver
   // backend service.
   void DispatchMessageForTests(PersistentMessage message, bool display);
 
+  // Reopens the tab specified by the currently showing instant message.
+  // Called from the action button of the toast.
+  void ReopenTabForCurrentInstantMessage();
+
+  // Opens the manage sharing dialog for the group in the currently showing
+  // instant message. Called from the action button of the toast.
+  void ManageSharingForCurrentInstantMessage(
+      BrowserWindowInterface* current_browser_window_interface);
+
  protected:
   FRIEND_TEST_ALL_PREFIXES(CollaborationMessagingObserverBrowserTest,
                            HandlesMessages);
@@ -61,6 +70,14 @@ class CollaborationMessagingObserver
                            HandlesTabMessagesInCollapsedGroup);
   FRIEND_TEST_ALL_PREFIXES(CollaborationMessagingObserverBrowserTest,
                            IgnoresTabMessagesWithIncompleteData);
+  FRIEND_TEST_ALL_PREFIXES(CollaborationMessagingObserverBrowserTest,
+                           InstantMessageReopensTab);
+  FRIEND_TEST_ALL_PREFIXES(CollaborationMessagingObserverBrowserTest,
+                           InstantMessageManagesSharing);
+  FRIEND_TEST_ALL_PREFIXES(CollaborationMessagingObserverBrowserTest,
+                           InstantMessageManagesSharingWithClosedGroup);
+  FRIEND_TEST_ALL_PREFIXES(CollaborationMessagingObserverBrowserTest,
+                           InstantMessageForTabGroupRemoved);
 
   // MessagingBackendService::PersistentMessageObserver
   void OnMessagingBackendServiceInitialized() override;

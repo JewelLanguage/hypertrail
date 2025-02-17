@@ -45,7 +45,6 @@ class StyleRuleKeyframe;
 class StyleRuleKeyframes;
 class StyleRuleMedia;
 class StyleRuleNamespace;
-class StyleRuleNestedDeclarations;
 class StyleRulePage;
 class StyleRulePositionTry;
 class StyleRuleProperty;
@@ -134,19 +133,28 @@ class CORE_EXPORT CSSParserImpl {
       CSSAtRuleID::kCSSAtRuleRightBottom,
   };
 
-  // Rules that are valid when nested within a style rule.
+  // Conditional rules can nest inside style rules (see kNestedGroupRules)
+  // and are valid within @function.
   //
-  // https://drafts.csswg.org/css-nesting/#nested-group-rules
-  static constexpr AllowedRules kNestedGroupRules = {
+  // https://drafts.csswg.org/css-conditional-3/#conditional-group-rule
+  // https://drafts.csswg.org/css-mixins-1/#conditional-rules
+  static constexpr AllowedRules kConditionalRules = {
       CSSAtRuleID::kCSSAtRuleMedia,
       CSSAtRuleID::kCSSAtRuleSupports,
       CSSAtRuleID::kCSSAtRuleContainer,
-      CSSAtRuleID::kCSSAtRuleLayer,
-      CSSAtRuleID::kCSSAtRuleScope,
-      CSSAtRuleID::kCSSAtRuleStartingStyle,
-      CSSAtRuleID::kCSSAtRuleViewTransition,
-      CSSAtRuleID::kCSSAtRuleApplyMixin,
   };
+
+  // Rules that are valid when nested within a style rule.
+  //
+  // https://drafts.csswg.org/css-nesting/#nested-group-rules
+  static constexpr AllowedRules kNestedGroupRules =
+      kConditionalRules | AllowedRules{
+                              CSSAtRuleID::kCSSAtRuleLayer,
+                              CSSAtRuleID::kCSSAtRuleScope,
+                              CSSAtRuleID::kCSSAtRuleStartingStyle,
+                              CSSAtRuleID::kCSSAtRuleViewTransition,
+                              CSSAtRuleID::kCSSAtRuleApplyMixin,
+                          };
 
   // Represents the start and end offsets of a CSSParserTokenRange.
   struct RangeOffset {
@@ -318,8 +326,8 @@ class CORE_EXPORT CSSParserImpl {
   StyleRulePositionTry* ConsumePositionTryRule(CSSParserTokenStream&);
 
   StyleRuleFunction* ConsumeFunctionRule(CSSParserTokenStream& stream);
-  std::optional<Vector<StyleRuleFunction::Parameter>> ConsumeFunctionParameters(
-      CSSParserTokenStream& stream);
+  std::optional<HeapVector<StyleRuleFunction::Parameter>>
+  ConsumeFunctionParameters(CSSParserTokenStream& stream);
   StyleRuleMixin* ConsumeMixinRule(CSSParserTokenStream& stream);
   StyleRuleApplyMixin* ConsumeApplyMixinRule(CSSParserTokenStream& stream);
 
@@ -356,7 +364,6 @@ class CORE_EXPORT CSSParserImpl {
 
   void ConsumeRuleListOrNestedDeclarationList(
       CSSParserTokenStream&,
-      bool is_nested_group_rule,
       CSSNestingType,
       StyleRule* parent_rule_for_nesting,
       HeapVector<Member<StyleRuleBase>, 4>* child_rules);
@@ -430,22 +437,26 @@ class CORE_EXPORT CSSParserImpl {
 
   // Creates a new "nested declarations rule", consisting of the declarations
   // (parsed_properties_) in the range [start_index, end_index).
+  // or (depending on `nesting_type`) a "function declarations rule",
+  // which works similarly, but contains function descriptors rather
+  // than regular properties.
+  //
   // The parsed properties in the range are left as-is, i.e. not removed
   // from parsed_properties_.
   //
   // https://drafts.csswg.org/css-nesting-1/#nested-declarations-rule
-  StyleRuleNestedDeclarations* CreateNestedDeclarationsRule(
-      CSSNestingType nesting_type,
-      const CSSSelector* selector_list,
-      wtf_size_t start_index,
-      wtf_size_t end_index);
+  // https://drafts.csswg.org/css-mixins-1/#cssfunctiondeclarations
+  StyleRuleBase* CreateDeclarationsRule(CSSNestingType nesting_type,
+                                        const CSSSelector* selector_list,
+                                        wtf_size_t start_index,
+                                        wtf_size_t end_index);
 
   // Adds a new "nested declarations rule" to child_rules, consisting of
   // the declarations (parsed_properties_) from start_index until the end.
   // The affected declarations (if any) are removed from parsed_properties_.
   // See also the "CSSNestedDeclarations" comment above for more information
   // on what this is used for.
-  void EmitNestedDeclarationsRuleIfNeeded(
+  void EmitDeclarationsRuleIfNeeded(
       StyleRule::RuleType,
       CSSNestingType,
       StyleRule* parent_rule_for_nesting,

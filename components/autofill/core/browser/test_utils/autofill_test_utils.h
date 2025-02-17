@@ -271,6 +271,14 @@ void SetProfileInfo(AutofillProfile* profile,
                     bool finalize = true,
                     VerificationStatus status = VerificationStatus::kObserved);
 
+void SetProfileInfo(AutofillProfile* profile,
+                    const char* first_name,
+                    const char* middle_name,
+                    const char* last_name,
+                    const char* country,
+                    bool finalize = true,
+                    VerificationStatus status = VerificationStatus::kObserved);
+
 void SetProfileInfoWithGuid(AutofillProfile* profile,
                             const char* guid,
                             const char* first_name,
@@ -314,12 +322,11 @@ void SetServerCreditCards(PaymentsAutofillTable* table,
                           const std::vector<CreditCard>& cards);
 
 struct PassportEntityOptions {
-  const char* name = "Pippi Långstrump";
-  const char* number = "123";
-  const char* country = "Sweden";
-  const char* expiry_date = "12/2019";
-  const char* issue_date = "01/2010";
-  const char* place_of_birth = "Vimmerby, Sweden";
+  const char16_t* name = u"Pippi Långstrump";
+  const char16_t* number = u"123";
+  const char16_t* country = u"Sweden";
+  const char16_t* expiry_date = u"12/2019";
+  const char16_t* issue_date = u"01/2010";
   std::string_view guid = "00000000-0000-4000-8000-000000000000";
   std::string_view nickname = "Passie";
   base::Time date_modified = kJune2017;
@@ -333,9 +340,9 @@ struct PassportEntityOptions {
 EntityInstance GetPassportEntityInstance(PassportEntityOptions options = {});
 
 struct LoyaltyCardEntityOptions {
-  const char* program = "Asterisk Airlines";
-  const char* provider = "Propeller Airways";
-  const char* member_id = "987";
+  const char16_t* program = u"Asterisk Airlines";
+  const char16_t* provider = u"Propeller Airways";
+  const char16_t* member_id = u"987";
   std::string_view guid = "11111111-1111-4111-8111-111111111111";
   std::string_view nickname = "Loyie";
   base::Time date_modified = kJune2017;
@@ -454,8 +461,11 @@ sync_pb::PaymentInstrument CreatePaymentInstrumentWithLinkedBnplIssuer(
     uint64_t min_price_in_micros,
     uint64_t max_price_in_micros);
 
-// Returns a BNPL issuer with fake data.
-BnplIssuer GetTestBnplIssuer();
+// Returns a linked BNPL issuer with fake data.
+BnplIssuer GetTestLinkedBnplIssuer();
+
+// Returns an unlinked BNPL issuer with fake data.
+BnplIssuer GetTestUnlinkedBnplIssuer();
 
 // Returns a payment instrument creation option with a BNPL issuer filled with
 // fake data using `id` as the `PaymentInstrumentCreationOption.id`.

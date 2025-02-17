@@ -58,9 +58,9 @@
 #include "ash/constants/ash_features.h"
 #include "chrome/browser/ash/apps/apk_web_app_service.h"
 #include "chrome/browser/ash/system_web_apps/color_helpers.h"
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_delegate.h"
 #include "chrome/browser/web_applications/chromeos_web_app_experiments.h"
 #include "chrome/common/chrome_features.h"
+#include "chromeos/ash/experiences/system_web_apps/types/system_web_app_delegate.h"
 #include "chromeos/constants/chromeos_features.h"
 #endif
 
@@ -103,24 +103,6 @@ base::OnceClosure& IconLoadCallbackForTesting() {
 base::OnceClosure& ManifestUpdateAppliedCallbackForTesting() {
   static base::NoDestructor<base::OnceClosure> callback;
   return *callback;
-}
-
-// Returns the list of patterns to match URLs against for tabbed mode home
-// tab navigations.
-std::vector<TabbedModeScopeMatcher> CreateTabbedHomeTabScope(
-    const WebApp* web_app) {
-  std::vector<TabbedModeScopeMatcher> matchers;
-  if (!web_app) {
-    return matchers;
-  }
-  TabStrip tab_strip = web_app->tab_strip().value();
-  if (const auto* params =
-          absl::get_if<blink::Manifest::HomeTabParams>(&tab_strip.home_tab)) {
-    for (auto& pattern : params->scope_patterns) {
-      matchers.emplace_back(pattern);
-    }
-  }
-  return matchers;
 }
 
 }  // namespace
@@ -487,42 +469,7 @@ bool WebAppBrowserController::ShouldHideNewTabButton() const {
 }
 
 bool WebAppBrowserController::IsUrlInHomeTabScope(const GURL& url) const {
-  if (!registrar().IsTabbedWindowModeEnabled(app_id())) {
-    return false;
-  }
-
-  if (!IsUrlInAppScope(url)) {
-    return false;
-  }
-
-  // Retrieve the start URL for the app. Start URL is always in home tab scope.
-  // TODO(b/330640982): rename GetAppPinnedHomeTabUrl() to something more
-  // sensible.
-  std::optional<GURL> pinned_home_url =
-      registrar().GetAppPinnedHomeTabUrl(app_id());
-  if (!pinned_home_url) {
-    return false;
-  }
-
-  // We ignore hash ref when deciding what should be opened as the home tab.
-  GURL::Replacements replacements;
-  replacements.ClearRef();
-  if (url.ReplaceComponents(replacements) ==
-      pinned_home_url.value().ReplaceComponents(replacements)) {
-    return true;
-  }
-
-  if (!home_tab_scope_) {
-    home_tab_scope_ = std::make_unique<std::vector<TabbedModeScopeMatcher>>(
-        CreateTabbedHomeTabScope(registrar().GetAppById(app_id())));
-  }
-
-  for (auto& matcher : *home_tab_scope_) {
-    if (matcher.Match(url)) {
-      return true;
-    }
-  }
-  return false;
+  return registrar().IsUrlInHomeTabScope(url, app_id());
 }
 
 bool WebAppBrowserController::ShouldShowAppIconOnTab(int index) const {

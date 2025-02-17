@@ -103,18 +103,26 @@ void DriveSkyvaultUploader::Run() {
     return;
   }
 
-  if (drive::util::GetDriveConnectionStatus(profile_) !=
-      drive::util::ConnectionStatus::kConnected) {
-    LOG(ERROR) << "No connection to Drive";
+  // Observe Drive updates.
+  drive::DriveIntegrationService::Observer::Observe(drive_integration_service_);
+
+  auto drive_status = drive::util::GetDriveConnectionStatus(profile_);
+  if (drive_status == drive::util::ConnectionStatus::kNoService) {
+    // Drive is completely disabled for this profile.
+    LOG(ERROR) << "Drive integration service isn't available";
     OnEndCopy(MigrationUploadError::kServiceUnavailable);
+    return;
+  }
+
+  if (drive_status != drive::util::ConnectionStatus::kConnected) {
+    LOG(ERROR) << "Waiting for connection to Drive";
+    waiting_for_connection_ = true;
     return;
   }
 
   // Observe IO tasks updates.
   io_task_controller_observer_.Observe(io_task_controller_);
 
-  // Observe Drive updates.
-  drive::DriveIntegrationService::Observer::Observe(drive_integration_service_);
   drivefs::DriveFsHost::Observer::Observe(
       drive_integration_service_->GetDriveFsHost());
 
@@ -415,9 +423,24 @@ void DriveSkyvaultUploader::OnError(const drivefs::mojom::DriveError& error) {
 
 void DriveSkyvaultUploader::OnDriveConnectionStatusChanged(
     drive::util::ConnectionStatus status) {
+  if (waiting_for_connection_) {
+    if (status == drive::util::ConnectionStatus::kConnected) {
+      LOG(ERROR) << "Reconnected to Drive";
+      waiting_for_connection_ = false;
+      drive::DriveIntegrationService::Observer::Reset();
+      Run();
+    }
+    return;
+  }
+  if (status == drive::util::ConnectionStatus::kNoService) {
+    LOG(ERROR) << "Drive service became unavailable during upload";
+    OnEndCopy(MigrationUploadError::kServiceUnavailable);
+    return;
+  }
   if (status != drive::util::ConnectionStatus::kConnected) {
     LOG(ERROR) << "Lost connection to Drive during upload";
-    OnEndCopy(MigrationUploadError::kServiceUnavailable);
+    // TODO: wait for reconnection, but not indefinitely?
+    OnEndCopy(MigrationUploadError::kNetworkError);
   }
 }
 

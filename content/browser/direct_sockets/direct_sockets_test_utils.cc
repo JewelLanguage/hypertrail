@@ -16,7 +16,7 @@
 #include "net/dns/host_resolver.h"
 #include "services/network/public/mojom/clear_data_filter.mojom.h"
 #include "services/network/public/mojom/udp_socket.mojom.h"
-#include "third_party/blink/public/common/permissions_policy/origin_with_possible_wildcards.h"
+#include "third_party/blink/public/common/permissions_policy/permissions_policy_declaration.h"
 #include "url/origin.h"
 
 namespace content::test {
@@ -175,19 +175,19 @@ IsolatedWebAppContentBrowserClient::GetPermissionsPolicyForIsolatedWebApp(
     WebContents* web_contents,
     const url::Origin& app_origin) {
   blink::ParsedPermissionsPolicyDeclaration coi_decl(
-      blink::mojom::PermissionsPolicyFeature::kCrossOriginIsolated,
+      network::mojom::PermissionsPolicyFeature::kCrossOriginIsolated,
       /*allowed_origins=*/{},
       /*self_if_matches=*/std::nullopt,
       /*matches_all_origins=*/true, /*matches_opaque_src=*/false);
 
   blink::ParsedPermissionsPolicyDeclaration sockets_decl(
-      blink::mojom::PermissionsPolicyFeature::kDirectSockets,
+      network::mojom::PermissionsPolicyFeature::kDirectSockets,
       /*allowed_origins=*/{},
       /*self_if_matches=*/app_origin,
       /*matches_all_origins=*/false, /*matches_opaque_src=*/false);
 
   blink::ParsedPermissionsPolicyDeclaration sockets_pna_decl(
-      blink::mojom::PermissionsPolicyFeature::kDirectSocketsPrivate,
+      network::mojom::PermissionsPolicyFeature::kDirectSocketsPrivate,
       /*allowed_origins=*/{},
       /*self_if_matches=*/app_origin,
       /*matches_all_origins=*/false, /*matches_opaque_src=*/false);

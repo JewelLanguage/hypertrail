@@ -2,11 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type {ChromeVersion, DraggableArea, ErrorWithReason, GlicBrowserHost, GlicHostRegistry, GlicWebClient, Observable, PanelState, PdfDocumentData, Subscriber, TabContextOptions, TabContextResult, TabData, UserProfileInfo} from '../glic_api/glic_api.js';
-import {GetTabContextErrorReason} from '../glic_api/glic_api.js';
+import type {AnnotatedPageData, ChromeVersion, DraggableArea, FocusedTabCandidate, FocusedTabData, GlicBrowserHost, GlicBrowserHostMetrics, GlicHostRegistry, GlicWebClient, ObservableValue, OpenPanelInfo, PanelState, PdfDocumentData, Screenshot, ScrollToParams, Subscriber, TabContextOptions, TabContextResult, TabData, UserProfileInfo} from '../glic_api/glic_api.js';
 
 import {PostMessageRequestReceiver, PostMessageRequestSender} from './post_message_transport.js';
-import type {PdfDocumentDataPrivate, RgbaImage, TabContextResultPrivate, TabDataPrivate, WebClientRequestTypes} from './request_types.js';
+import type {AnnotatedPageDataPrivate, FocusedTabCandidatePrivate, FocusedTabDataPrivate, PdfDocumentDataPrivate, RgbaImage, TabContextResultPrivate, TabDataPrivate, WebClientRequestTypes} from './request_types.js';
 import {ImageAlphaType, ImageColorType} from './request_types.js';
 
 
@@ -58,12 +57,18 @@ class WebClientMessageHandler implements WebClientMessageHandlerInterface {
   }
 
   async glicWebClientNotifyPanelWillOpen(payload: {panelState: PanelState}):
-      Promise<void> {
+      Promise<{openPanelInfo?: OpenPanelInfo}> {
+    let openPanelInfo: OpenPanelInfo|undefined;
     try {
-      await this.webClient.notifyPanelWillOpen?.(payload.panelState);
+      const result =
+          await this.webClient.notifyPanelWillOpen?.(payload.panelState);
+      if (result) {
+        openPanelInfo = result;
+      }
     } catch (e) {
       console.error(e);
     }
+    return {openPanelInfo};
   }
 
   glicWebClientNotifyPanelClosed(): void {
@@ -82,6 +87,10 @@ class WebClientMessageHandler implements WebClientMessageHandlerInterface {
 
   glicWebClientPanelStateChanged(payload: {panelState: PanelState}): void {
     this.host.getPanelState().assignAndSignal(payload.panelState);
+  }
+
+  glicWebClientCanAttachStateChanged(payload: {canAttach: boolean}): void {
+    this.host.canAttachPanelValue.assignAndSignal(payload.canAttach);
   }
 
   glicWebClientNotifyMicrophonePermissionStateChanged(payload: {
@@ -103,12 +112,13 @@ class WebClientMessageHandler implements WebClientMessageHandlerInterface {
   }
 
   glicWebClientNotifyFocusedTabChanged(payload: {
-    focusedTab: TabDataPrivate|undefined,
+    focusedTabDataPrivate: FocusedTabDataPrivate,
   }) {
-    const tabData = !payload.focusedTab ?
-        undefined :
-        convertTabDataFromPrivate(payload.focusedTab);
-    this.host.getFocusedTabState().assignAndSignal(tabData);
+    const focusedTabData =
+        convertFocusedTabDataFromPrivate(payload.focusedTabDataPrivate);
+    this.host.getFocusedTabStateV2().assignAndSignal(focusedTabData);
+    // Keep below for backwards compatibility.
+    this.host.getFocusedTabState().assignAndSignal(focusedTabData.focusedTab);
   }
 }
 
@@ -118,11 +128,17 @@ class GlicBrowserHostImpl implements GlicBrowserHost {
   private handlerFunctionNames: Set<string> = new Set();
   private webClientMessageHandler: WebClientMessageHandler;
   private chromeVersion?: ChromeVersion;
-  private panelState?: ObservableValue<PanelState>;
-  private focusedTabState?: ObservableValue<TabData|undefined>;
-  private permissionStateMicrophone?: ObservableValue<boolean>;
-  private permissionStateLocation?: ObservableValue<boolean>;
-  private permissionStateTabContext?: ObservableValue<boolean>;
+  private panelState = ObservableValueImpl.withNoValue<PanelState>();
+  canAttachPanelValue = ObservableValueImpl.withNoValue<boolean>();
+  private focusedTabState =
+      ObservableValueImpl.withNoValue<TabData|undefined>();
+  private focusedTabStateV2 = ObservableValueImpl.withNoValue<FocusedTabData>();
+  private permissionStateMicrophone =
+      ObservableValueImpl.withNoValue<boolean>();
+  private permissionStateLocation = ObservableValueImpl.withNoValue<boolean>();
+  private permissionStateTabContext =
+      ObservableValueImpl.withNoValue<boolean>();
+  private metrics: GlicBrowserHostMetricsImpl;
 
   constructor(private webClient: GlicWebClient, windowProxy: WindowProxy) {
     this.sender = new PostMessageRequestSender(windowProxy, 'chrome://glic');
@@ -130,6 +146,7 @@ class GlicBrowserHostImpl implements GlicBrowserHost {
         new PostMessageRequestReceiver('chrome://glic', windowProxy, this);
     this.webClientMessageHandler =
         new WebClientMessageHandler(this.webClient, this);
+    this.metrics = new GlicBrowserHostMetricsImpl(this.sender);
 
     for (const name of Object.getOwnPropertyNames(
              WebClientMessageHandler.prototype)) {
@@ -146,17 +163,23 @@ class GlicBrowserHostImpl implements GlicBrowserHost {
   async webClientCreated() {
     const state = await this.sender.requestWithResponse(
         'glicBrowserWebClientCreated', {});
-    this.panelState = new ObservableValue<PanelState>(state.panelState);
-    this.focusedTabState = new ObservableValue<TabData|undefined>(
-        state.focusedTab ? convertTabDataFromPrivate(state.focusedTab) :
-                           undefined);
-    this.permissionStateMicrophone =
-        new ObservableValue(state.microphonePermissionEnabled);
-    this.permissionStateLocation =
-        new ObservableValue(state.locationPermissionEnabled);
-    this.permissionStateTabContext =
-        new ObservableValue(state.tabContextPermissionEnabled);
+    this.panelState.assignAndSignal(state.panelState);
+    const focusedTabData =
+        convertFocusedTabDataFromPrivate(state.focusedTabData);
+    this.focusedTabState.assignAndSignal(focusedTabData.focusedTab);
+    this.focusedTabStateV2.assignAndSignal(focusedTabData);
+    this.permissionStateMicrophone.assignAndSignal(
+        state.microphonePermissionEnabled);
+    this.permissionStateLocation.assignAndSignal(
+        state.locationPermissionEnabled);
+    this.permissionStateTabContext.assignAndSignal(
+        state.tabContextPermissionEnabled);
+    this.canAttachPanelValue.assignAndSignal(state.canAttach);
     this.chromeVersion = state.chromeVersion;
+
+    if (!state.scrollToEnabled) {
+      (this as GlicBrowserHost).scrollTo = undefined;
+    }
   }
 
   webClientInitialized(success: boolean) {
@@ -180,8 +203,8 @@ class GlicBrowserHostImpl implements GlicBrowserHost {
 
   // GlicBrowserHost implementation.
 
-  async getChromeVersion() {
-    return this.chromeVersion!;
+  getChromeVersion() {
+    return Promise.resolve(this.chromeVersion!);
   }
 
   async createTab(
@@ -215,28 +238,28 @@ class GlicBrowserHostImpl implements GlicBrowserHost {
     return this.sender.requestNoResponse('glicBrowserDetachPanel', {});
   }
 
+  showProfilePicker(): void {
+    this.sender.requestNoResponse('glicBrowserShowProfilePicker', {});
+  }
+
   async getContextFromFocusedTab(options: TabContextOptions):
       Promise<TabContextResult> {
     const context = await this.sender.requestWithResponse(
         'glicBrowserGetContextFromFocusedTab', {options});
-    if (!context.tabContextResult) {
-      throw new ErrorWithReasonImpl(
-          'getContext failed',
-          context.error || GetTabContextErrorReason.UNKNOWN);
-    }
     return convertTabContextResultFromPrivate(context.tabContextResult);
   }
 
-  async resizeWindow(width: number, height: number) {
-    const result = await this.sender.requestWithResponse(
-        'glicBrowserResizeWindow', {width, height});
-    if (result.actualHeight !== undefined && result.actualWidth !== undefined) {
-      return {
-        actualWidth: result.actualWidth,
-        actualHeight: result.actualHeight,
-      };
-    }
-    throw new Error('Can\'t resize the widget while it\'s closed');
+  async resizeWindow(width: number, height: number, options?: {
+    durationMs?: number,
+  }): Promise<void> {
+    return this.sender.requestWithResponse(
+        'glicBrowserResizeWindow', {size: {width, height}, options});
+  }
+
+  async captureScreenshot(): Promise<Screenshot> {
+    const screenshotResult = await this.sender.requestWithResponse(
+        'glicBrowserCaptureScreenshot', {});
+    return screenshotResult.screenshot;
   }
 
   setWindowDraggableAreas(areas: DraggableArea[]) {
@@ -244,24 +267,32 @@ class GlicBrowserHostImpl implements GlicBrowserHost {
         'glicBrowserSetWindowDraggableAreas', {areas});
   }
 
-  getPanelState(): ObservableValue<PanelState> {
-    return this.panelState!;
+  getPanelState(): ObservableValueImpl<PanelState> {
+    return this.panelState;
   }
 
-  getFocusedTabState(): ObservableValue<TabData|undefined> {
-    return this.focusedTabState!;
+  canAttachPanel(): ObservableValue<boolean> {
+    return this.canAttachPanelValue;
   }
 
-  getMicrophonePermissionState(): ObservableValue<boolean> {
-    return this.permissionStateMicrophone!;
+  getFocusedTabState(): ObservableValueImpl<TabData|undefined> {
+    return this.focusedTabState;
   }
 
-  getLocationPermissionState(): ObservableValue<boolean> {
-    return this.permissionStateLocation!;
+  getFocusedTabStateV2(): ObservableValueImpl<FocusedTabData> {
+    return this.focusedTabStateV2;
   }
 
-  getTabContextPermissionState(): ObservableValue<boolean> {
-    return this.permissionStateTabContext!;
+  getMicrophonePermissionState(): ObservableValueImpl<boolean> {
+    return this.permissionStateMicrophone;
+  }
+
+  getLocationPermissionState(): ObservableValueImpl<boolean> {
+    return this.permissionStateLocation;
+  }
+
+  getTabContextPermissionState(): ObservableValueImpl<boolean> {
+    return this.permissionStateTabContext;
   }
 
   setMicrophonePermissionState(enabled: boolean): Promise<void> {
@@ -305,6 +336,42 @@ class GlicBrowserHostImpl implements GlicBrowserHost {
       throw Error('refreshSignInCookies failed');
     }
   }
+
+  setAudioDucking?(enabled: boolean): void {
+    this.sender.requestNoResponse('glicBrowserSetAudioDucking', {enabled});
+  }
+
+  getMetrics(): GlicBrowserHostMetrics {
+    return this.metrics;
+  }
+
+  scrollTo(params: ScrollToParams): Promise<void> {
+    return this.sender.requestWithResponse('glicBrowserScrollTo', {params});
+  }
+}
+
+class GlicBrowserHostMetricsImpl implements GlicBrowserHostMetrics {
+  constructor(private sender: PostMessageRequestSender) {}
+
+  onUserInputSubmitted(mode: number): void {
+    this.sender.requestNoResponse('glicBrowserOnUserInputSubmitted', {mode});
+  }
+
+  onResponseStarted(): void {
+    this.sender.requestNoResponse('glicBrowserOnResponseStarted', {});
+  }
+
+  onResponseStopped(): void {
+    this.sender.requestNoResponse('glicBrowserOnResponseStopped', {});
+  }
+
+  onSessionTerminated(): void {
+    this.sender.requestNoResponse('glicBrowserOnSessionTerminated', {});
+  }
+
+  onResponseRated(positive: boolean): void {
+    this.sender.requestNoResponse('glicBrowserOnResponseRated', {positive});
+  }
 }
 
 // Returns a promise which resolves to the `GlicHostRegistry`. This promise
@@ -312,7 +379,7 @@ class GlicBrowserHostImpl implements GlicBrowserHost {
 // This should be called on or before page load.
 export function createGlicHostRegistryOnLoad(): Promise<GlicHostRegistry> {
   const {promise, resolve} = Promise.withResolvers<GlicHostRegistry>();
-  const messageHandler = async (event: MessageEvent) => {
+  const messageHandler = (event: MessageEvent) => {
     if (event.origin !== 'chrome://glic' || event.source === null) {
       return;
     }
@@ -323,12 +390,6 @@ export function createGlicHostRegistryOnLoad(): Promise<GlicHostRegistry> {
   };
   window.addEventListener('message', messageHandler);
   return promise;
-}
-
-class ErrorWithReasonImpl<T> extends Error implements ErrorWithReason<T> {
-  constructor(message: string, public reason: T) {
-    super(message);
-  }
 }
 
 // Converts an RgbaImage into a Blob through the canvas API. Output is a PNG.
@@ -387,26 +448,56 @@ function replaceProperties<O, R>(
 }
 
 function convertTabDataFromPrivate(data: TabDataPrivate): TabData {
+  let faviconResult: Promise<Blob>|undefined;
   async function getFavicon() {
-    if (data.favicon) {
-      return rgbaImageToBlob(data.favicon);
+    if (data.favicon && !faviconResult) {
+      faviconResult = rgbaImageToBlob(data.favicon);
+      return faviconResult;
     }
-    return undefined;
+    return faviconResult;
   }
 
   const favicon = data.favicon && getFavicon;
   return replaceProperties(data, {favicon});
 }
 
+function convertFocusedTabCandidateFromPrivate(
+    data: FocusedTabCandidatePrivate): FocusedTabCandidate {
+  const focusedTabCandidateData = data.focusedTabCandidateData &&
+      convertTabDataFromPrivate(data.focusedTabCandidateData);
+  return replaceProperties(data, {focusedTabCandidateData});
+}
+
+function convertFocusedTabDataFromPrivate(data: FocusedTabDataPrivate):
+    FocusedTabData {
+  const focusedTab =
+      data.focusedTab && convertTabDataFromPrivate(data.focusedTab);
+  const focusedTabCandidate = data.focusedTabCandidate &&
+      convertFocusedTabCandidateFromPrivate(data.focusedTabCandidate);
+  return replaceProperties(data, {focusedTab, focusedTabCandidate});
+}
+
+function streamFromBuffer(buffer: Uint8Array): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(buffer);
+      controller.close();
+    },
+  });
+}
+
 function convertPdfDocumentDataFromPrivate(data: PdfDocumentDataPrivate):
     PdfDocumentData {
-  const pdfData = data.pdfData && new ReadableStream({
-                    start(controller) {
-                      controller.enqueue(data.pdfData);
-                      controller.close();
-                    },
-                  });
+  const pdfData =
+      data.pdfData && streamFromBuffer(new Uint8Array(data.pdfData));
   return replaceProperties(data, {pdfData});
+}
+
+function convertAnnotatedPageDataFromPrivate(data: AnnotatedPageDataPrivate):
+    AnnotatedPageData {
+  const annotatedPageContent = data.annotatedPageContent &&
+      streamFromBuffer(new Uint8Array(data.annotatedPageContent));
+  return replaceProperties(data, {annotatedPageContent});
 }
 
 function convertTabContextResultFromPrivate(data: TabContextResultPrivate):
@@ -414,7 +505,9 @@ function convertTabContextResultFromPrivate(data: TabContextResultPrivate):
   const tabData = convertTabDataFromPrivate(data.tabData);
   const pdfDocumentData = data.pdfDocumentData &&
       convertPdfDocumentDataFromPrivate(data.pdfDocumentData);
-  return replaceProperties(data, {tabData, pdfDocumentData});
+  const annotatedPageData = data.annotatedPageData &&
+      convertAnnotatedPageDataFromPrivate(data.annotatedPageData);
+  return replaceProperties(data, {tabData, pdfDocumentData, annotatedPageData});
 }
 
 class ObservableSubscription<T> implements Subscriber {
@@ -427,11 +520,30 @@ class ObservableSubscription<T> implements Subscriber {
   }
 }
 
-class ObservableValue<T> implements Observable<T> {
+/**
+ * A observable value that can change over time. If value is initialized, sends
+ * it to new subscribers upon subscribe().
+ */
+class ObservableValueImpl<T> implements ObservableValue<T> {
   private subscribers: Set<ObservableSubscription<T>> = new Set();
-  constructor(private value: T) {}
+
+  private constructor(private isSet: boolean, private value: T|undefined) {}
+
+  /** Create an ObservableValue which has an initial value. */
+  static withValue<T>(value: T) {
+    return new ObservableValueImpl(true, value);
+  }
+
+  /**
+   * Create an Observable which has no initial value. Subscribers will not be
+   * called until after assignAndSignal() is called the first time.
+   */
+  static withNoValue<T>() {
+    return new ObservableValueImpl<T>(false, undefined);
+  }
 
   assignAndSignal(v: T) {
+    this.isSet = true;
     this.value = v;
     this.subscribers.forEach((sub) => {
       // Ignore if removed since forEach was called.
@@ -442,14 +554,13 @@ class ObservableValue<T> implements Observable<T> {
   }
 
   // Observable impl.
-  getValue(): T {
-    return this.value;
-  }
-
   subscribe(change: (newValue: T) => void): Subscriber {
     const newSub = new ObservableSubscription(
         change, (sub) => this.subscribers.delete(sub));
     this.subscribers.add(newSub);
+    if (this.isSet) {
+      change(this.value!);
+    }
     return newSub;
   }
 }

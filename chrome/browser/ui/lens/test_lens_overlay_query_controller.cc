@@ -89,11 +89,6 @@ void TestLensOverlayQueryController::StartQueryFlow(
       invocation_time);
 }
 
-void TestLensOverlayQueryController::SendTaskCompletionGen204IfEnabled(
-    lens::mojom::UserAction user_action) {
-  last_user_action_ = user_action;
-}
-
 void TestLensOverlayQueryController::SendRegionSearch(
     lens::mojom::CenterRotatedBoxPtr region,
     lens::LensOverlaySelectionType selection_type,
@@ -163,7 +158,7 @@ std::unique_ptr<EndpointFetcher>
 TestLensOverlayQueryController::CreateEndpointFetcher(
     lens::LensOverlayServerRequest* request,
     const GURL& fetch_url,
-    const std::string& http_method,
+    const HttpMethod& http_method,
     const base::TimeDelta& timeout,
     const std::vector<std::string>& request_headers,
     const std::vector<std::string>& cors_exempt_headers,
@@ -203,6 +198,9 @@ TestLensOverlayQueryController::CreateEndpointFetcher(
     fake_server_response_string = "";
     sent_page_content_request_id_.CopyFrom(
         request->objects_request().request_context().request_id());
+    // Need to reset the underlying content bytes before changing
+    // last_sent_page_content_data_ to prevent a dangling reference.
+    last_sent_underlying_content_bytes_ = {};
     last_sent_page_content_data_ =
         std::string(request->objects_request().payload().content_data());
     last_sent_underlying_content_bytes_ =
@@ -212,6 +210,7 @@ TestLensOverlayQueryController::CreateEndpointFetcher(
     last_sent_page_url_ = GURL(request->objects_request().payload().page_url());
   } else if (request->has_objects_request()) {
     // Full image request.
+    num_full_image_requests_sent_++;
     sent_full_image_objects_request_.CopyFrom(request->objects_request());
     fake_server_response.mutable_objects_response()->CopyFrom(
         fake_objects_response_);
@@ -274,6 +273,14 @@ void TestLensOverlayQueryController::SendLatencyGen204IfEnabled(
                     ? latency_gen_204_counter_.at(latency_type)
                     : 0;
   latency_gen_204_counter_[latency_type] = counter + 1;
+  last_latency_gen204_analytics_id_ = encoded_analytics_id;
+}
+
+void TestLensOverlayQueryController::SendTaskCompletionGen204IfEnabled(
+    std::string encoded_analytics_id,
+    lens::mojom::UserAction user_action) {
+  last_user_action_ = user_action;
+  last_task_completion_gen204_analytics_id_ = encoded_analytics_id;
 }
 
 }  // namespace lens

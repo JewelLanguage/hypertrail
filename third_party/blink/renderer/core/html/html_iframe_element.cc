@@ -27,12 +27,12 @@
 #include "base/metrics/histogram_macros.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/web_sandbox_flags.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
 #include "services/network/public/mojom/trust_tokens.mojom-blink.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/permissions_policy/policy_helper_public.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink.h"
 #include "third_party/blink/public/mojom/permissions_policy/policy_disposition.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_html_iframe_element.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
@@ -460,7 +460,8 @@ ParsedPermissionsPolicy HTMLIFrameElement::ConstructContainerPolicy() const {
   // enable the feature for all origins.
   if (AllowFullscreen()) {
     bool policy_changed = AllowFeatureEverywhereIfNotPresent(
-        mojom::blink::PermissionsPolicyFeature::kFullscreen, container_policy);
+        network::mojom::PermissionsPolicyFeature::kFullscreen,
+        container_policy);
     if (!policy_changed) {
       logger.Warn(
           "Allow attribute will take precedence over 'allowfullscreen'.");
@@ -470,7 +471,7 @@ ParsedPermissionsPolicy HTMLIFrameElement::ConstructContainerPolicy() const {
   // set, enable the feature for all origins.
   if (AllowPaymentRequest()) {
     bool policy_changed = AllowFeatureEverywhereIfNotPresent(
-        mojom::blink::PermissionsPolicyFeature::kPayment, container_policy);
+        network::mojom::PermissionsPolicyFeature::kPayment, container_policy);
     // Measure cases where allowpaymentrequest had an actual effect, to see if
     // we can deprecate it. See https://crbug.com/1127988
     if (policy_changed) {
@@ -584,7 +585,7 @@ HTMLIFrameElement::ConstructTrustTokenParams() const {
   }
 
   if (!GetExecutionContext()->IsFeatureEnabled(
-          mojom::blink::PermissionsPolicyFeature::kTrustTokenRedemption)) {
+          network::mojom::PermissionsPolicyFeature::kTrustTokenRedemption)) {
     GetExecutionContext()->AddConsoleMessage(MakeGarbageCollected<
                                              ConsoleMessage>(
         mojom::blink::ConsoleMessageSource::kOther,
@@ -666,7 +667,7 @@ void HTMLIFrameElement::CheckPotentialPermissionsPolicyViolation() {
   ParsedPermissionsPolicy container_policy = ConstructContainerPolicy();
   auto& security_context = GetExecutionContext()->GetSecurityContext();
   for (const auto& feature_desc : GetPermissionsPolicyFeatureList(src)) {
-    mojom::blink::PermissionsPolicyFeature feature = feature_desc.first;
+    network::mojom::PermissionsPolicyFeature feature = feature_desc.first;
     if (!IsFeatureDeclared(feature, container_policy)) {
       continue;
     }
@@ -679,7 +680,7 @@ void HTMLIFrameElement::CheckPotentialPermissionsPolicyViolation() {
           permissions_policy->GetEndpointForFeature(feature));
       GetExecutionContext()->ReportPotentialPermissionsPolicyViolation(
           feature, mojom::blink::PolicyDisposition::kEnforce, endpoint,
-          /*message*/ "", allow_);
+          /*message*/ "", allow_, src_);
     } else if (auto* report_only_permissions_policy =
                    security_context.GetReportOnlyPermissionsPolicy();
                report_only_permissions_policy &&
@@ -690,7 +691,7 @@ void HTMLIFrameElement::CheckPotentialPermissionsPolicyViolation() {
           report_only_permissions_policy->GetEndpointForFeature(feature));
       GetExecutionContext()->ReportPotentialPermissionsPolicyViolation(
           feature, mojom::blink::PolicyDisposition::kReport, endpoint,
-          /*message*/ "", allow_);
+          /*message*/ "", allow_, src_);
     }
   }
 }

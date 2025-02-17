@@ -11,12 +11,12 @@
 #include <stdint.h>
 #include <sys/socket.h>
 
+#include <algorithm>
 #include <iomanip>
 #include <optional>
 #include <string>
 #include <utility>
 
-#include "ash/components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "ash/constants/ash_pref_names.h"
 #include "base/containers/contains.h"
 #include "base/containers/queue.h"
@@ -27,7 +27,6 @@
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "base/posix/eintr_wrapper.h"
-#include "base/ranges/algorithm.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
@@ -36,6 +35,7 @@
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/ash/bluetooth/bluetooth_pairing_dialog.h"
+#include "chromeos/ash/experiences/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "chromeos/ash/experiences/arc/bluetooth/bluetooth_type_converters.h"
 #include "chromeos/ash/experiences/arc/intent_helper/arc_intent_helper_bridge.h"
 #include "chromeos/ash/experiences/arc/intent_helper/arc_intent_helper_package.h"
@@ -188,7 +188,7 @@ template <class RemoteGattAttribute>
 RemoteGattAttribute* FindGattAttributeByUuid(
     const std::vector<RemoteGattAttribute*>& attributes,
     const BluetoothUUID& uuid) {
-  auto it = base::ranges::find(attributes, uuid, &RemoteGattAttribute::GetUUID);
+  auto it = std::ranges::find(attributes, uuid, &RemoteGattAttribute::GetUUID);
   return it != attributes.end() ? *it : nullptr;
 }
 

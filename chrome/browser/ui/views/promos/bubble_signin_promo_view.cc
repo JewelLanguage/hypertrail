@@ -39,15 +39,19 @@
 
 using signin_util::SignedInState;
 
+// TODO(crbug.com/391586330): Strings used in this file sometimes originate
+// from a different source which makes their name out of context. Look into
+// whether it would better to have specific strings for these views.
+
 namespace {
 
 constexpr int kTitleMaxWidth = 218;
+constexpr int kExtensionsExplicitSigninTitleMaxWidth = 318;
 
 int GetSubtitleID(signin_metrics::AccessPoint access_point,
                   SignedInState signed_in_state,
                   int default_subtitle_id) {
-  if (access_point ==
-      signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE) {
+  if (access_point == signin_metrics::AccessPoint::kPasswordBubble) {
     switch (signed_in_state) {
       case SignedInState::kSignedOut:
       case SignedInState::kWebOnlySignedIn:
@@ -59,8 +63,7 @@ int GetSubtitleID(signin_metrics::AccessPoint access_point,
     }
   }
 
-  if (access_point ==
-      signin_metrics::AccessPoint::ACCESS_POINT_ADDRESS_BUBBLE) {
+  if (access_point == signin_metrics::AccessPoint::kAddressBubble) {
     switch (signed_in_state) {
       case SignedInState::kSignedOut:
       case SignedInState::kWebOnlySignedIn:
@@ -98,11 +101,12 @@ std::u16string GetButtonText(bool is_autofill_promo,
 
 std::u16string GetAccessibilityText(bool is_autofill_promo,
                                     SignedInState signed_in_state,
-                                    const std::string& email) {
+                                    const AccountInfo& account) {
   if (is_autofill_promo && signed_in_state == SignedInState::kWebOnlySignedIn) {
     return l10n_util::GetStringFUTF16(
-        IDS_SIGNIN_CONTINUE_AS_BUTTON_ACCESSIBILITY_LABEL,
-        {base::UTF8ToUTF16(email)});
+        IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CHROME_SIGNIN_ACCEPT_TEXT,
+        {base::UTF8ToUTF16(
+            base::StrCat({account.given_name, " ", account.email}))});
   }
 
   return std::u16string();
@@ -168,14 +172,15 @@ BubbleSignInPromoView::BubbleSignInPromoView(
   std::u16string button_text =
       GetButtonText(is_autofill_promo, signed_in_state, account.given_name);
   std::u16string accessibility_text =
-      GetAccessibilityText(is_autofill_promo, signed_in_state, account.email);
+      GetAccessibilityText(is_autofill_promo, signed_in_state, account);
   signin_metrics::PromoAction promo_action =
       GetPromoAction(is_autofill_promo, signed_in_state);
 
+  int title_max_width = kTitleMaxWidth;
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
-  if (access_point ==
-      signin_metrics::AccessPoint::ACCESS_POINT_EXTENSION_INSTALL_BUBBLE) {
+  if (access_point == signin_metrics::AccessPoint::kExtensionInstallBubble) {
     if (extensions::sync_util::IsExtensionsExplicitSigninEnabled()) {
+      title_max_width = kExtensionsExplicitSigninTitleMaxWidth;
       button_text =
           account.given_name.empty()
               ? l10n_util::GetStringUTF16(IDS_EXTENSIONS_EXPLICIT_SIGNIN_BUTTON)
@@ -198,7 +203,7 @@ BubbleSignInPromoView::BubbleSignInPromoView(
     title->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
     title->SetMultiLine(true);
     if (orientation == views::LayoutOrientation::kHorizontal) {
-      title->SetMaximumWidth(kTitleMaxWidth);
+      title->SetMaximumWidth(title_max_width);
     } else {
       title->SetProperty(
           views::kMarginsKey,
@@ -259,6 +264,10 @@ BubbleSignInPromoView::BubbleSignInPromoView(
 }
 
 BubbleSignInPromoView::~BubbleSignInPromoView() = default;
+
+views::View* BubbleSignInPromoView::GetSignInButton() const {
+  return signin_button_view_ ? signin_button_view_->GetSignInButton() : nullptr;
+}
 
 void BubbleSignInPromoView::SignIn() {
   std::optional<AccountInfo> account = signin_button_view_->account();

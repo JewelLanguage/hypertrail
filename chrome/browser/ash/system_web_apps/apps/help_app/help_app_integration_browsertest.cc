@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <vector>
@@ -19,7 +20,6 @@
 #include "ash/webui/web_applications/test/sandboxed_web_ui_test_base.h"
 #include "base/command_line.h"
 #include "base/containers/to_vector.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -29,7 +29,6 @@
 #include "base/values.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/app_install/app_install_service_ash.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -301,9 +300,10 @@ IN_PROC_BROWSER_TEST_P(HelpAppAllProfilesIntegrationTest, HelpAppV2ShowHelp) {
 #endif
 }
 
+// TODO(crbug.com/394677144): Enable test
 // Test that first run experience opens Help App with launch source query param.
 IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTestWithFirstRunEnabled,
-                       HelpAppV2FirstRunLaunch) {
+                       DISABLED_HelpAppV2FirstRunLaunch) {
   WaitForTestSystemAppInstall();
   base::HistogramTester histogram_tester;
   GURL expected_trusted_frame_url =
@@ -1178,7 +1178,7 @@ IN_PROC_BROWSER_TEST_P(HelpAppIntegrationTest,
   auto& tasks = GetManager().GetBackgroundTasksForTesting();
 
   // Find the help app's background task.
-  const auto& help_task = base::ranges::find(
+  const auto& help_task = std::ranges::find(
       tasks, bg_task_url, &SystemWebAppBackgroundTask::url_for_testing);
   ASSERT_NE(help_task, tasks.end());
 

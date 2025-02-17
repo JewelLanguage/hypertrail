@@ -167,7 +167,6 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   void AnnotateFieldsWithParsingResult(
       const ParsingResult& parsing_result) override;
 #if BUILDFLAG(IS_ANDROID)
-  void KeyboardReplacingSurfaceClosed(bool show_virtual_keyboard) override;
   void TriggerFormSubmission() override;
 #endif
 
@@ -199,16 +198,6 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // Sends a reputation check request in case if `element` has type password and
   // no check request were sent from this frame load.
   void MaybeCheckSafeBrowsingReputation(const blink::WebInputElement& element);
-
-#if BUILDFLAG(IS_ANDROID)
-  // Returns whether the soft keyboard should be suppressed.
-  bool ShouldSuppressKeyboard();
-
-  // Asks the agent to show the keyboard replacing surface for
-  // `control_element`. Returns whether the agent was able to do so.
-  bool TryToShowKeyboardReplacingSurface(
-      const blink::WebFormControlElement& control_element);
-#endif
 
   // Queries password suggestions for the given `element` and `trigger_source`.
   // If `generation_popup_showing` is true, this function will return false
@@ -343,18 +332,6 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
     const raw_ref<PasswordAutofillAgent> agent_;
   };
 
-  // Enumeration representing possible keyboard replacing surface states. A
-  // keyboard replacing surface can be either Touch To Fill UI or Android
-  // Credential Manager UI. This is used to make sure that keyboard replacing
-  // surface will only be shown in response to the first password form focus
-  // during a frame's life time and to suppress the soft keyboard when
-  // credential selector sheet is shown.
-  enum class KeyboardReplacingSurfaceState {
-    kShouldShow,
-    kIsShowing,
-    kWasShown,
-  };
-
   struct PasswordInfo {
     FieldRef password_field;
     PasswordFormFillData fill_data;
@@ -431,7 +408,7 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // signatures as HTML attributes. Used by
   // chrome://flags/#enable-show-autofill-signatures only.
   void AnnotateFormsAndFieldsWithSignatures(
-      blink::WebVector<blink::WebFormElement>& forms,
+      std::vector<blink::WebFormElement>& forms,
       const SynchronousFormCache& form_cache);
 
   // Scans the given frame for password forms and sends them up to the browser.
@@ -546,12 +523,14 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
 
   // This function attempts to fill `username_element` and `password_element`
   // with values from `fill_data`. The `username_element` and `password_element`
-  // will only have the suggestedValue set. If a match is found, return true and
-  // Returns true if the password is filled.
+  // will only have the suggestedValue set. Notifies the browser about
+  // successful filling based on `notify_browser_of_successful_filling`. Returns
+  // true if filling was successful.
   bool FillUserNameAndPassword(blink::WebInputElement username_element,
                                blink::WebInputElement password_element,
                                const PasswordFormFillData& fill_data,
-                               RendererSavePasswordProgressLogger* logger);
+                               RendererSavePasswordProgressLogger* logger,
+                               bool notify_browser_of_successful_filling);
 
   // Logs whether a username value that was prefilled by the website was
   // overridden when trying to fill with an existing credential. This logs
@@ -709,13 +688,6 @@ class PasswordAutofillAgent : public content::RenderFrameObserver,
   // This notifier is used to avoid sending redundant messages to the password
   // manager driver mojo interface.
   FocusStateNotifier focus_state_notifier_{this};
-
-#if BUILDFLAG(IS_ANDROID)
-  // Current state of the keyboard replacing surface. This is reset during
-  // CleanupOnDocumentShutdown.
-  KeyboardReplacingSurfaceState keyboard_replacing_surface_state_ =
-      KeyboardReplacingSurfaceState::kShouldShow;
-#endif
 };
 
 }  // namespace autofill

@@ -2372,7 +2372,6 @@ error::Error GLES2DecoderPassthroughImpl::DoLineWidth(GLfloat width) {
 
 error::Error GLES2DecoderPassthroughImpl::DoLinkProgram(GLuint program) {
   TRACE_EVENT0("gpu", "GLES2DecoderPassthroughImpl::DoLinkProgram");
-  SCOPED_UMA_HISTOGRAM_TIMER("GPU.PassthroughDoLinkProgramTime");
   GLuint program_service_id = GetProgramServiceID(program, resources_);
 
   // Call report progress to delay GPU Watchdog timeout.
@@ -3827,8 +3826,10 @@ error::Error GLES2DecoderPassthroughImpl::DoDeleteQueriesEXT(
       continue;
     }
 
-    if (base::Contains(active_queries_, query_info.type)) {
-      active_queries_.erase(query_info.type);
+    auto active_query_iter = active_queries_.find(query_info.type);
+    if (active_query_iter != active_queries_.end() &&
+        active_query_iter->second.service_id == query_service_id) {
+      active_queries_.erase(active_query_iter);
     }
 
     RemovePendingQuery(query_service_id);
@@ -4014,7 +4015,7 @@ error::Error GLES2DecoderPassthroughImpl::DoEndQueryEXT(GLenum target,
     }
   }
 
-  DCHECK(active_queries_.find(target) != active_queries_.end());
+  CHECK(base::Contains(active_queries_, target));
   ActiveQuery active_query = std::move(active_queries_[target]);
   active_queries_.erase(target);
 

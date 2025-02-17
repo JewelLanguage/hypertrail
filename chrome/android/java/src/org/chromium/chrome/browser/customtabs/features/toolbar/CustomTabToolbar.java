@@ -238,9 +238,6 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
         if (!ChromeFeatureList.sCctIntentFeatureOverrides.isEnabled()) {
             maybeInitMinimizeButton();
         }
-
-        // Set hover tooltip texts for toolbar buttons.
-        super.setTooltipTextForToolbarButtons();
     }
 
     @Override
@@ -1049,10 +1046,6 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
                 minimizeHighlighted);
     }
 
-    private static boolean shouldNestSecurityIcon() {
-        return ChromeFeatureList.sCctNestedSecurityIcon.isEnabled();
-    }
-
     /** Custom tab-specific implementation of the LocationBar interface. */
     @VisibleForTesting
     public class CustomTabLocationBar
@@ -1122,11 +1115,6 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
 
         public boolean isShowingTitleOnly() {
             return mState == STATE_TITLE_ONLY;
-        }
-
-        @Override
-        public boolean unfocusUrlBarOnBackPressed() {
-            return false;
         }
 
         @Override
@@ -1256,7 +1244,7 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
 
             int securityButtonId =
                     shouldNestSecurityIcon() ? R.id.security_icon : R.id.security_button;
-            mSecurityButton = container.findViewById(securityButtonId);
+            mSecurityButton = mLocationBarFrameLayout.findViewById(securityButtonId);
             mSecurityButton.setVisibility(INVISIBLE);
 
             // If the security icon is nested, only the url bar should be offset by it.
@@ -1270,8 +1258,26 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
                             mSecurityButton,
                             securityButtonOffsetTarget,
                             this::adjustTitleUrlBarPadding,
-                            R.dimen.location_bar_icon_width);
+                            shouldNestSecurityIcon()
+                                    ? R.dimen.custom_tabs_security_icon_width
+                                    : R.dimen.location_bar_icon_width);
+
             addButtonsVisibilityUpdater();
+            adjustLocationBarPadding();
+        }
+
+        private void adjustLocationBarPadding() {
+            if (shouldNestSecurityIcon() && !isIncognitoBranded()) {
+                int horizontalPadding =
+                        getResources()
+                                .getDimensionPixelSize(
+                                        R.dimen.custom_tabs_location_bar_horizontal_padding);
+                mLocationBarFrameLayout.setPadding(
+                        horizontalPadding,
+                        mLocationBarFrameLayout.getPaddingTop(),
+                        horizontalPadding,
+                        mLocationBarFrameLayout.getPaddingBottom());
+            }
         }
 
         private void removeButtonsVisibilityUpdater() {
@@ -1370,7 +1376,7 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
 
         public void onNativeLibraryReady() {
             mSecurityButton.setOnClickListener(v -> showPageInfo());
-            if (!mOmniboxEnabled && shouldNestSecurityIcon()) {
+            if (shouldNestSecurityIcon()) {
                 mTitleUrlContainer.setOnClickListener(v -> showPageInfo());
                 // The title and url are independently focusable for accessibility. Set
                 // AccessibilityNodeInfo on each to indicate they respond to clicks / long clicks
@@ -1583,8 +1589,7 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
             @ConnectionSecurityLevel
             int securityLevel = mLocationBarDataProvider.getSecurityLevel();
             return securityLevel == ConnectionSecurityLevel.NONE
-                    || securityLevel == ConnectionSecurityLevel.SECURE
-                    || securityLevel == ConnectionSecurityLevel.SECURE_WITH_POLICY_INSTALLED_CERT;
+                    || securityLevel == ConnectionSecurityLevel.SECURE;
         }
 
         @VisibleForTesting(otherwise = VisibleForTesting.NONE)
@@ -1677,7 +1682,7 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
             final CharSequence displayText;
             final int originStart;
             final int originEnd;
-            if (publisherUrl != null) {
+            if (!mOmniboxEnabled && publisherUrl != null) {
                 String plainDisplayText =
                         getContext()
                                 .getString(
@@ -1701,7 +1706,7 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
                 originStart = 0;
                 if (mOmniboxEnabled) {
                     displayText = urlBarData.displayText;
-                    originEnd = 0;
+                    originEnd = urlBarData.originEndIndex;
                 } else if (urlBarData.displayText != null) {
                     displayText =
                             urlBarData.displayText.subSequence(
@@ -1791,6 +1796,27 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
                     mState = STATE_TITLE_ONLY;
                 } else {
                     mState = STATE_DOMAIN_AND_TITLE;
+                }
+                if (shouldNestSecurityIcon()) {
+                    int width =
+                            getResources()
+                                    .getDimensionPixelSize(
+                                            R.dimen.custom_tabs_security_icon_width_nested);
+                    mSecurityButton.getLayoutParams().width = width;
+                    int paddingLeft =
+                            getResources()
+                                    .getDimensionPixelSize(
+                                            R.dimen.custom_tabs_security_icon_padding_left_nested);
+                    int paddingRight =
+                            getResources()
+                                    .getDimensionPixelSize(
+                                            R.dimen.custom_tabs_security_icon_padding_right_nested);
+                    mSecurityButton.setPadding(
+                            paddingLeft,
+                            mSecurityButton.getPaddingTop(),
+                            paddingRight,
+                            mSecurityButton.getPaddingBottom());
+                    mAnimDelegate.setSecurityButtonWidth(width);
                 }
                 mAnimDelegate.prepareTitleAnim(mUrlBar, mTitleBar);
                 setUrlBarVisuals(Gravity.BOTTOM, 0, R.dimen.custom_tabs_url_text_size);
@@ -1968,6 +1994,19 @@ public class CustomTabToolbar extends ToolbarLayout implements View.OnLongClickL
                             info.setEditable(false);
                         }
                     });
+            updateAnimationsForOmnibox();
+        }
+
+        private void updateAnimationsForOmnibox() {
+            mSecurityButton = mLocationBarFrameLayout.findViewById(R.id.security_button);
+            mSecurityButton.setVisibility(VISIBLE);
+            mLocationBarFrameLayout.findViewById(R.id.security_icon).setVisibility(GONE);
+            mAnimDelegate.setSecurityButton(mSecurityButton);
+            mAnimDelegate.setSecurityButtonWidth(0);
+        }
+
+        private boolean shouldNestSecurityIcon() {
+            return ChromeFeatureList.sCctNestedSecurityIcon.isEnabled() && !mOmniboxEnabled;
         }
     }
 

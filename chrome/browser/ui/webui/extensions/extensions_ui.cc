@@ -140,6 +140,7 @@ content::WebUIDataSource* CreateAndAddExtensionsSource(Profile* profile,
       {"sidebarDiscoverMore", IDS_EXTENSIONS_SIDEBAR_DISCOVER_MORE},
       {"keyboardShortcuts", IDS_EXTENSIONS_SIDEBAR_KEYBOARD_SHORTCUTS},
       {"incognitoInfoWarning", IDS_EXTENSIONS_INCOGNITO_WARNING},
+      {"userScriptInfoWarning", IDS_EXTENSIONS_ALLOW_USER_SCRIPTS_WARNING},
       {"hostPermissionsDescription",
        IDS_EXTENSIONS_HOST_PERMISSIONS_DESCRIPTION},
       {"permissionsLearnMoreLabel",
@@ -170,6 +171,7 @@ content::WebUIDataSource* CreateAndAddExtensionsSource(Profile* profile,
       {"itemInspectViewsExtra", IDS_EXTENSIONS_ITEM_INSPECT_VIEWS_EXTRA},
       {"noActiveViews", IDS_EXTENSIONS_ITEM_NO_ACTIVE_VIEWS},
       {"itemAllowIncognito", IDS_EXTENSIONS_ITEM_ALLOW_INCOGNITO},
+      {"itemAllowUserScripts", IDS_EXTENSIONS_ITEM_ALLOW_USER_SCRIPTS},
       {"itemDescriptionLabel", IDS_EXTENSIONS_ITEM_DESCRIPTION},
       {"itemDependencies", IDS_EXTENSIONS_ITEM_DEPENDENCIES},
       {"itemDependentEntry", IDS_EXTENSIONS_DEPENDENT_ENTRY},
@@ -359,6 +361,8 @@ content::WebUIDataSource* CreateAndAddExtensionsSource(Profile* profile,
        IDS_EXTENSIONS_MV2_DEPRECATION_MESSAGE_WARNING_SUBTITLE},
       {"mv2DeprecationUnsupportedExtensionOffText",
        IDS_EXTENSIONS_MV2_DEPRECATION_UNSUPPORTED_EXTENSION_OFF_TEXT},
+      {"setShortcutInSystemSettings",
+       IDS_EXTENSIONS_SET_SHORTCUT_IN_SYSTEM_SETTINGS},
       {"shortcutNotSet", IDS_SHORTCUT_NOT_SET},
       {"shortcutScopeGlobal", IDS_EXTENSIONS_SHORTCUT_SCOPE_GLOBAL},
       {"shortcutScopeLabel", IDS_EXTENSIONS_SHORTCUT_SCOPE_LABEL},
@@ -388,6 +392,8 @@ content::WebUIDataSource* CreateAndAddExtensionsSource(Profile* profile,
       {"viewIframe", IDS_EXTENSIONS_VIEW_IFRAME},
       {"viewServiceWorker", IDS_EXTENSIONS_SERVICE_WORKER_BACKGROUND},
       {"safetyCheckKeepExtension", IDS_EXTENSIONS_SC_KEEP_EXT},
+      {"safetyCheckExtensionThreeDotDetails",
+       IDS_EXTENSIONS_SC_THREEDOT_DETAILS},
       {"safetyCheckRemoveAll", IDS_EXTENSIONS_SC_REMOVE_ALL},
       {"safetyHubHeader", IDS_SETTINGS_SAFETY_HUB},
       {"safetyCheckRemoveButtonA11yLabel",
@@ -461,6 +467,9 @@ content::WebUIDataSource* CreateAndAddExtensionsSource(Profile* profile,
       "enableUserPermittedSites",
       base::FeatureList::IsEnabled(
           extensions_features::kExtensionsMenuAccessControlWithPermittedSites));
+  source->AddBoolean(
+      "safetyHubThreeDotDetails",
+      base::FeatureList::IsEnabled(features::kSafetyHubThreeDotDetails));
 
   // MV2 deprecation.
   auto* mv2_experiment_manager = ManifestV2ExperimentManager::Get(profile);
@@ -550,13 +559,6 @@ base::RefCountedMemory* ExtensionsUI::GetFaviconResourceBytes(
     ui::ResourceScaleFactor scale_factor) {
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   return rb.LoadDataResourceBytesForScale(IDR_EXTENSIONS_FAVICON, scale_factor);
-}
-
-void ExtensionsUI::RegisterProfilePrefs(
-    user_prefs::PrefRegistrySyncable* registry) {
-  registry->RegisterBooleanPref(
-      prefs::kExtensionsUIDeveloperMode, false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 }
 
 // Normally volatile data does not belong in loadTimeData, but in this case

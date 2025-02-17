@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "base/cancelable_callback.h"
@@ -111,7 +112,7 @@ std::unique_ptr<views::ToggleImageButton> CreatePinToggleButton(
   int dip_size = ChromeLayoutProvider::Get()->GetDistanceMetric(
       ChromeDistanceMetric::DISTANCE_SIDE_PANEL_HEADER_VECTOR_ICON_SIZE);
   const gfx::VectorIcon& pin_icon = kKeepIcon;
-  const gfx::VectorIcon& unpin_icon = kKeepFilledIcon;
+  const gfx::VectorIcon& unpin_icon = kKeepOffIcon;
   views::SetImageFromVectorIconWithColorId(
       button.get(), pin_icon, kColorSidePanelHeaderButtonIcon,
       kColorSidePanelHeaderButtonIconDisabled, dip_size);
@@ -161,6 +162,7 @@ std::unique_ptr<views::Label> CreateTitle() {
       views::style::STYLE_HEADLINE_5);
 
   title->SetEnabledColorId(kColorSidePanelEntryTitle);
+  title->SetBackgroundColor(kColorToolbar);
   title->SetSubpixelRenderingEnabled(false);
   const int horizontal_margin =
       ChromeLayoutProvider::Get()->GetDistanceMetric(
@@ -1019,7 +1021,7 @@ void SidePanelCoordinator::SetNoDelaysForTesting(bool no_delays_for_testing) {
 
 void SidePanelCoordinator::UpdatePanelIconAndTitle(
     const ui::ImageModel& icon,
-    const std::u16string& text,
+    std::u16string_view text,
     const bool should_show_title_text,
     const bool is_extension) {
   if (is_extension) {
@@ -1032,7 +1034,7 @@ void SidePanelCoordinator::UpdatePanelIconAndTitle(
     panel_icon_->SetImage(updated_icon);
   }
   panel_icon_->SetVisible(is_extension);
-  panel_title_->SetText(should_show_title_text ? text : std::u16string());
+  panel_title_->SetText(should_show_title_text ? text : std::u16string_view());
 }
 
 void SidePanelCoordinator::OnViewVisibilityChanged(views::View* observed_view,

@@ -40,6 +40,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/network_handle.h"
+#include "pdf/buildflags.h"
 #include "services/device/public/cpp/geolocation/buildflags.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/network_context.mojom.h"
@@ -79,6 +80,7 @@ class PopupNavigationDelegate;
 namespace content {
 class BrowserContext;
 class BtmService;
+class NavigationHandle;
 class RenderFrameHost;
 enum class SmsFetchFailureType;
 struct ServiceWorkerVersionBaseInfo;
@@ -92,17 +94,16 @@ class SiteForCookies;
 namespace safe_browsing {
 class AsyncCheckTracker;
 class RealTimeUrlLookupServiceBase;
-class SafeBrowsingService;
 class UrlCheckerDelegate;
+
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+class SafeBrowsingService;
+#endif
 
 namespace hash_realtime_utils {
 enum class HashRealTimeSelection;
 }
 }  // namespace safe_browsing
-
-namespace sandbox {
-class SandboxCompiler;
-}  // namespace sandbox
 
 namespace ui {
 class NativeTheme;
@@ -223,6 +224,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       network::mojom::URLLoaderFactoryParams* factory_params) override;
   void GetAdditionalWebUISchemes(
       std::vector<std::string>* additional_schemes) override;
+  bool IsInternalScheme(const GURL& url) override;
   void GetAdditionalViewSourceSchemes(
       std::vector<std::string>* additional_schemes) override;
   network::mojom::IPAddressSpace DetermineAddressSpaceFromURL(
@@ -267,6 +269,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   bool ShouldEnableStrictSiteIsolation() override;
   bool ShouldDisableSiteIsolation(
       content::SiteIsolationMode site_isolation_mode) override;
+  bool ShouldDisableOriginIsolation() override;
   std::vector<std::string> GetAdditionalSiteIsolationModes() override;
   void PersistIsolatedOrigin(
       content::BrowserContext* context,
@@ -308,6 +311,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   bool ShouldTryToUpdateServiceWorkerRegistration(
       const GURL& scope,
       content::BrowserContext* browser_context) override;
+  bool AllowServiceWorkerToControlSrcdocIframe(
+      content::BrowserContext* context) override;
   bool AllowSharedWorker(
       const GURL& worker_url,
       const net::SiteForCookies& site_for_cookies,
@@ -564,7 +569,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   bool IsRendererCodeIntegrityEnabled() override;
   void SessionEnding(std::optional<DWORD> control_type) override;
   bool ShouldEnableAudioProcessHighPriority() override;
-  bool ShouldUseFontDataManager(const GURL& site_url) override;
 #endif
   void ExposeInterfacesToRenderer(
       service_manager::BinderRegistry* registry,
@@ -737,6 +741,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
                                    const std::string& mime_type) override;
   content::BluetoothDelegate* GetBluetoothDelegate() override;
   content::UsbDelegate* GetUsbDelegate() override;
+  content::SerialDelegate* GetSerialDelegate() override;
   content::PrivateNetworkDeviceDelegate* GetPrivateNetworkDeviceDelegate()
       override;
   bool IsSecurityLevelAcceptableForWebAuthn(
@@ -750,7 +755,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       content::RenderFrameHost* render_frame_host,
       mojo::PendingReceiver<blink::mojom::ManagedConfigurationService> receiver)
       override;
-  content::SerialDelegate* GetSerialDelegate() override;
   content::HidDelegate* GetHidDelegate() override;
   content::DirectSocketsDelegate* GetDirectSocketsDelegate() override;
   content::WebAuthenticationDelegate* GetWebAuthenticationDelegate() override;
@@ -758,10 +762,10 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   GetWebAuthenticationRequestDelegate(
       content::RenderFrameHost* render_frame_host) override;
 #endif
-  void CreatePaymentCredential(
+  void CreateSecurePaymentConfirmationService(
       content::RenderFrameHost* render_frame_host,
-      mojo::PendingReceiver<payments::mojom::PaymentCredential> receiver)
-      override;
+      mojo::PendingReceiver<payments::mojom::SecurePaymentConfirmationService>
+          receiver) override;
 #if BUILDFLAG(IS_CHROMEOS)
   content::SmartCardDelegate* GetSmartCardDelegate() override;
 #endif
@@ -933,7 +937,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
 #if BUILDFLAG(IS_MAC)
   bool SetupEmbedderSandboxParameters(
       sandbox::mojom::Sandbox sandbox_type,
-      sandbox::SandboxCompiler* compiler) override;
+      sandbox::SandboxSerializer* serializer) override;
 #endif  // BUILDFLAG(IS_MAC)
 
   void GetHyphenationDictionary(
@@ -1051,11 +1055,11 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   bool UseOutermostMainFrameOrEmbedderForSubCaptureTargets() const override;
 
 #if BUILDFLAG(ENABLE_VIDEO_EFFECTS)
-  void BindVideoEffectsManager(
+  void BindReadonlyVideoEffectsManager(
       const std::string& device_id,
       content::BrowserContext* browser_context,
-      mojo::PendingReceiver<media::mojom::VideoEffectsManager>
-          video_effects_manager) override;
+      mojo::PendingReceiver<media::mojom::ReadonlyVideoEffectsManager>
+          readonly_video_effects_manager) override;
 
   void BindVideoEffectsProcessor(
       const std::string& device_id,
@@ -1145,6 +1149,12 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   std::unique_ptr<content::WebUIController> OverrideForInternalWebUI(
       content::WebUI* web_ui,
       const GURL& url) override;
+
+#if BUILDFLAG(ENABLE_PDF)
+  std::optional<network::CrossOriginEmbedderPolicy>
+  MaybeOverrideLocalURLCrossOriginEmbedderPolicy(
+      content::NavigationHandle* navigation_handle) override;
+#endif  // BUILDFLAG(ENABLE_PDF)
 
   void SetSamplingProfiler(
       std::unique_ptr<MainThreadStackSamplingProfiler> sampling_profiler);
@@ -1292,20 +1302,22 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   // Parts are deleted in the reverse order they are added.
   std::vector<std::unique_ptr<ChromeContentBrowserClientParts>> extra_parts_;
 
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   scoped_refptr<safe_browsing::SafeBrowsingService> safe_browsing_service_;
+#endif
   scoped_refptr<safe_browsing::UrlCheckerDelegate>
       safe_browsing_url_checker_delegate_;
 
   StartupData startup_data_;
 
 #if !BUILDFLAG(IS_ANDROID)
-  std::unique_ptr<ChromeSerialDelegate> serial_delegate_;
   std::unique_ptr<ChromeHidDelegate> hid_delegate_;
   std::unique_ptr<ChromeDirectSocketsDelegate> direct_sockets_delegate_;
   std::unique_ptr<ChromeWebAuthenticationDelegate> web_authentication_delegate_;
 #endif
   std::unique_ptr<ChromeBluetoothDelegate> bluetooth_delegate_;
   std::unique_ptr<ChromeUsbDelegate> usb_delegate_;
+  std::unique_ptr<ChromeSerialDelegate> serial_delegate_;
   std::unique_ptr<ChromePrivateNetworkDeviceDelegate>
       private_network_device_delegate_;
 

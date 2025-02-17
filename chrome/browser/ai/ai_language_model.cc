@@ -86,14 +86,6 @@ const char* FormatPromptRole(PromptApiRole role) {
   }
 }
 
-PromptApiMetadata ParseMetadata(const optimization_guide::proto::Any& any) {
-  PromptApiMetadata metadata;
-  if (any.type_url() == "type.googleapis.com/" + metadata.GetTypeName()) {
-    metadata.ParseFromString(any.value());
-  }
-  return metadata;
-}
-
 std::unique_ptr<optimization_guide::proto::StringValue> ToStringValue(
     const PromptApiRequest& request) {
   std::ostringstream oss;
@@ -203,12 +195,14 @@ AILanguageModel::AILanguageModel(
     mojo::PendingRemote<blink::mojom::AILanguageModel> pending_remote,
     AIContextBoundObjectSet& context_bound_object_set,
     AIManager& ai_manager,
+    AIUtils::LanguageCodes expected_input_languages,
     const std::optional<const Context>& context)
     : AIContextBoundObject(context_bound_object_set),
       session_(std::move(session)),
       browser_context_(browser_context),
       context_bound_object_set_(context_bound_object_set),
       ai_manager_(ai_manager),
+      expected_input_languages_(std::move(expected_input_languages)),
       pending_remote_(std::move(pending_remote)),
       receiver_(this, pending_remote_.InitWithNewPipeAndPassReceiver()) {
   receiver_.set_disconnect_handler(base::BindOnce(
@@ -234,6 +228,16 @@ AILanguageModel::AILanguageModel(
 }
 
 AILanguageModel::~AILanguageModel() = default;
+
+// static
+PromptApiMetadata AILanguageModel::ParseMetadata(
+    const optimization_guide::proto::Any& any) {
+  PromptApiMetadata metadata;
+  if (any.type_url() == "type.googleapis.com/" + metadata.GetTypeName()) {
+    metadata.ParseFromString(any.value());
+  }
+  return metadata;
+}
 
 void AILanguageModel::SetInitialPrompts(
     const std::optional<std::string> system_prompt,
@@ -286,7 +290,7 @@ void AILanguageModel::InitializeContextWithInitialPrompts(
   initial_prompts.prompts.Swap(initial_request.mutable_initial_prompts());
   context_ = std::make_unique<Context>(max_token, std::move(initial_prompts),
                                        context_->use_prompt_api_proto());
-  std::move(callback).Run(TakePendingRemote(), GetLanguageModelInfo());
+  std::move(callback).Run(TakePendingRemote(), GetLanguageModelInstanceInfo());
 }
 
 void AILanguageModel::ModelExecutionCallback(
@@ -423,6 +427,17 @@ void AILanguageModel::Prompt(
                      weak_ptr_factory_.GetWeakPtr(), responder_id, request));
 }
 
+AIUtils::LanguageCodes AILanguageModel::GetExpectedInputLanguagesCopy() {
+  if (!expected_input_languages_.has_value()) {
+    return std::nullopt;
+  }
+  std::vector<blink::mojom::AILanguageCodePtr> cloned_languages;
+  for (auto& language : expected_input_languages_.value()) {
+    cloned_languages.emplace_back(language->Clone());
+  }
+  return cloned_languages;
+}
+
 void AILanguageModel::Fork(
     mojo::PendingRemote<blink::mojom::AIManagerCreateLanguageModelClient>
         client) {
@@ -443,7 +458,8 @@ void AILanguageModel::Fork(
       base::PassKey<AILanguageModel>(),
       blink::mojom::AILanguageModelSamplingParams::New(
           sampling_param.top_k, sampling_param.temperature),
-      context_bound_object_set_.get(), *context_, std::move(client_remote));
+      context_bound_object_set_.get(), GetExpectedInputLanguagesCopy(),
+      *context_, std::move(client_remote));
 }
 
 void AILanguageModel::Destroy() {
@@ -459,13 +475,15 @@ void AILanguageModel::Destroy() {
   responder_set_.Clear();
 }
 
-blink::mojom::AILanguageModelInfoPtr AILanguageModel::GetLanguageModelInfo() {
+blink::mojom::AILanguageModelInstanceInfoPtr
+AILanguageModel::GetLanguageModelInstanceInfo() {
   const optimization_guide::SamplingParams session_sampling_params =
       session_->GetSamplingParams();
-  return blink::mojom::AILanguageModelInfo::New(
+  return blink::mojom::AILanguageModelInstanceInfo::New(
       context_->max_tokens(), context_->current_tokens(),
       blink::mojom::AILanguageModelSamplingParams::New(
-          session_sampling_params.top_k, session_sampling_params.temperature));
+          session_sampling_params.top_k, session_sampling_params.temperature),
+      GetExpectedInputLanguagesCopy());
 }
 
 void AILanguageModel::CountPromptTokens(

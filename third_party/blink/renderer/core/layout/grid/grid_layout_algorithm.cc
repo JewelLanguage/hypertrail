@@ -449,10 +449,10 @@ wtf_size_t GridLayoutAlgorithm::BuildGridSizingSubtree(
   }
 
   auto BuildSizingCollection = [&](GridTrackSizingDirection track_direction) {
-    GridRangeBuilder range_builder(style, line_resolver, track_direction,
-                                   (track_direction == kForColumns)
-                                       ? column_start_offset
-                                       : row_start_offset);
+    GridRangeBuilder range_builder(
+        style, track_direction, line_resolver.AutoRepetitions(track_direction),
+        (track_direction == kForColumns) ? column_start_offset
+                                         : row_start_offset);
 
     bool must_create_baselines = false;
     for (auto& grid_item : sizing_node.grid_items.IncludeSubgriddedItems()) {
@@ -1154,9 +1154,11 @@ wtf_size_t GridLayoutAlgorithm::ComputeAutomaticRepetitions(
     const GridSpan& subgrid_span,
     GridTrackSizingDirection track_direction) const {
   const bool is_for_columns = track_direction == kForColumns;
+
+  const auto& style = Style();
   const auto& track_list = is_for_columns
-                               ? Style().GridTemplateColumns().track_list
-                               : Style().GridTemplateRows().track_list;
+                               ? style.GridTemplateColumns().track_list
+                               : style.GridTemplateRows().track_list;
 
   if (!track_list.HasAutoRepeater())
     return 0;
@@ -1188,7 +1190,8 @@ wtf_size_t GridLayoutAlgorithm::ComputeAutomaticRepetitions(
 
   LayoutUnit auto_repeater_size;
   LayoutUnit non_auto_specified_size;
-  const LayoutUnit gutter_size = GutterSize(track_direction);
+  const auto gutter_size = GridTrackSizingAlgorithm::CalculateGutterSize(
+      style, grid_available_size_, track_direction);
 
   for (wtf_size_t repeater_index = 0;
        repeater_index < track_list.RepeaterCount(); ++repeater_index) {
@@ -1428,9 +1431,10 @@ GridLayoutAlgorithm::CreateSubgridTrackCollection(
   const bool is_for_columns_in_parent = subgrid_data->is_parallel_with_root_grid
                                             ? track_direction == kForColumns
                                             : track_direction == kForRows;
+
+  const auto& style = Style();
   const auto& parent_track_collection =
       is_for_columns_in_parent ? subgrid_data.Columns() : subgrid_data.Rows();
-
   const auto& range_indices = is_for_columns_in_parent
                                   ? subgrid_data->column_range_indices
                                   : subgrid_data->row_range_indices;
@@ -1438,8 +1442,10 @@ GridLayoutAlgorithm::CreateSubgridTrackCollection(
   return std::make_unique<GridLayoutTrackCollection>(
       parent_track_collection.CreateSubgridTrackCollection(
           range_indices.begin, range_indices.end,
-          GutterSize(track_direction, parent_track_collection.GutterSize()),
-          ComputeMarginsForSelf(GetConstraintSpace(), Style()),
+          GridTrackSizingAlgorithm::CalculateGutterSize(
+              style, grid_available_size_, track_direction,
+              parent_track_collection.GutterSize()),
+          ComputeMarginsForSelf(GetConstraintSpace(), style),
           BorderScrollbarPadding(), track_direction,
           is_for_columns_in_parent
               ? subgrid_data->is_opposite_direction_in_root_grid_columns
@@ -1461,11 +1467,7 @@ void GridLayoutAlgorithm::InitializeTrackCollection(
   }
 
   auto& track_collection = layout_data->SizingCollection(track_direction);
-  track_collection.BuildSets(Style(),
-                             (track_direction == kForColumns)
-                                 ? grid_available_size_.inline_size
-                                 : grid_available_size_.block_size,
-                             GutterSize(track_direction));
+  track_collection.BuildSets(Style(), grid_available_size_);
 }
 
 namespace {
@@ -1629,12 +1631,7 @@ void GridLayoutAlgorithm::ComputeUsedTrackSizes(
 
   auto& track_collection =
       sizing_subtree.LayoutData().SizingCollection(track_direction);
-
-  track_collection.BuildSets(Style(),
-                             (track_direction == kForColumns)
-                                 ? grid_available_size_.inline_size
-                                 : grid_available_size_.block_size,
-                             GutterSize(track_direction));
+  track_collection.BuildSets(Style(), grid_available_size_);
 
   // 2. Resolve intrinsic track sizing functions to absolute lengths.
   if (track_collection.HasIntrinsicTrack()) {
@@ -2916,26 +2913,6 @@ void GridLayoutAlgorithm::ExpandFlexibleTracks(
   // inner size when it’s sized to its min-width/height (max-width/height).
 }
 
-LayoutUnit GridLayoutAlgorithm::GutterSize(
-    GridTrackSizingDirection track_direction,
-    LayoutUnit parent_grid_gutter_size) const {
-  const bool is_for_columns = track_direction == kForColumns;
-  const auto& gutter_size =
-      is_for_columns ? Style().ColumnGap() : Style().RowGap();
-
-  if (!gutter_size) {
-    // No specified gutter size means we must use the "normal" gap behavior:
-    //   - For standalone grids `parent_grid_gutter_size` will default to zero.
-    //   - For subgrids we must provide the parent grid's gutter size.
-    return parent_grid_gutter_size;
-  }
-
-  return MinimumValueForLength(
-      *gutter_size, (is_for_columns ? grid_available_size_.inline_size
-                                    : grid_available_size_.block_size)
-                        .ClampIndefiniteToZero());
-}
-
 // TODO(ikilpatrick): Determine if other uses of this method need to respect
 // |grid_min_available_size_| similar to |StretchAutoTracks|.
 LayoutUnit GridLayoutAlgorithm::DetermineFreeSpace(
@@ -3450,6 +3427,26 @@ void GridLayoutAlgorithm::PlaceGridItems(
     }
   }
 
+  // Build geometry for the gaps within this fragment.
+  if (RuntimeEnabledFeatures::CSSGapDecorationEnabled() &&
+      Style().HasColumnRule()) {
+    GapFragmentData::GapGeometry* gap_geometry =
+        MakeGarbageCollected<GapFragmentData::GapGeometry>();
+    HeapVector<LayoutUnit> inline_intersection_points;
+    BuildGapGeometry(kForColumns, layout_data, inline_intersection_points,
+                     gap_geometry);
+
+    HeapVector<LayoutUnit> block_intersection_points;
+    BuildGapGeometry(kForRows, layout_data, block_intersection_points,
+                     gap_geometry);
+
+    PopulateGapIntersectionPoints(block_intersection_points,
+                                  gap_geometry->GetGapBoundaries(kForColumns));
+    PopulateGapIntersectionPoints(inline_intersection_points,
+                                  gap_geometry->GetGapBoundaries(kForRows));
+    container_builder_.SetGapGeometry(std::move(gap_geometry));
+  }
+
   // Propagate the baselines.
   if (layout_data.Rows().HasBaselines()) {
     baseline_accumulator.AccumulateRows(layout_data.Rows());
@@ -3931,6 +3928,37 @@ void GridLayoutAlgorithm::PlaceGridItemsForFragmentation(
   }
 }
 
+void GridLayoutAlgorithm::BuildGapGeometry(
+    GridTrackSizingDirection track_direction,
+    const GridLayoutData& layout_data,
+    HeapVector<LayoutUnit>& intersection_points,
+    GapFragmentData::GapGeometry* gap_geometry) const {
+  const auto tracks =
+      LayoutGrid::ComputeExpandedPositions(&layout_data, track_direction);
+  const auto& gutter_size = track_direction == kForColumns
+                                ? layout_data.Columns().GutterSize()
+                                : layout_data.Rows().GutterSize();
+
+  intersection_points.push_back(tracks[0]);
+  for (wtf_size_t i = 1; i < tracks.size() - 1; ++i) {
+    const auto start_offset = tracks[i] - gutter_size;
+    const auto end_offset = tracks[i];
+    GapFragmentData::GapBoundary gap_boundary(/*index=*/i, start_offset,
+                                              end_offset);
+    intersection_points.push_back((start_offset + end_offset) / 2.0f);
+    gap_geometry->AddGapBoundary(track_direction, gap_boundary);
+  }
+  intersection_points.push_back(tracks[tracks.size() - 1]);
+}
+
+void GridLayoutAlgorithm::PopulateGapIntersectionPoints(
+    const HeapVector<LayoutUnit>& intersection_points,
+    GapFragmentData::GapBoundaries& gap_boundaries) const {
+  for (auto& gap : gap_boundaries) {
+    gap.intersection_points = intersection_points;
+  }
+}
+
 void GridLayoutAlgorithm::PlaceOutOfFlowItems(
     const GridLayoutData& layout_data,
     const LayoutUnit block_size,
@@ -4028,13 +4056,20 @@ void GridLayoutAlgorithm::SetReadingFlowNodes(
     }
   };
 
+  Vector<const GridItemData*, 16> reordered_grid_items;
+  reordered_grid_items.ReserveInitialCapacity(grid_items.Size());
+  bool should_sort_by_reading_order = false;
+  for (const auto& grid_item : grid_items) {
+    reordered_grid_items.emplace_back(&grid_item);
+    // We optimize to only sort by reading-order if at least one item's value is
+    // not the default (0).
+    if (grid_item.node.Style().ReadingOrder() != 0) {
+      should_sort_by_reading_order = true;
+    }
+  }
+
   if (reading_flow == EReadingFlow::kGridRows ||
       reading_flow == EReadingFlow::kGridColumns) {
-    Vector<const GridItemData*, 16> reordered_grid_items;
-    reordered_grid_items.ReserveInitialCapacity(grid_items.Size());
-    for (const auto& grid_item : grid_items) {
-      reordered_grid_items.emplace_back(&grid_item);
-    }
     // We reorder grid items by their row/column indices.
     // If reading-flow is grid-rows, we should sort by row, then column.
     // If reading-flow is grid-columns, we should sort by column, then
@@ -4058,13 +4093,20 @@ void GridLayoutAlgorithm::SetReadingFlowNodes(
         };
     std::stable_sort(reordered_grid_items.begin(), reordered_grid_items.end(),
                      CompareGridItemsForReadingFlow);
-    for (const auto& grid_item : reordered_grid_items) {
-      AddItemIfNeeded(*grid_item);
-    }
-  } else {
-    for (const auto& grid_item : grid_items) {
-      AddItemIfNeeded(grid_item);
-    }
+  }
+  // After reading-flow ordering, items should still be sorted by reading-order.
+  if (should_sort_by_reading_order) {
+    auto CompareGridItemsForReadingOrder = [](const auto& lhs,
+                                              const auto& rhs) {
+      return lhs->node.Style().ReadingOrder() <
+             rhs->node.Style().ReadingOrder();
+    };
+    std::stable_sort(reordered_grid_items.begin(), reordered_grid_items.end(),
+                     CompareGridItemsForReadingOrder);
+  }
+
+  for (const auto& grid_item : reordered_grid_items) {
+    AddItemIfNeeded(*grid_item);
   }
   container_builder_.SetReadingFlowNodes(std::move(reading_flow_nodes));
 }

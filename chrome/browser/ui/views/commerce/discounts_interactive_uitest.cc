@@ -18,6 +18,8 @@
 #include "chrome/test/interaction/interactive_browser_test.h"
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/commerce/core/commerce_types.h"
+#include "components/commerce/core/feature_utils.h"
+#include "components/commerce/core/mock_account_checker.h"
 #include "components/commerce/core/mock_shopping_service.h"
 #include "components/commerce/core/test_utils.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
@@ -73,8 +75,10 @@ class DiscountsInteractiveTest : public InteractiveBrowserTest,
       enabled_features.emplace_back(GetParam().enabled_feature.value());
     }
 
-    feature_list_.InitWithFeaturesAndParameters(enabled_features,
-                                                /*disabled_features=*/{});
+    feature_list_.InitWithFeaturesAndParameters(
+        enabled_features,
+        /*disabled_features=*/{commerce::kPriceInsights,
+                               commerce::kProductSpecifications});
   }
   void SetUp() override {
     set_open_about_blank_on_browser_launch(true);
@@ -119,7 +123,12 @@ class DiscountsInteractiveTest : public InteractiveBrowserTest,
 
  private:
   void SetUpTabHelperAndShoppingService() {
-    ShoppingService()->SetIsDiscountEligibleToShowOnNavigation(true);
+    mock_account_checker_ = std::make_unique<commerce::MockAccountChecker>();
+    commerce::SetUpDiscountEligibilityForAccount(mock_account_checker_.get(),
+                                                 true);
+    ASSERT_TRUE(commerce::IsDiscountEligibleToShowOnNavigation(
+        mock_account_checker_.get()));
+    ShoppingService()->SetAccountChecker(mock_account_checker_.get());
 
     std::string detail =
         "10% off on laptop stands, valid for purchase of $40 or more";
@@ -140,6 +149,7 @@ class DiscountsInteractiveTest : public InteractiveBrowserTest,
   base::test::ScopedFeatureList feature_list_;
   base::CallbackListSubscription create_services_subscription_;
   commerce::DiscountInfo discount_info_;
+  std::unique_ptr<commerce::MockAccountChecker> mock_account_checker_;
   base::WeakPtrFactory<DiscountsInteractiveTest> weak_ptr_factory_{this};
 };
 
@@ -150,7 +160,9 @@ INSTANTIATE_TEST_SUITE_P(
     DiscountsIconViewInteractiveTest,
     testing::Values(
         TestData{"OfferLevelDiscounts",
-                 commerce::DiscountClusterType::kOfferLevel},
+                 commerce::DiscountClusterType::kOfferLevel,
+                 std::make_optional<base::test::FeatureRefAndParams>(
+                     {commerce::kEnableDiscountInfoApi, {}})},
         TestData{"PageLevelDiscounts",
                  commerce::DiscountClusterType::kPageLevel,
                  std::make_optional<base::test::FeatureRefAndParams>(
@@ -282,7 +294,9 @@ INSTANTIATE_TEST_SUITE_P(
     DiscountsBubbleDialogInteractiveTest,
     testing::Values(
         TestData{"OfferLevelDiscounts",
-                 commerce::DiscountClusterType::kOfferLevel},
+                 commerce::DiscountClusterType::kOfferLevel,
+                 std::make_optional<base::test::FeatureRefAndParams>(
+                     {commerce::kEnableDiscountInfoApi, {}})},
         TestData{"PageLevelDiscounts",
                  commerce::DiscountClusterType::kPageLevel,
                  std::make_optional<base::test::FeatureRefAndParams>(
@@ -333,12 +347,11 @@ IN_PROC_BROWSER_TEST_P(DiscountsBubbleDialogInteractiveTest,
 
 IN_PROC_BROWSER_TEST_P(DiscountsBubbleDialogInteractiveTest,
                        AccessibleNameChangedOnCopyButtonPress) {
-  static auto is_accessible_name_equal = [](views::MdTextButton* copy_button,
-                                            int expected_message_id) {
-    std::u16string expected_name =
-        copy_button->GetText() + u" " +
-        l10n_util::GetStringUTF16(expected_message_id);
-    return copy_button->GetViewAccessibility().GetCachedName() == expected_name;
+  static auto is_accessible_name_expected = [](views::MdTextButton* copy_button,
+                                               int expected_message_id) {
+    return copy_button->GetViewAccessibility().GetCachedName() ==
+           base::StrCat({copy_button->GetText(), u" ",
+                         l10n_util::GetStringUTF16(expected_message_id)});
   };
 
   RunTestSequence(
@@ -350,13 +363,13 @@ IN_PROC_BROWSER_TEST_P(DiscountsBubbleDialogInteractiveTest,
       WaitForShow(kDiscountsBubbleDialogId),
       CheckView(kDiscountsBubbleCopyButtonElementId,
                 base::BindOnce([&](views::MdTextButton* copy_button) {
-                  return is_accessible_name_equal(
+                  return is_accessible_name_expected(
                       copy_button, IDS_DISCOUNTS_COUPON_CODE_BUTTON_TOOLTIP);
                 })),
       PressButton(kDiscountsBubbleCopyButtonElementId),
       CheckView(kDiscountsBubbleCopyButtonElementId,
                 base::BindOnce([&](views::MdTextButton* copy_button) {
-                  return is_accessible_name_equal(
+                  return is_accessible_name_expected(
                       copy_button,
                       IDS_DISCOUNTS_COUPON_CODE_BUTTON_TOOLTIP_CLICKED);
                 })));
@@ -496,6 +509,7 @@ class DiscountDialogAutoPopupCounterfactual : public DiscountsInteractiveTest {
  public:
   DiscountDialogAutoPopupCounterfactual() {
     std::vector<base::test::FeatureRefAndParams> enabled_features = {
+        {commerce::kEnableDiscountInfoApi, {}},
         {commerce::kDiscountDialogAutoPopupBehaviorSetting,
          {{commerce::kMerchantWideBehaviorParam, "2"},
           {commerce::kNonMerchantWideBehaviorParam, "1"}}}};

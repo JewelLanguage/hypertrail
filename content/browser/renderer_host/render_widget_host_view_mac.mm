@@ -9,6 +9,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <tuple>
 #include <utility>
 
@@ -648,6 +649,10 @@ void RenderWidgetHostViewMac::DidEnterBackForwardCache() {
   host()->ForceFirstFrameAfterNavigationTimeout();
 }
 
+void RenderWidgetHostViewMac::ActivatedOrEvictedFromBackForwardCache() {
+  browser_compositor_->ActivatedOrEvictedFromBackForwardCache();
+}
+
 void RenderWidgetHostViewMac::SetIsLoading(bool is_loading) {
   is_loading_ = is_loading;
   // If we ever decide to show the waiting cursor while the page is loading
@@ -940,7 +945,7 @@ void AddTextNodesToVector(const ui::AXNode* node,
   }
 }
 
-using SpeechCallback = base::OnceCallback<void(const std::u16string&)>;
+using SpeechCallback = base::OnceCallback<void(std::u16string_view)>;
 void CombineTextNodesAndMakeCallback(SpeechCallback callback,
                                      ui::AXTreeUpdate& update) {
   std::vector<std::u16string> text_node_contents;
@@ -995,6 +1000,12 @@ void RenderWidgetHostViewMac::SetWindowFrameInScreen(const gfx::Rect& rect) {
   DCHECK(GetInProcessNSView() && ![GetInProcessNSView() window])
       << "This method should only be called in headless browser!";
   OnWindowFrameInScreenChanged(rect);
+
+  // Force screen info update because with no NSWindow in headless there is no
+  // notification to trigger it automatically. This ensures correct current
+  // screen association. Note the use of the generic variant of
+  // UpdateScreenInfo() that does not consider Cocoa provided screen info.
+  RenderWidgetHostViewBase::UpdateScreenInfo();
 }
 
 //

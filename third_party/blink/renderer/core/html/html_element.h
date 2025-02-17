@@ -76,7 +76,6 @@ enum class PopoverTriggerAction {
   kToggle,
   kShow,
   kHide,
-  kHover,
 };
 
 enum class HidePopoverFocusBehavior {
@@ -111,6 +110,7 @@ class CORE_EXPORT HTMLElement : public Element {
   HTMLElement(const QualifiedName& tag_name, Document&, ConstructionType);
 
   bool HasTagName(const HTMLQualifiedName& name) const {
+    DCHECK_EQ(name.NamespaceURI(), namespaceURI());
     return HasLocalName(name.LocalName());
   }
 
@@ -296,10 +296,6 @@ class CORE_EXPORT HTMLElement : public Element {
                                    Document&,
                                    HidePopoverFocusBehavior,
                                    HidePopoverTransitionBehavior);
-  // Popover hover triggering behavior.
-  bool IsNodePopoverDescendant(const Node& node) const;
-  void MaybeQueuePopoverHideEvent();
-  static void HoveredElementChanged(Element* old_element, Element* new_element);
 
   void SetImplicitAnchor(Element* element);
   Element* implicitAnchor() const;
@@ -322,6 +318,8 @@ class CORE_EXPORT HTMLElement : public Element {
   // See: crbug.com/1490919, https://open-ui.org/components/invokers.explainer/
   bool IsValidBuiltinCommand(HTMLElement& invoker,
                              CommandEventType command) override;
+  bool IsValidBuiltinPopoverCommand(HTMLElement& invoker,
+                                    CommandEventType command);
   bool HandleCommandInternal(HTMLElement& invoker,
                              CommandEventType command) override;
 

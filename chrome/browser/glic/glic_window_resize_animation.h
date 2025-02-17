@@ -12,27 +12,26 @@
 #include "ui/gfx/animation/linear_animation.h"
 #include "ui/gfx/geometry/rect_f.h"
 
-namespace views {
-class Widget;
-}  // namespace views
-
 namespace glic {
+
+class GlicWindowController;
+class GlicWindowAnimator;
 
 // This class controls the animation of the glic window from one size to
 // another. It has the following constraints that the caller must enforce:
 // * The glic window and glic view must outlive instances of this class.
 // * There can be at most 1 animation at any point in time.
-// This class will generally override any other changes to window size.
+// * Callbacks are posted when this object is destroyed and must remain valid
+// until they run. This class will generally override any other changes to
+// window size.
 class GlicWindowResizeAnimation : public gfx::LinearAnimation,
                                   public gfx::AnimationDelegate {
  public:
-  // The caller is expected to destroy GlicWindowResizeAnimation upon receiving
-  // FinishedCallback. FinishedCallback is always invoked asynchronously.
-  using FinishedCallback = base::OnceClosure;
-  GlicWindowResizeAnimation(views::Widget* widget,
-                            gfx::Size new_size,
+  GlicWindowResizeAnimation(GlicWindowController* window_controller,
+                            GlicWindowAnimator* window_animator,
+                            const gfx::Rect& target_bounds,
                             base::TimeDelta duration,
-                            FinishedCallback finished_callback);
+                            base::OnceClosure destruction_callback);
   GlicWindowResizeAnimation(const GlicWindowResizeAnimation&) = delete;
   GlicWindowResizeAnimation& operator=(const GlicWindowResizeAnimation&) =
       delete;
@@ -41,11 +40,23 @@ class GlicWindowResizeAnimation : public gfx::LinearAnimation,
   void AnimateToState(double state) override;
   void AnimationEnded(const Animation* animation) override;
 
+  // Change the target position only and add `callback` to the list of callbacks
+  // to be run on destruction.
+  void UpdateTargetPosition(const gfx::Point& point,
+                            base::OnceClosure callback);
+
+  // Change the target size only and add `callback` to the list of callbacks to
+  // be run on destruction.
+  void UpdateTargetSize(const gfx::Size& size, base::OnceClosure callback);
+
  private:
-  const raw_ptr<views::Widget> widget_;
-  const gfx::Size initial_size_;
-  const gfx::Size new_size_;
-  FinishedCallback finished_callback_;
+  // GlicWindowAnimator owns GlicWindowResizeAnimation
+  // and will outlive it
+  const raw_ptr<GlicWindowController> window_controller_;
+  const raw_ptr<GlicWindowAnimator> glic_window_animator_;
+  const gfx::Rect initial_bounds_;
+  gfx::Rect new_bounds_;
+  std::unique_ptr<base::OnceClosureList> destruction_callbacks_;
   base::WeakPtrFactory<GlicWindowResizeAnimation> weak_ptr_factory_{this};
 };
 

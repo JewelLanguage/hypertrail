@@ -16,7 +16,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import android.app.Activity;
+import android.view.View;
 import android.view.Window;
+import android.view.WindowInsetsController;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -37,6 +39,8 @@ public class EdgeToEdgeManagerUnitTest {
 
     @Mock Activity mActivity;
     @Mock Window mWindow;
+    @Mock View mDecorView;
+    @Mock WindowInsetsController mWindowInsetsController;
     @Mock EdgeToEdgeStateProvider mEdgeToEdgeStateProvider;
     @Mock SystemBarColorHelper mSystemBarColorHelper;
 
@@ -46,6 +50,8 @@ public class EdgeToEdgeManagerUnitTest {
     @Before
     public void setup() {
         doReturn(mWindow).when(mActivity).getWindow();
+        doReturn(mDecorView).when(mWindow).getDecorView();
+        doReturn(mWindowInsetsController).when(mDecorView).getWindowInsetsController();
 
         mSystemBarColorHelperSupplier = new OneshotSupplierImpl<>();
         mSystemBarColorHelperSupplier.set(mSystemBarColorHelper);
@@ -56,7 +62,8 @@ public class EdgeToEdgeManagerUnitTest {
                 mActivity,
                 mEdgeToEdgeStateProvider,
                 mSystemBarColorHelperSupplier,
-                shouldDrawEdgeToEdge);
+                shouldDrawEdgeToEdge,
+                /* canColorStatusBarColor= */ true);
     }
 
     @Test
@@ -75,12 +82,14 @@ public class EdgeToEdgeManagerUnitTest {
     public void testShouldDrawEdgeToEdge() {
         mEdgeToEdgeManager = createEdgeToEdgeManager(/* shouldDrawEdgeToEdge= */ true);
         verify(mEdgeToEdgeStateProvider, atLeastOnce()).acquireSetDecorFitsSystemWindowToken();
+        assertFalse(mEdgeToEdgeManager.shouldContentFitsWindowInsets());
     }
 
     @Test
     public void testShouldNotDrawEdgeToEdge() {
         mEdgeToEdgeManager = createEdgeToEdgeManager(/* shouldDrawEdgeToEdge= */ false);
         verify(mEdgeToEdgeStateProvider, never()).acquireSetDecorFitsSystemWindowToken();
+        assertTrue(mEdgeToEdgeManager.shouldContentFitsWindowInsets());
     }
 
     @Test
@@ -92,7 +101,8 @@ public class EdgeToEdgeManagerUnitTest {
                         mActivity,
                         mEdgeToEdgeStateProvider,
                         systemBarColorHelperSupplier,
-                        /* shouldDrawEdgeToEdge= */ true);
+                        /* shouldDrawEdgeToEdge= */ true,
+                        /* canColorStatusBarColor= */ true);
 
         assertNull(
                 edgeToEdgeManager
@@ -116,7 +126,8 @@ public class EdgeToEdgeManagerUnitTest {
                         mActivity,
                         mEdgeToEdgeStateProvider,
                         systemBarColorHelperSupplier,
-                        /* shouldDrawEdgeToEdge= */ true);
+                        /* shouldDrawEdgeToEdge= */ false,
+                        /* canColorStatusBarColor= */ true);
         assertTrue(
                 "The manager should have been initialized with the content fitting the window"
                         + " insets.",
@@ -131,6 +142,25 @@ public class EdgeToEdgeManagerUnitTest {
         assertTrue(
                 "The content should be fitting the window.",
                 edgeToEdgeManager.getContentFitsWindowInsetsSupplier().get());
+    }
+
+    @Test
+    public void testCanColorStatusBarColorIsFalse() {
+        EdgeToEdgeManager edgeToEdgeManager =
+                new EdgeToEdgeManager(
+                        mActivity,
+                        mEdgeToEdgeStateProvider,
+                        mSystemBarColorHelperSupplier,
+                        /* shouldDrawEdgeToEdge= */ true,
+                        /* canColorStatusBarColor= */ false);
+
+        assertNotNull(edgeToEdgeManager.getEdgeToEdgeStateProvider());
+        assertNotNull(edgeToEdgeManager.getEdgeToEdgeSystemBarColorHelper());
+        assertEquals(
+                mSystemBarColorHelper,
+                edgeToEdgeManager
+                        .getEdgeToEdgeSystemBarColorHelper()
+                        .getEdgeToEdgeDelegateHelperForTesting());
     }
 
     @Test

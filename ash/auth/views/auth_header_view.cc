@@ -4,6 +4,8 @@
 
 #include "ash/auth/views/auth_header_view.h"
 
+#include <string_view>
+
 #include "ash/ash_export.h"
 #include "ash/login/ui/animated_rounded_image_view.h"
 #include "ash/login/ui/non_accessible_view.h"
@@ -50,7 +52,7 @@ AuthHeaderView::TestApi::~TestApi() = default;
 AuthHeaderView::Observer::Observer() = default;
 AuthHeaderView::Observer::~Observer() = default;
 
-const std::u16string& AuthHeaderView::TestApi::GetCurrentTitle() const {
+std::u16string_view AuthHeaderView::TestApi::GetCurrentTitle() const {
   return view_->title_label_->GetText();
 }
 
@@ -141,8 +143,9 @@ void AuthHeaderView::SetErrorTitle(const std::u16string& error_str) {
   title_label_->SetEnabledColorId(kTitleErrorColorId);
   NotifyTitleChanged(error_str);
   title_label_->GetViewAccessibility().SetName(error_str);
-  title_label_->NotifyAccessibilityEvent(ax::mojom::Event::kTextChanged,
-                                         /*send_native_event=*/true);
+  title_label_->NotifyAccessibilityEventDeprecated(
+      ax::mojom::Event::kTextChanged,
+      /*send_native_event=*/true);
   title_label_->GetViewAccessibility().AnnounceText(error_str);
 }
 

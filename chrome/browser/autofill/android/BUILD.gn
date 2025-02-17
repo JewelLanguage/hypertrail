@@ -18,6 +18,8 @@ android_library("third_party_provider_java") {
   sources = [ "java/src/org/chromium/chrome/browser/autofill/AutofillThirdPartyModeContentProvider.java" ]
   deps = [
     "//base:base_java",
+    "//base:base_shared_preferences_java",
+    "//chrome/browser/preferences:java",
     "//third_party/android_deps:com_android_support_support_annotations_java",
   ]
 }
@@ -85,6 +87,7 @@ android_library("java") {
     "//components/autofill/android:autofill_java_resources",
     "//components/autofill/android:autofill_payments_java_resources",
     "//components/autofill/android:main_autofill_java",
+    "//components/autofill/android:payments_interfaces_java",
     "//components/browser_ui/settings/android:java",
     "//components/browser_ui/styles/android:java",
     "//components/browser_ui/styles/android:java_resources",
@@ -177,6 +180,7 @@ android_library("test_java") {
   resources_package = "org.chromium.chrome.browser.autofill"
 
   sources = [
+    "javatest/src/org/chromium/chrome/browser/autofill/AutofillThirdPartyModeContentProviderIntegrationTest.java",
     "javatest/src/org/chromium/chrome/browser/autofill/editors/AddressEditorRenderTest.java",
     "javatest/src/org/chromium/chrome/browser/autofill/editors/DropdownFieldViewTest.java",
   ]
@@ -202,6 +206,7 @@ android_library("test_java") {
     "//components/sync/android:sync_java",
     "//content/public/test/android:content_java_test_support",
     "//third_party/android_deps:material_design_java",
+    "//third_party/androidx:androidx_test_core_java",
     "//third_party/androidx:androidx_test_rules_java",
     "//third_party/androidx:androidx_test_runner_java",
     "//third_party/hamcrest:hamcrest_java",

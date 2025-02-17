@@ -8,9 +8,11 @@
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/glic/glic_pref_names.h"
+#include "chrome/browser/glic/glic_test_util.h"
 #include "chrome/browser/glic/launcher/glic_launcher_configuration.h"
 #include "chrome/browser/global_features.h"
 #include "chrome/browser/status_icons/status_tray.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/keep_alive_registry/keep_alive_registry.h"
@@ -32,6 +34,10 @@ class GlicBackgroundModeManagerBrowserTest : public InProcessBrowserTest {
         {features::kGlic, features::kTabstripComboButton}, {});
     InProcessBrowserTest::SetUp();
   }
+  void SetUpOnMainThread() override {
+    InProcessBrowserTest::SetUpOnMainThread();
+    ForceSigninAndModelExecutionCapability(browser()->profile());
+  }
 
   void TearDownOnMainThread() override {
     // Disable glic so that the glic_background_mode_manager won't prevent the
@@ -43,18 +49,14 @@ class GlicBackgroundModeManagerBrowserTest : public InProcessBrowserTest {
   bool IsHotkeySupported() {
     auto* const global_shortcut_listener =
         ui::GlobalAcceleratorListener::GetInstance();
-    return global_shortcut_listener != nullptr;
+    return global_shortcut_listener != nullptr &&
+           !global_shortcut_listener->IsRegistrationHandledExternally();
   }
 
   void RegisterHotkey(ui::Accelerator updated_hotkey) {
-    auto hotkey_dictionary =
-        base::Value::Dict()
-            .Set(GlicLauncherConfiguration::kHotkeyKeyCode,
-                 updated_hotkey.key_code())
-            .Set(GlicLauncherConfiguration::kHotkeyModifiers,
-                 updated_hotkey.modifiers());
-    g_browser_process->local_state()->SetDict(prefs::kGlicLauncherGlobalHotkey,
-                                              std::move(hotkey_dictionary));
+    g_browser_process->local_state()->SetString(
+        prefs::kGlicLauncherHotkey,
+        ui::Command::AcceleratorToString(updated_hotkey));
   }
 
  private:
@@ -103,10 +105,16 @@ IN_PROC_BROWSER_TEST_F(GlicBackgroundModeManagerBrowserTest,
                                                true);
   GlicBackgroundModeManager* const manager =
       g_browser_process->GetFeatures()->glic_background_mode_manager();
-  EXPECT_EQ(ui::Accelerator(ui::VKEY_G, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN),
+  EXPECT_EQ(ui::Accelerator(ui::VKEY_G,
+#if BUILDFLAG(IS_MAC)
+                            ui::EF_CONTROL_DOWN
+#else
+                            ui::EF_ALT_DOWN
+#endif
+                            ),
             manager->RegisteredHotkeyForTesting());
 
-  ui::Accelerator updated_hotkey(ui::VKEY_A, ui::EF_SHIFT_DOWN);
+  ui::Accelerator updated_hotkey(ui::VKEY_A, ui::EF_CONTROL_DOWN);
   RegisterHotkey(updated_hotkey);
   EXPECT_EQ(updated_hotkey, manager->RegisteredHotkeyForTesting());
 }
@@ -124,7 +132,7 @@ IN_PROC_BROWSER_TEST_F(GlicBackgroundModeManagerBrowserTest,
 
   // If the hotkey pref were to somehow change even while glic was disabled,
   // the manager should not register the hotkey.
-  ui::Accelerator updated_hotkey(ui::VKEY_A, ui::EF_SHIFT_DOWN);
+  ui::Accelerator updated_hotkey(ui::VKEY_A, ui::EF_CONTROL_DOWN);
   RegisterHotkey(updated_hotkey);
   EXPECT_TRUE(manager->RegisteredHotkeyForTesting().IsEmpty());
 
@@ -147,5 +155,26 @@ IN_PROC_BROWSER_TEST_F(GlicBackgroundModeManagerBrowserTest,
   ui::Accelerator updated_hotkey(ui::VKEY_A, ui::EF_NONE);
   RegisterHotkey(updated_hotkey);
   EXPECT_NE(updated_hotkey, manager->RegisteredHotkeyForTesting());
+}
+
+IN_PROC_BROWSER_TEST_F(GlicBackgroundModeManagerBrowserTest,
+                       SuspendShortcutAndRegisterAccelerator) {
+  if (!IsHotkeySupported()) {
+    GTEST_SKIP() << "Test does not apply to this platform.";
+  }
+  g_browser_process->local_state()->SetBoolean(prefs::kGlicLauncherEnabled,
+                                               true);
+  GlicBackgroundModeManager* const manager =
+      g_browser_process->GetFeatures()->glic_background_mode_manager();
+
+  auto* const global_accelerator_listener =
+      ui::GlobalAcceleratorListener::GetInstance();
+  global_accelerator_listener->SetShortcutHandlingSuspended(true);
+  ui::Accelerator updated_hotkey(ui::VKEY_A,
+                                 ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
+  RegisterHotkey(updated_hotkey);
+
+  EXPECT_EQ(updated_hotkey, manager->RegisteredHotkeyForTesting());
+  EXPECT_TRUE(global_accelerator_listener->IsShortcutHandlingSuspended());
 }
 }  // namespace glic

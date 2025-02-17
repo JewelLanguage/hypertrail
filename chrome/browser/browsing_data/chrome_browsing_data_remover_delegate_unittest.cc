@@ -41,7 +41,6 @@
 #include "base/time/time.h"
 #include "base/uuid.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/autocomplete/zero_suggest_cache_service_factory.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/autofill/strike_database_factory.h"
@@ -221,18 +220,24 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #else
 #include "base/task/current_thread.h"
+#include "chrome/browser/new_tab_page/microsoft_auth/microsoft_auth_service.h"
+#include "chrome/browser/new_tab_page/microsoft_auth/microsoft_auth_service_factory.h"
+#include "chrome/browser/ui/webui/ntp_microsoft_auth/ntp_microsoft_auth_untrusted_ui.mojom.h"
 #include "chrome/browser/user_education/browser_user_education_storage_service.h"
 #include "chrome/browser/user_education/user_education_service.h"
 #include "chrome/browser/user_education/user_education_service_factory.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/common/webui_url_constants.h"
 #include "components/lens/lens_features.h"
+#include "components/search/ntp_features.h"
 #include "components/services/storage/public/mojom/local_storage_control.mojom.h"
 #include "components/services/storage/public/mojom/storage_usage_info.mojom.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "third_party/blink/public/mojom/dom_storage/storage_area.mojom.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#if !BUILDFLAG(IS_ANDROID)
 #include "base/test/test_future.h"
 #include "chrome/browser/ui/web_applications/test/isolated_web_app_test_utils.h"
 #include "chrome/browser/web_applications/isolated_web_apps/commands/get_controlled_frame_partition_command.h"
@@ -244,15 +249,15 @@
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chromeos/ash/components/dbus/attestation/fake_attestation_client.h"
-#include "chromeos/dbus/tpm_manager/fake_tpm_manager_client.h"  // nogncheck
+#include "chromeos/dbus/tpm_manager/fake_tpm_manager_client.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/scoped_user_manager.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 #include "components/crash/core/app/crashpad.h"
@@ -485,7 +490,7 @@ class RemoveHistoryTester {
     base::RunLoop run_loop;
     base::CancelableTaskTracker tracker;
     history_service_->QueryURL(
-        url, true,
+        url, /*want_visits=*/false,
         base::BindLambdaForTesting([&](history::QueryURLResult result) {
           contains_url = result.success;
           run_loop.Quit();
@@ -1201,9 +1206,9 @@ class ChromeBrowsingDataRemoverDelegateTest : public testing::Test {
     nacl_browser_delegate_.Init(profile_manager_->profile_manager());
 #endif  // BUILDFLAG(ENABLE_NACL)
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#if !BUILDFLAG(IS_ANDROID)
     web_app::test::AwaitStartWebAppProviderAndSubsystems(profile_.get());
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
     remover_ = profile_->GetBrowsingDataRemover();
 
@@ -1230,9 +1235,9 @@ class ChromeBrowsingDataRemoverDelegateTest : public testing::Test {
             std::make_unique<TestWebappRegistry>());
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     chromeos::TpmManagerClient::InitializeFake();
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
   }
 
   void TearDown() override {
@@ -1661,7 +1666,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
   EXPECT_FALSE(tester.ContainsCookie());
 }
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#if !BUILDFLAG(IS_ANDROID)
 TEST_F(ChromeBrowsingDataRemoverDelegateTest, ClearWebAppData) {
   auto* provider = web_app::FakeWebAppProvider::Get(GetProfile());
   ASSERT_TRUE(provider);
@@ -1901,7 +1906,7 @@ TEST_F(IsolatedWebAppChromeBrowsingDataRemoverDelegateTest,
                       iwa_url_info.storage_partition_config(GetProfile())},
           RemovalInfo{DATA_TYPE_INDEXED_DB, controlled_frame_partition}));
 }
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveHistoryForever) {
   RemoveHistoryTester tester;
@@ -2644,7 +2649,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, ZeroSuggestInMemoryCacheClear) {
 }
 #endif  // !BUILDFLAG(IS_ANDROID)
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 TEST_F(ChromeBrowsingDataRemoverDelegateTest,
        ContentProtectionPlatformKeysRemoval) {
   auto user_manager = std::make_unique<ash::FakeChromeUserManager>();
@@ -4111,7 +4116,7 @@ class ChromeBrowsingDataRemoverDelegateWithAccountPasswordsTest
 #endif
   }
 
-  void OptInToAccountStorage() {
+  void EnableAccountStorage() {
     sync_service()->SetSignedIn(
 #if BUILDFLAG(IS_ANDROID)
         signin::ConsentLevel::kSync
@@ -4119,7 +4124,7 @@ class ChromeBrowsingDataRemoverDelegateWithAccountPasswordsTest
         signin::ConsentLevel::kSignin
 #endif
     );
-    ASSERT_TRUE(password_manager::features_util::IsOptedInForAccountStorage(
+    ASSERT_TRUE(password_manager::features_util::IsAccountStorageEnabled(
         GetProfile()->GetPrefs(), sync_service()));
   }
 };
@@ -4132,7 +4137,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateWithAccountPasswordsTest,
        DisableAutoSignInAfterRemovingPasswords) {
   // Set up the necessary futures for account and profile PasswordStores, so the
   // the test can wait for them later.
-  OptInToAccountStorage();
+  EnableAccountStorage();
   TestFuture<base::OnceClosure> profile_auto_signin_cb, account_auto_signin_cb;
   TestFuture<base::OnceCallback<void(bool)>> account_remove_cb;
   TestFuture<base::OnceCallback<void(bool)>> account_sync_cb;
@@ -4407,6 +4412,60 @@ TEST_F(
                               content::BrowsingDataRemover::DATA_TYPE_COOKIES,
                               std::move(filter_builder));
 }
+
+#if !BUILDFLAG(IS_ANDROID)
+// Ensures New Tab page local storage is clear when Microsoft auth service
+// exists.
+TEST_F(ChromeBrowsingDataRemoverDelegateTest, ClearNewTabPageLocalStorage) {
+  // Setup features that allows auth service to be created.
+  base::test::ScopedFeatureList features;
+  GetProfile()->GetTestingPrefService()->SetManagedPref(
+      prefs::kNtpSharepointModuleVisible, base::Value(true));
+  features.InitWithFeatures(
+      /*enabled_features=*/{ntp_features::kNtpMicrosoftAuthenticationModule,
+                            ntp_features::kNtpSharepointModule},
+      /*disabled_features=*/{});
+
+  // Set auth service access token.
+  new_tab_page::mojom::AccessTokenPtr access_token =
+      new_tab_page::mojom::AccessToken::New();
+  access_token->token = "1234";
+  access_token->expiration = base::Time::Now() + base::Minutes(20);
+  auto* auth_service = MicrosoftAuthServiceFactory::GetForProfile(GetProfile());
+  ASSERT_TRUE(auth_service);
+  auth_service->SetAccessToken(std::move(access_token));
+
+  // Create local storage with fake data.
+  auto* local_storage_control =
+      GetProfile()->GetDefaultStoragePartition()->GetLocalStorageControl();
+  mojo::Remote<blink::mojom::StorageArea> area;
+  blink::StorageKey key = blink::StorageKey::CreateFromStringForTesting(
+      chrome::kChromeUINewTabPageURL);
+  local_storage_control->BindStorageArea(key,
+                                         area.BindNewPipeAndPassReceiver());
+  base::test::TestFuture<bool> put_future;
+  area->Put({'k', 'e', 'y'}, {'v', 'a', 'l', 'u', 'e'}, std::nullopt, "source",
+            put_future.GetCallback());
+  ASSERT_TRUE(put_future.Get());
+
+  // Verify fake data has been persisted into local storage.
+  base::test::TestFuture<std::vector<storage::mojom::StorageUsageInfoPtr>>
+      usage_future;
+  local_storage_control->GetUsage(usage_future.GetCallback());
+  EXPECT_EQ(usage_future.Get().size(), 1u);
+
+  // Clear local storage.
+  BlockUntilBrowsingDataRemoved(base::Time::Now(), base::Time::Max(),
+                                content::BrowsingDataRemover::DATA_TYPE_COOKIES,
+                                false);
+
+  // Verify local storage and auth data has been cleared.
+  usage_future.Clear();
+  local_storage_control->GetUsage(usage_future.GetCallback());
+  EXPECT_EQ(usage_future.Get().size(), 0u);
+  EXPECT_TRUE(auth_service->GetAccessToken().empty());
+}
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 class ChromeBrowsingDataRemoverDelegateOriginTrialsTest
     : public ChromeBrowsingDataRemoverDelegateTest {

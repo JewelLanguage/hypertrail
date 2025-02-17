@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ash/app_restore/full_restore_service.h"
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
@@ -28,7 +29,6 @@
 #include "base/check_is_test.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/trace_event/trace_event.h"
 #include "base/version.h"
@@ -66,6 +66,7 @@
 #include "components/app_restore/window_info.h"
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/url_formatter/url_formatter.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -579,8 +580,8 @@ void FullRestoreService::InitInformedRestoreContentsData(
   // Sort the windows based on their activation index (more recent windows
   // have a lower index). Windows without an activation index can be placed at
   // the end.
-  base::ranges::sort(complete_window_list, [](const WindowAppData& element_a,
-                                              const WindowAppData& element_b) {
+  std::ranges::sort(complete_window_list, [](const WindowAppData& element_a,
+                                             const WindowAppData& element_b) {
     return element_a.app_restore_data->window_info.activation_index.value_or(
                INT_MAX) <
            element_b.app_restore_data->window_info.activation_index.value_or(
@@ -893,19 +894,27 @@ void FullRestoreService::OnSessionInformationReceived(
 
         // Use the tab title if possible. If no tab title is available and it is
         // a chrome WebUI, use the host piece (history, extensions, etc.).
-        // Otherwise we will default to the app title, "Chrome".
+        // Otherwise we will use the formatted url as tab title.
         std::string tab_title = base::UTF16ToUTF8(entry.title());
-        if (tab_title.empty() &&
-            entry.original_request_url().SchemeIs(content::kChromeUIScheme)) {
-          tab_title = entry.original_request_url().host_piece();
+        const GURL& url = entry.original_request_url();
+        if (tab_title.empty()) {
+          if (url.SchemeIs(content::kChromeUIScheme)) {
+            tab_title = url.host_piece();
+          } else {
+            tab_title = base::UTF16ToUTF8(url_formatter::FormatUrl(
+                entry.virtual_url().is_empty() ? url : entry.virtual_url(),
+                url_formatter::kFormatUrlOmitDefaults |
+                    url_formatter::kFormatUrlOmitTrivialSubdomains |
+                    url_formatter::kFormatUrlOmitHTTPS,
+                base::UnescapeRule::SPACES, nullptr, nullptr, nullptr));
+          }
         }
 
         if (active_tab_title.empty()) {
           active_tab_title = tab_title;
         }
 
-        tab_infos.push_back(InformedRestoreContentsData::TabInfo(
-            entry.original_request_url(), tab_title));
+        tab_infos.emplace_back(url, tab_title);
       }
     };
 

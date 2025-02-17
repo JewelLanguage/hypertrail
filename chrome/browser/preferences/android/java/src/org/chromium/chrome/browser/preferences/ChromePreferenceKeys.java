@@ -10,6 +10,7 @@ import static org.chromium.components.browser_ui.site_settings.SingleCategorySet
 
 import org.chromium.base.shared_preferences.KeyPrefix;
 import org.chromium.build.annotations.CheckDiscard;
+import org.chromium.build.annotations.NullMarked;
 
 import java.util.Arrays;
 import java.util.List;
@@ -17,36 +18,32 @@ import java.util.List;
 /**
  * Contains String and {@link KeyPrefix} constants with the SharedPreferences keys used by Chrome.
  *
- * All Chrome layer SharedPreferences keys should be declared in this class.
+ * <p>All Chrome layer SharedPreferences keys should be declared in this class.
  *
- * To add a new key:
- * 1. Declare it as a String constant in this class. Its value should follow the format
- *    "Chrome.[Feature].[Key]" and the constants names should be in alphabetical order.
- * 2. Add it to {@link #getKeysInUse()}.
+ * <p>To add a new key: 1. Declare it as a String constant in this class. Its value should follow
+ * the format "Chrome.[Feature].[Key]" and the constants names should be in alphabetical order. 2.
+ * Add it to {@link #getKeysInUse()}.
  *
- * To deprecate a key that is not used anymore:
- * 1. Add its constant value to {@link DeprecatedChromePreferenceKeys#getKeysForTesting()}, in
- * alphabetical order by value.
- * 2. Remove the key from {@link #getKeysInUse()} or {@link
- * LegacyChromePreferenceKeys#getKeysInUse()}.
- * 3. Delete the constant.
+ * <p>To deprecate a key that is not used anymore: 1. Add its constant value to {@link
+ * DeprecatedChromePreferenceKeys#getKeysForTesting()}, in alphabetical order by value. 2. Remove
+ * the key from {@link #getKeysInUse()} or {@link LegacyChromePreferenceKeys#getKeysInUse()}. 3.
+ * Delete the constant.
  *
- * To add a new KeyPrefix:
- * 1. Declare it as a KeyPrefix constant in this class. Its value should follow the format
- *    "Chrome.[Feature].[KeyPrefix].*" and the constants names should be in alphabetical order.
- * 2. Add PREFIX_CONSTANT.pattern() to {@link #getKeysInUse()}}.
+ * <p>To add a new KeyPrefix: 1. Declare it as a KeyPrefix constant in this class. Its value should
+ * follow the format "Chrome.[Feature].[KeyPrefix].*" and the constants names should be in
+ * alphabetical order. 2. Add PREFIX_CONSTANT.pattern() to {@link #getKeysInUse()}}.
  *
- * To deprecate a KeyPrefix that is not used anymore:
- * 1. Add its String value to {@link DeprecatedChromePreferenceKeys#getPrefixesForTesting()},
- * including the ".*", in alphabetical order by value.
- * 2. Remove it from {@link #getKeysInUse()} or {@link
- * LegacyChromePreferenceKeys#getPrefixesInUse()}.
- * 3. Delete the KeyPrefix constant.
+ * <p>To deprecate a KeyPrefix that is not used anymore: 1. Add its String value to {@link
+ * DeprecatedChromePreferenceKeys#getPrefixesForTesting()}, including the ".*", in alphabetical
+ * order by value. 2. Remove it from {@link #getKeysInUse()} or {@link
+ * LegacyChromePreferenceKeys#getPrefixesInUse()}. 3. Delete the KeyPrefix constant.
  *
- * Tests in ChromePreferenceKeysTest and checks in {@link StrictPreferenceKeyChecker} ensure the
+ * <p>Tests in ChromePreferenceKeysTest and checks in {@link StrictPreferenceKeyChecker} ensure the
  * validity of this file.
  */
+@NullMarked
 public final class ChromePreferenceKeys {
+
     /** Whether the current adaptive toolbar customization is enabled. */
     public static final String ADAPTIVE_TOOLBAR_CUSTOMIZATION_ENABLED =
             "Chrome.AdaptiveToolbarCustomization.Enabled";
@@ -54,6 +51,10 @@ public final class ChromePreferenceKeys {
     /** The current adaptive toolbar customization setting in the preferences. */
     public static final String ADAPTIVE_TOOLBAR_CUSTOMIZATION_SETTINGS =
             "Chrome.AdaptiveToolbarCustomization.Settings";
+
+    public static final String ADDRESS_BAR_SETTINGS_CLICKED = "Chrome.AddressBar.SettingsClicked";
+    public static final String ADDRESS_BAR_SETTINGS_VIEW_COUNT =
+            "Chrome.AddressBar.SettingsViewCount";
 
     /** The language code to override application language with. */
     public static final String APPLICATION_OVERRIDE_LANGUAGE =
@@ -110,6 +111,9 @@ public final class ChromePreferenceKeys {
     /** Whether users have responded to the opt in card. */
     public static final String AUXILIARY_SEARCH_MODULE_USER_RESPONDED =
             "Chrome.AuxiliarySearchModule.UserResponded";
+
+    public static final String AUTOFILL_THIRD_PARTY_MODE_STATE =
+            "Chrome.AutofillThirdPartyMode.State";
 
     public static final String BACKUP_FIRST_BACKUP_DONE = "first_backup_done";
 
@@ -561,6 +565,13 @@ public final class ChromePreferenceKeys {
             new KeyPrefix("Chrome.HomeModules.FreshnessScoreTimeStamp.*");
 
     /**
+     * The number at the end should be consistent with {@link
+     * org.chromium.chrome.browser.magic_stack.ModuleDelegate.ModuleType}
+     */
+    public static final KeyPrefix HOME_MODULES_IMPRESSION_COUNT_BEFORE_INTERACTION =
+            new KeyPrefix("Chrome.HomeModules.ImpressionCountBeforeInteraction.*");
+
+    /**
      * Save the timestamp of the last time that we record metrics on whether user enables the price
      * tracking annotations.
      */
@@ -739,13 +750,6 @@ public final class ChromePreferenceKeys {
     public static final String SIGNIN_ACCOUNT_RENAME_EVENT_INDEX =
             "prefs_sync_account_rename_event_index";
 
-    /** SyncPromo Show Count preference. */
-    public static final KeyPrefix SYNC_PROMO_SHOW_COUNT =
-            new KeyPrefix("Chrome.SyncPromo.ShowCount.*");
-
-    /** SyncPromo total shown count preference across all access points. */
-    public static final String SYNC_PROMO_TOTAL_SHOW_COUNT = "Chrome.SyncPromo.TotalShowCount";
-
     public static final String SIGNIN_PROMO_LAST_SHOWN_ACCOUNT_NAMES =
             "signin_promo_last_shown_account_names";
     public static final String SIGNIN_PROMO_LAST_SHOWN_MAJOR_VERSION =
@@ -767,6 +771,17 @@ public final class ChromePreferenceKeys {
 
     /** Personalized signin promo preference. */
     public static final String SIGNIN_PROMO_BOOKMARKS_DECLINED = "signin_promo_bookmarks_declined";
+
+    /** Preferece recording whether the signin promo in the History page has been dismissed. */
+    public static final String SIGNIN_PROMO_HISTORY_PAGE_DECLINED =
+            "Chrome.SigninPromoHistoryPage.Declined";
+
+    /** SyncPromo Show Count preference. */
+    public static final KeyPrefix SYNC_PROMO_SHOW_COUNT =
+            new KeyPrefix("Chrome.SyncPromo.ShowCount.*");
+
+    /** SyncPromo total shown count preference across all access points. */
+    public static final String SYNC_PROMO_TOTAL_SHOW_COUNT = "Chrome.SyncPromo.TotalShowCount";
 
     // TODO(crbug.com/40697988): Remove this after migrating the legacy code that uses
     //                                  the primary account before the native is loaded.
@@ -910,9 +925,8 @@ public final class ChromePreferenceKeys {
     public static final String USB_NOTIFICATION_IDS = "Chrome.USB.NotificationIds";
 
     /**
-     * These values are currently used as SharedPreferences keys, along with the keys in
-     * {@link LegacyChromePreferenceKeys#getKeysInUse()}. Add new SharedPreferences keys
-     * here.
+     * These values are currently used as SharedPreferences keys, along with the keys in {@link
+     * LegacyChromePreferenceKeys#getKeysInUse()}. Add new SharedPreferences keys here.
      *
      * @return The list of [keys in use] conforming to the format.
      */
@@ -921,8 +935,11 @@ public final class ChromePreferenceKeys {
         return Arrays.asList(
                 ADAPTIVE_TOOLBAR_CUSTOMIZATION_ENABLED,
                 ADAPTIVE_TOOLBAR_CUSTOMIZATION_SETTINGS,
+                ADDRESS_BAR_SETTINGS_CLICKED,
+                ADDRESS_BAR_SETTINGS_VIEW_COUNT,
                 AUTOFILL_ASSISTANT_FIRST_TIME_LITE_SCRIPT_USER,
                 AUTOFILL_ASSISTANT_PROACTIVE_HELP_ENABLED,
+                AUTOFILL_THIRD_PARTY_MODE_STATE,
                 AUXILIARY_SEARCH_CONSUMER_SCHEMA_FOUND,
                 AUXILIARY_SEARCH_MODULE_USER_RESPONDED,
                 AUXILIARY_SEARCH_MODULE_IMPRESSION,
@@ -961,6 +978,7 @@ public final class ChromePreferenceKeys {
                 DEVICE_LOCK_SHOW_ALERT_IF_REMOVED,
                 DOWNLOAD_INTERSTITIAL_DOWNLOAD_PENDING_REMOVAL,
                 DSE_NEW_TAB_URL,
+                HOME_MODULES_IMPRESSION_COUNT_BEFORE_INTERACTION.pattern(),
                 EXPLORE_OFFLINE_CONTENT_AVAILABILITY_STATUS,
                 FIRST_RUN_SKIPPED_BY_POLICY,
                 FLAGS_LAST_CACHED_MINIMAL_BROWSER_FLAGS_TIME_MILLIS,
@@ -1040,6 +1058,7 @@ public final class ChromePreferenceKeys {
                 SHARING_LAST_SHARED_COMPONENT_NAME,
                 SHARING_TABS_WITH_OS,
                 SYNC_PROMO_SHOW_COUNT.pattern(),
+                SIGNIN_PROMO_HISTORY_PAGE_DECLINED,
                 SIGNIN_PROMO_NTP_FIRST_SHOWN_TIME,
                 SIGNIN_PROMO_NTP_LAST_SHOWN_TIME,
                 SYNC_PROMO_TOTAL_SHOW_COUNT,

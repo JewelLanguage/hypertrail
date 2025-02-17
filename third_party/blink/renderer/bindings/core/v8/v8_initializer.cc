@@ -329,6 +329,10 @@ void V8Initializer::PromiseRejectHandlerInMainThread(
 void V8Initializer::ExceptionPropagationCallback(
     v8::ExceptionPropagationMessage v8_message) {
   v8::Isolate* isolate = v8_message.GetIsolate();
+  if (V8PerIsolateData::From(isolate)->OmitExceptionContextInformation()) {
+    return;
+  }
+
   v8::Local<v8::Object> exception = v8_message.GetException();
 
   v8::ExceptionContext context_type = v8_message.GetExceptionContext();
@@ -399,11 +403,9 @@ static void PromiseRejectHandlerInWorker(v8::PromiseRejectMessage data) {
 // static
 void V8Initializer::FailedAccessCheckCallbackInMainThread(
     v8::Local<v8::Object> holder,
-    v8::AccessType type,
-    v8::Local<v8::Value> data) {
-  BindingSecurity::FailedAccessCheckFor(
-      holder->GetIsolate(), WrapperTypeInfo::Unwrap(data), holder,
-      PassThroughException(holder->GetIsolate()));
+    v8::AccessType,
+    v8::Local<v8::Value>) {
+  BindingSecurity::FailedAccessCheckFor(holder);
 }
 
 // Check whether Content Security Policy allows script execution.
@@ -926,7 +928,8 @@ v8::Isolate* V8Initializer::InitializeMainThread() {
   v8::Isolate* isolate = V8PerIsolateData::Initialize(
       scheduler->V8TaskRunner(), scheduler->V8UserVisibleTaskRunner(),
       scheduler->V8BestEffortTaskRunner(), snapshot_mode,
-      create_histogram_callback, add_histogram_sample_callback);
+      create_histogram_callback, add_histogram_sample_callback,
+      ThreadState::Current()->ReleaseCppHeap());
   scheduler->SetV8Isolate(isolate);
 
   // ThreadState::isolate_ needs to be set before setting the EmbedderHeapTracer

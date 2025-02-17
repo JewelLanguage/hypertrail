@@ -4,10 +4,10 @@
 
 #include "chromeos/ash/experiences/arc/chrome_feature_flags/arc_chrome_feature_flags_bridge.h"
 
-#include "ash/components/arc/arc_features.h"
 #include "ash/constants/ash_features.h"
 #include "base/memory/raw_ptr.h"
 #include "base/test/scoped_feature_list.h"
+#include "chromeos/ash/experiences/arc/arc_features.h"
 #include "chromeos/ash/experiences/arc/session/arc_bridge_service.h"
 #include "chromeos/ash/experiences/arc/session/arc_service_manager.h"
 #include "chromeos/ash/experiences/arc/test/fake_chrome_feature_flags_instance.h"
@@ -120,20 +120,6 @@ TEST_F(ArcChromeFeatureFlagsBridgeTest, NotifyRoundedWindows_Disabled) {
       chromeos::features::kRoundedWindows);
   Connect();
   EXPECT_EQ(instance()->flags_called_value()->rounded_window_radius, 0);
-}
-
-TEST_F(ArcChromeFeatureFlagsBridgeTest, NotifyPipDoubleTapToResize_Enabled) {
-  scoped_feature_list()->InitAndEnableFeature(
-      ash::features::kPipDoubleTapToResize);
-  Connect();
-  EXPECT_TRUE(instance()->flags_called_value()->enable_pip_double_tap);
-}
-
-TEST_F(ArcChromeFeatureFlagsBridgeTest, NotifyPipDoubleTapToResize_Disabled) {
-  scoped_feature_list()->InitAndDisableFeature(
-      ash::features::kPipDoubleTapToResize);
-  Connect();
-  EXPECT_FALSE(instance()->flags_called_value()->enable_pip_double_tap);
 }
 
 TEST_F(ArcChromeFeatureFlagsBridgeTest, NotifyResizeCompat_Enabled) {

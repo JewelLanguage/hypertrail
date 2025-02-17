@@ -50,7 +50,7 @@ enum UIDisplayDisposition {
   AUTOMATIC_ADD_USERNAME_BUBBLE = 17,
   MANUAL_ADD_USERNAME_BUBBLE = 18,
   AUTOMATIC_RELAUNCH_CHROME_BUBBLE = 19,
-  AUTOMATIC_DEFAULT_STORE_CHANGED_BUBBLE = 20,
+  // Deprecated: AUTOMATIC_DEFAULT_STORE_CHANGED_BUBBLE = 20,
   AUTOMATIC_PASSKEY_SAVED_CONFIRMATION = 21,
   AUTOMATIC_PASSKEY_DELETED_CONFIRMATION = 22,
   MANUAL_PASSKEY_DELETED_CONFIRMATION = 23,
@@ -85,6 +85,7 @@ enum UIDismissalReason {
   CLICKED_PASSWORDS_DASHBOARD = 12,
   CLICKED_MANAGE_PASSWORD = 13,
   CLICKED_GOT_IT = 14,
+  CLICKED_ABOUT_PASSWORD_CHANGE = 15,
   NUM_UI_RESPONSES,
 };
 
@@ -632,23 +633,6 @@ enum class PasswordAccessLossWarningUserActions {
   kHelpCenter = 1,
   kDismissed = 2,
   kMaxValue = kDismissed,
-};
-
-// Represents different causes for showing the password migration warning.
-//
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused. Always keep this enum in sync with the
-// corresponding PasswordMigrationWarningTriggers in enums.xml.
-// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.pwd_migration
-enum class PasswordMigrationWarningTriggers {
-  kChromeStartup = 0,
-  kPasswordSaveUpdateMessage = 1,
-  kPasswordSettings = 2,
-  kTouchToFill = 3,
-  kKeyboardAcessorySheet = 4,
-  kKeyboardAcessoryBar = 5,
-  kAllPasswords = 6,
-  kMaxValue = kAllPasswords,
 };
 
 // These values are persisted to logs. Entries should not be renumbered and

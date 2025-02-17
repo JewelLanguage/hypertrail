@@ -15,6 +15,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
 #include "components/optimization_guide/core/model_execution/feature_keys.h"
+#include "components/optimization_guide/core/model_execution/multimodal_message.h"
 #include "components/optimization_guide/core/model_execution/on_device_context.h"
 #include "components/optimization_guide/core/model_execution/on_device_model_feature_adapter.h"
 #include "components/optimization_guide/core/model_execution/optimization_guide_model_execution_error.h"
@@ -46,7 +47,8 @@ void InvokeStreamingCallbackWithRemoteResult(
 
 // The state for an ongoing ExecuteModel() call.
 class OnDeviceExecution final
-    : public on_device_model::mojom::StreamingResponder {
+    : public on_device_model::mojom::StreamingResponder,
+      public on_device_model::mojom::ContextClient {
  public:
   // Possible outcomes of ExecuteModel().
   // These values are persisted to logs. Entries should not be renumbered and
@@ -117,7 +119,7 @@ class OnDeviceExecution final
       ModelBasedCapabilityKey feature,
       OnDeviceOptions opts,
       ExecuteRemoteFn execute_remote_fn,
-      std::unique_ptr<google::protobuf::MessageLite> message,
+      MultimodalMessage message,
       std::unique_ptr<ResultLogger> logger,
       OptimizationGuideModelExecutionResultStreamingCallback callback,
       base::OnceCallback<void(bool)> cleanup_callback);
@@ -143,16 +145,21 @@ class OnDeviceExecution final
 
   // Callback invoked with RequestSafetyCheck result.
   // Calls BeginRequestExecution if safety checks pass.
-  void OnRequestSafetyResult(on_device_model::mojom::InputOptionsPtr options,
+  void OnRequestSafetyResult(on_device_model::mojom::GenerateOptionsPtr options,
                              SafetyChecker::Result safety_result);
 
   // Begins request execution (leads to OnResponse/OnComplete, which will
   // call RunRawOutputSafetyCheck).
-  void BeginRequestExecution(on_device_model::mojom::InputOptionsPtr options);
+  void BeginRequestExecution(
+      on_device_model::mojom::GenerateOptionsPtr options);
 
   // on_device_model::mojom::StreamingResponder:
   void OnResponse(on_device_model::mojom::ResponseChunkPtr chunk) override;
   void OnComplete(on_device_model::mojom::ResponseSummaryPtr summary) override;
+
+  // on_device_model::mojom::ContextClient:
+  void OnComplete(uint32_t tokens_processed) override;
+
   void OnResponderDisconnect();
 
   // Evaluates raw output safety (leads to OnRawOutputSafetyResult).
@@ -221,7 +228,7 @@ class OnDeviceExecution final
   mojo::Remote<on_device_model::mojom::Session> session_;
 
   // The request message.
-  std::unique_ptr<google::protobuf::MessageLite> last_message_;
+  MultimodalMessage last_message_;
   // Time ExecuteModel() was called.
   base::TimeTicks start_;
   // Used to log the result of ExecuteModel().
@@ -264,7 +271,8 @@ class OnDeviceExecution final
   // Should pass true to indicate healthy completion, or false if unhealthy.
   base::OnceCallback<void(bool)> cleanup_callback_;
 
-  mojo::Receiver<on_device_model::mojom::StreamingResponder> receiver_;
+  mojo::Receiver<on_device_model::mojom::StreamingResponder> receiver_{this};
+  mojo::Receiver<on_device_model::mojom::ContextClient> context_receiver_{this};
 
   // Factory for weak pointers related to this session that are invalidated
   // with the request state.

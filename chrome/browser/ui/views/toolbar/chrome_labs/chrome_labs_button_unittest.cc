@@ -16,7 +16,7 @@
 #include "chrome/browser/ui/views/toolbar/chrome_labs/chrome_labs_bubble_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/browser/unexpire_flags.h"
-#include "components/flags_ui/feature_entry_macros.h"
+#include "components/webui/flags/feature_entry_macros.h"
 #include "ui/events/event_utils.h"
 #include "ui/views/controls/dot_indicator.h"
 #include "ui/views/test/button_test_api.h"
@@ -168,7 +168,7 @@ class ChromeLabsButtonTestSafeMode : public ChromeLabsButtonTest {
 };
 
 TEST_F(ChromeLabsButtonTestSafeMode, ButtonShouldNotShowTest) {
-  EXPECT_EQ(browser_view()->toolbar()->GetChromeLabsButton(), nullptr);
+  EXPECT_FALSE(browser_view()->toolbar()->GetChromeLabsButton()->GetVisible());
 }
 
 class ChromeLabsButtonTestSecondaryUser : public ChromeLabsButtonTest {
@@ -184,7 +184,7 @@ class ChromeLabsButtonTestSecondaryUser : public ChromeLabsButtonTest {
 };
 
 TEST_F(ChromeLabsButtonTestSecondaryUser, ButtonShouldNotShowTest) {
-  EXPECT_EQ(browser_view()->toolbar()->GetChromeLabsButton(), nullptr);
+  EXPECT_FALSE(browser_view()->toolbar()->GetChromeLabsButton()->GetVisible());
 }
 
 #endif

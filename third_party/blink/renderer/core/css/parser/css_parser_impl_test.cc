@@ -19,6 +19,7 @@
 #include "third_party/blink/renderer/core/css/style_rule.h"
 #include "third_party/blink/renderer/core/css/style_rule_font_feature_values.h"
 #include "third_party/blink/renderer/core/css/style_rule_font_palette_values.h"
+#include "third_party/blink/renderer/core/css/style_rule_function_declarations.h"
 #include "third_party/blink/renderer/core/css/style_rule_import.h"
 #include "third_party/blink/renderer/core/css/style_rule_nested_declarations.h"
 #include "third_party/blink/renderer/core/css/style_sheet_contents.h"
@@ -64,6 +65,7 @@ class TestCSSParserObserver : public CSSParserObserver {
                        bool is_parsed) override {
     if (IsAtTargetLevel()) {
       property_start_ = start_offset;
+      property_end_ = end_offset;
     }
   }
   void ObserveComment(unsigned start_offset, unsigned end_offset) override {}
@@ -88,6 +90,7 @@ class TestCSSParserObserver : public CSSParserObserver {
 
   StyleRule::RuleType rule_type_ = StyleRule::RuleType::kStyle;
   unsigned property_start_ = 0;
+  unsigned property_end_ = 0;
   unsigned rule_header_start_ = 0;
   unsigned rule_header_end_ = 0;
   unsigned rule_body_start_ = 0;
@@ -545,6 +548,21 @@ TEST(CSSParserImplTest, ObserveNestedLayer) {
   EXPECT_EQ(test_css_parser_observer.rule_header_end_, 53u);
   EXPECT_EQ(test_css_parser_observer.rule_body_start_, 54u);
   EXPECT_EQ(test_css_parser_observer.rule_body_end_, 82u);
+}
+
+TEST(CSSParserImplTest, ObserveInvalidImportant) {
+  test::TaskEnvironment task_environment;
+  String sheet_text = ".element { font-size: 10px !imp; }";
+
+  auto* context = MakeGarbageCollected<CSSParserContext>(
+      kHTMLStandardMode, SecureContextMode::kInsecureContext);
+  auto* sheet = MakeGarbageCollected<StyleSheetContents>(context);
+  TestCSSParserObserver test_css_parser_observer;
+  CSSParserImpl::ParseStyleSheetForInspector(sheet_text, context, sheet,
+                                             test_css_parser_observer);
+
+  EXPECT_EQ(test_css_parser_observer.property_start_, 11u);
+  EXPECT_EQ(test_css_parser_observer.property_end_, 31u);
 }
 
 TEST(CSSParserImplTest, NestedIdent) {
@@ -1156,6 +1174,7 @@ TEST(CSSParserImplTest, CSSFunction) {
 
   String sheet_text = R"CSS(
     @function --foo() returns <color> {
+      --local: green;
       result: red;
     }
   )CSS";
@@ -1172,12 +1191,18 @@ TEST(CSSParserImplTest, CSSFunction) {
   const HeapVector<Member<StyleRuleBase>>& child_rules = rule->ChildRules();
   ASSERT_EQ(1u, child_rules.size());
 
-  const auto* nested_declarations =
-      DynamicTo<StyleRuleNestedDeclarations>(child_rules.front().Get());
-  ASSERT_TRUE(nested_declarations);
+  const auto* function_declarations =
+      DynamicTo<StyleRuleFunctionDeclarations>(child_rules.front().Get());
+  ASSERT_TRUE(function_declarations);
 
-  const CSSPropertyValueSet& properties = nested_declarations->Properties();
-  ASSERT_EQ(1u, properties.PropertyCount());
+  const CSSPropertyValueSet& properties = function_declarations->Properties();
+  ASSERT_EQ(2u, properties.PropertyCount());
+
+  const auto* local = DynamicTo<CSSUnparsedDeclarationValue>(
+      properties.GetPropertyCSSValue(AtomicString("--local")));
+  ASSERT_TRUE(local);
+
+  EXPECT_EQ("green", local->VariableDataValue()->OriginalText());
 
   const auto* result = DynamicTo<CSSUnparsedDeclarationValue>(
       properties.GetPropertyCSSValue(CSSPropertyID::kResult));
@@ -1239,7 +1264,7 @@ TEST(CSSParserImplTest, AllPropertiesCanParseImportant) {
   }
 
   // So that we don't introduce more, or break the entire test inadvertently.
-  EXPECT_EQ(broken_properties, 18);
+  EXPECT_EQ(broken_properties, 17);
 }
 
 TEST(CSSParserImplTest, ParseSupportsBlinkFeature) {

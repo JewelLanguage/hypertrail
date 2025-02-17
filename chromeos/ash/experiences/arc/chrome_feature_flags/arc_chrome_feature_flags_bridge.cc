@@ -4,12 +4,12 @@
 
 #include "chromeos/ash/experiences/arc/chrome_feature_flags/arc_chrome_feature_flags_bridge.h"
 
-#include "ash/components/arc/arc_browser_context_keyed_service_factory_base.h"
-#include "ash/components/arc/arc_features.h"
 #include "ash/constants/ash_features.h"
 #include "base/feature_list.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/field_trial_params.h"
+#include "chromeos/ash/experiences/arc/arc_browser_context_keyed_service_factory_base.h"
+#include "chromeos/ash/experiences/arc/arc_features.h"
 #include "chromeos/ash/experiences/arc/session/arc_bridge_service.h"
 #include "chromeos/ash/experiences/arc/session/arc_service_manager.h"
 #include "chromeos/constants/chromeos_features.h"
@@ -87,7 +87,7 @@ void ArcChromeFeatureFlagsBridge::NotifyFeatureFlags() {
                                          kLeftRightBottomGesture)))
           : mojom::RoundedWindowCompatStrategy::kDisabled;
   flags->rounded_window_radius = chromeos::features::RoundedWindowsRadius();
-  flags->enable_pip_double_tap = ash::features::IsPipDoubleTapToResizeEnabled();
+  flags->enable_pip_double_tap = true;
   flags->render_arc_notifications_by_chrome =
       ash::features::IsRenderArcNotificationsByChromeEnabled();
   flags->resize_compat = base::FeatureList::IsEnabled(arc::kResizeCompat);

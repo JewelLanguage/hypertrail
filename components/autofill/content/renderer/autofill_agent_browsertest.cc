@@ -591,6 +591,51 @@ TEST_F(AutofillAgentTestExtractLabeledTextNodeValue,
                                                callback.Get());
 }
 
+// This test checks if latency metrics record as failure case when
+// the final checkout amount is not found.
+TEST_F(AutofillAgentTestExtractLabeledTextNodeValue,
+       ExtractLabeledTextNodeValueIsNotFound_Renderer_Latency_Metrics) {
+  base::HistogramTester histogram_tester;
+  LoadHTML(R"(
+    <body>
+      <div>
+        <span>I'm not a total amount keyword</span>
+        <div>I'm not a total amount</div>
+      </div>
+    </body>)");
+  Callback callback;
+  EXPECT_CALL(callback, Run(Eq("")));
+  autofill_agent().ExtractLabeledTextNodeValue(u"^.448.60$", u"^Total$", 4,
+                                               callback.Get());
+  // Check the failure case records amount extraction latency spent in renderer
+  // in ms
+  histogram_tester.ExpectTotalCount(
+      "Autofill.RendererLabeledAmountExtractionLatency.Success", 0);
+  histogram_tester.ExpectTotalCount(
+      "Autofill.RendererLabeledAmountExtractionLatency.Failure", 1);
+}
+
+// This test checks if latency metrics record as success case when
+// the final checkout amount is found.
+TEST_F(AutofillAgentTestExtractLabeledTextNodeValue,
+       ExtractLabeledTextNodeValueIsFound_Renderer_Latency_Metrics) {
+  base::HistogramTester histogram_tester;
+  LoadHTML(R"(
+  <div>
+    <div>Total: <span>$56.70</span></div>
+  </div>)");
+  Callback callback;
+  EXPECT_CALL(callback, Run(Eq("$56.70")));
+  autofill_agent().ExtractLabeledTextNodeValue(u"^\\$56\\.70$", u"^Total:", 2,
+                                               callback.Get());
+  // Check the success case records amount extraction latency spent in renderer
+  // in ms
+  histogram_tester.ExpectTotalCount(
+      "Autofill.RendererLabeledAmountExtractionLatency.Success", 1);
+  histogram_tester.ExpectTotalCount(
+      "Autofill.RendererLabeledAmountExtractionLatency.Failure", 0);
+}
+
 class AutofillAgentTestExtractForms : public AutofillAgentTestWithFeatures {
  public:
   using Callback = base::MockCallback<
@@ -716,8 +761,7 @@ TEST_F(AutofillAgentTest, PreviewThenClear) {
     </form>
   )");
 
-  blink::WebVector<blink::WebFormElement> forms =
-      GetDocument().GetTopLevelForms();
+  std::vector<blink::WebFormElement> forms = GetDocument().GetTopLevelForms();
   ASSERT_EQ(1U, forms.size());
   FormData form = *form_util::ExtractFormData(
       forms[0].GetDocument(), forms[0],
@@ -1246,7 +1290,7 @@ TEST_P(AutofillAgentSubmissionTest,
       kCallTimerStateDummy);
   ASSERT_TRUE(form.has_value());
 
-  blink::WebVector<blink::WebFormControlElement> field_elements =
+  std::vector<blink::WebFormControlElement> field_elements =
       form_element.GetFormControlElements();
 
   for (const blink::WebFormControlElement& field_element : field_elements) {

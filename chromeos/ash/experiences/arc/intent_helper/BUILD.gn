@@ -4,6 +4,19 @@
 
 assert(is_chromeos)
 
+static_library("intent_filter") {
+  sources = [
+    "intent_constants.h",
+    "intent_filter.cc",
+    "intent_filter.h",
+  ]
+
+  deps = [
+    "//base",
+    "//url",
+  ]
+}
+
 static_library("intent_helper") {
   sources = [
     "activity_icon_loader.cc",
@@ -19,17 +32,14 @@ static_library("intent_helper") {
     "control_camera_app_delegate.h",
     "custom_tab.cc",
     "custom_tab.h",
-    "intent_constants.cc",
-    "intent_constants.h",
-    "intent_filter.cc",
-    "intent_filter.h",
     "link_handler_model.cc",
     "link_handler_model.h",
     "open_url_delegate.h",
   ]
 
   public_deps = [
-    "//ash/components/arc:prefs",
+    ":intent_filter",
+    "//chromeos/ash/experiences/arc:prefs",
     "//ui/aura",
     "//ui/views",
   ]
@@ -39,11 +49,11 @@ static_library("intent_helper") {
 
   deps = [
     ":arc_intent_helper_constants",
-    "//ash/components/arc",
-    "//ash/components/arc:arc_metrics_constants",
-    "//ash/components/arc/mojom",
     "//ash/public/cpp",
     "//base",
+    "//chromeos/ash/experiences/arc",
+    "//chromeos/ash/experiences/arc:arc_metrics_constants",
+    "//chromeos/ash/experiences/arc/mojom",
     "//chromeos/ash/experiences/arc/session",
     "//components/exo",
     "//components/google/core/common",
@@ -70,8 +80,8 @@ source_set("unit_tests") {
   deps = [
     ":arc_intent_helper_constants",
     ":intent_helper",
-    "//ash/components/arc/mojom",
     "//base/test:test_support",
+    "//chromeos/ash/experiences/arc/mojom",
     "//chromeos/ash/experiences/arc/session",
     "//testing/gtest",
     "//ui/aura:test_support",

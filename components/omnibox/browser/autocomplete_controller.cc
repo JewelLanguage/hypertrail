@@ -30,7 +30,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/observer_list.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -287,7 +286,7 @@ AutocompleteMatch::RichAutocompletionType TopMatchRichAutocompletionType(
         match.relevance);
   };
 
-  auto top_match = base::ranges::max_element(result, {}, get_sort_key);
+  auto top_match = std::ranges::max_element(result, {}, get_sort_key);
   return top_match->rich_autocompletion_triggered;
 }
 
@@ -462,10 +461,6 @@ void AutocompleteController::ExtendMatchSubtypes(
     }
     case AutocompleteMatchType::HISTORY_BODY: {
       subtypes->emplace(omnibox::SUBTYPE_OMNIBOX_HISTORY_BODY);
-      break;
-    }
-    case AutocompleteMatchType::HISTORY_KEYWORD: {
-      subtypes->emplace(omnibox::SUBTYPE_OMNIBOX_HISTORY_KEYWORD);
       break;
     }
     case AutocompleteMatchType::BOOKMARK_TITLE: {
@@ -860,13 +855,14 @@ void AutocompleteController::OnProviderUpdate(
   if (last_update_type_ == UpdateType::kNone)
     return;
 
-  // Allow history embedding answers to trigger updates after `stop_timer_` has
-  // fired.
+  // Allow history embedding answers and unscoped extension suggestions to
+  // trigger updates after `stop_timer_` has fired.
   // TODO(crbug.com/364303536) This is a temporary fix for allowing history
   //   embedding answers to `UpdateResults()` after `stop_timer_` has fired.
   bool allow_post_done_updates =
       provider &&
-      provider->type() == AutocompleteProvider::TYPE_HISTORY_EMBEDDINGS;
+      (provider->type() == AutocompleteProvider::TYPE_HISTORY_EMBEDDINGS ||
+       provider->type() == AutocompleteProvider::TYPE_UNSCOPED_EXTENSION);
 
   // Providers shouldn't be running and calling `OnProviderUpdate()` after
   // autocompletion has stopped.
@@ -886,7 +882,7 @@ void AutocompleteController::OnProviderUpdate(
 
   if (done_state == ProviderDoneState::kAllDone) {
     size_t calculator_count =
-        base::ranges::count_if(published_result_, [](const auto& match) {
+        std::ranges::count_if(published_result_, [](const auto& match) {
           return match.type == AutocompleteMatchType::CALCULATOR;
         });
     UMA_HISTOGRAM_COUNTS_100("Omnibox.NumCalculatorMatches", calculator_count);
@@ -1145,9 +1141,24 @@ bool AutocompleteController::ShouldRunProvider(
 
   // Some providers should only run in starter pack mode or in the CrOS
   // launcher. If we reach here, we're not in starter pack mode.
+  // TODO(crbug.com/384540016): Check policy field instead of finch param
+  // after policy is handled.
+  bool should_run_search_aggregator_provider =
+      template_url_service_ &&
+      template_url_service_->GetEnterpriseSearchAggregatorEngine() &&
+      !omnibox_feature_configs::SearchAggregatorProvider::Get()
+           .require_shortcut;
+
   switch (provider->type()) {
     case AutocompleteProvider::TYPE_ENTERPRISE_SEARCH_AGGREGATOR:
-      return false;
+      return should_run_search_aggregator_provider;
+
+    // Document provider suggestions are redundant with the enterprise search
+    // aggregator provider suggestions, which can be configured to provide
+    // Google Drive suggestions.
+    case AutocompleteProvider::TYPE_DOCUMENT:
+      return !should_run_search_aggregator_provider;
+
     case AutocompleteProvider::TYPE_OPEN_TAB:
       return is_cros_launcher_;
 #if !BUILDFLAG(IS_IOS)
@@ -1208,7 +1219,7 @@ void AutocompleteController::InitializeAsyncProviders(int provider_types) {
   if (provider_types &
       AutocompleteProvider::TYPE_ENTERPRISE_SEARCH_AGGREGATOR) {
     providers_.push_back(
-        new EnterpriseSearchAggregatorProvider(provider_client_.get()));
+        new EnterpriseSearchAggregatorProvider(provider_client_.get(), this));
   }
   if (provider_types & AutocompleteProvider::TYPE_ON_DEVICE_HEAD) {
     on_device_head_provider_ =
@@ -2069,7 +2080,7 @@ void AutocompleteController::RunBatchUrlScoringModel(OldResult& old_result) {
   // would be scored independently with their partial signals.
   internal_result_.DeduplicateMatches(input_, template_url_service_);
 
-  size_t eligible_matches_count = base::ranges::count_if(
+  size_t eligible_matches_count = std::ranges::count_if(
       internal_result_.matches_,
       [](const auto& match) { return match.IsMlScoringEligible(); });
 
@@ -2268,7 +2279,7 @@ void AutocompleteController::RunBatchUrlScoringModelMappedSearchBlending(
     }
     scores_pool.push_back(match.relevance);
   }
-  base::ranges::sort(scores_pool, std::greater<>());
+  std::ranges::sort(scores_pool, std::greater<>());
 
   // Avoid duplicate scores by ensuring that no two URL suggestions are assigned
   // the same score.
@@ -2284,8 +2295,8 @@ void AutocompleteController::RunBatchUrlScoringModelMappedSearchBlending(
     prediction_and_position_heap.push_back(
         {prediction.value_or(0), scored_positions[i]});
   }
-  base::ranges::stable_sort(prediction_and_position_heap, std::greater<>(),
-                            [](const auto& pair) { return pair.first; });
+  std::ranges::stable_sort(prediction_and_position_heap, std::greater<>(),
+                           [](const auto& pair) { return pair.first; });
 
   // Assign the finalized relevance scores to each URL suggestion in order of
   // priority (i.e. ML score).
@@ -2431,7 +2442,7 @@ void AutocompleteController::
     }
     scores_pool.push_back(match.relevance);
   }
-  base::ranges::sort(scores_pool, std::greater<>());
+  std::ranges::sort(scores_pool, std::greater<>());
 
   // Avoid duplicate scores by ensuring that no two URL suggestions are assigned
   // the same score.
@@ -2447,8 +2458,8 @@ void AutocompleteController::
     prediction_and_position_heap.push_back(
         {prediction.value_or(0), scored_positions[i]});
   }
-  base::ranges::stable_sort(prediction_and_position_heap, std::greater<>(),
-                            [](const auto& pair) { return pair.first; });
+  std::ranges::stable_sort(prediction_and_position_heap, std::greater<>(),
+                           [](const auto& pair) { return pair.first; });
 
   // Assign the finalized relevance scores to each URL suggestion in order of
   // priority (i.e. ML score).
@@ -2474,7 +2485,7 @@ void AutocompleteController::MaybeRemoveCompanyEntityImages(
     history_domain = GetDomain(*result->match_at(0));
   }
 
-  auto iter = base::ranges::find_if(result->matches_, [](const auto& match) {
+  auto iter = std::ranges::find_if(result->matches_, [](const auto& match) {
     return match.type == AutocompleteMatchType::SEARCH_SUGGEST_ENTITY;
   });
   if (iter == result->matches_.end()) {

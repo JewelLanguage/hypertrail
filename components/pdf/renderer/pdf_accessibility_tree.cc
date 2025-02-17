@@ -21,7 +21,6 @@
 #include "base/memory/raw_ref.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "components/pdf/renderer/pdf_accessibility_tree_builder.h"
@@ -55,7 +54,7 @@
 
 namespace pdf {
 
-namespace ranges = base::ranges;
+namespace ranges = std::ranges;
 
 namespace {
 
@@ -437,10 +436,7 @@ void PdfAccessibilityTree::DoSetAccessibilityViewportInfo(
   scroll_ = gfx::PointF(viewport_info.scroll).OffsetFromOrigin();
   offset_ = gfx::PointF(viewport_info.offset).OffsetFromOrigin();
   orientation_ = viewport_info.orientation;
-  selection_start_page_index_ = viewport_info.selection_start_page_index;
-  selection_start_char_index_ = viewport_info.selection_start_char_index;
-  selection_end_page_index_ = viewport_info.selection_end_page_index;
-  selection_end_char_index_ = viewport_info.selection_end_char_index;
+  selection_ = viewport_info.selection;
 
   auto obj = GetPluginContainerAXObject();
   if (obj && tree_.size() > 1) {
@@ -841,17 +837,17 @@ void PdfAccessibilityTree::UpdateAXTreeDataFromSelection() {
   }
 
   tree_data_.sel_is_backward = false;
-  if (selection_start_page_index_ > selection_end_page_index_) {
+  if (selection_.start.page_index > selection_.end.page_index) {
     tree_data_.sel_is_backward = true;
-  } else if (selection_start_page_index_ == selection_end_page_index_ &&
-             selection_start_char_index_ > selection_end_char_index_) {
+  } else if (selection_.start.page_index == selection_.end.page_index &&
+             selection_.start.char_index > selection_.end.char_index) {
     tree_data_.sel_is_backward = true;
   }
 
-  FindNodeOffset(selection_start_page_index_, selection_start_char_index_,
+  FindNodeOffset(selection_.start.page_index, selection_.start.char_index,
                  &tree_data_.sel_anchor_object_id,
                  &tree_data_.sel_anchor_offset);
-  FindNodeOffset(selection_end_page_index_, selection_end_char_index_,
+  FindNodeOffset(selection_.end.page_index, selection_.end.char_index,
                  &tree_data_.sel_focus_object_id, &tree_data_.sel_focus_offset);
 }
 
@@ -1209,7 +1205,7 @@ void PdfAccessibilityTree::OnOcrDataReceived(
                   ax::mojom::IntListAttribute::kCharacterOffsets);
 
           float ratio = static_cast<float>(new_width) / original_width;
-          base::ranges::for_each(character_offsets, [ratio](int32_t& offset) {
+          std::ranges::for_each(character_offsets, [ratio](int32_t& offset) {
             offset = static_cast<int32_t>(offset * ratio);
           });
           node_from_ocr.AddIntListAttribute(

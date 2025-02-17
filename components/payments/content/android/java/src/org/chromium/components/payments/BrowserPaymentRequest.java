@@ -112,26 +112,32 @@ public interface BrowserPaymentRequest {
 
     /**
      * Notifies the payment UI service of the payment apps pending to be handled
+     *
      * @param pendingApps The payment apps that are pending to be handled.
      */
     void notifyPaymentUiOfPendingApps(List<PaymentApp> pendingApps);
 
     /**
-     * Called when these conditions are satisfied: (1) show() has been called, (2) payment apps
-     * are all queried, and (3) PaymentDetails is finalized.
+     * Called when the merchant requested Secure Payment Confirmation (SPC), but no credentials have
+     * been found.
+     *
+     * @return Returns true if SPC is supported and enabled (e.g., in Chrome). Returns false if SPC
+     *     is not supported or disabled (e.g., in WebView).
+     */
+    default boolean showNoMatchingPaymentCredential() {
+        return false;
+    }
+
+    /**
+     * Called when these conditions are satisfied: (1) show() has been called, (2) payment apps are
+     * all queried, and (3) PaymentDetails is finalized.
+     *
      * @return The error if it fails; null otherwise.
      */
     @Nullable
     default String onShowCalledAndAppsQueriedAndDetailsFinalized() {
         return null;
     }
-
-    /**
-     * Called when a new payment app is created.
-     * @param paymentApp The new payment app.
-     * @return True if the payment app should be used; false if it should be ignored.
-     */
-    boolean onPaymentAppCreated(PaymentApp paymentApp);
 
     /**
      * Patches the given payment response if needed.
@@ -214,4 +220,22 @@ public interface BrowserPaymentRequest {
     default boolean isContactSectionVisible() {
         return false;
     }
+
+    /**
+     * @return A dialog controller for displaying informational or warning messages.
+     */
+    DialogController getDialogController();
+
+    /**
+     * @return The site certificate chain of the web contents where PaymentRequest API was invoked.
+     *     Can return null when ANDROID_PAYMENT_INTENTS_OMIT_DEPRECATED_PARAMETERS is enabled or
+     *     when the page is localhost or is a file.
+     */
+    @Nullable
+    byte[][] getCertificateChain();
+
+    /**
+     * @return The launcher for Android intent-based payment app.
+     */
+    AndroidIntentLauncher getAndroidIntentLauncher();
 }

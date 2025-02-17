@@ -25,7 +25,6 @@
 #import "components/enterprise/connectors/core/connectors_prefs.h"
 #import "components/enterprise/idle/idle_pref_names.h"
 #import "components/feed/core/v2/public/ios/pref_names.h"
-#import "components/flags_ui/pref_service_flags_storage.h"
 #import "components/handoff/handoff_manager.h"
 #import "components/history/core/common/pref_names.h"
 #import "components/invalidation/impl/fcm_invalidation_service.h"
@@ -42,7 +41,6 @@
 #import "components/omnibox/browser/zero_suggest_provider.h"
 #import "components/optimization_guide/core/model_execution/model_execution_prefs.h"
 #import "components/optimization_guide/core/optimization_guide_prefs.h"
-#import "components/optimization_guide/optimization_guide_buildflags.h"
 #import "components/password_manager/core/browser/password_manager.h"
 #import "components/password_manager/core/common/password_manager_pref_names.h"
 #import "components/payments/core/payment_prefs.h"
@@ -81,6 +79,8 @@
 #import "components/update_client/update_client.h"
 #import "components/variations/service/variations_service.h"
 #import "components/web_resource/web_resource_pref_names.h"
+#import "components/webui/chrome_urls/pref_names.h"
+#import "components/webui/flags/pref_service_flags_storage.h"
 #import "ios/chrome/app/spotlight/spotlight_util.h"
 #import "ios/chrome/app/variations_app_state_agent.h"
 #import "ios/chrome/browser/authentication/ui_bundled/history_sync/history_sync_utils.h"
@@ -89,6 +89,7 @@
 #import "ios/chrome/browser/bookmarks/ui_bundled/bookmark_mediator.h"
 #import "ios/chrome/browser/bookmarks/ui_bundled/bookmark_path_cache.h"
 #import "ios/chrome/browser/bookmarks/ui_bundled/home/bookmarks_home_mediator.h"
+#import "ios/chrome/browser/download/model/auto_deletion/auto_deletion_service.h"
 #import "ios/chrome/browser/drive/model/drive_policy.h"
 #import "ios/chrome/browser/first_run/model/first_run.h"
 #import "ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_scene_agent.h"
@@ -123,14 +124,7 @@
 #import "ios/web/common/features.h"
 #import "ui/base/l10n/l10n_util.h"
 
-#if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
-#import "components/optimization_guide/core/model_execution/model_execution_prefs.h"
-#endif
-
 namespace {
-
-// Deprecated 02/24.
-const char kIosPromosManagerImpressions[] = "ios.promos_manager.impressions";
 
 // Deprecated 03/2024.
 const char kObsoleteAccountStorageNewFeatureIconImpressions[] =
@@ -187,6 +181,10 @@ constexpr char kEnableDoNotTrackIos[] = "enable_do_not_track";
 inline constexpr char kPageContentCollectionEnabled[] =
     "page_content_collection.enabled";
 
+// Deprecated 02/2025.
+inline constexpr char kNumberOfProfiles[] = "profile.profiles_created";
+inline constexpr char kLastActiveProfiles[] = "profile.last_active_profiles";
+
 // Helper function migrating the preference `pref_name` of type "int" from
 // `defaults` to `pref_service`.
 void MigrateIntegerPreferenceFromUserDefaults(std::string_view pref_name,
@@ -235,29 +233,6 @@ void MigrateBooleanPref(std::string_view pref_name,
   if (target_pref->IsDefaultValue() && !source_pref->IsDefaultValue()) {
     target_pref_service->SetBoolean(pref_name,
                                     source_pref_service->GetBoolean(pref_name));
-  }
-
-  // In all cases, clear the pref from source.
-  source_pref_service->ClearPref(pref_name);
-}
-
-// Migrates a list pref from source to target PrefService.
-void MigrateListPref(std::string_view pref_name,
-                     PrefService* target_pref_service,
-                     PrefService* source_pref_service) {
-  const PrefService::Preference* target_pref =
-      target_pref_service->FindPreference(pref_name);
-  CHECK(target_pref);
-
-  const PrefService::Preference* source_pref =
-      source_pref_service->FindPreference(pref_name);
-  CHECK(source_pref);
-
-  // Only migrate the pref if 1. it is not set in target,
-  // 2. it is not the default in source.
-  if (target_pref->IsDefaultValue() && !source_pref->IsDefaultValue()) {
-    target_pref_service->SetList(
-        pref_name, source_pref_service->GetList(pref_name).Clone());
   }
 
   // In all cases, clear the pref from source.
@@ -356,15 +331,6 @@ void MigrateTimePref(std::string_view pref_name,
   source_pref_service->ClearPref(pref_name);
 }
 
-// Helper function migrating the `list` preference from LocalState prefs to
-// Profile prefs.
-void MigrateListPrefFromLocalStatePrefsToProfilePrefs(
-    std::string_view pref_name,
-    PrefService* profile_pref_service) {
-  MigrateListPref(pref_name, profile_pref_service,
-                  GetApplicationContext()->GetLocalState());
-}
-
 // Helper function migrating the `string` preference from LocalState prefs to
 // Profile prefs.
 void MigrateStringPrefFromLocalStatePrefsToProfilePrefs(
@@ -425,6 +391,7 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   autofill::prefs::RegisterLocalStatePrefs(registry);
   breadcrumbs::RegisterPrefs(registry);
   ProfileAttributesStorageIOS::RegisterPrefs(registry);
+  chrome_urls::RegisterPrefs(registry);
   flags_ui::PrefServiceFlagsStorage::RegisterPrefs(registry);
   signin::IdentityManager::RegisterLocalStatePrefs(registry);
   IOSChromeMetricsServiceClient::RegisterPrefs(registry);
@@ -450,18 +417,15 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   segmentation_platform::SegmentationPlatformService::RegisterLocalStatePrefs(
       registry);
   optimization_guide::prefs::RegisterLocalStatePrefs(registry);
+  optimization_guide::model_execution::prefs::RegisterLocalStatePrefs(registry);
   PushNotificationService::RegisterLocalStatePrefs(registry);
   TipsNotificationClient::RegisterLocalStatePrefs(registry);
-
-#if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
-  optimization_guide::model_execution::prefs::RegisterLocalStatePrefs(registry);
-#endif
+  auto_deletion::AutoDeletionService::RegisterLocalStatePrefs(registry);
 
   // Preferences related to the profile manager.
   registry->RegisterStringPref(prefs::kLastUsedProfile, std::string());
   registry->RegisterBooleanPref(prefs::kLegacyProfileHidden, false);
   registry->RegisterDictionaryPref(prefs::kLegacyProfileMap);
-  registry->RegisterListPref(prefs::kProfilesToRemove);
 
   [MemoryDebuggerManager registerLocalState:registry];
   [IncognitoReauthSceneAgent registerLocalState:registry];
@@ -477,7 +441,6 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(prefs::kIosPreRestoreAccountInfo);
 
   registry->RegisterListPref(prefs::kIosPromosManagerActivePromos);
-  registry->RegisterListPref(kIosPromosManagerImpressions);
   registry->RegisterListPref(prefs::kIosPromosManagerSingleDisplayActivePromos);
   registry->RegisterDictionaryPref(
       prefs::kIosPromosManagerSingleDisplayPendingPromos);
@@ -620,10 +583,6 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kBottomOmniboxByDefault, false);
 
   // Prefs migrated to profile prefs.
-  registry->RegisterListPref(prefs::kIosLatestMostVisitedSites,
-                             PrefRegistry::LOSSY_PREF);
-  registry->RegisterStringPref(
-      tab_resumption_prefs::kTabResumptionLastOpenedTabURLPref, std::string());
   registry->RegisterTimePref(prefs::kTabPickupLastDisplayedTime, base::Time());
   registry->RegisterStringPref(prefs::kTabPickupLastDisplayedURL,
                                std::string());
@@ -694,6 +653,10 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   registry->RegisterIntegerPref(prefs::kChromeDataRegionSetting, 0);
 
   registry->RegisterBooleanPref(prefs::kYoutubeIncognitoHasBeenShown, false);
+
+  // Deprecated 02/2025.
+  registry->RegisterIntegerPref(kNumberOfProfiles, 0);
+  registry->RegisterListPref(kLastActiveProfiles);
 }
 
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
@@ -1025,6 +988,9 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   // Preferences related to Lens Overlay.
   registry->RegisterBooleanPref(prefs::kLensOverlayConditionsAccepted, false);
 
+  // Prefs related to Reminder Notifications.
+  registry->RegisterDictionaryPref(prefs::kReminderNotifications);
+
   // Deprecated 09/2024.
   registry->RegisterIntegerPref(kContentSettingsWindowLastTabIndex, 0);
   registry->RegisterStringPref(kSyncPasswordHash, std::string());
@@ -1054,9 +1020,6 @@ void MigrateObsoleteLocalStatePrefs(PrefService* prefs) {
   // This function is not allowed to block.
   base::ScopedDisallowBlocking disallow_blocking;
 
-  // Added 02/2024.
-  prefs->ClearPref(kIosPromosManagerImpressions);
-
   // Added 07/2024.
   prefs->ClearPref(prefs::kTabPickupEnabled);
   prefs->ClearPref(prefs::kTabPickupLastDisplayedTime);
@@ -1074,6 +1037,10 @@ void MigrateObsoleteLocalStatePrefs(PrefService* prefs) {
   // Added 09/2024
   prefs->ClearPref(
       kIosMagicStackSegmentationPriceTrackingPromoImpressionsSinceFreshness);
+
+  // Added 02/2025
+  prefs->ClearPref(kNumberOfProfiles);
+  prefs->ClearPref(kLastActiveProfiles);
 }
 
 // This method should be periodically pruned of year+ old migrations.
@@ -1085,17 +1052,6 @@ void MigrateObsoleteProfilePrefs(PrefService* prefs) {
   autofill::prefs::MigrateDeprecatedAutofillPrefs(prefs);
 
   NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
-
-  // Added 01/2024.
-  // Note that this key is an obsolete LocalState pref, it's here because it was
-  // moved from LocalState pref to Profile pref and before clearing it the
-  // Profile pref needs to be updated.
-  MigrateStringPrefFromLocalStatePrefsToProfilePrefs(
-      tab_resumption_prefs::kTabResumptionLastOpenedTabURLPref, prefs);
-
-  // Added 02/2024.
-  MigrateListPrefFromLocalStatePrefsToProfilePrefs(
-      prefs::kIosLatestMostVisitedSites, prefs);
 
   // Added 03/2024.
   prefs->ClearPref(kObsoleteAccountStorageNewFeatureIconImpressions);
@@ -1215,9 +1171,6 @@ void MigrateObsoleteProfilePrefs(PrefService* prefs) {
 
 void MigrateObsoleteUserDefault() {
   NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
-
-  // TODO(b/322004644): Remove in M124+. Added 02/2024.
-  [defaults removeObjectForKey:@"TimestampAppLaunchedOnColdStart"];
 
   // Added 05/2024.
   [defaults removeObjectForKey:@"lastSignificantUserEventVideo"];

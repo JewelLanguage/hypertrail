@@ -22,7 +22,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
 #include "base/test/values_test_util.h"
 #include "base/values.h"
@@ -462,7 +461,7 @@ class FakeGetAuthTokenFunction : public IdentityGetAuthTokenFunction {
         identity_manager->GetAccountsMutator()->AddOrUpdateAccount(
             account_info.gaia, account_info.email, "token",
             account_info.is_under_advanced_protection,
-            signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN,
+            signin_metrics::AccessPoint::kUnknown,
             signin_metrics::SourceForRefreshTokenOperation::kUnknown);
         fixed_auth_error = true;
       }
@@ -713,10 +712,6 @@ class IdentityGetAccountsFunctionTest : public IdentityTestWithSignin {
 
     return testing::AssertionFailure(msg);
   }
-
- private:
-  base::test::ScopedFeatureList feature_list_{
-      switches::kExplicitBrowserSigninUIOnDesktop};
 };
 
 IN_PROC_BROWSER_TEST_F(IdentityGetAccountsFunctionTest, AllAccountsOn) {
@@ -1096,8 +1091,6 @@ class GetAuthTokenFunctionTest
     std::move(on_access_token_requested_).Run();
   }
 
-  base::test::ScopedFeatureList feature_list_{
-      switches::kExplicitBrowserSigninUIOnDesktop};
   base::HistogramTester histogram_tester_;
   ExtensionId extension_id_;
   std::set<std::string> oauth_scopes_;
@@ -4157,7 +4150,6 @@ class ClearAllCachedAuthTokensFunctionTest : public AsyncExtensionBrowserTest {
   }
 
  private:
-  base::test::ScopedFeatureList feature_list_;
   raw_ptr<const Extension> extension_ = nullptr;
 };
 

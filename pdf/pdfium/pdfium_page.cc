@@ -49,7 +49,6 @@
 #include "ui/gfx/range/range.h"
 
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
-#include "base/containers/contains.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/skbitmap_operations.h"
 #endif
@@ -549,7 +548,9 @@ std::optional<AccessibilityTextRunInfo> PDFiumPage::GetTextRunInfo(
 
   AccessibilityTextRunInfo info;
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
-  info.is_searchified = IsCharacterAddedBySearchify(start_char_index);
+  // This assumes all text on the page are either from the PDF itself, or from
+  // Searchify.
+  info.is_searchified = has_searchify_added_text_.value_or(false);
 #endif
 
   int actual_start_char_index = GetFirstNonUnicodeWhiteSpaceCharIndex(
@@ -924,17 +925,16 @@ SkBitmap PDFiumPage::GetImageForOcr(int page_object_index) {
   return SkBitmapOperations::Rotate(bitmap, rotation);
 }
 
-void PDFiumPage::OnSearchifyGotOcrResult(
-    base::span<FPDF_PAGEOBJECT> text_objects) {
-  got_searchify_results_ = true;
-  for (FPDF_PAGEOBJECT text_object : text_objects) {
-    bool inserted = searchify_added_text_.insert(text_object).second;
-    CHECK(inserted);
+void PDFiumPage::OnSearchifyGotOcrResult(bool added_text) {
+  CHECK(!has_searchify_added_text_.has_value());
+  has_searchify_added_text_ = added_text;
+  if (added_text) {
+    engine_->OnHasSearchifyText();
   }
 }
 
 bool PDFiumPage::IsPageSearchified() const {
-  return got_searchify_results_;
+  return has_searchify_added_text_.has_value();
 }
 #endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
 
@@ -1833,14 +1833,8 @@ Thumbnail PDFiumPage::GenerateThumbnail(float device_pixel_ratio) {
   FPDF_PAGE page = GetPage();
   const bool has_alpha = !!FPDFPage_HasTransparency(page);
   const int format = has_alpha ? FPDFBitmap_BGRA : FPDFBitmap_BGRx;
-  uint32_t fill_color;
-  if (base::FeatureList::IsEnabled(features::kPdfPaintManagerDrawsBackground)) {
-    fill_color = has_alpha ? 0x00000000 : 0xFFFFFFFF;
-  } else {
-    fill_color = 0xFFFFFFFF;
-  }
 
-  Thumbnail thumbnail = GetThumbnail(device_pixel_ratio);
+  Thumbnail thumbnail = CreateThumbnail(device_pixel_ratio);
   const gfx::Size& image_size = thumbnail.image_size();
 
   // Create and initialize the bitmap.
@@ -1848,6 +1842,7 @@ Thumbnail PDFiumPage::GenerateThumbnail(float device_pixel_ratio) {
       FPDFBitmap_CreateEx(image_size.width(), image_size.height(), format,
                           thumbnail.GetImageData().data(), thumbnail.stride()));
 
+  const uint32_t fill_color = has_alpha ? 0x00000000 : 0xFFFFFFFF;
   FPDFBitmap_FillRect(fpdf_bitmap.get(), /*left=*/0, /*top=*/0,
                       image_size.width(), image_size.height(), fill_color);
 
@@ -1870,7 +1865,7 @@ Thumbnail PDFiumPage::GenerateThumbnail(float device_pixel_ratio) {
 
 #if BUILDFLAG(ENABLE_PDF_INK2)
 gfx::Size PDFiumPage::GetThumbnailSize(float device_pixel_ratio) {
-  return GetThumbnail(device_pixel_ratio).image_size();
+  return CreateThumbnail(device_pixel_ratio).image_size();
 }
 #endif
 
@@ -1879,7 +1874,7 @@ void PDFiumPage::GenerateAndSendThumbnail(float device_pixel_ratio,
   std::move(send_callback).Run(GenerateThumbnail(device_pixel_ratio));
 }
 
-Thumbnail PDFiumPage::GetThumbnail(float device_pixel_ratio) {
+Thumbnail PDFiumPage::CreateThumbnail(float device_pixel_ratio) {
   CHECK(available());
 
   FPDF_PAGE page = GetPage();
@@ -1887,13 +1882,6 @@ Thumbnail PDFiumPage::GetThumbnail(float device_pixel_ratio) {
                       base::saturated_cast<int>(FPDF_GetPageHeightF(page)));
   return Thumbnail(page_size, device_pixel_ratio);
 }
-
-#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
-bool PDFiumPage::IsCharacterAddedBySearchify(int char_index) {
-  FPDF_PAGEOBJECT object = FPDFText_GetTextObject(GetTextPage(), char_index);
-  return base::Contains(searchify_added_text_, object);
-}
-#endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
 
 void PDFiumPage::MarkAvailable() {
   available_ = true;

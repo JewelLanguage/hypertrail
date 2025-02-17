@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include <array>
 #include <memory>
 #include <string_view>
@@ -224,6 +229,7 @@
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/core/common/policy_service.h"
 #include "components/session_manager/core/session_manager.h"
+#include "components/user_manager/test_helper.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 using content::WebContents;
@@ -4714,10 +4720,6 @@ class CommonNameMismatchBrowserTest : public CertVerifierBrowserTest {
                                            "Enabled");
   }
 
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    CertVerifierBrowserTest::SetUpCommandLine(command_line);
-  }
-
   void SetUpOnMainThread() override {
     CertVerifierBrowserTest::SetUpOnMainThread();
     host_resolver()->AddRule("*", "127.0.0.1");
@@ -5575,7 +5577,19 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, DISABLED_PushStateSSLState) {
 class SSLUITestNoCert : public SSLUITest,
                         public CertificateManagerModel::Observer {
  public:
-  SSLUITestNoCert() = default;
+  SSLUITestNoCert() {
+    // These tests are specifically for the ChromeOS NSS database integration.
+    // On ChromeOS, once the kEnableCertManagementUIV2Write feature is launched
+    // NSS is no longer used and the equivalent functionality is provided by
+    // ServerCertificateDatabaseService and is tested by
+    // cert_verifier_service_browsertest.cc.
+    feature_list_.InitWithFeatures(
+        /*enabled_features=*/{},
+        /*disabled_features=*/
+        {features::kEnableCertManagementUIV2,
+         features::kEnableCertManagementUIV2Write,
+         features::kEnableCertManagementUIV2EditCerts});
+  }
   ~SSLUITestNoCert() override = default;
 
   void SetUp() override {
@@ -5585,6 +5599,9 @@ class SSLUITestNoCert : public SSLUITest,
 
   // CertificateManagerModel::Observer implementation:
   void CertificatesRefreshed() override {}
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
 };
 
 class TestCertDatabaseObserver : public net::CertDatabase::Observer {
@@ -5655,6 +5672,13 @@ IN_PROC_BROWSER_TEST_F(SSLUITestNoCert, NewCertificateAuthority) {
 // into their NSS databases.
 class SSLUITestCustomCACerts : public SSLUITestNoCert {
  public:
+  static inline constexpr char kPrimaryUserAccount[] = "test1@test.com";
+  static inline constexpr GaiaId::Literal kPrimaryUserGaiaId{"1234567890"};
+  static inline constexpr char kPrimaryUserHash[] = "test1-hash";
+  static inline constexpr char kSecondaryUserAccount[] = "test2@test.com";
+  static inline constexpr GaiaId::Literal kSecondaryUserGaiaId{"9876543210"};
+  static inline constexpr char kSecondaryUserHash[] = "test2-hash";
+
   SSLUITestCustomCACerts() = default;
 
   SSLUITestCustomCACerts(const SSLUITestCustomCACerts&) = delete;
@@ -5668,6 +5692,23 @@ class SSLUITestCustomCACerts : public SSLUITestNoCert {
     // code knows not to expect cached policy for the secondary profile.
     command_line->AppendSwitchASCII(ash::switches::kProfileRequiresPolicy,
                                     "false");
+
+    command_line->AppendSwitchASCII(ash::switches::kLoginUser,
+                                    kPrimaryUserAccount);
+    command_line->AppendSwitchASCII(ash::switches::kLoginProfile,
+                                    kPrimaryUserHash);
+  }
+
+  void SetUpLocalStatePrefService(PrefService* local_state) override {
+    SSLUITestNoCert::SetUpLocalStatePrefService(local_state);
+
+    // Register a persisted user.
+    user_manager::TestHelper::RegisterPersistedUser(
+        *local_state, AccountId::FromUserEmailGaiaId(kPrimaryUserAccount,
+                                                     kPrimaryUserGaiaId));
+    user_manager::TestHelper::RegisterPersistedUser(
+        *local_state, AccountId::FromUserEmailGaiaId(kSecondaryUserAccount,
+                                                     kSecondaryUserGaiaId));
   }
 
   void SetUpOnMainThread() override {
@@ -5677,10 +5718,6 @@ class SSLUITestCustomCACerts : public SSLUITestNoCert {
 
     // Create a second profile.
     {
-      static const char kSecondProfileAccount[] = "profile2@test.com";
-      static const char kSecondProfileGaiaId[] = "9876543210";
-      static const char kSecondProfileHash[] = "testProfile2";
-
       ON_CALL(policy_for_profile_2_, IsInitializationComplete(testing::_))
           .WillByDefault(testing::Return(true));
       ON_CALL(policy_for_profile_2_, IsFirstPolicyLoadComplete(testing::_))
@@ -5691,12 +5728,13 @@ class SSLUITestCustomCACerts : public SSLUITestNoCert {
       base::FilePath user_data_directory;
       base::PathService::Get(chrome::DIR_USER_DATA, &user_data_directory);
       session_manager::SessionManager::Get()->CreateSession(
-          AccountId::FromUserEmailGaiaId(kSecondProfileAccount,
-                                         GaiaId(kSecondProfileGaiaId)),
-          kSecondProfileHash, false);
+          AccountId::FromUserEmailGaiaId(kSecondaryUserAccount,
+                                         kSecondaryUserGaiaId),
+          kSecondaryUserHash, /*new_user=*/false,
+          /*has_active_session=*/false);
       // Set up the secondary profile.
       base::FilePath profile_dir = user_data_directory.Append(
-          ash::ProfileHelper::GetUserProfileDir(kSecondProfileHash).BaseName());
+          ash::ProfileHelper::GetUserProfileDir(kSecondaryUserHash).BaseName());
       profile_2_ =
           g_browser_process->profile_manager()->GetProfile(profile_dir);
     }

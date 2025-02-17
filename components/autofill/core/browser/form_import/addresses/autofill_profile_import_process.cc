@@ -4,11 +4,11 @@
 
 #include "components/autofill/core/browser/form_import/addresses/autofill_profile_import_process.h"
 
+#include <algorithm>
 #include <map>
 
 #include "base/check_deref.h"
 #include "base/feature_list.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/data_manager/addresses/address_data_cleaner.h"
 #include "components/autofill/core/browser/data_manager/addresses/address_data_manager.h"
@@ -16,7 +16,6 @@
 #include "components/autofill/core/browser/data_model/autofill_profile_comparator.h"
 #include "components/autofill/core/browser/data_quality/addresses/profile_requirement_utils.h"
 #include "components/autofill/core/browser/field_types.h"
-#include "components/autofill/core/browser/metrics/profile_deduplication_metrics.h"
 #include "components/autofill/core/browser/metrics/profile_import_metrics.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_features.h"
@@ -471,13 +470,6 @@ void ProfileImportProcess::CollectMetrics(
         UserAccepted() ? *confirmed_import_candidate_ : *import_candidate_,
         app_locale_);
     LogUkmMetrics(num_edited_fields);
-    if (base::FeatureList::IsEnabled(
-            features::kAutofillLogDeduplicationMetrics)) {
-      autofill_metrics::LogDeduplicationImportMetrics(
-          UserAccepted(),
-          UserAccepted() ? *confirmed_import_candidate_ : *import_candidate_,
-          existing_profiles, app_locale_);
-    }
     if (UserAccepted()) {
       autofill_metrics::LogNewProfileStorageLocation(
           *confirmed_import_candidate_);

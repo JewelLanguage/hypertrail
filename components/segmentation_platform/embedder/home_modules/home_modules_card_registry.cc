@@ -9,6 +9,7 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/string_split.h"
 #include "components/commerce/core/commerce_feature_list.h"
+#include "components/segmentation_platform/embedder/home_modules/auxiliary_search_promo.h"
 #include "components/segmentation_platform/embedder/home_modules/card_selection_info.h"
 #include "components/segmentation_platform/embedder/home_modules/constants.h"
 #include "components/segmentation_platform/embedder/home_modules/default_browser_promo.h"
@@ -19,6 +20,7 @@
 #include "components/segmentation_platform/embedder/home_modules/tab_group_promo.h"
 #include "components/segmentation_platform/embedder/home_modules/tab_group_sync_promo.h"
 #include "components/segmentation_platform/embedder/home_modules/tips_manager/constants.h"
+#include "components/segmentation_platform/public/constants.h"
 #include "components/segmentation_platform/public/features.h"
 #if BUILDFLAG(IS_IOS)
 #include "components/segmentation_platform/embedder/home_modules/address_bar_position_ephemeral_module.h"
@@ -32,6 +34,10 @@
 namespace segmentation_platform::home_modules {
 
 #if BUILDFLAG(IS_ANDROID)
+const char kAuxiliarySearchPromoImpressionCounterPref[] =
+    "ephemeral_pref_counter.auxiliary_search_promo_counter";
+const char kAuxiliarySearchPromoInteractedPref[] =
+    "ephemeral_pref_interacted.auxiliary_search_promo_interacted";
 const char kDefaultBrowserPromoImpressionCounterPref[] =
     "ephemeral_pref_counter.default_browser_promo_counter";
 const char kDefaultBrowserPromoInteractedPref[] =
@@ -182,6 +188,8 @@ void HomeModulesCardRegistry::RegisterProfilePrefs(
 #endif
 
 #if BUILDFLAG(IS_ANDROID)
+  registry->RegisterIntegerPref(kAuxiliarySearchPromoImpressionCounterPref, 0);
+  registry->RegisterBooleanPref(kAuxiliarySearchPromoInteractedPref, false);
   registry->RegisterIntegerPref(kDefaultBrowserPromoImpressionCounterPref, 0);
   registry->RegisterBooleanPref(kDefaultBrowserPromoInteractedPref, false);
   registry->RegisterIntegerPref(kTabGroupPromoImpressionCounterPref, 0);
@@ -279,6 +287,11 @@ void HomeModulesCardRegistry::NotifyCardShown(const char* card_name) {
           profile_prefs_->GetInteger(kQuickDeletePromoImpressionCounterPref);
       profile_prefs_->SetInteger(kQuickDeletePromoImpressionCounterPref,
                                  freshness_impression_count + 1);
+    } else if (strcmp(card_name, kAuxiliarySearch) == 0) {
+      int freshness_impression_count = profile_prefs_->GetInteger(
+          kAuxiliarySearchPromoImpressionCounterPref);
+      profile_prefs_->SetInteger(kAuxiliarySearchPromoImpressionCounterPref,
+                                 freshness_impression_count + 1);
     }
   }
 #endif
@@ -334,6 +347,8 @@ void HomeModulesCardRegistry::NotifyCardInteracted(const char* card_name) {
     profile_prefs_->SetBoolean(kTabGroupSyncPromoInteractedPref, true);
   } else if (strcmp(card_name, kQuickDeletePromo) == 0) {
     profile_prefs_->SetBoolean(kQuickDeletePromoInteractedPref, true);
+  } else if (strcmp(card_name, kAuxiliarySearch) == 0) {
+    profile_prefs_->SetBoolean(kAuxiliarySearchPromoInteractedPref, true);
   }
 #endif
 }
@@ -398,6 +413,12 @@ void HomeModulesCardRegistry::CreateAllCards() {
 #endif
 
 #if BUILDFLAG(IS_ANDROID)
+  int auxiliary_search_promo_count =
+      profile_prefs_->GetInteger(kAuxiliarySearchPromoImpressionCounterPref);
+  if (AuxiliarySearchPromo::IsEnabled(auxiliary_search_promo_count)) {
+    all_cards_by_priority_.push_back(std::make_unique<AuxiliarySearchPromo>());
+  }
+
   int default_browser_promo_count =
       profile_prefs_->GetInteger(kDefaultBrowserPromoImpressionCounterPref);
   if (DefaultBrowserPromo::IsEnabled(default_browser_promo_count)) {
@@ -425,6 +446,7 @@ void HomeModulesCardRegistry::CreateAllCards() {
     all_cards_by_priority_.push_back(
         std::make_unique<QuickDeletePromo>(profile_prefs_));
   }
+
 #endif
   InitializeAfterAddingCards();
 }

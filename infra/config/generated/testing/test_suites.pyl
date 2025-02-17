@@ -248,7 +248,7 @@
             {
               'cipd_package': 'infra/3pp/tools/cpython3/linux-amd64',
               'location': 'vpython_dir_linux_amd64',
-              'revision': 'version:2@3.8.10.chromium.34',
+              'revision': 'version:3@3.11.9.chromium.36',
             },
             {
               'cipd_package': 'infra/tools/luci/vpython3/linux-amd64',
@@ -620,7 +620,7 @@
         'test': 'blink_wpt_tests',
         'results_handler': 'layout tests',
         'swarming': {
-          'shards': 3,
+          'shards': 1,
         },
       },
       'high_dpi_headless_shell_wpt_tests': {
@@ -690,7 +690,7 @@
         },
         'results_handler': 'layout tests',
         'swarming': {
-          'shards': 7,
+          'shards': 2,
         },
       },
       'chrome_wpt_tests': {
@@ -901,278 +901,32 @@
       },
     },
 
-    'gpu_common_gtests_passthrough': {
-      'gl_tests_passthrough': {
-        'test_common': {
-          'args': [
-            '--use-cmd-decoder=passthrough',
-          ],
-        },
-        'test': 'gl_tests',
-        'args': [
-          '--use-gl=angle',
-        ],
-        'chromeos_args': [
-          '--stop-ui',
-          '$$MAGIC_SUBSTITUTION_ChromeOSGtestFilterFile',
-        ],
-        'desktop_args': [
-          '--use-gpu-in-tests',
-        ],
-        'linux_args': [
-          '--no-xvfb',
-        ],
-        'swarming': {
-          'shards': 2,
-        },
-      },
-      'gl_unittests': {
-        'mixins': [
-          'skia_gold_test',
-        ],
-        'chromeos_args': [
-          '--stop-ui',
-          '--test-launcher-filter-file=../../testing/buildbot/filters/chromeos.gl_unittests.filter',
-        ],
-        'desktop_args': [
-          '--use-gpu-in-tests',
-        ],
-        'linux_args': [
-          '--no-xvfb',
-        ],
-      },
-    },
-
-    'gpu_dawn_gtests': {
-      'dawn_end2end_implicit_device_sync_tests': {
-        'test_common': {
-          'mixins': [
-            'dawn_end2end_gpu_test',
-          ],
-          'args': [
-            '--enable-implicit-device-sync',
-          ],
-        },
-        'test': 'dawn_end2end_tests',
-        'linux_args': [
-          '--no-xvfb',
-        ],
-        'ci_only': True,
-        'swarming': {
-          'shards': 2,
-        },
-      },
-      'dawn_end2end_skip_validation_tests': {
-        'test_common': {
-          'mixins': [
-            'dawn_end2end_gpu_test',
-          ],
-          'args': [
-            '--enable-toggles=skip_validation',
-          ],
-        },
-        'test': 'dawn_end2end_tests',
-        'linux_args': [
-          '--no-xvfb',
-        ],
-        'swarming': {
-          'shards': 2,
-        },
-      },
-      'dawn_end2end_tests': {
-        'test_common': {
-          'mixins': [
-            'dawn_end2end_gpu_test',
-          ],
-        },
-        'linux_args': [
-          '--no-xvfb',
-        ],
-        'swarming': {
-          'shards': 2,
-        },
-      },
-      'dawn_end2end_wire_tests': {
-        'test_common': {
-          'mixins': [
-            'dawn_end2end_gpu_test',
-          ],
-          'args': [
-            '--use-wire',
-          ],
-        },
-        'test': 'dawn_end2end_tests',
-        'linux_args': [
-          '--no-xvfb',
-        ],
-        'swarming': {
-          'shards': 2,
-        },
-      },
-    },
-
-    'gpu_dawn_gtests_with_validation': {
-      'dawn_end2end_validation_layers_tests': {
-        'test_common': {
-          'mixins': [
-            'dawn_end2end_gpu_test',
-          ],
-          'args': [
-            '--enable-backend-validation',
-          ],
-        },
-        'test': 'dawn_end2end_tests',
-        'linux_args': [
-          '--no-xvfb',
-        ],
-        'swarming': {
-          'shards': 2,
-        },
-      },
-    },
-
-    'gpu_dawn_webgpu_cts': {
-      'webgpu_cts_dedicated_worker_tests': {
-        'test_common': {
-          'mixins': [
-            'has_native_resultdb_integration',
-          ],
-          'args': [
-            '--use-worker=dedicated',
-          ],
-        },
-        'telemetry_test_name': 'webgpu_cts',
-        'mixins': [
-          'gpu_integration_test_common_args',
-          'webgpu_telemetry_cts',
-          'linux_vulkan',
-        ],
-        'swarming': {
-          'shards': 1,
-        },
-        'android_swarming': {
-          'shards': 2,
-        },
-      },
-      'webgpu_cts_service_worker_tests': {
-        'test_common': {
-          'mixins': [
-            'has_native_resultdb_integration',
-          ],
-          'args': [
-            '--use-worker=service',
-          ],
-        },
-        'telemetry_test_name': 'webgpu_cts',
-        'mixins': [
-          'gpu_integration_test_common_args',
-          'webgpu_telemetry_cts',
-          'linux_vulkan',
-        ],
-        'swarming': {
-          'shards': 1,
-        },
-        'android_swarming': {
-          'shards': 2,
-        },
-      },
-      'webgpu_cts_shared_worker_tests': {
-        'test_common': {
-          'mixins': [
-            'has_native_resultdb_integration',
-          ],
-          'args': [
-            '--use-worker=shared',
-          ],
-        },
-        'telemetry_test_name': 'webgpu_cts',
-        'mixins': [
-          'gpu_integration_test_common_args',
-          'webgpu_telemetry_cts',
-          'linux_vulkan',
-        ],
-        'swarming': {
-          'shards': 1,
-        },
-        'android_swarming': {
-          'shards': 2,
-        },
-      },
-      'webgpu_cts_tests': {
-        'test_common': {
-          'mixins': [
-            'has_native_resultdb_integration',
-          ],
-        },
-        'telemetry_test_name': 'webgpu_cts',
-        'mixins': [
-          'gpu_integration_test_common_args',
-          'webgpu_telemetry_cts',
-          'linux_vulkan',
-        ],
-        'swarming': {
-          'shards': 14,
-        },
-        'android_swarming': {
-          'shards': 36,
-        },
-      },
-      'webgpu_cts_with_validation_tests': {
-        'test_common': {
-          'mixins': [
-            'has_native_resultdb_integration',
-          ],
-        },
-        'telemetry_test_name': 'webgpu_cts',
-        'mixins': [
-          'gpu_integration_test_common_args',
-          'webgpu_telemetry_cts',
-          'linux_vulkan',
-        ],
-        'args': [
-          '--enable-dawn-backend-validation',
-        ],
-        'swarming': {
-          'shards': 14,
-        },
-        'android_swarming': {
-          'shards': 36,
-        },
-      },
-    },
-
     'gpu_gl_passthrough_ganesh_telemetry_tests': {
       'context_lost_gl_passthrough_ganesh_tests': {
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_gl',
+            'gpu_force_skia_ganesh',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'context_lost',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --use-angle=gl --disable-features=SkiaGraphite',
-        ],
       },
       'expected_color_pixel_gl_passthrough_ganesh_test': {
         'test_common': {
           'mixins': [
             'skia_gold_test',
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_gl',
+            'gpu_force_skia_ganesh',
+            'gpu_integration_test_expected_color_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'expected_color',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--dont-restore-color-profile-after-test',
-          '--test-machine-name',
-          '${buildername}',
-          '--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --use-angle=gl --disable-features=SkiaGraphite',
-        ],
       },
       'gpu_process_launch_tests': {
         'test_common': {
@@ -1201,33 +955,27 @@
           'mixins': [
             'skia_gold_test',
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_gl',
+            'gpu_force_skia_ganesh',
+            'gpu_integration_test_pixel_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'pixel',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--dont-restore-color-profile-after-test',
-          '--test-machine-name',
-          '${buildername}',
-          '--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --use-angle=gl --disable-features=SkiaGraphite',
-        ],
       },
       'screenshot_sync_gl_passthrough_ganesh_tests': {
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_gl',
+            'gpu_force_skia_ganesh',
+            'gpu_integration_test_screenshot_sync_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'screenshot_sync',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--dont-restore-color-profile-after-test',
-          '--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --use-angle=gl --disable-features=SkiaGraphite',
-        ],
       },
     },
 
@@ -1236,33 +984,27 @@
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_metal',
+            'gpu_force_skia_ganesh',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'context_lost',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --use-angle=metal --disable-features=SkiaGraphite',
-        ],
       },
       'expected_color_pixel_metal_passthrough_ganesh_test': {
         'test_common': {
           'mixins': [
             'skia_gold_test',
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_metal',
+            'gpu_force_skia_ganesh',
+            'gpu_integration_test_expected_color_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'expected_color',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--dont-restore-color-profile-after-test',
-          '--test-machine-name',
-          '${buildername}',
-          '--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --use-angle=metal --disable-features=SkiaGraphite',
-        ],
       },
       'gpu_process_launch_tests': {
         'test_common': {
@@ -1291,33 +1033,27 @@
           'mixins': [
             'skia_gold_test',
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_metal',
+            'gpu_force_skia_ganesh',
+            'gpu_integration_test_pixel_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'pixel',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--dont-restore-color-profile-after-test',
-          '--test-machine-name',
-          '${buildername}',
-          '--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --use-angle=metal --disable-features=SkiaGraphite',
-        ],
       },
       'screenshot_sync_metal_passthrough_ganesh_tests': {
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_metal',
+            'gpu_force_skia_ganesh',
+            'gpu_integration_test_screenshot_sync_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'screenshot_sync',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--dont-restore-color-profile-after-test',
-          '--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --use-angle=metal --disable-features=SkiaGraphite',
-        ],
       },
     },
 
@@ -1326,33 +1062,27 @@
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_metal',
+            'gpu_force_skia_graphite',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'context_lost',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --use-angle=metal --enable-features=SkiaGraphite',
-        ],
       },
       'expected_color_pixel_metal_passthrough_graphite_test': {
         'test_common': {
           'mixins': [
             'skia_gold_test',
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_metal',
+            'gpu_force_skia_graphite',
+            'gpu_integration_test_expected_color_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'expected_color',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--dont-restore-color-profile-after-test',
-          '--test-machine-name',
-          '${buildername}',
-          '--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --use-angle=metal --enable-features=SkiaGraphite',
-        ],
       },
       'gpu_process_launch_tests': {
         'test_common': {
@@ -1381,33 +1111,27 @@
           'mixins': [
             'skia_gold_test',
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_metal',
+            'gpu_force_skia_graphite',
+            'gpu_integration_test_pixel_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'pixel',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--dont-restore-color-profile-after-test',
-          '--test-machine-name',
-          '${buildername}',
-          '--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --use-angle=metal --enable-features=SkiaGraphite',
-        ],
       },
       'screenshot_sync_metal_passthrough_graphite_tests': {
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_metal',
+            'gpu_force_skia_graphite',
+            'gpu_integration_test_screenshot_sync_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'screenshot_sync',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--dont-restore-color-profile-after-test',
-          '--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --use-angle=metal --enable-features=SkiaGraphite',
-        ],
       },
     },
 
@@ -1425,75 +1149,50 @@
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_skia_graphite',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'context_lost',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --enable-features=SkiaGraphite',
-        ],
       },
       'expected_color_pixel_passthrough_graphite_test': {
         'test_common': {
           'mixins': [
             'skia_gold_test',
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_skia_graphite',
+            'gpu_integration_test_expected_color_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'expected_color',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--dont-restore-color-profile-after-test',
-          '--test-machine-name',
-          '${buildername}',
-          '--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --enable-features=SkiaGraphite',
-        ],
-        'android_args': [
-          '--extra-browser-args=--force-online-connection-state-for-indicator',
-        ],
       },
       'pixel_skia_gold_passthrough_graphite_test': {
         'test_common': {
           'mixins': [
             'skia_gold_test',
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_skia_graphite',
+            'gpu_integration_test_pixel_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'pixel',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--dont-restore-color-profile-after-test',
-          '--test-machine-name',
-          '${buildername}',
-          '--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --enable-features=SkiaGraphite',
-        ],
-        'android_args': [
-          '--extra-browser-args=--force-online-connection-state-for-indicator',
-        ],
       },
       'screenshot_sync_passthrough_graphite_tests': {
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_skia_graphite',
+            'gpu_integration_test_screenshot_sync_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'screenshot_sync',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--dont-restore-color-profile-after-test',
-          '--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --enable-features=SkiaGraphite',
-        ],
-        'android_args': [
-          '--extra-browser-args=--force-online-connection-state-for-indicator',
-        ],
       },
     },
 
@@ -1502,36 +1201,23 @@
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'context_lost',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle',
-        ],
       },
       'expected_color_pixel_passthrough_test': {
         'test_common': {
           'mixins': [
             'skia_gold_test',
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_integration_test_expected_color_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'expected_color',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--dont-restore-color-profile-after-test',
-          '--test-machine-name',
-          '${buildername}',
-          '--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle',
-        ],
-        'android_args': [
-          '--extra-browser-args=--force-online-connection-state-for-indicator',
-        ],
       },
       'gpu_process_launch_tests': {
         'test_common': {
@@ -1560,39 +1246,23 @@
           'mixins': [
             'skia_gold_test',
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_integration_test_pixel_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'pixel',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--dont-restore-color-profile-after-test',
-          '--test-machine-name',
-          '${buildername}',
-          '--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle',
-        ],
-        'android_args': [
-          '--extra-browser-args=--force-online-connection-state-for-indicator',
-        ],
       },
       'screenshot_sync_passthrough_tests': {
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_integration_test_screenshot_sync_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'screenshot_sync',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--dont-restore-color-profile-after-test',
-          '--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle',
-        ],
-        'android_args': [
-          '--extra-browser-args=--force-online-connection-state-for-indicator',
-        ],
       },
     },
 
@@ -1625,36 +1295,23 @@
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_validating',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'context_lost',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--extra-browser-args=--use-cmd-decoder=validating',
-        ],
       },
       'expected_color_pixel_validating_test': {
         'test_common': {
           'mixins': [
+            'skia_gold_test',
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_validating',
+            'gpu_integration_test_expected_color_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'expected_color',
-        'mixins': [
-          'skia_gold_test',
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--dont-restore-color-profile-after-test',
-          '--test-machine-name',
-          '${buildername}',
-          '--extra-browser-args=--use-cmd-decoder=validating',
-        ],
-        'android_args': [
-          '--extra-browser-args=--force-online-connection-state-for-indicator',
-        ],
       },
       'gpu_process_launch_tests': {
         'test_common': {
@@ -1681,41 +1338,25 @@
       'pixel_skia_gold_validating_test': {
         'test_common': {
           'mixins': [
+            'skia_gold_test',
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_validating',
+            'gpu_integration_test_pixel_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'pixel',
-        'mixins': [
-          'skia_gold_test',
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--dont-restore-color-profile-after-test',
-          '--test-machine-name',
-          '${buildername}',
-          '--extra-browser-args=--use-cmd-decoder=validating',
-        ],
-        'android_args': [
-          '--extra-browser-args=--force-online-connection-state-for-indicator',
-        ],
       },
       'screenshot_sync_validating_tests': {
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_validating',
+            'gpu_integration_test_screenshot_sync_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'screenshot_sync',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--dont-restore-color-profile-after-test',
-          '--extra-browser-args=--use-cmd-decoder=validating',
-        ],
-        'android_args': [
-          '--extra-browser-args=--force-online-connection-state-for-indicator',
-        ],
       },
     },
 
@@ -1724,15 +1365,13 @@
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
-          ],
-          'args': [
-            '--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --use-angle=gl --disable-features=SkiaGraphite',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_gl',
+            'gpu_force_skia_ganesh',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'webcodecs',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
       },
     },
 
@@ -1741,15 +1380,13 @@
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
-          ],
-          'args': [
-            '--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --use-angle=metal --disable-features=SkiaGraphite',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_metal',
+            'gpu_force_skia_ganesh',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'webcodecs',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
       },
     },
 
@@ -1758,15 +1395,13 @@
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
-          ],
-          'args': [
-            '--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle --use-angle=metal --enable-features=SkiaGraphite',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_metal',
+            'gpu_force_skia_graphite',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'webcodecs',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
       },
     },
 
@@ -1775,12 +1410,10 @@
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'webcodecs',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
       },
     },
 
@@ -1789,17 +1422,14 @@
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_d3d11',
+            'gpu_force_high_performance_gpu',
+            'gpu_integration_test_webgl2_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'webgl2_conformance',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--webgl-conformance-version=2.0.1',
-          '$$MAGIC_SUBSTITUTION_GPUWebGLRuntimeFile',
-          '--extra-browser-args=--use-gl=angle --use-angle=d3d11 --use-cmd-decoder=passthrough --force_high_performance_gpu',
-        ],
         'swarming': {
           'shards': 20,
         },
@@ -1811,17 +1441,15 @@
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
-          ],
-          'args': [
-            '--webgl-conformance-version=2.0.1',
-            '$$MAGIC_SUBSTITUTION_GPUWebGLRuntimeFile',
-            '--extra-browser-args=--use-gl=angle --use-angle=gl --use-cmd-decoder=passthrough --force_high_performance_gpu --disable-features=SkiaGraphite',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_gl',
+            'gpu_force_skia_ganesh',
+            'gpu_force_high_performance_gpu',
+            'gpu_integration_test_webgl2_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'webgl2_conformance',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
         'swarming': {
           'shards': 20,
         },
@@ -1833,17 +1461,14 @@
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
-          ],
-          'args': [
-            '--webgl-conformance-version=2.0.1',
-            '$$MAGIC_SUBSTITUTION_GPUWebGLRuntimeFile',
-            '--extra-browser-args=--use-gl=angle --use-angle=gl --use-cmd-decoder=passthrough --force_high_performance_gpu',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_gl',
+            'gpu_force_high_performance_gpu',
+            'gpu_integration_test_webgl2_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'webgl2_conformance',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
         'swarming': {
           'shards': 5,
         },
@@ -1855,17 +1480,14 @@
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_gles',
+            'gpu_force_high_performance_gpu',
+            'gpu_integration_test_webgl2_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'webgl2_conformance',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--webgl-conformance-version=2.0.1',
-          '$$MAGIC_SUBSTITUTION_GPUWebGLRuntimeFile',
-          '--extra-browser-args=--use-gl=angle --use-angle=gles --use-cmd-decoder=passthrough --force_high_performance_gpu',
-        ],
         'swarming': {
           'shards': 20,
         },
@@ -1880,18 +1502,16 @@
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
-          ],
-          'args': [
-            '--webgl-conformance-version=2.0.1',
-            '$$MAGIC_SUBSTITUTION_GPUWebGLRuntimeFile',
-            '--extra-browser-args=--use-gl=angle --use-angle=metal --use-cmd-decoder=passthrough --enable-features=EGLDualGPURendering,ForceHighPerformanceGPUForWebGL,SkiaGraphite',
-            '--enable-metal-debug-layers',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_metal',
+            'gpu_force_skia_graphite',
+            'gpu_force_high_performance_gpu_for_webgl',
+            'gpu_enable_metal_debug_layers',
+            'gpu_integration_test_webgl2_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'webgl2_conformance',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
         'swarming': {
           'shards': 20,
         },
@@ -1903,16 +1523,14 @@
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_d3d11',
+            'gpu_force_high_performance_gpu',
+            'gpu_integration_test_webgl1_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'webgl1_conformance',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--extra-browser-args=--use-gl=angle --use-angle=d3d11 --use-cmd-decoder=passthrough --force_high_performance_gpu',
-          '$$MAGIC_SUBSTITUTION_GPUWebGLRuntimeFile',
-        ],
         'swarming': {
           'shards': 2,
         },
@@ -1924,16 +1542,14 @@
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_d3d9',
+            'gpu_force_high_performance_gpu',
+            'gpu_integration_test_webgl1_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'webgl1_conformance',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--extra-browser-args=--use-gl=angle --use-angle=d3d9 --use-cmd-decoder=passthrough --force_high_performance_gpu',
-          '$$MAGIC_SUBSTITUTION_GPUWebGLRuntimeFile',
-        ],
         'swarming': {
           'shards': 2,
         },
@@ -1945,16 +1561,15 @@
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
-          ],
-          'args': [
-            '--extra-browser-args=--use-gl=angle --use-angle=gl --use-cmd-decoder=passthrough --force_high_performance_gpu --disable-features=SkiaGraphite',
-            '$$MAGIC_SUBSTITUTION_GPUWebGLRuntimeFile',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_gl',
+            'gpu_force_skia_ganesh',
+            'gpu_force_high_performance_gpu',
+            'gpu_integration_test_webgl1_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'webgl1_conformance',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
         'swarming': {
           'shards': 2,
         },
@@ -1966,16 +1581,14 @@
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_gl',
+            'gpu_force_high_performance_gpu',
+            'gpu_integration_test_webgl1_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'webgl1_conformance',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--extra-browser-args=--use-gl=angle --use-angle=gl --use-cmd-decoder=passthrough --force_high_performance_gpu',
-          '$$MAGIC_SUBSTITUTION_GPUWebGLRuntimeFile',
-        ],
         'swarming': {
           'shards': 2,
         },
@@ -1987,16 +1600,14 @@
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
+            'gpu_force_angle_gles',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_high_performance_gpu',
+            'gpu_integration_test_webgl1_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'webgl1_conformance',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--extra-browser-args=--use-gl=angle --use-angle=gles --use-cmd-decoder=passthrough --force_high_performance_gpu',
-          '$$MAGIC_SUBSTITUTION_GPUWebGLRuntimeFile',
-        ],
         'swarming': {
           'shards': 6,
         },
@@ -2011,17 +1622,16 @@
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
-          ],
-          'args': [
-            '--extra-browser-args=--use-gl=angle --use-angle=metal --use-cmd-decoder=passthrough --enable-features=EGLDualGPURendering,ForceHighPerformanceGPUForWebGL --disable-features=SkiaGraphite',
-            '$$MAGIC_SUBSTITUTION_GPUWebGLRuntimeFile',
-            '--enable-metal-debug-layers',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_metal',
+            'gpu_force_skia_ganesh',
+            'gpu_force_high_performance_gpu_for_webgl',
+            'gpu_enable_metal_debug_layers',
+            'gpu_integration_test_webgl1_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'webgl1_conformance',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
       },
     },
 
@@ -2030,17 +1640,16 @@
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
-          ],
-          'args': [
-            '--extra-browser-args=--use-gl=angle --use-angle=metal --use-cmd-decoder=passthrough --enable-features=EGLDualGPURendering,ForceHighPerformanceGPUForWebGL,SkiaGraphite',
-            '$$MAGIC_SUBSTITUTION_GPUWebGLRuntimeFile',
-            '--enable-metal-debug-layers',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_metal',
+            'gpu_force_skia_graphite',
+            'gpu_force_high_performance_gpu_for_webgl',
+            'gpu_enable_metal_debug_layers',
+            'gpu_integration_test_webgl1_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'webgl1_conformance',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
       },
     },
 
@@ -2049,14 +1658,14 @@
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_swiftshader',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'webgl1_conformance',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
         'args': [
-          '--extra-browser-args=--use-gl=angle --use-angle=swiftshader --use-cmd-decoder=passthrough --force_high_performance_gpu',
+          '--extra-browser-args=--force_high_performance_gpu',
           '--test-filter=conformance/rendering/gl-drawelements.html',
         ],
         'swarming': {
@@ -2070,16 +1679,13 @@
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_validating',
+            'gpu_force_high_performance_gpu',
+            'gpu_integration_test_webgl1_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'webgl1_conformance',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--extra-browser-args=--use-cmd-decoder=validating --force_high_performance_gpu',
-          '$$MAGIC_SUBSTITUTION_GPUWebGLRuntimeFile',
-        ],
         'swarming': {
           'shards': 2,
         },
@@ -2094,15 +1700,14 @@
         'test_common': {
           'mixins': [
             'has_native_resultdb_integration',
+            'gpu_force_command_decoder_passthrough',
+            'gpu_force_angle_vulkan',
+            'gpu_force_high_performance_gpu',
+            'gpu_integration_test_webgl1_args',
+            'gpu_integration_test_common_args',
           ],
         },
         'telemetry_test_name': 'webgl1_conformance',
-        'mixins': [
-          'gpu_integration_test_common_args',
-        ],
-        'args': [
-          '--extra-browser-args=--use-angle=vulkan --use-cmd-decoder=passthrough --force_high_performance_gpu',
-        ],
         'swarming': {
           'shards': 2,
         },
@@ -2190,7 +1795,7 @@
         'test': 'blink_wpt_tests',
         'results_handler': 'layout tests',
         'swarming': {
-          'shards': 10,
+          'shards': 2,
         },
       },
       'not_site_per_process_headless_shell_wpt_tests': {
@@ -2884,32 +2489,6 @@
       'chromeos_integration_tests_suite': {
         'variants': [
           'CROS_RELEASE_LKGM',
-        ],
-      },
-    },
-
-    'dawn_chromeos_release_telemetry_tests_volteer_skylab': {
-      'gpu_dawn_webgpu_cts': {
-        'variants': [
-          'CROS_VOLTEER_PUBLIC_RELEASE_ASH_LKGM',
-        ],
-      },
-    },
-
-    'dawn_chromeos_release_tests_volteer_skylab': {
-      'gpu_common_gtests_passthrough': {
-        'variants': [
-          'CROS_VOLTEER_PUBLIC_RELEASE_ASH_LKGM',
-        ],
-      },
-      'gpu_dawn_gtests': {
-        'variants': [
-          'CROS_VOLTEER_PUBLIC_RELEASE_ASH_LKGM',
-        ],
-      },
-      'gpu_dawn_gtests_with_validation': {
-        'variants': [
-          'CROS_VOLTEER_PUBLIC_RELEASE_ASH_LKGM',
         ],
       },
     },

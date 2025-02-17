@@ -18,7 +18,7 @@ PageActionModel::PageActionModel() = default;
 
 PageActionModel::~PageActionModel() {
   observer_list_.Notify(
-      &PageActionModelObserver::OnPageActionModelWillBeDeleted, this);
+      &PageActionModelObserver::OnPageActionModelWillBeDeleted, *this);
 }
 
 void PageActionModel::SetShowRequested(base::PassKey<PageActionController>,
@@ -27,6 +27,33 @@ void PageActionModel::SetShowRequested(base::PassKey<PageActionController>,
     return;
   }
   show_requested_ = requested;
+  NotifyChange();
+}
+
+void PageActionModel::SetShowSuggestionChip(base::PassKey<PageActionController>,
+                                            bool show) {
+  if (show_suggestion_chip_ == show) {
+    return;
+  }
+  show_suggestion_chip_ = show;
+  NotifyChange();
+}
+
+void PageActionModel::SetTabActive(base::PassKey<PageActionController>,
+                                   bool is_active) {
+  if (is_tab_active_ == is_active) {
+    return;
+  }
+  is_tab_active_ = is_active;
+  NotifyChange();
+}
+
+void PageActionModel::SetHasPinnedIcon(base::PassKey<PageActionController>,
+                                       bool has_pinned_icon) {
+  if (has_pinned_icon_ == has_pinned_icon) {
+    return;
+  }
+  has_pinned_icon_ = has_pinned_icon;
   NotifyChange();
 }
 
@@ -62,7 +89,12 @@ void PageActionModel::SetActionItemProperties(
 }
 
 bool PageActionModel::GetVisible() const {
-  return action_item_enabled_ && action_item_visible_ && show_requested_;
+  return is_tab_active_ && action_item_enabled_ && action_item_visible_ &&
+         show_requested_ && !has_pinned_icon_;
+}
+
+bool PageActionModel::GetShowSuggestionChip() const {
+  return show_suggestion_chip_;
 }
 
 const ui::ImageModel& PageActionModel::GetImage() const {
@@ -96,8 +128,11 @@ void PageActionModel::RemoveObserver(PageActionModelObserver* observer) {
 }
 
 void PageActionModel::NotifyChange() {
+  CHECK(!is_notifying_observers_)
+      << "PageActionModel should not be updated while notifying observers";
+  base::AutoReset<bool> auto_reset(&is_notifying_observers_, true);
   observer_list_.Notify(&PageActionModelObserver::OnPageActionModelChanged,
-                        this);
+                        *this);
 }
 
 }  // namespace page_actions

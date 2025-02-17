@@ -23,6 +23,7 @@
 #include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/extensions/crx_installer.h"
+#include "chrome/browser/extensions/delayed_install_manager.h"
 #include "chrome/browser/extensions/extension_garbage_collector_factory.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/load_error_reporter.h"
@@ -53,6 +54,7 @@
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/pref_names.h"
+#include "extensions/common/extension_features.h"
 #include "extensions/common/extensions_client.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -266,6 +268,9 @@ ExtensionServiceTestBase::ExtensionServiceTestBase(
       std::vector<
           raw_ptr<policy::ConfigurationPolicyProvider, VectorExperimental>>{
           &policy_provider_});
+  // Allow unpacked extensions without developer mode for testing.
+  feature_list_.InitAndDisableFeature(
+      extensions_features::kExtensionDisableUnsupportedDeveloper);
 }
 
 ExtensionServiceTestBase::~ExtensionServiceTestBase() {
@@ -487,8 +492,9 @@ void ExtensionServiceTestBase::CreateExtensionService(
   // will register one specifically.
   service_->ClearProvidersForTesting();
 
-  service_->RegisterInstallGate(ExtensionPrefs::DelayReason::kWaitForImports,
-                                service_->shared_module_service());
+  service_->delayed_install_manager()->RegisterInstallGate(
+      ExtensionPrefs::DelayReason::kWaitForImports,
+      service_->shared_module_service());
 
 #if BUILDFLAG(IS_CHROMEOS)
   if (!enable_install_limiter) {

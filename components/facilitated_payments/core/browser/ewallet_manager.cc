@@ -163,24 +163,18 @@ void EwalletManager::OnApiAvailabilityReceived(base::TimeTicks start_time,
 
   ShowEwalletPaymentPrompt(
       supported_ewallets_,
-      base::BindOnce(&EwalletManager::OnEwalletPaymentPromptResult,
+      base::BindOnce(&EwalletManager::OnEwalletAccountSelected,
                      weak_ptr_factory_.GetWeakPtr()));
 }
 
-void EwalletManager::OnEwalletPaymentPromptResult(
-    bool is_prompt_accepted,
-    int64_t selected_instrument_id) {
-  if (!is_prompt_accepted) {
-    return;
-  }
-
+void EwalletManager::OnEwalletAccountSelected(int64_t selected_instrument_id) {
   LogEwalletFopSelected(GetAvailableEwalletsConfiguration());
   LogEwalletFopSelectorResultUkm(/*accepted=*/true, ukm_source_id_, scheme_);
 
   ShowProgressScreen();
 
   initiate_payment_request_details_->instrument_id_ = selected_instrument_id;
-  auto iter_ewallet = base::ranges::find_if(
+  auto iter_ewallet = std::ranges::find_if(
       supported_ewallets_, [&](const autofill::Ewallet& ewallet) {
         return ewallet.payment_instrument().instrument_id() ==
                selected_instrument_id;
@@ -283,7 +277,7 @@ void EwalletManager::OnInitiatePaymentResponseReceived(
 
   LogInitiatePurchaseActionAttempt(kPaymentsType, scheme_);
   GetApiClient()->InvokePurchaseAction(
-      account_info.value(), response_details->secure_payload_.action_token,
+      account_info.value(), response_details->secure_payload_,
       base::BindOnce(&EwalletManager::OnTransactionResult,
                      weak_ptr_factory_.GetWeakPtr(), base::TimeTicks::Now()));
 
@@ -353,10 +347,10 @@ void EwalletManager::DismissPrompt() {
 
 void EwalletManager::ShowEwalletPaymentPrompt(
     base::span<const autofill::Ewallet> ewallet_suggestions,
-    base::OnceCallback<void(bool, int64_t)> on_user_decision_callback) {
+    base::OnceCallback<void(int64_t)> on_ewallet_account_selected) {
   ui_state_ = UiState::kFopSelector;
   client_->ShowEwalletPaymentPrompt(std::move(ewallet_suggestions),
-                                    std::move(on_user_decision_callback));
+                                    std::move(on_ewallet_account_selected));
 }
 
 void EwalletManager::ShowProgressScreen() {

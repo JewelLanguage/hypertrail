@@ -53,7 +53,14 @@ std::vector<ActivityLogItem> EmptyMessagingBackendService::GetActivityLog(
 }
 
 void EmptyMessagingBackendService::ClearDirtyTabMessagesForGroup(
-    tab_groups::EitherGroupID group_id) {}
+    const data_sharing::GroupId& collaboration_group_id) {}
+
+void EmptyMessagingBackendService::ClearPersistentMessage(
+    const base::Uuid& message_id,
+    std::optional<PersistentNotificationType> type) {}
+
+void EmptyMessagingBackendService::RemoveMessages(
+    const std::vector<base::Uuid>& message_ids) {}
 
 void EmptyMessagingBackendService::AddActivityLogForTesting(
     data_sharing::GroupId collaboration_id,

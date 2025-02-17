@@ -2,8 +2,14 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+if (is_android) {
+  import("//build/config/android/config.gni")
+  import("//build/config/android/rules.gni")
+}
+
 static_library("regional_capabilities") {
   sources = [
+    "eea_countries_ids.h",
     "regional_capabilities_service.cc",
     "regional_capabilities_service.h",
     "regional_capabilities_switches.cc",
@@ -17,10 +23,6 @@ static_library("regional_capabilities") {
     "//components/country_codes",
     "//components/keyed_service/core",
     "//components/prefs",
-    "//components/search_engines:search_engine_utils",
-
-    # TODO(crbug.com/388792357): Refactor out search_engines dependency.
-    "//components/search_engines:search_engines_switches",
   ]
 
   if (is_android) {
@@ -43,7 +45,10 @@ static_library("test_support") {
 
 source_set("unit_tests") {
   testonly = true
-  sources = [ "regional_capabilities_service_unittest.cc" ]
+  sources = [
+    "regional_capabilities_service_unittest.cc",
+    "regional_capabilities_utils_unittest.cc",
+  ]
 
   deps = [
     ":regional_capabilities",
@@ -51,16 +56,7 @@ source_set("unit_tests") {
     "//base/test:test_support",
     "//components/country_codes",
     "//components/metrics",
-    "//components/search_engines:search_engines_switches",
     "//components/sync_preferences:test_support",
     "//testing/gtest",
   ]
-
-  if (is_android) {
-    # Note: "//components/regional_capabilities/android:test_utils_java" is also
-    # also needed, but it seems that for now it needs to be added in the `deps`
-    # of `//components:components_unittests`.
-    deps +=
-        [ "//components/regional_capabilities/android:test_utils_jni_headers" ]
-  }
 }

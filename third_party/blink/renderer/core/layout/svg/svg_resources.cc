@@ -19,7 +19,8 @@
 
 #include "third_party/blink/renderer/core/layout/svg/svg_resources.h"
 
-#include "base/ranges/algorithm.h"
+#include <algorithm>
+
 #include "third_party/blink/renderer/core/css/properties/longhands.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_resource_filter.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_resource_paint_server.h"
@@ -115,12 +116,7 @@ void SVGResources::UpdateEffects(LayoutObject& object,
       (style.HasFilter() || (old_style && old_style->HasFilter()))) {
     // We either created one above, or had one already.
     DCHECK(GetClient(object));
-    if (RuntimeEnabledFeatures::SvgTransformOptimizationEnabled()) {
-      GetClient(object)->InvalidateFilterData();
-    } else {
-      object.SetNeedsPaintPropertyUpdate();
-      GetClient(object)->MarkFilterDataDirty();
-    }
+    GetClient(object)->InvalidateFilterData();
   }
   if (!old_style || !had_client)
     return;
@@ -261,7 +257,7 @@ bool ContainsResource(const ContainerType* container, SVGResource* resource) {
 
 bool ContainsResource(const FilterOperations& operations,
                       SVGResource* resource) {
-  return base::ranges::any_of(
+  return std::ranges::any_of(
       operations.Operations(), [resource](const FilterOperation* operation) {
         return ContainsResource(DynamicTo<ReferenceFilterOperation>(operation),
                                 resource);

@@ -21,7 +21,6 @@
 #include "base/feature_list.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "pdf/draw_utils/page_boundary_intersect.h"
@@ -65,15 +64,12 @@ constexpr ink::AffineTransform kIdentityTransform;
 
 ink::StrokeInput::ToolType GetToolTypeFromTouchEvent(
     const blink::WebTouchEvent& event) {
-  // TODO(crbug.com/377733396): Investigate how multiple touches and pens should
-  // behave. For now, if there is any pen touch, set the tool type to pen.
-  for (size_t i = 0; i < event.touches_length; ++i) {
-    if (event.touches[i].pointer_type ==
-        blink::WebPointerProperties::PointerType::kPen) {
-      return ink::StrokeInput::ToolType::kStylus;
-    }
-  }
-  return ink::StrokeInput::ToolType::kTouch;
+  // Assumes the caller already handled multi-touch events.
+  CHECK_EQ(event.touches_length, 1u);
+  return event.touches[0].pointer_type ==
+                 blink::WebPointerProperties::PointerType::kPen
+             ? ink::StrokeInput::ToolType::kStylus
+             : ink::StrokeInput::ToolType::kTouch;
 }
 
 PdfInkModule::StrokeInputPoints GetStrokePointsForTesting(  // IN-TEST
@@ -142,6 +138,15 @@ PdfInkModule::PdfInkModule(PdfInkModuleClient& client)
 
 PdfInkModule::~PdfInkModule() = default;
 
+bool PdfInkModule::HasInputsToDraw() const {
+  if (!enabled_ || !is_drawing_stroke()) {
+    return false;
+  }
+
+  const DrawingStrokeState& state = drawing_stroke_state();
+  return !state.inputs.empty();
+}
+
 void PdfInkModule::Draw(SkCanvas& canvas) {
   ink::SkiaRenderer skia_renderer;
 
@@ -150,9 +155,7 @@ void PdfInkModule::Draw(SkCanvas& canvas) {
   const float zoom = client_->GetZoom();
 
   auto in_progress_stroke = CreateInProgressStrokeSegmentsFromInputs();
-  if (in_progress_stroke.empty()) {
-    return;
-  }
+  CHECK(!in_progress_stroke.empty());
 
   DrawingStrokeState& state = drawing_stroke_state();
 
@@ -401,8 +404,13 @@ bool PdfInkModule::OnTouchStart(const blink::WebTouchEvent& event) {
     return false;
   }
 
-  gfx::PointF position = event.touches[0].PositionInWidget();
   ink::StrokeInput::ToolType tool_type = GetToolTypeFromTouchEvent(event);
+  MaybeRecordPenInput(tool_type);
+  if (ShouldIgnoreTouchInput(tool_type)) {
+    return false;
+  }
+
+  gfx::PointF position = event.touches[0].PositionInWidget();
   return is_drawing_stroke()
              ? StartStroke(position, event.TimeStamp(), tool_type)
              : StartEraseStroke(position, tool_type);
@@ -415,8 +423,13 @@ bool PdfInkModule::OnTouchEnd(const blink::WebTouchEvent& event) {
     return false;
   }
 
-  gfx::PointF position = event.touches[0].PositionInWidget();
   ink::StrokeInput::ToolType tool_type = GetToolTypeFromTouchEvent(event);
+  MaybeRecordPenInput(tool_type);
+  if (ShouldIgnoreTouchInput(tool_type)) {
+    return false;
+  }
+
+  gfx::PointF position = event.touches[0].PositionInWidget();
   return is_drawing_stroke()
              ? FinishStroke(position, event.TimeStamp(), tool_type)
              : FinishEraseStroke(position, tool_type);
@@ -429,8 +442,13 @@ bool PdfInkModule::OnTouchMove(const blink::WebTouchEvent& event) {
     return false;
   }
 
-  gfx::PointF position = event.touches[0].PositionInWidget();
   ink::StrokeInput::ToolType tool_type = GetToolTypeFromTouchEvent(event);
+  MaybeRecordPenInput(tool_type);
+  if (ShouldIgnoreTouchInput(tool_type)) {
+    return false;
+  }
+
+  gfx::PointF position = event.touches[0].PositionInWidget();
   return is_drawing_stroke()
              ? ContinueStroke(position, event.TimeStamp(), tool_type)
              : ContinueEraseStroke(position, tool_type);
@@ -495,6 +513,11 @@ bool PdfInkModule::ContinueStroke(const gfx::PointF& position,
   const gfx::PointF last_position = state.input_last_event.value().position;
   if (position == last_position) {
     // Since the position did not change, do nothing.
+    return true;
+  }
+
+  if (state.input_last_event.value().tool_type != tool_type) {
+    // Ignore if the user is simultaneously using a different input type.
     return true;
   }
 
@@ -771,6 +794,18 @@ bool PdfInkModule::EraseHelper(const gfx::PointF& position, int page_index) {
   return true;
 }
 
+void PdfInkModule::MaybeRecordPenInput(ink::StrokeInput::ToolType tool_type) {
+  if (tool_type == ink::StrokeInput::ToolType::kStylus) {
+    using_stylus_instead_of_touch_ = true;
+  }
+}
+
+bool PdfInkModule::ShouldIgnoreTouchInput(
+    ink::StrokeInput::ToolType tool_type) {
+  return using_stylus_instead_of_touch_ &&
+         tool_type == ink::StrokeInput::ToolType::kTouch;
+}
+
 void PdfInkModule::HandleAnnotationRedoMessage(
     const base::Value::Dict& message) {
   ApplyUndoRedoCommands(undo_redo_model_.Redo());
@@ -1001,7 +1036,7 @@ void PdfInkModule::RecordStrokePosition(const gfx::PointF& position,
   base::TimeDelta time_diff = timestamp - state.start_time.value();
   auto result = state.inputs.back().Append(
       CreateInkStrokeInput(tool_type, canonical_position, time_diff));
-  CHECK(result.ok());
+  CHECK(result.ok()) << result.message();
 }
 
 void PdfInkModule::ApplyUndoRedoCommands(
@@ -1062,8 +1097,8 @@ void PdfInkModule::ApplyUndoRedoCommandsHelper(
     }
 
     std::vector<InkStrokeId> ids_to_apply_command;
-    base::ranges::set_intersection(stroke_ids, page_ids,
-                                   std::back_inserter(ids_to_apply_command));
+    std::ranges::set_intersection(stroke_ids, page_ids,
+                                  std::back_inserter(ids_to_apply_command));
     if (ids_to_apply_command.empty()) {
       continue;
     }
@@ -1073,7 +1108,7 @@ void PdfInkModule::ApplyUndoRedoCommandsHelper(
     auto it = page_ink_strokes.begin();
     ink::Envelope invalidate_envelope;
     for (InkStrokeId id : ids_to_apply_command) {
-      it = base::ranges::lower_bound(
+      it = std::ranges::lower_bound(
           it, page_ink_strokes.end(), id, {},
           [](const FinishedStrokeState& state) { return state.id; });
       auto& stroke = *it;
@@ -1104,8 +1139,8 @@ void PdfInkModule::ApplyUndoRedoCommandsHelper(
     }
 
     std::vector<InkModeledShapeId> ids_to_apply_command;
-    base::ranges::set_intersection(shape_ids, page_ids,
-                                   std::back_inserter(ids_to_apply_command));
+    std::ranges::set_intersection(shape_ids, page_ids,
+                                  std::back_inserter(ids_to_apply_command));
     if (ids_to_apply_command.empty()) {
       continue;
     }
@@ -1115,7 +1150,7 @@ void PdfInkModule::ApplyUndoRedoCommandsHelper(
     auto it = page_ink_shapes.begin();
     ink::Envelope invalidate_envelope;
     for (InkModeledShapeId id : ids_to_apply_command) {
-      it = base::ranges::lower_bound(
+      it = std::ranges::lower_bound(
           it, page_ink_shapes.end(), id, {},
           [](const LoadedV2ShapeState& state) { return state.id; });
       auto& shape_state = *it;
@@ -1156,7 +1191,7 @@ void PdfInkModule::ApplyUndoRedoDiscards(
   const InkStrokeId start_id = *discards.begin();
   for (auto& [page_index, page_ink_strokes] : strokes_) {
     // Find the first element in `page_ink_strokes` whose ID >= `start_id`.
-    auto start = base::ranges::lower_bound(
+    auto start = std::ranges::lower_bound(
         page_ink_strokes, start_id, {},
         [](const FinishedStrokeState& state) { return state.id; });
     auto end = page_ink_strokes.end();

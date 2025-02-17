@@ -235,6 +235,10 @@ struct StructTraits<autofill::mojom::FormFieldDataDataView,
     return r.parsed_autocomplete();
   }
 
+  static const std::u16string& pattern(const autofill::FormFieldData& r) {
+    return r.pattern();
+  }
+
   static const std::u16string& placeholder(const autofill::FormFieldData& r) {
     return r.placeholder();
   }
@@ -632,6 +636,11 @@ struct StructTraits<autofill::mojom::PasswordFormFillDataDataView,
   static std::vector<autofill::FieldRendererId> suggestion_banned_fields(
       const autofill::PasswordFormFillData& r) {
     return r.suggestion_banned_fields;
+  }
+
+  static bool notify_browser_of_successful_filling(
+      const autofill::PasswordFormFillData& r) {
+    return r.notify_browser_of_successful_filling;
   }
 
   static bool Read(autofill::mojom::PasswordFormFillDataDataView data,

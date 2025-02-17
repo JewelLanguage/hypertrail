@@ -14,7 +14,6 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/util/managed_browser_utils.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
@@ -137,7 +136,7 @@ class UserPolicySigninServiceTest : public InProcessBrowserTest {
     // that these objects did not leak.
     ++helper_created_count_;
     return new TurnSyncOnHelper(
-        profile(), signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER,
+        profile(), signin_metrics::AccessPoint::kBookmarkManager,
         signin_metrics::PromoAction::PROMO_ACTION_WITH_DEFAULT,
         account_info_.account_id,
         TurnSyncOnHelper::SigninAbortedMode::REMOVE_ACCOUNT,

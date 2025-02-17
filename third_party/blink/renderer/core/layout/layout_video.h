@@ -59,7 +59,7 @@ class CORE_EXPORT LayoutVideo final : public LayoutMedia {
     return "LayoutVideo";
   }
 
-  void IntrinsicSizeChanged() override;
+  void NaturalSizeChanged() override;
 
   OverflowClipAxes ComputeOverflowClipAxes() const final {
     NOT_DESTROYED();
@@ -91,8 +91,7 @@ class CORE_EXPORT LayoutVideo final : public LayoutMedia {
   }
   CompositingReasons AdditionalCompositingReasons() const override;
 
-  PhysicalNaturalSizingInfo cached_image_natural_dimensions_ =
-      PhysicalNaturalSizingInfo::None();
+  PhysicalNaturalSizingInfo natural_dimensions_;
 };
 
 template <>

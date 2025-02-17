@@ -826,6 +826,8 @@ base::Value::Dict SerializeIntelligentScanInfo(
   base::Value::Dict dict;
   dict.Set("brand", intelligent_scan_info.brand());
   dict.Set("intent", intelligent_scan_info.intent());
+  dict.Set("no_info_reason", IntelligentScanInfo_NoInfoReason_Name(
+                                 intelligent_scan_info.no_info_reason()));
   return dict;
 }
 
@@ -1684,11 +1686,6 @@ base::Value::Dict SerializePasswordReuseEvent(
   event_dict.Set("frame_id", event.frame_id());
 
   event_dict.Set(
-      "sync_account_type",
-      LoginReputationClientRequest_PasswordReuseEvent_SyncAccountType_Name(
-          event.sync_account_type()));
-
-  event_dict.Set(
       "reused_password_type",
       LoginReputationClientRequest_PasswordReuseEvent_ReusedPasswordType_Name(
           event.reused_password_type()));
@@ -1801,15 +1798,30 @@ base::Value::Dict SerializeReferringAppInfo(
            ReferringAppInfo_ReferringAppSource_Name(info.referring_app_source));
   dict.Set("referring_app_info", info.referring_app_name);
   dict.Set("target_url", info.target_url.spec());
+  // Do not bother serializing referring_webapk_* here, because they are only
+  // populated for a WebAPK, and it is not possible to launch
+  // chrome://safe-browsing in a WebAPK, so they will never show up here.
   return dict;
 }
 #endif
+
+base::Value::Dict SerializeSafeBrowsingWebAppKey(
+    const SafeBrowsingWebAppKey& key) {
+  base::Value::Dict dict;
+  dict.Set("start_url_origin", key.start_url_origin());
+  dict.Set("id_or_start_path", key.id_or_start_path());
+  return dict;
+}
 
 base::Value::Dict SerializeReferringAppInfo(const ReferringAppInfo& info) {
   base::Value::Dict dict;
   dict.Set("referring_app_source", ReferringAppInfo_ReferringAppSource_Name(
                                        info.referring_app_source()));
   dict.Set("referring_app_info", info.referring_app_name());
+  if (info.has_referring_webapk()) {
+    dict.Set("referring_webapk",
+             SerializeSafeBrowsingWebAppKey(info.referring_webapk()));
+  }
   return dict;
 }
 
@@ -1961,6 +1973,12 @@ std::string SerializeURTLookupPing(const URTLookupRequest& ping) {
   request_dict.Set("version", request.version());
 
   request_dict.Set("os", RTLookupRequest_OSType_Name(request.os_type()));
+
+  base::Value::List local_ips;
+  for (const std::string& local_ip : request.local_ips()) {
+    local_ips.Append(local_ip);
+  }
+  request_dict.Set("local_ips", std::move(local_ips));
 
   base::Value::List referrer_chain;
   for (const auto& referrer_chain_entry : request.referrer_chain()) {
@@ -2130,6 +2148,11 @@ std::string SerializeContentAnalysisRequest(
   request_dict.Set("reason",
                    enterprise_connectors::ContentAnalysisRequest_Reason_Name(
                        request.reason()));
+  base::Value::List local_ips;
+  for (const std::string& local_ip : request.local_ips()) {
+    local_ips.Append(local_ip);
+  }
+  request_dict.Set("local_ips", std::move(local_ips));
 
   if (request.has_request_data()) {
     base::Value::Dict request_data;

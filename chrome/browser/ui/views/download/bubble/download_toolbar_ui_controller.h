@@ -45,6 +45,9 @@ class DownloadToolbarUIController
       public BrowserListObserver,
       public DownloadBubbleRowListViewInfoObserver {
  public:
+  // Identifies the bubble dialog widget for testing.
+  static constexpr char kBubbleName[] = "DownloadBubbleDialog";
+
   explicit DownloadToolbarUIController(BrowserView* browser_view);
   DownloadToolbarUIController(const DownloadToolbarUIController&) = delete;
   DownloadToolbarUIController& operator=(const DownloadToolbarUIController&) =
@@ -96,6 +99,10 @@ class DownloadToolbarUIController
 
   void InvokeUI();
 
+  // If |has_pending_download_started_animation_| is true, shows an animation of
+  // a download icon moving upwards towards the toolbar icon.
+  void ShowPendingDownloadStartedAnimation();
+
   DownloadBubbleUIController* bubble_controller() {
     return bubble_controller_.get();
   }
@@ -112,6 +119,7 @@ class DownloadToolbarUIController
 
   bool IsProgressRingInDownloadingStateForTesting();
   bool IsProgressRingInDormantStateForTesting();
+  views::ImageView* GetImageBadgeForTesting();
 
  private:
   // Closes the bubble when it detects an event such as a mouse click, escape
@@ -126,7 +134,7 @@ class DownloadToolbarUIController
   class BubbleCloser : public ui::EventObserver {
    public:
     explicit BubbleCloser(views::Button* toolbar_button,
-                          base::OnceClosure press_callback);
+                          base::WeakPtr<DownloadDisplay> download_display);
 
     BubbleCloser(const BubbleCloser& other) = delete;
     BubbleCloser& operator=(const BubbleCloser& other) = delete;
@@ -137,8 +145,7 @@ class DownloadToolbarUIController
     void OnEvent(const ui::Event& event) override;
 
    private:
-    raw_ptr<views::Button> toolbar_button_ = nullptr;
-    base::OnceClosure callback_;
+    base::WeakPtr<DownloadDisplay> download_display_;
     std::unique_ptr<views::EventMonitor> event_monitor_;
   };
 
@@ -209,6 +216,21 @@ class DownloadToolbarUIController
 
   // Whether we have a new progress_info_ and need to redraw the button.
   bool redraw_progress_soon_ = false;
+
+  // Marks whether there is a pending download started animation. This is needed
+  // because the animation should only be triggered after the view has been
+  // laid out properly, so this provides a way to remember to show the animation
+  // if needed, when performing layout.
+  bool has_pending_download_started_animation_ = false;
+
+// Overrides whether we are allowed to show the download started animation,
+// may be false in tests.
+#if BUILDFLAG(IS_CHROMEOS)
+  // NOTE: Disabled on ChromeOS to respect its own download renderings.
+  bool show_download_started_animation_ = false;
+#else
+  bool show_download_started_animation_ = true;
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   // Tracks the task to automatically close the partial view after some amount
   // of time open, to minimize disruption to the user.

@@ -15,17 +15,18 @@
 #include "ash/webui/settings/public/constants/routes.mojom.h"
 #include "ash/webui/settings/public/constants/setting.mojom.h"
 #include "base/feature_list.h"
+#include "base/notreached.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/ash/lobster/lobster_service.h"
 #include "chrome/browser/ash/lobster/lobster_service_provider.h"
 #include "chrome/browser/ash/lobster/lobster_system_state_provider.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/editor_menu/editor_manager_factory.h"
+#include "chrome/browser/ui/ash/editor_menu/editor_menu_card_context.h"
 #include "chrome/browser/ui/ash/editor_menu/editor_menu_promo_card_view.h"
 #include "chrome/browser/ui/ash/editor_menu/editor_menu_strings.h"
 #include "chrome/browser/ui/ash/editor_menu/editor_menu_view.h"
@@ -37,6 +38,7 @@
 #include "chromeos/constants/chromeos_features.h"
 #include "content/public/browser/browser_context.h"
 #include "ui/base/ime/ash/ime_bridge.h"
+#include "ui/base/ime/text_input_client.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/view_utils.h"
 #include "ui/views/widget/widget.h"
@@ -49,13 +51,11 @@ namespace chromeos::editor_menu {
 
 namespace {
 
-gfx::Rect CalculateCaretBounds() {
+ui::TextInputClient* GetCurrentTextInputClient() {
   const ui::InputMethod* input_method =
       ash::IMEBridge::Get()->GetInputContextHandler()->GetInputMethod();
-  if (input_method && input_method->GetTextInputClient()) {
-    return input_method->GetTextInputClient()->GetCaretBounds();
-  }
-  return gfx::Rect();
+
+  return input_method != nullptr ? input_method->GetTextInputClient() : nullptr;
 }
 
 std::unique_ptr<LobsterManager> CreateLobsterManager() {
@@ -68,7 +68,7 @@ std::unique_ptr<LobsterManager> CreateLobsterManager() {
 
   std::unique_ptr<ash::LobsterController::Trigger> lobster_trigger =
       lobster_controller->CreateTrigger(ash::LobsterEntryPoint::kRightClickMenu,
-                                        true, CalculateCaretBounds());
+                                        GetCurrentTextInputClient());
 
   if (!lobster_trigger) {
     return nullptr;
@@ -104,7 +104,9 @@ void EditorMenuControllerImpl::OnTextAvailable(
                       /*text_selection_mode=*/selected_text.length() > 0
                           ? EditorTextSelectionMode::kHasSelection
                           : EditorTextSelectionMode::kNoSelection,
-                      false, {}));
+                      /*consent_status_settled=*/false,
+                      /*preset_queries=*/{}));
+    return;
   }
 
   card_session_->editor_manager()->GetEditorPanelContext(base::BindOnce(
@@ -162,7 +164,7 @@ void EditorMenuControllerImpl::OnChipButtonPressed(
 }
 
 void EditorMenuControllerImpl::OnTabSelected(int index) {
-  if (!card_session_ || card_session_->editor_manager() == nullptr) {
+  if (card_session_ == nullptr) {
     return;
   }
 
@@ -173,8 +175,7 @@ void EditorMenuControllerImpl::OnTabSelected(int index) {
 
 void EditorMenuControllerImpl::OnTextfieldArrowButtonPressed(
     std::u16string_view text) {
-  if (text.empty() || !card_session_ ||
-      card_session_->editor_manager() == nullptr) {
+  if (text.empty() || card_session_ == nullptr) {
     return;
   }
 
@@ -252,9 +253,23 @@ void EditorMenuControllerImpl::LogEditorMode(const EditorMode& editor_mode) {
 
 void EditorMenuControllerImpl::GetEditorMenuCardContext(
     base::OnceCallback<void(const EditorMenuCardContext&)> callback) {
-  if (!card_session_ || card_session_->editor_manager() == nullptr) {
+  if (card_session_ == nullptr) {
     return;
   }
+
+  if (card_session_->editor_manager() == nullptr) {
+    OnGetEditorCardMenuContext(
+        std::move(callback), card_session_->GetLobsterMode(),
+        // At this stage, we do not need to be 100% correct about the text
+        // selection data, because it will be updated later from
+        // EditorMenuControllerImpl::OnTextAvailable.
+        EditorContext(EditorMode::kHardBlocked,
+                      EditorTextSelectionMode::kNoSelection,
+                      /*consent_status_settled=*/false,
+                      /*preset_queries=*/{}));
+    return;
+  }
+
   card_session_->editor_manager()->GetEditorPanelContext(
       base::BindOnce(&EditorMenuControllerImpl::OnGetEditorCardMenuContext,
                      weak_factory_.GetWeakPtr(), std::move(callback),
@@ -278,6 +293,11 @@ void EditorMenuControllerImpl::OnGetEditorCardMenuContext(
           .set_editor_preset_queries(editor_context.preset_queries)
           .set_editor_mode(editor_context.mode)
           .set_lobster_mode(lobster_mode)
+          .set_text_selection_mode(
+              editor_context.text_selection_mode ==
+                      EditorTextSelectionMode::kHasSelection
+                  ? EditorMenuCardTextSelectionMode::kHasSelection
+                  : EditorMenuCardTextSelectionMode::kNoSelection)
           .build());
 }
 
@@ -291,6 +311,11 @@ void EditorMenuControllerImpl::OnGetAnchorBoundsAndEditorContext(
           .set_editor_preset_queries(editor_context.preset_queries)
           .set_editor_mode(editor_context.mode)
           .set_lobster_mode(lobster_mode)
+          .set_text_selection_mode(
+              editor_context.text_selection_mode ==
+                      EditorTextSelectionMode::kHasSelection
+                  ? EditorMenuCardTextSelectionMode::kHasSelection
+                  : EditorMenuCardTextSelectionMode::kNoSelection)
           .build();
 
   TextAndImageMode text_and_image_mode =
@@ -300,6 +325,9 @@ void EditorMenuControllerImpl::OnGetAnchorBoundsAndEditorContext(
     case TextAndImageMode::kBlocked:
       break;
     case TextAndImageMode::kPromoCard:
+      if (chromeos::features::IsMagicBoostRevampEnabled()) {
+        NOTREACHED();
+      }
       editor_menu_widget_ =
           EditorMenuPromoCardView::CreateWidget(anchor_bounds, this);
       editor_menu_widget_->ShowInactive();

@@ -412,7 +412,7 @@ std::u16string DecryptU16StringFromColumn(
 
 std::unique_ptr<CreditCard> CreditCardFromStatement(
     sql::Statement& card_statement,
-    std::optional<std::reference_wrapper<sql::Statement>> cvc_statement,
+    base::optional_ref<sql::Statement> cvc_statement,
     const os_crypt_async::Encryptor& encryptor) {
   auto credit_card = std::make_unique<CreditCard>();
 
@@ -439,9 +439,9 @@ std::unique_ptr<CreditCard> CreditCardFromStatement(
   // Only set cvc if we retrieve cvc from local_stored_cvc table.
   if (cvc_statement) {
     credit_card->set_cvc(
-        DecryptU16StringFromColumn(cvc_statement.value(), 0, encryptor));
+        DecryptU16StringFromColumn(*cvc_statement, 0, encryptor));
     credit_card->set_cvc_modification_date(
-        base::Time::FromTimeT(cvc_statement->get().ColumnInt64(1)));
+        base::Time::FromTimeT(cvc_statement->ColumnInt64(1)));
   }
   return credit_card;
 }
@@ -466,8 +466,7 @@ std::unique_ptr<Iban> IbanFromStatement(
   iban->usage_history().set_use_date(
       base::Time::FromTimeT(s.ColumnInt64(index++)));
 
-  iban->SetRawInfo(IBAN_VALUE,
-                   DecryptU16StringFromColumn(s, index++, encryptor));
+  iban->set_value(DecryptU16StringFromColumn(s, index++, encryptor));
   iban->set_nickname(s.ColumnString16(index++));
   return iban;
 }
@@ -662,11 +661,7 @@ bool PaymentsAutofillTable::AddLocalIban(const Iban& iban) {
   InsertBuilder(db(), s, kLocalIbansTable,
                 {kGuid, kUseCount, kUseDate, kValueEncrypted, kNickname});
   BindIbanToStatement(iban, &s, *encryptor());
-  if (!s.Run())
-    return false;
-
-  DCHECK_GT(db()->GetLastChangeCount(), 0);
-  return true;
+  return s.Run();
 }
 
 bool PaymentsAutofillTable::UpdateLocalIban(const Iban& iban) {
@@ -687,9 +682,7 @@ bool PaymentsAutofillTable::UpdateLocalIban(const Iban& iban) {
                 "guid=?1");
   BindIbanToStatement(iban, &s, *encryptor());
 
-  bool result = s.Run();
-  DCHECK_GT(db()->GetLastChangeCount(), 0);
-  return result;
+  return s.Run();
 }
 
 bool PaymentsAutofillTable::RemoveLocalIban(const std::string& guid) {
@@ -749,8 +742,6 @@ bool PaymentsAutofillTable::AddCreditCard(const CreditCard& credit_card) {
     return false;
   }
 
-  DCHECK_GT(db()->GetLastChangeCount(), 0);
-
   // If credit card contains cvc, will store cvc in local_stored_cvc table.
   if (!credit_card.cvc().empty() &&
       base::FeatureList::IsEnabled(
@@ -798,8 +789,6 @@ bool PaymentsAutofillTable::UpdateCreditCard(const CreditCard& credit_card) {
                    : old_credit_card->usage_history().modification_date(),
       &card_statement, *encryptor());
   bool card_result = card_statement.Run();
-  CHECK(db()->GetLastChangeCount() > 0);
-
   return cvc_result || card_result;
 }
 
@@ -815,21 +804,16 @@ bool PaymentsAutofillTable::UpdateLocalCvc(const std::string& guid,
     return DeleteWhereColumnEq(db(), kLocalStoredCvcTable, kGuid, guid);
   }
   sql::Statement cvc_statement;
-  // If existing card doesn't have CVC, we will insert CVC into
-  // `kLocalStoredCvcTable` table. If existing card does have CVC, we will
-  // update CVC for `kLocalStoredCvcTable` table.
-  if (old_credit_card->cvc().empty()) {
-    InsertBuilder(db(), cvc_statement, kLocalStoredCvcTable,
-                  {kGuid, kValueEncrypted, kLastUpdatedTimestamp});
-  } else {
-    UpdateBuilder(db(), cvc_statement, kLocalStoredCvcTable,
-                  {kGuid, kValueEncrypted, kLastUpdatedTimestamp}, "guid=?1");
-  }
+  // The INSERT OR REPLACE inserts the new or updates an existing card.
+  // In particular, it gracefully handles the case where an entry for `guid`
+  // exists but `old_credit_card->cvc().empty()` because the decryption failed
+  // (crbug.com/392169470).
+  InsertBuilder(db(), cvc_statement, kLocalStoredCvcTable,
+                {kGuid, kValueEncrypted, kLastUpdatedTimestamp},
+                /*or_replace=*/true);
   BindLocalStoredCvcToStatement(guid, cvc, AutofillClock::Now(), &cvc_statement,
                                 *encryptor());
-  bool cvc_result = cvc_statement.Run();
-  CHECK(db()->GetLastChangeCount() > 0);
-  return cvc_result;
+  return cvc_statement.Run();
 }
 
 bool PaymentsAutofillTable::RemoveCreditCard(const std::string& guid) {
@@ -883,11 +867,7 @@ std::unique_ptr<CreditCard> PaymentsAutofillTable::GetCreditCard(
 
   bool has_cvc = cvc_statement.Step();
   return CreditCardFromStatement(
-      card_statement,
-      has_cvc
-          ? std::optional<std::reference_wrapper<sql::Statement>>{cvc_statement}
-          : std::nullopt,
-      *encryptor());
+      card_statement, has_cvc ? &cvc_statement : nullptr, *encryptor());
 }
 
 bool PaymentsAutofillTable::GetCreditCards(
@@ -1031,8 +1011,14 @@ bool PaymentsAutofillTable::AddServerCvc(const ServerCvc& server_cvc) {
   }
 
   sql::Statement s;
+  // CreditCardDataManager decides between AddServerCvc() and UpdateServerCvc()
+  // by checking if the CVC of the `CreditCard` in the database is empty.
+  // However, decryption of the CVC may have failed (crbug.com/392169470), in
+  // which case there is an entry for `server_cvc.instrument_id` in the database
+  // already. To handle this case, we set `or_replace = true`.
   InsertBuilder(db(), s, kServerStoredCvcTable,
-                {kInstrumentId, kValueEncrypted, kLastUpdatedTimestamp});
+                {kInstrumentId, kValueEncrypted, kLastUpdatedTimestamp},
+                /*or_replace=*/true);
   BindServerCvcToStatement(server_cvc, *encryptor(), &s);
   s.Run();
   return db()->GetLastChangeCount() > 0;

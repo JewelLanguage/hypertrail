@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "cc/trees/layer_tree_host_impl.h"
 
 #include <stddef.h>
@@ -35,7 +40,6 @@
 #include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "base/task/common/task_annotator.h"
@@ -54,9 +58,10 @@
 #include "cc/benchmarks/benchmark_instrumentation.h"
 #include "cc/debug/rendering_stats_instrumentation.h"
 #include "cc/input/browser_controls_offset_manager.h"
-#include "cc/input/browser_controls_offset_tags_info.h"
+#include "cc/input/browser_controls_offset_tag_modifications.h"
 #include "cc/input/page_scale_animation.h"
 #include "cc/input/scrollbar_animation_controller.h"
+#include "cc/layers/append_quads_context.h"
 #include "cc/layers/append_quads_data.h"
 #include "cc/layers/effect_tree_layer_list_iterator.h"
 #include "cc/layers/heads_up_display_layer_impl.h"
@@ -98,6 +103,7 @@
 #include "cc/trees/latency_info_swap_promise_monitor.h"
 #include "cc/trees/layer_context.h"
 #include "cc/trees/layer_tree_frame_sink.h"
+#include "cc/trees/layer_tree_host_impl_client.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/mobile_optimized_viewport_util.h"
 #include "cc/trees/mutator_host.h"
@@ -111,6 +117,7 @@
 #include "cc/trees/trace_utils.h"
 #include "cc/trees/tree_synchronizer.h"
 #include "cc/view_transition/view_transition_request.h"
+#include "components/viz/client/client_resource_provider.h"
 #include "components/viz/common/features.h"
 #include "components/viz/common/frame_timing_details.h"
 #include "components/viz/common/hit_test/hit_test_region_list.h"
@@ -121,7 +128,6 @@
 #include "components/viz/common/quads/shared_element_draw_quad.h"
 #include "components/viz/common/quads/shared_quad_state.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
-#include "components/viz/common/resources/bitmap_allocation.h"
 #include "components/viz/common/resources/platform_color.h"
 #include "components/viz/common/resources/shared_image_format.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
@@ -242,7 +248,6 @@ class LayerTreeHostImpl::ImageDecodeCacheHolder {
  public:
   ImageDecodeCacheHolder(bool enable_shared_image_cache_for_gpu,
                          const RasterCapabilities& raster_caps,
-                         bool gpu_compositing,
                          scoped_refptr<RasterContextProviderWrapper>
                              worker_context_provider_wrapper,
                          size_t decoded_image_working_set_budget_bytes,
@@ -262,8 +267,7 @@ class LayerTreeHostImpl::ImageDecodeCacheHolder {
       }
     } else {
       image_decode_cache_ = std::make_unique<SoftwareImageDecodeCache>(
-          viz::ToClosestSkColorTypeDeprecated(gpu_compositing,
-                                              raster_caps.tile_format),
+          viz::ToClosestSkColorType(raster_caps.tile_format),
           decoded_image_working_set_budget_bytes);
     }
 
@@ -381,9 +385,10 @@ void LayerTreeHostImpl::UpdateBrowserControlsState(
     BrowserControlsState constraints,
     BrowserControlsState current,
     bool animate,
-    base::optional_ref<const BrowserControlsOffsetTagsInfo> offset_tags_info) {
+    base::optional_ref<const BrowserControlsOffsetTagModifications>
+        offset_tag_modifications) {
   browser_controls_offset_manager_->UpdateBrowserControlsState(
-      constraints, current, animate, offset_tags_info);
+      constraints, current, animate, offset_tag_modifications);
 }
 
 bool LayerTreeHostImpl::HasScrollLinkedAnimation(ElementId for_scroller) const {
@@ -490,7 +495,9 @@ LayerTreeHostImpl::LayerTreeHostImpl(
                       compositor_frame_reporting_controller_.get()),
       lcd_text_metrics_reporter_(LCDTextMetricsReporter::CreateIfNeeded(this)),
       frame_rate_estimator_(GetTaskRunner()),
-      contains_srgb_cache_(kContainsSrgbCacheSize) {
+      contains_srgb_cache_(kContainsSrgbCacheSize),
+      zero_scroll_metrics_update_enabled_(
+          base::FeatureList::IsEnabled(features::kZeroScrollMetricsUpdate)) {
   resource_provider_ = std::make_unique<viz::ClientResourceProvider>(
       task_runner_provider_->MainThreadTaskRunner(),
       task_runner_provider_->HasImplThread()
@@ -666,7 +673,7 @@ void LayerTreeHostImpl::ReadyToCommit(
     browser_controls_manager()->NotifyConstraintSyncedToMainThread();
   }
 
-  // If the scoll offsets were not synchronized, undo the sending of offsets
+  // If the scroll offsets were not synchronized, undo the sending of offsets
   // similar to what's done when the commit is aborted.
   if (!scroll_and_viewport_changes_synced) {
     active_tree_->ApplySentScrollAndScaleDeltasFromAbortedCommit(
@@ -1268,7 +1275,7 @@ static void AppendQuadsToFillScreen(
 static viz::CompositorRenderPass* FindRenderPassById(
     const viz::CompositorRenderPassList& list,
     viz::CompositorRenderPassId id) {
-  auto it = base::ranges::find(list, id, &viz::CompositorRenderPass::id);
+  auto it = std::ranges::find(list, id, &viz::CompositorRenderPass::id);
   return it == list.end() ? nullptr : it->get();
 }
 
@@ -1409,7 +1416,7 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(FrameData* frame) {
   // texture suddenly appearing in the future.
   DrawResult draw_result = DrawResult::kSuccess;
 
-  const DrawMode draw_mode = GetDrawMode();
+  const AppendQuadsContext context = {GetDrawMode(), {}, false};
 
   int num_missing_tiles = 0;
   CHECK(!frame->checkerboarded_needs_raster);
@@ -1454,12 +1461,12 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(FrameData* frame) {
                  EffectTreeLayerListIterator::State::kContributingSurface) {
         RenderSurfaceImpl* render_surface = it.current_render_surface();
         if (render_surface->contributes_to_drawn_surface()) {
-          render_surface->AppendQuads(draw_mode, target_render_pass,
+          render_surface->AppendQuads(context, target_render_pass,
                                       &append_quads_data);
         }
       } else if (it.state() == EffectTreeLayerListIterator::State::kLayer) {
         LayerImpl* layer = it.current_layer();
-        if (layer->WillDraw(draw_mode, resource_provider_.get())) {
+        if (layer->WillDraw(context.draw_mode, resource_provider_.get())) {
           DCHECK_EQ(active_tree_.get(), layer->layer_tree_impl());
 
           frame->will_draw_layers.push_back(layer);
@@ -1478,7 +1485,7 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(FrameData* frame) {
             }
           }
           layer->NotifyKnownResourceIdsBeforeAppendQuads(known_resource_ids);
-          layer->AppendQuads(target_render_pass, &append_quads_data);
+          layer->AppendQuads(context, target_render_pass, &append_quads_data);
         } else {
           if (settings_.enable_compositing_based_throttling) {
             throttle_decider_.ProcessLayerNotToDraw(layer);
@@ -1549,7 +1556,7 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(FrameData* frame) {
   // When doing a resourceless software draw, we don't have control over the
   // surface the compositor draws to, so even though the frame may not be
   // complete, the previous frame has already been potentially lost, so an
-  // incomplete frame is better than nothing, so this takes highest precidence.
+  // incomplete frame is better than nothing, so this takes highest precedence.
   if (resourceless_software_draw_)
     draw_result = DrawResult::kSuccess;
 
@@ -1899,7 +1906,7 @@ void LayerTreeHostImpl::UpdateTileManagerMemoryPolicy(
     // When the memory policy is set to zero, its important to release any
     // decoded images cached by the tracker. But we can not re-checker any
     // images that have been displayed since the resources, if held by the
-    // browser, may be re-used. Which is why its important to maintain the
+    // browser, may be reused. Which is why its important to maintain the
     // decode policy tracking.
     bool can_clear_decode_policy_tracking = false;
     tile_manager_.ClearCheckerImageTracking(can_clear_decode_policy_tracking);
@@ -2534,7 +2541,7 @@ viz::CompositorFrameMetadata LayerTreeHostImpl::MakeCompositorFrameMetadata() {
           // completely scrolled off screen. Shift the top controls a bit more
           // so that the hairline disappears.
           offset +=
-              browser_controls_offset_manager_->TopControlsHairlineHeight();
+              browser_controls_offset_manager_->TopControlsAdditionalHeight();
         }
 
         // ViewAndroid::OnTopControlsChanged() also rounds the offset before
@@ -2930,7 +2937,7 @@ std::optional<SubmitInfo> LayerTreeHostImpl::DrawLayers(FrameData* frame) {
 
   // The next frame should start by assuming nothing has changed, and changes
   // are noted as they occur.
-  // TODO(boliu): If we did a temporary software renderer frame, propogate the
+  // TODO(boliu): If we did a temporary software renderer frame, propagate the
   // damage forward to the next frame.
   for (size_t i = 0; i < frame->render_surface_list->size(); i++) {
     auto* surface = (*frame->render_surface_list)[i];
@@ -3113,7 +3120,7 @@ viz::CompositorFrame LayerTreeHostImpl::GenerateCompositorFrame(
     // All animations are impl-thread animations that tick at no more than
     // half the default display compositing fps.
     // Here and below with FrameRateEstimator::GetPreferredInterval(), the
-    // meta data's preferred_frame_interval is constrainted to either 0 or
+    // meta data's preferred_frame_interval is constrained to either 0 or
     // twice the default interval. The reason is because GPU process side
     // viz::FrameRateDecider is optimized for when all the preferred frame
     // rates are similar.
@@ -3289,11 +3296,8 @@ void LayerTreeHostImpl::UpdateRasterCapabilities() {
     // No context provider means software raster + compositing.
     raster_caps_.max_texture_size = settings_.max_render_buffer_bounds_for_sw;
 
-    // Software compositing always uses the native skia RGBA N32 format, but we
-    // just call it RGBA_8888 everywhere even though it can be BGRA ordering,
-    // because we don't need to communicate the actual ordering as the code all
-    // assumes the native skia format.
-    raster_caps_.tile_format = viz::SinglePlaneFormat::kRGBA_8888;
+    // Software compositor always uses BGRA 8888 format for tiles.
+    raster_caps_.tile_format = viz::SinglePlaneFormat::kBGRA_8888;
     raster_caps_.ui_rgba_format =
         layer_tree_frame_sink_->shared_image_interface()
             ? viz::SinglePlaneFormat::kBGRA_8888
@@ -3491,6 +3495,14 @@ void LayerTreeHostImpl::DidNotProduceFrame(const viz::BeginFrameAck& ack,
     } else {
       layer_tree_frame_sink_->DidNotProduceFrame(ack, reason);
     }
+  }
+  // While scrolling, we save all event metrics. It is possible that this
+  // results in a 0 delta scroll, which has no damage. We take the metrics here
+  // so that they are terminated now. This prevents them from being incorrectly
+  // associated with a future produced frame. So that jank measurements have
+  // accurate deltas.
+  if (zero_scroll_metrics_update_enabled_) {
+    events_metrics_manager_.TakeSavedEventsMetrics();
   }
 }
 
@@ -4095,10 +4107,8 @@ void LayerTreeHostImpl::RecreateTileResources() {
 
 void LayerTreeHostImpl::CreateTileManagerResources() {
   DCHECK(!settings_.is_display_tree);
-  const bool gpu_compositing = !!layer_tree_frame_sink_->context_provider();
   image_decode_cache_holder_ = std::make_unique<ImageDecodeCacheHolder>(
       settings_.enable_shared_image_cache_for_gpu, raster_caps(),
-      gpu_compositing,
       layer_tree_frame_sink_->worker_context_provider_wrapper(),
       settings_.decoded_image_working_set_budget_bytes, dark_mode_filter_);
 
@@ -4243,7 +4253,7 @@ size_t LayerTreeHostImpl::CommitDurationSampleCountForTesting() const {
 
 void LayerTreeHostImpl::ClearCaches() {
   // It is safe to clear the decode policy tracking on navigations since it
-  // comes with an invalidation and the image ids are never re-used.
+  // comes with an invalidation and the image ids are never reused.
   bool can_clear_decode_policy_tracking = true;
   tile_manager_.ClearCheckerImageTracking(can_clear_decode_policy_tracking);
   // TODO(crbug.com/40243840): add tracking for which clients have used an image
@@ -4560,6 +4570,10 @@ void LayerTreeHostImpl::UpdateImageDecodingHints(
       std::move(decoding_mode_map));
 }
 
+void LayerTreeHostImpl::RenewTreePriorityForTesting() {
+  client_->RenewTreePriority();
+}
+
 void LayerTreeHostImpl::SetRenderFrameObserver(
     std::unique_ptr<RenderFrameMetadataObserver> observer) {
   render_frame_metadata_observer_ = std::move(observer);
@@ -4576,6 +4590,14 @@ void LayerTreeHostImpl::WillScrollContent(ElementId element_id) {
     if (ScrollbarAnimationController* animation_controller =
             ScrollbarAnimationControllerForElementId(element_id))
       animation_controller->WillUpdateScroll();
+  }
+  // Whenever we are scrolling, we want to save the metrics. It is possible for
+  // the event to result in a 0 delta change. However we want to associate it
+  // with the subsequent frame. Otherwise this event will be attributed to jank.
+  //
+  // If there are on going animations, we may still submit a frame.
+  if (zero_scroll_metrics_update_enabled_) {
+    events_metrics_manager_.SaveActiveEventMetrics();
   }
 }
 
@@ -5275,12 +5297,10 @@ void LayerTreeHostImpl::CreateUIResource(UIResourceId uid,
   }
 
   // Once the backing has the UIResource inside it, we have to prepare it for
-  // export to the display compositor via ImportResource(). For gpu compositing,
-  // this requires a Mailbox+SyncToken as well. For software compositing, the
-  // SharedBitmapId must be notified to the LayerTreeFrameSink. The
-  // OnUIResourceReleased() method will be called once the resource is deleted
-  // and the display compositor is no longer using it, to free the memory
-  // allocated in this method above.
+  // export to the display compositor via ImportResource(). This requires a
+  // Mailbox+SyncToken as well. The OnUIResourceReleased() method will be called
+  // once the resource is deleted and the display compositor is no longer using
+  // it, to free the memory allocated in this method above.
   viz::TransferableResource transferable;
   if (layer_tree_frame_sink_->context_provider()) {
     gpu::SyncToken sync_token = layer_tree_frame_sink_->context_provider()
@@ -5729,6 +5749,10 @@ void LayerTreeHostImpl::RequestInvalidationForAnimatedImages() {
   // before a new tree is activated.
   bool needs_first_draw_on_activation = true;
   client_->SetNeedsImplSideInvalidation(needs_first_draw_on_activation);
+}
+
+bool LayerTreeHostImpl::IsInSynchronousComposite() const {
+  return client_->IsInSynchronousComposite();
 }
 
 bool LayerTreeHostImpl::IsReadyToActivate() const {

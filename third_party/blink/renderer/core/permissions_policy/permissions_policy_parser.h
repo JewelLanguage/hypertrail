@@ -6,7 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_PERMISSIONS_POLICY_PERMISSIONS_POLICY_PARSER_H_
 
 #include "base/memory/scoped_refptr.h"
-#include "third_party/blink/public/common/permissions_policy/origin_with_possible_wildcards.h"
+#include "services/network/public/cpp/permissions_policy/origin_with_possible_wildcards.h"
 #include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/permissions_policy/policy_helper.h"
@@ -45,8 +45,8 @@ class CORE_EXPORT PermissionsPolicyParser {
   // We need to keep track of the source of the list of declarations as
   // different features (e.g., wildcards) might be active per-context.
   struct Node {
-    OriginWithPossibleWildcards::NodeType type{
-        OriginWithPossibleWildcards::NodeType::kUnknown};
+    network::OriginWithPossibleWildcards::NodeType type{
+        network::OriginWithPossibleWildcards::NodeType::kUnknown};
     Vector<Declaration> declarations;
   };
 
@@ -101,44 +101,46 @@ class CORE_EXPORT PermissionsPolicyParser {
 };
 
 // Returns true iff any declaration in the policy is for the given feature.
-CORE_EXPORT bool IsFeatureDeclared(mojom::blink::PermissionsPolicyFeature,
+CORE_EXPORT bool IsFeatureDeclared(network::mojom::PermissionsPolicyFeature,
                                    const ParsedPermissionsPolicy&);
 
 // Removes any declaration in the policy for the given feature. Returns true if
 // the policy was modified.
-CORE_EXPORT bool RemoveFeatureIfPresent(mojom::blink::PermissionsPolicyFeature,
-                                        ParsedPermissionsPolicy&);
+CORE_EXPORT bool RemoveFeatureIfPresent(
+    network::mojom::PermissionsPolicyFeature,
+    ParsedPermissionsPolicy&);
 
 // If no declaration in the policy exists already for the feature, adds a
 // declaration which disallows the feature in all origins. Returns true if the
 // policy was modified.
 CORE_EXPORT bool DisallowFeatureIfNotPresent(
-    mojom::blink::PermissionsPolicyFeature,
+    network::mojom::PermissionsPolicyFeature,
     ParsedPermissionsPolicy&);
 
 // If no declaration in the policy exists already for the feature, adds a
 // declaration which allows the feature in all origins. Returns true if the
 // policy was modified.
 CORE_EXPORT bool AllowFeatureEverywhereIfNotPresent(
-    mojom::blink::PermissionsPolicyFeature,
+    network::mojom::PermissionsPolicyFeature,
     ParsedPermissionsPolicy&);
 
 // Replaces any existing declarations in the policy for the given feature with
 // a declaration which disallows the feature in all origins.
-CORE_EXPORT void DisallowFeature(mojom::blink::PermissionsPolicyFeature,
+CORE_EXPORT void DisallowFeature(network::mojom::PermissionsPolicyFeature,
                                  ParsedPermissionsPolicy&);
 
 // Returns true iff the feature should not be exposed to script.
 CORE_EXPORT bool IsFeatureForMeasurementOnly(
-    mojom::blink::PermissionsPolicyFeature);
+    network::mojom::PermissionsPolicyFeature);
 
 // Replaces any existing declarations in the policy for the given feature with
 // a declaration which allows the feature in all origins.
-CORE_EXPORT void AllowFeatureEverywhere(mojom::blink::PermissionsPolicyFeature,
-                                        ParsedPermissionsPolicy&);
+CORE_EXPORT void AllowFeatureEverywhere(
+    network::mojom::PermissionsPolicyFeature,
+    ParsedPermissionsPolicy&);
 
 CORE_EXPORT const String
-GetNameForFeature(mojom::blink::PermissionsPolicyFeature,
+GetNameForFeature(network::mojom::PermissionsPolicyFeature,
                   bool is_isolated_context);
 
 }  // namespace blink

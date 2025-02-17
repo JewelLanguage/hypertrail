@@ -60,7 +60,6 @@ NSString* const kChromiumSigninPromoLogoImage = @"chromium_signin_promo_logo";
 
 // Custom symbol names.
 NSString* const kPrivacySymbol = @"checkerboard_shield";
-NSString* const kSyncDisabledSymbol = @"arrow_triangle_slash_circlepath";
 NSString* const kSafetyCheckSymbol = @"checkermark_shield";
 NSString* const kArrowClockWiseSymbol = @"arrow_clockwise";
 NSString* const kIncognitoSymbol = @"incognito";
@@ -240,6 +239,7 @@ NSString* const kShippingBoxSymbol = @"shippingbox";
 NSString* const kSliderHorizontalSymbol = @"slider.horizontal.3";
 NSString* const kMacbookAndIPhoneSymbol = @"macbook.and.iphone";
 NSString* const kCheckmarkShieldSymbol = @"checkmark.shield";
+NSString* const kListBulletSymbol = @"list.bullet";
 NSString* const kListBulletClipboardSymbol = @"list.bullet.clipboard";
 NSString* const kListBulletRectangleSymbol = @"list.bullet.rectangle.portrait";
 NSString* const kBoxTruckFillSymbol = @"box.truck.fill";

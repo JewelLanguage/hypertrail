@@ -30,10 +30,13 @@
 #include "chrome/browser/ui/lens/lens_overlay_entry_point_controller.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/passwords/passwords_model_delegate.h"
+#include "chrome/browser/ui/performance_controls/memory_saver_bubble_controller.h"
 #include "chrome/browser/ui/qrcode_generator/qrcode_generator_bubble_controller.h"
 #include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_bubble.h"
+#include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_toolbar_icon_controller.h"
 #include "chrome/browser/ui/tabs/public/tab_features.h"
 #include "chrome/browser/ui/tabs/public/tab_interface.h"
+#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
 #include "chrome/browser/ui/toolbar/chrome_labs/chrome_labs_utils.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.h"
@@ -47,6 +50,7 @@
 #include "chrome/browser/ui/views/side_panel/side_panel_entry_key.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_enums.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_ui.h"
+#include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/lens/lens_features.h"
@@ -245,6 +249,25 @@ void BrowserActions::InitializeBrowserActions() {
                       kActionSidePanelShowLens, browser, false)
           .Build());
 
+  root_action_item_->AddChild(
+      actions::ActionItem::Builder(
+          base::BindRepeating(
+              [](Browser* browser, actions::ActionItem* item,
+                 actions::ActionInvocationContext context) {
+                auto* bubble_controller =
+                    browser->browser_window_features()
+                        ->memory_saver_bubble_controller();
+                bubble_controller->InvokeAction(browser, item);
+              },
+              base::Unretained(browser)))
+          .SetActionId(kActionShowMemorySaverChip)
+          // Text properties aren't needed here; they are set dynamically.
+          .SetImage(ui::ImageModel::FromVectorIcon(
+              kPerformanceSpeedometerIcon, ui::kColorIcon,
+              ui::SimpleMenuModel::kDefaultIconSize))
+          .SetEnabled(true)
+          .Build());
+
   //------- Chrome Menu Actions --------//
   if (features::IsToolbarPinningEnabled()) {
     root_action_item_->AddChild(
@@ -318,28 +341,31 @@ void BrowserActions::InitializeBrowserActions() {
             kActionDevTools, IDS_DEV_TOOLS, IDS_DEV_TOOLS, kDeveloperToolsIcon)
             .Build());
 
-    root_action_item_->AddChild(
-        ChromeMenuAction(
-            base::BindRepeating(
-                [](Browser* browser, actions::ActionItem* item,
-                   actions::ActionInvocationContext context) {
-                  auto* bubble_controller =
-                      browser->browser_window_features()
-                          ->send_tab_to_self_toolbar_bubble_controller();
-                  if (bubble_controller->IsBubbleShowing()) {
-                    bubble_controller->HideBubble();
-                  } else {
-                    send_tab_to_self::ShowBubble(
-                        browser->tab_strip_model()->GetActiveWebContents());
-                  }
-                },
-                base::Unretained(browser)),
-            kActionSendTabToSelf, IDS_SEND_TAB_TO_SELF, IDS_SEND_TAB_TO_SELF,
-            kDevicesChromeRefreshIcon)
-            .SetEnabled(chrome::CanSendTabToSelf(browser))
-            .SetVisible(
-                !sharing_hub::SharingIsDisabledByPolicy(browser->profile()))
-            .Build());
+    if (send_tab_to_self::SendTabToSelfToolbarIconController::CanShowOnBrowser(
+            browser)) {
+      root_action_item_->AddChild(
+          ChromeMenuAction(
+              base::BindRepeating(
+                  [](Browser* browser, actions::ActionItem* item,
+                     actions::ActionInvocationContext context) {
+                    auto* bubble_controller =
+                        browser->browser_window_features()
+                            ->send_tab_to_self_toolbar_bubble_controller();
+                    if (bubble_controller->IsBubbleShowing()) {
+                      bubble_controller->HideBubble();
+                    } else {
+                      send_tab_to_self::ShowBubble(
+                          browser->tab_strip_model()->GetActiveWebContents());
+                    }
+                  },
+                  base::Unretained(browser)),
+              kActionSendTabToSelf, IDS_SEND_TAB_TO_SELF, IDS_SEND_TAB_TO_SELF,
+              kDevicesChromeRefreshIcon)
+              .SetEnabled(chrome::CanSendTabToSelf(browser))
+              .SetVisible(
+                  !sharing_hub::SharingIsDisabledByPolicy(browser->profile()))
+              .Build());
+    }
 
     root_action_item_->AddChild(
         ChromeMenuAction(base::BindRepeating(
@@ -416,7 +442,8 @@ void BrowserActions::InitializeBrowserActions() {
             .SetEnabled(!is_guest_session)
             .Build());
 
-    if (IsChromeLabsEnabled()) {
+    if (IsChromeLabsEnabled() &&
+        !web_app::AppBrowserController::IsWebApp(browser)) {
       // TODO(b/354758327): Update `ShouldShowChromeLabsUI()` to not require
       // `model` as a parameter, then use to set visibility of action item.
       root_action_item_->AddChild(
@@ -511,6 +538,23 @@ void BrowserActions::InitializeBrowserActions() {
                            kActionShowDownloads, IDS_SHOW_DOWNLOADS,
                            IDS_TOOLTIP_DOWNLOAD_ICON,
                            kDownloadToolbarButtonChromeRefreshIcon)
+              .Build());
+    }
+
+    if (tab_groups::SavedTabGroupUtils::SupportsSharedTabGroups()) {
+      root_action_item_->AddChild(
+          ChromeMenuAction(base::BindRepeating(
+                               [](Browser* browser, actions::ActionItem* item,
+                                  actions::ActionInvocationContext context) {
+                                 chrome::OpenFeedbackDialog(
+                                     browser,
+                                     feedback::kFeedbackSourceDesktopTabGroups);
+                               },
+                               base::Unretained(browser)),
+                           kActionSendSharedTabGroupFeedback,
+                           IDS_DATA_SHARING_SHARED_GROUPS_FEEDBACK,
+                           IDS_DATA_SHARING_SHARED_GROUPS_FEEDBACK,
+                           vector_icons::kFeedbackIcon)
               .Build());
     }
 

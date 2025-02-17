@@ -39,7 +39,6 @@
 #include "components/sync_bookmarks/parent_guid_preprocessing.h"
 #include "components/sync_bookmarks/synced_bookmark_tracker.h"
 #include "components/sync_bookmarks/synced_bookmark_tracker_entity.h"
-#include "components/undo/bookmark_undo_utils.h"
 #include "ui/base/models/tree_node_iterator.h"
 
 namespace sync_bookmarks {
@@ -50,13 +49,11 @@ constexpr size_t kDefaultMaxBookmarksTillSyncEnabled = 100000;
 
 class ScopedRemoteUpdateBookmarks {
  public:
-  // `bookmark_model`, `bookmark_undo_service` and `observer` must not be null
-  // and must outlive this object.
+  // `bookmark_model` and `observer` must not be null and must outlive this
+  // object.
   ScopedRemoteUpdateBookmarks(BookmarkModelView* bookmark_model,
-                              BookmarkUndoService* bookmark_undo_service,
                               bookmarks::BookmarkModelObserver* observer)
       : bookmark_model_(bookmark_model),
-        suspend_undo_(bookmark_undo_service),
         observer_(observer) {
     // Notify UI intensive observers of BookmarkModel that we are about to make
     // potentially significant changes to it, so the updates may be batched. For
@@ -83,10 +80,6 @@ class ScopedRemoteUpdateBookmarks {
 
  private:
   const raw_ptr<BookmarkModelView> bookmark_model_;
-
-  // Changes made to the bookmark model due to sync should not be undoable.
-  ScopedSuspendBookmarkUndo suspend_undo_;
-
   const raw_ptr<bookmarks::BookmarkModelObserver> observer_;
 };
 
@@ -134,11 +127,9 @@ void RecordDataTypeNumUnsyncedEntitiesOnModelReadyForBookmarks(
 }  // namespace
 
 BookmarkDataTypeProcessor::BookmarkDataTypeProcessor(
-    BookmarkUndoService* bookmark_undo_service,
     syncer::WipeModelUponSyncDisabledBehavior
         wipe_model_upon_sync_disabled_behavior)
-    : bookmark_undo_service_(bookmark_undo_service),
-      wipe_model_upon_sync_disabled_behavior_(
+    : wipe_model_upon_sync_disabled_behavior_(
           wipe_model_upon_sync_disabled_behavior),
       max_bookmarks_till_sync_enabled_(kDefaultMaxBookmarksTillSyncEnabled) {}
 
@@ -237,8 +228,7 @@ void BookmarkDataTypeProcessor::OnUpdateReceived(
   // Incremental updates.
   {
     ScopedRemoteUpdateBookmarks update_bookmarks(
-        bookmark_model_, bookmark_undo_service_,
-        bookmark_model_observer_.get());
+        bookmark_model_, bookmark_model_observer_.get());
     BookmarkRemoteUpdatesHandler updates_handler(
         bookmark_model_, favicon_service_, bookmark_tracker_.get());
     const bool got_new_encryption_requirements =
@@ -347,14 +337,6 @@ void BookmarkDataTypeProcessor::ModelReadyToSync(
     if (!metadata_str.empty()) {
       LogClearMetadataWhileStoppedHistogram(syncer::BOOKMARKS,
                                             /*is_delayed_call=*/true);
-      if (syncer::IsInitialSyncDone(
-              model_metadata.data_type_state().initial_sync_state())) {
-        // There used to be a tracker, which is dropped now due to
-        // `pending_clear_metadata_`. This isn't very different to
-        // ClearMetadataIfStopped(), in the sense that the need to wipe the
-        // local model needs to be considered.
-        TriggerWipeModelUponSyncDisabledBehavior();
-      }
       schedule_save_closure_.Run();
     }
   } else if (model_metadata
@@ -385,25 +367,7 @@ void BookmarkDataTypeProcessor::ModelReadyToSync(
   }
 
   if (!bookmark_tracker_) {
-    switch (wipe_model_upon_sync_disabled_behavior_) {
-      case syncer::WipeModelUponSyncDisabledBehavior::kNever:
-        // Nothing to do.
-        break;
-      case syncer::WipeModelUponSyncDisabledBehavior::kOnceIfTrackingMetadata:
-        // Since the model isn't initially tracking metadata, move away from
-        // kOnceIfTrackingMetadata so the behavior doesn't kick in, in case sync
-        // is turned on later and back to off. This should be practically
-        // unreachable because usually ClearMetadataIfStopped() would be invoked
-        // earlier, but let's be extra safe and avoid relying on this behavior.
-        wipe_model_upon_sync_disabled_behavior_ =
-            syncer::WipeModelUponSyncDisabledBehavior::kNever;
-        break;
-      case syncer::WipeModelUponSyncDisabledBehavior::kAlways:
-        // Remove any previous data that may exist, if its lifetime is strongly
-        // coupled with the tracker's (sync metadata's).
-        bookmark_model_->RemoveAllSyncableNodes();
-        break;
-    }
+    TriggerWipeModelUponSyncDisabledBehavior();
   }
 
   ConnectIfReady();
@@ -626,8 +590,7 @@ void BookmarkDataTypeProcessor::OnInitialUpdateReceived(
 
   {
     ScopedRemoteUpdateBookmarks update_bookmarks(
-        bookmark_model_, bookmark_undo_service_,
-        bookmark_model_observer_.get());
+        bookmark_model_, bookmark_model_observer_.get());
 
     bookmark_model_->EnsurePermanentNodesExist();
     BookmarkModelMerger model_merger(std::move(updates), bookmark_model_,
@@ -858,13 +821,6 @@ void BookmarkDataTypeProcessor::TriggerWipeModelUponSyncDisabledBehavior() {
     case syncer::WipeModelUponSyncDisabledBehavior::kNever:
       // Nothing to do.
       break;
-    case syncer::WipeModelUponSyncDisabledBehavior::kOnceIfTrackingMetadata:
-      // Do it this time, but switch to kNever so it doesn't trigger next
-      // time.
-      syncer::SyncRecordModelClearedOnceHistogram(syncer::BOOKMARKS);
-      wipe_model_upon_sync_disabled_behavior_ =
-          syncer::WipeModelUponSyncDisabledBehavior::kNever;
-      [[fallthrough]];
     case syncer::WipeModelUponSyncDisabledBehavior::kAlways:
       bookmark_model_->RemoveAllSyncableNodes();
       break;

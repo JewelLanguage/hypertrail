@@ -223,6 +223,10 @@ chrome_internal_verifier(
 )
 
 chrome_internal_verifier(
+    builder = "fuchsia-webgl-sherlock-qemu",
+)
+
+chrome_internal_verifier(
     branch_selector = branches.selector.IOS_BRANCHES,
     builder = "ios-rel-ready",
 )
@@ -305,7 +309,7 @@ chrome_internal_verifier(
 chrome_internal_verifier(
     builder = "optimization_guide-linux",
     owner_whitelist = [
-        "optimization-guide-try-opt-in",
+        "google/optimization-guide-try-opt-in@google.com",
     ],
     tryjob = try_.job(
         location_filters = [
@@ -319,7 +323,7 @@ chrome_internal_verifier(
 chrome_internal_verifier(
     builder = "optimization_guide-mac-arm64",
     owner_whitelist = [
-        "optimization-guide-try-opt-in",
+        "google/optimization-guide-try-opt-in@google.com",
     ],
     tryjob = try_.job(
         location_filters = [
@@ -341,7 +345,7 @@ chrome_internal_verifier(
 chrome_internal_verifier(
     builder = "optimization_guide-win64",
     owner_whitelist = [
-        "optimization-guide-try-opt-in",
+        "google/optimization-guide-try-opt-in@google.com",
     ],
     tryjob = try_.job(
         location_filters = [

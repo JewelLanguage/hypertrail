@@ -125,6 +125,8 @@ std::string GetRequestTypeName(
       return "PointerLockRequested";
     case safe_browsing::ClientSideDetectionType::VIBRATION_API:
       return "VibrationApi";
+    case safe_browsing::ClientSideDetectionType::FULLSCREEN_API:
+      return "FullscreenApi";
   }
 }
 
@@ -315,6 +317,10 @@ class ClientSideDetectionHost::ShouldClassifyUrlRequest {
       base::UmaHistogramEnumeration(
           "SBClientPhishing.PreClassificationCheckResult", reason,
           PreClassificationCheckResult::NO_CLASSIFY_MAX);
+      base::UmaHistogramEnumeration(
+          "SBClientPhishing.PreClassificationCheckResult." +
+              GetRequestTypeName(phishing_detection_request_type_),
+          reason, PreClassificationCheckResult::NO_CLASSIFY_MAX);
       if (base::FeatureList::IsEnabled(
               kClientSideDetectionDebuggingMetadataCache) &&
           host_ && host_->delegate_->GetPrefs() &&
@@ -393,6 +399,12 @@ class ClientSideDetectionHost::ShouldClassifyUrlRequest {
 
     if (phishing_reason !=
         PreClassificationCheckResult::NO_CLASSIFY_NO_DATABASE_MANAGER) {
+      if (phishing_detection_request_type_ ==
+          ClientSideDetectionType::FULLSCREEN_API) {
+        base::UmaHistogramBoolean(
+            "SBClientPhishing.MatchCSDAllowlistOnFullscreenApi",
+            match_allowlist);
+      }
       // This check is also for logging purposes although the CSD allowlist
       // could be matched or not checked at all. Once it completes,
       // preclassification check will continue.
@@ -439,6 +451,16 @@ class ClientSideDetectionHost::ShouldClassifyUrlRequest {
     if (phishing_reason == NO_CLASSIFY_MAX && ShouldAcceptHCAllowlist()) {
       phishing_reason =
           PreClassificationCheckResult::NO_CLASSIFY_MATCH_HC_ALLOWLIST;
+    }
+
+    if (phishing_detection_request_type_ ==
+        ClientSideDetectionType::FULLSCREEN_API) {
+      // The purpose of triggering preclassification for fullscreen API to have
+      // an initial assessment on how often we'll be hitting the allowlist and
+      // triggering the classification. We will not go further than checking for
+      // this metric for now.
+      DontClassifyForPhishing(
+          PreClassificationCheckResult::NO_CLASSIFY_ALLOWLIST_METRIC);
     }
 
     CheckCache(phishing_reason);
@@ -660,8 +682,8 @@ void ClientSideDetectionHost::MaybeStartPreClassification(
   }
 
   content::RenderFrameHost* rfh = web_contents()->GetPrimaryMainFrame();
-
   current_url_ = rfh->GetLastCommittedURL();
+  last_committed_url_map_[request_type] = current_url_;
   current_outermost_main_frame_id_ = rfh->GetGlobalId();
   // Check whether we can cassify the current URL for phishing.
   classification_request_ = std::make_unique<ShouldClassifyUrlRequest>(
@@ -734,7 +756,11 @@ void ClientSideDetectionHost::KeyboardLockRequested() {
     return;
   }
 
-  MaybeStartPreClassification(ClientSideDetectionType::KEYBOARD_LOCK_REQUESTED);
+  if (!HasDonePreclassificationCheckOnSameURL(
+          ClientSideDetectionType::KEYBOARD_LOCK_REQUESTED)) {
+    MaybeStartPreClassification(
+        ClientSideDetectionType::KEYBOARD_LOCK_REQUESTED);
+  }
 }
 
 void ClientSideDetectionHost::PointerLockRequested() {
@@ -752,15 +778,35 @@ void ClientSideDetectionHost::VibrationRequested() {
       !base::FeatureList::IsEnabled(kClientSideDetectionVibrationApi)) {
     return;
   }
+
   // Vibration API can be triggered on a page in intervals between 0 and 1
   // seconds. Because of this, we want to only classify once per given URL since
   // a page can send a request multiple vibration at a time.
-  ClientSideDetectionFeatureCache::CreateForWebContents(web_contents());
-  ClientSideDetectionFeatureCache* feature_cache_map =
-      ClientSideDetectionFeatureCache::FromWebContents(web_contents());
-  if (!feature_cache_map->WasVibrationClassificationTriggered(current_url_)) {
+  if (!HasDonePreclassificationCheckOnSameURL(
+          ClientSideDetectionType::VIBRATION_API)) {
     MaybeStartPreClassification(ClientSideDetectionType::VIBRATION_API);
   }
+}
+
+void ClientSideDetectionHost::DidToggleFullscreenModeForTab(
+    bool entered_fullscreen,
+    bool will_cause_resize) {
+  // We do not check for entered_fullscreen, because although the user may never
+  // successfully enter fullscreen, we want to proceed with the
+  // preclassification check.
+  if (!HasDonePreclassificationCheckOnSameURL(
+          ClientSideDetectionType::FULLSCREEN_API)) {
+    MaybeStartPreClassification(ClientSideDetectionType::FULLSCREEN_API);
+  }
+}
+
+bool ClientSideDetectionHost::HasDonePreclassificationCheckOnSameURL(
+    ClientSideDetectionType client_side_detection_type) {
+  content::RenderFrameHost* rfh = web_contents()->GetPrimaryMainFrame();
+  auto last_committed_url =
+      last_committed_url_map_.find(client_side_detection_type);
+  return last_committed_url != last_committed_url_map_.end() &&
+         rfh->GetLastCommittedURL() == last_committed_url->second;
 }
 
 void ClientSideDetectionHost::OnPhishingPreClassificationDone(
@@ -942,6 +988,10 @@ void ClientSideDetectionHost::MaybeSendClientPhishingRequest(
   if (can_extract_visual_features_result !=
       visual_utils::CanExtractVisualFeaturesResult::kCanExtractVisualFeatures) {
     verdict->clear_visual_features();
+  } else {
+    base::UmaHistogramBoolean("SBClientPhishing.HasVisualFeaturesImage",
+                              verdict->has_visual_features() &&
+                                  verdict->visual_features().has_image());
   }
 
   if (IsEnhancedProtectionEnabled(*delegate_->GetPrefs())) {
@@ -1123,6 +1173,16 @@ void ClientSideDetectionHost::OnInnerTextComplete(
     std::string inner_text) {
   base::UmaHistogramCounts100000("SBClientPhishing.OnDeviceModelInnerTextSize",
                                  inner_text.size());
+  if (inner_text.empty()) {
+    IntelligentScanInfo intelligent_scan_info;
+    intelligent_scan_info.set_no_info_reason(IntelligentScanInfo::EMPTY_TEXT);
+    *verdict->mutable_intelligent_scan_info() =
+        std::move(intelligent_scan_info);
+    MaybeGetAccessToken(std::move(verdict),
+                        did_match_high_confidence_allowlist);
+    return;
+  }
+
   csd_service_->InquireOnDeviceModel(
       verdict.get(), inner_text,
       base::BindOnce(&ClientSideDetectionHost::OnInquireOnDeviceModelDone,

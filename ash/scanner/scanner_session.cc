@@ -13,9 +13,9 @@
 
 #include "ash/public/cpp/scanner/scanner_profile_scoped_delegate.h"
 #include "ash/scanner/scanner_action_view_model.h"
-#include "ash/scanner/scanner_command_delegate.h"
+#include "ash/scanner/scanner_controller.h"
 #include "ash/scanner/scanner_metrics.h"
-#include "ash/scanner/scanner_unpopulated_action.h"
+#include "ash/strings/grit/ash_strings.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/memory/ref_counted_memory.h"
@@ -28,6 +28,7 @@
 #include "components/manta/proto/scanner.pb.h"
 #include "skia/ext/image_operations.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 
 namespace ash {
@@ -95,10 +96,9 @@ scoped_refptr<base::RefCountedMemory> DownscaleImageIfNeeded(
 
 // Runs the callback with the populated proto from the response of a call to
 // `FetchActionDetailsForImage`.
-void OnActionPopulated(
-    ScannerUnpopulatedAction::PopulatedActionCallback callback,
-    std::unique_ptr<manta::proto::ScannerOutput> output,
-    manta::MantaStatus status) {
+void OnActionPopulated(ScannerSession::PopulateActionCallback callback,
+                       std::unique_ptr<manta::proto::ScannerOutput> output,
+                       manta::MantaStatus status) {
   if (output == nullptr) {
     // TODO(b/363100868): Handle error case
     std::move(callback).Run(manta::proto::ScannerAction());
@@ -170,9 +170,8 @@ void RecordAllDetectedActions(const manta::proto::ScannerOutput& output) {
 
 }  // namespace
 
-ScannerSession::ScannerSession(ScannerProfileScopedDelegate* delegate,
-                               ScannerCommandDelegate* command_delegate)
-    : delegate_(delegate), command_delegate_(command_delegate) {}
+ScannerSession::ScannerSession(ScannerProfileScopedDelegate* delegate)
+    : delegate_(delegate) {}
 
 ScannerSession::~ScannerSession() = default;
 
@@ -182,11 +181,23 @@ void ScannerSession::FetchActionsForImage(
   scoped_refptr<base::RefCountedMemory> downscaled_jpeg_bytes =
       DownscaleImageIfNeeded(std::move(jpeg_bytes));
 
+  if (mock_scanner_output_) {
+    OnActionsReturned(downscaled_jpeg_bytes, base::TimeTicks::Now(),
+                      std::move(callback), std::move(mock_scanner_output_),
+                      manta::MantaStatus(manta::MantaStatusCode::kOk));
+    return;
+  }
+
   delegate_->FetchActionsForImage(
       downscaled_jpeg_bytes,
       base::BindOnce(&ScannerSession::OnActionsReturned,
                      weak_ptr_factory_.GetWeakPtr(), downscaled_jpeg_bytes,
                      base::TimeTicks::Now(), std::move(callback)));
+}
+
+void ScannerSession::SetMockScannerOutput(
+    std::unique_ptr<manta::proto::ScannerOutput> mock_output) {
+  mock_scanner_output_ = std::move(mock_output);
 }
 
 void ScannerSession::OnActionsReturned(
@@ -199,8 +210,8 @@ void ScannerSession::OnActionsReturned(
                                 base::TimeTicks::Now() - request_start_time);
 
   if (output == nullptr) {
-    // TODO(b/363100868): Handle error case
-    std::move(callback).Run({});
+    std::move(callback).Run(base::unexpected(
+        l10n_util::GetStringUTF16(IDS_ASH_SCANNER_ERROR_GENERIC)));
     return;
   }
 
@@ -212,19 +223,12 @@ void ScannerSession::OnActionsReturned(
 
   std::vector<ScannerActionViewModel> action_view_models;
 
-  ScannerUnpopulatedAction::PopulateCallback populate_to_proto_callback =
-      base::BindRepeating(&ScannerSession::PopulateAction,
-                          weak_ptr_factory_.GetWeakPtr(),
-                          downscaled_jpeg_bytes);
-
   for (manta::proto::ScannerAction& proto_action :
        *output->mutable_objects(0)->mutable_actions()) {
-    std::optional<ScannerUnpopulatedAction> unpopulated_action_ =
-        ScannerUnpopulatedAction::FromProto(std::move(proto_action),
-                                            populate_to_proto_callback);
-    if (unpopulated_action_.has_value()) {
-      action_view_models.emplace_back(std::move(*unpopulated_action_),
-                                      command_delegate_->GetWeakPtr());
+    if (proto_action.action_case() !=
+        manta::proto::ScannerAction::ACTION_NOT_SET) {
+      action_view_models.emplace_back(std::move(proto_action),
+                                      downscaled_jpeg_bytes);
     }
   }
 
@@ -234,7 +238,13 @@ void ScannerSession::OnActionsReturned(
 void ScannerSession::PopulateAction(
     scoped_refptr<base::RefCountedMemory> downscaled_jpeg_bytes,
     manta::proto::ScannerAction unpopulated_action,
-    ScannerUnpopulatedAction::PopulatedActionCallback callback) {
+    PopulateActionCallback callback) {
+  if (mock_scanner_output_) {
+    OnActionPopulated(std::move(callback), std::move(mock_scanner_output_),
+                      {manta::MantaStatusCode::kOk});
+    return;
+  }
+
   delegate_->FetchActionDetailsForImage(
       std::move(downscaled_jpeg_bytes), std::move(unpopulated_action),
       base::BindOnce(&OnActionPopulated, std::move(callback)));

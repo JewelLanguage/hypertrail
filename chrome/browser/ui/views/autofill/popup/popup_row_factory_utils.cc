@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/autofill/popup/popup_row_factory_utils.h"
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
@@ -20,12 +21,10 @@
 #include "base/location.h"
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ui/autofill/autofill_popup_controller.h"
 #include "chrome/browser/ui/autofill/autofill_suggestion_controller_utils.h"
-#include "chrome/browser/ui/views/autofill/popup/autofill_ai/popup_row_autofill_ai_feedback_view.h"
 #include "chrome/browser/ui/views/autofill/popup/lazy_loading_image_view.h"
 #include "chrome/browser/ui/views/autofill/popup/popup_base_view.h"
 #include "chrome/browser/ui/views/autofill/popup/popup_cell_utils.h"
@@ -86,14 +85,12 @@ constexpr int kRefreshIconSize = 16;
 constexpr int kRefreshInkDropRadius = 12;
 
 // Popup items that use a leading icon instead of a trailing one.
-constexpr auto kPopupItemTypesUsingLeadingIcons =
-    base::MakeFixedFlatSet<SuggestionType>(
-        {SuggestionType::kAllSavedPasswordsEntry,
-         SuggestionType::kManageAddress, SuggestionType::kManageCreditCard,
-         SuggestionType::kManageIban, SuggestionType::kManagePlusAddress,
-         SuggestionType::kShowAccountCards, SuggestionType::kUndoOrClear,
-         SuggestionType::kViewPasswordDetails,
-         SuggestionType::kRetrieveAutofillAi});
+constexpr auto kPopupItemTypesUsingLeadingIcons = DenseSet<SuggestionType>(
+    {SuggestionType::kAllSavedPasswordsEntry, SuggestionType::kManageAddress,
+     SuggestionType::kManageAutofillAi, SuggestionType::kManageCreditCard,
+     SuggestionType::kManageIban, SuggestionType::kManagePlusAddress,
+     SuggestionType::kShowAccountCards, SuggestionType::kUndoOrClear,
+     SuggestionType::kViewPasswordDetails});
 
 // Max width for the username and masked password.
 constexpr int kAutofillPopupUsernameMaxWidth = 272;
@@ -139,10 +136,8 @@ void FormatLabel(views::Label& label,
       break;
     case FillingProduct::kCreditCard:
       if (text.should_truncate.value()) {
-        // should_truncate should only be set to true iff the experiments are
-        // enabled.
-        DCHECK(base::FeatureList::IsEnabled(
-            autofill::features::kAutofillEnableVirtualCardMetadata));
+        // `should_truncate` should only be set to true iff
+        // `kAutofillEnableCardProductName` is enabled.
         DCHECK(base::FeatureList::IsEnabled(
             autofill::features::kAutofillEnableCardProductName));
         label.SetMaximumWidthSingleLine(maximum_width_single_line);
@@ -558,17 +553,6 @@ std::unique_ptr<PopupRowView> CreateNewPlusAddressInlineSuggestion(
       PopupRowWithButtonView::ButtonSelectBehavior::kSelectSuggestion);
 }
 
-// Creates the row for the `SuggestionType::kAutofillAiFeedback` suggestion.
-std::unique_ptr<autofill_ai::PopupRowAutofillAiFeedbackView>
-CreateAutofillAiFeedbackRow(
-    base::WeakPtr<AutofillPopupController> controller,
-    PopupRowView::AccessibilitySelectionDelegate& a11y_selection_delegate,
-    PopupRowView::SelectionDelegate& selection_delegate,
-    int line_number) {
-  return std::make_unique<autofill_ai::PopupRowAutofillAiFeedbackView>(
-      a11y_selection_delegate, selection_delegate, controller, line_number);
-}
-
 }  // namespace
 
 std::unique_ptr<PopupRowView> CreatePopupRowView(
@@ -587,11 +571,6 @@ std::unique_ptr<PopupRowView> CreatePopupRowView(
   if (type == SuggestionType::kAutocompleteEntry) {
     return CreateAutocompleteRowWithDeleteButton(
         controller, a11y_selection_delegate, selection_delegate, line_number);
-  }
-
-  if (type == SuggestionType::kAutofillAiFeedback) {
-    return CreateAutofillAiFeedbackRow(controller, a11y_selection_delegate,
-                                       selection_delegate, line_number);
   }
 
   if (IsFooterSuggestionType(type)) {

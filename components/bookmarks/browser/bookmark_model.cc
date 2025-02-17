@@ -246,6 +246,31 @@ const BookmarkNode* BookmarkModel::account_mobile_node() const {
   return account_mobile_node_;
 }
 
+bool BookmarkModel::IsNodeVisible(const BookmarkNode& node) const {
+  if (!node.is_permanent_node()) {
+    return true;
+  }
+
+  if (!node.children().empty()) {
+    return true;
+  }
+
+  if (!BookmarkPermanentNode::IsTypeVisibleWhenEmpty(node.type())) {
+    return false;
+  }
+
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+  if (IsLocalOnlyNode(node) && account_bookmark_bar_node() &&
+      !HasLocalOrSyncableBookmarks(this)) {
+    // Prune this local empty permanent node, since the user has account
+    // permanent folders.
+    return false;
+  }
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+
+  return true;
+}
+
 bool BookmarkModel::IsLocalOnlyNode(const BookmarkNode& node) const {
   if (is_root_node(&node)) {
     // The semantics aren't clear for the root, but returning true seems most
@@ -446,11 +471,15 @@ void BookmarkModel::Move(const BookmarkNode* node,
     return;
   }
 
-  SetDateFolderModified(new_parent, Time::Now());
-
   if (old_parent == new_parent && index > old_index) {
     index--;
   }
+
+  for (BookmarkModelObserver& observer : observers_) {
+    observer.OnWillMoveBookmarkNode(old_parent, old_index, new_parent, index);
+  }
+
+  SetDateFolderModified(new_parent, Time::Now());
 
   const NodeTypeForUuidLookup old_type_for_uuid_lookup =
       DetermineTypeForUuidLookupForExistingNode(old_parent);
@@ -959,6 +988,16 @@ void BookmarkModel::ReorderChildren(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK(!client_->IsNodeManaged(parent));
 
+  // Workaround for callers that provide an unexpected vector size in
+  // `ordered_nodes`, as there is evidence that Java callers may run into this
+  // scenario. While the underlying issue is investigated, avoid CHECK failures
+  // or other undesired side effects by simply ignoring the call.
+  // TODO(crbug.com/390764681): Investigate and fix the actual issue in Java
+  // instead of ignoring the call here.
+  if (parent->children().size() != ordered_nodes.size()) {
+    return;
+  }
+
   // Ensure that all children in `parent` are in `ordered_nodes`.
   CHECK_EQ(parent->children().size(), ordered_nodes.size());
   for (const BookmarkNode* node : ordered_nodes) {
@@ -1461,6 +1500,15 @@ void BookmarkModel::RemoveAccountPermanentFolders() {
     RemoveChildAt(node->parent(), node->parent()->GetIndexOf(node).value(),
                   FROM_HERE, /*source=*/std::nullopt, /*is_undoable=*/false);
   }
+}
+
+size_t BookmarkModel::GetTotalNumberOfUrlsAndFoldersIncludingManagedNodes()
+    const {
+  size_t number_of_nodes = 0;
+  for (auto const& [lookup, uuid_index] : uuid_index_) {
+    number_of_nodes += uuid_index.size();
+  }
+  return number_of_nodes;
 }
 
 void BookmarkModel::ScheduleSaveForNode(const BookmarkNode* node) {

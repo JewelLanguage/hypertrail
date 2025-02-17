@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <functional>
 #include <memory>
 #include <numbers>
 #include <numeric>
@@ -22,8 +23,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
-#include "base/ranges/functional.h"
+#include "base/strings/strcat.h"
 #include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
@@ -38,8 +38,6 @@
 #include "chrome/browser/icon_manager.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager_factory.h"
-#include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
-#include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/tab_modal_confirm_dialog.h"
@@ -105,6 +103,11 @@
 #include "url/gurl.h"
 #include "url/url_constants.h"
 
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+#include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
+#include "chrome/browser/safe_browsing/safe_browsing_service.h"
+#endif
+
 namespace {
 
 // TODO(pkasting): Replace bespoke constants in file with standard metrics from
@@ -165,7 +168,13 @@ class TransparentButton : public views::Button {
                       views::style::STYLE_PRIMARY)));
         },
         this));
+    tooltip_text_changed_subscription_ =
+        parent->AddTooltipTextChangedCallback(base::BindRepeating(
+            &TransparentButton::OnTooltipTextUpdated, base::Unretained(this)));
+
+    SetTooltipText(parent->GetTooltipText());
   }
+
   ~TransparentButton() override = default;
 
   // Forward dragging and capture loss events, since this class doesn't have
@@ -181,9 +190,10 @@ class TransparentButton : public views::Button {
     Button::OnMouseCaptureLost();
   }
 
-  std::u16string GetTooltipText(const gfx::Point& point) const override {
-    return parent()->GetTooltipText(point);
-  }
+  void OnTooltipTextUpdated() { parent()->GetTooltipText(); }
+
+ private:
+  base::CallbackListSubscription tooltip_text_changed_subscription_;
 };
 
 BEGIN_METADATA(TransparentButton)
@@ -475,12 +485,12 @@ void DownloadItemView::OnMouseCaptureLost() {
 
 void DownloadItemView::UpdateTooltipText() {
   if (has_warning_label(mode_)) {
-    SetCachedTooltipText(std::u16string());
+    SetTooltipText(std::u16string());
     return;
   }
 
   const std::u16string new_tooltip_text = model_->GetTooltipText();
-  SetCachedTooltipText(new_tooltip_text);
+  SetTooltipText(new_tooltip_text);
 }
 
 void DownloadItemView::ShowContextMenuForViewImpl(
@@ -583,7 +593,7 @@ gfx::Size DownloadItemView::CalculatePreferredSize(
         kStartPadding * 2 + icon_size.width() + label->width() + kEndPadding;
     height = std::max(height, icon_size.height());
     const int visible_buttons =
-        base::ranges::count(buttons(), true, &views::View::GetVisible);
+        std::ranges::count(buttons(), true, &views::View::GetVisible);
     if (visible_buttons > 0) {
       const gfx::Size button_size = GetButtonSize();
       width += kLabelPadding + button_size.width() * visible_buttons +
@@ -822,6 +832,7 @@ void DownloadItemView::UpdateLabels() {
     warning_label_->SizeToFit(GetLabelWidth(*warning_label_));
   }
 
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   deep_scanning_label_->SetVisible(mode_ ==
                                    download::DownloadItemMode::kDeepScanning);
   if (deep_scanning_label_->GetVisible()) {
@@ -837,6 +848,7 @@ void DownloadItemView::UpdateLabels() {
     StyleFilename(*deep_scanning_label_, filename_offset, filename.length());
     deep_scanning_label_->SizeToFit(GetLabelWidth(*deep_scanning_label_));
   }
+#endif
 }
 
 void DownloadItemView::UpdateButtons() {
@@ -975,7 +987,8 @@ std::u16string DownloadItemView::GetInProgressAccessibleAlertText() const {
 }
 
 void DownloadItemView::AnnounceAccessibleAlert() {
-  accessible_alert_->NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
+  accessible_alert_->NotifyAccessibilityEventDeprecated(
+      ax::mojom::Event::kAlert, true);
   announce_accessible_alert_soon_ = false;
 }
 
@@ -1175,8 +1188,8 @@ int DownloadItemView::GetLabelWidth(const views::StyledLabel& label) const {
   // TODO(pkasting): Can use std::iota_view() when C++20 is available.
   std::vector<int> widths(max_width + 1 - min_width);
   std::iota(widths.begin(), widths.end(), min_width);
-  return *base::ranges::lower_bound(widths, 2, base::ranges::greater{},
-                                    std::move(lines_for_width));
+  return *std::ranges::lower_bound(widths, 2, std::ranges::greater{},
+                                   std::move(lines_for_width));
 }
 
 void DownloadItemView::SetDropdownPressed(bool pressed) {
@@ -1306,7 +1319,9 @@ void DownloadItemView::ShowContextMenuImpl(
 }
 
 void DownloadItemView::OpenDownloadDuringAsyncScanning() {
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   model_->CompleteSafeBrowsingScan();
+#endif
   model_->SetOpenWhenComplete(true);
 }
 
@@ -1337,8 +1352,9 @@ void DownloadItemView::UpdateAccessibleName() {
 std::u16string DownloadItemView::CalculateAccessibleName() const {
   return has_warning_label(mode_)
              ? warning_label_->GetText()
-             : (status_label_->GetText() + u' ' +
-                model_->GetFileNameToReportUser().LossyDisplayName());
+             : base::StrCat(
+                   {status_label_->GetText(), u" ",
+                    model_->GetFileNameToReportUser().LossyDisplayName()});
 }
 
 std::array<raw_ptr<views::MdTextButton>, DownloadItemView::kButtonsCount>

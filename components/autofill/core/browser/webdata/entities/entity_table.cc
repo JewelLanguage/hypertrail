@@ -8,6 +8,7 @@
 #include <optional>
 #include <ranges>
 
+#include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/notreached.h"
 #include "base/strings/strcat.h"
@@ -18,6 +19,7 @@
 #include "components/autofill/core/browser/data_model/entity_instance.h"
 #include "components/autofill/core/browser/webdata/autofill_table_utils.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/os_crypt/async/common/encryptor.h"
 #include "components/webdata/common/web_database.h"
 #include "sql/statement.h"
 #include "sql/transaction.h"
@@ -31,11 +33,19 @@ void* GetKey() {
   return reinterpret_cast<void*>(&key);
 }
 
+// TODO(crbug.com/394292801): Remove when we migrate to WebDatabase's
+// versioning.
+namespace version {
+constexpr char kTableName[] = "entities_version";
+constexpr char kVersion[] = "version";
+constexpr int kCurrentVersion = 3;
+}  // namespace version
+
 namespace attributes {
 constexpr char kTableName[] = "attributes";
 constexpr char kEntityGuid[] = "entity_guid";
 constexpr char kType[] = "type";
-constexpr char kValue[] = "value";
+constexpr char kValueEncrypted[] = "value_encrypted";
 constexpr char kContext[] = "context";
 }  // namespace attributes
 
@@ -47,82 +57,99 @@ constexpr char kNickname[] = "nickname";
 constexpr char kDateModified[] = "date_modified";
 }  // namespace entities
 
-std::optional<AttributeInstance> ValidateAttributeInstance(
-    AttributeTypeName type_name,
-    std::string value,
-    AttributeInstance::Context context) {
-  if (!IsValidAttributeTypeName(type_name)) {
-    return std::nullopt;
-  }
-  return AttributeInstance(AttributeType(type_name), std::move(value),
-                           std::move(context));
-}
+struct AttributeRecord {
+  std::string type_name;
+  std::u16string value;
+  AttributeInstance::Context context;
+};
 
-std::optional<EntityInstance> ValidateEntityInstance(
-    EntityTypeName type_name,
-    std::vector<AttributeInstance> attributes,
+std::optional<EntityInstance> ValidateInstance(
+    base::PassKey<EntityTable> pass_key,
+    std::string_view type_name,
+    std::vector<AttributeRecord> attribute_records,
     base::Uuid guid,
     std::string nickname,
     base::Time date_modified) {
-  if (!IsValidEntityTypeName(type_name) || !guid.is_valid()) {
+  std::optional<EntityType> entity_type =
+      StringToEntityType(pass_key, type_name);
+  if (!entity_type || !guid.is_valid()) {
     return std::nullopt;
+  }
+
+  std::vector<AttributeInstance> attributes;
+  attributes.reserve(attribute_records.size());
+  for (AttributeRecord& ar : attribute_records) {
+    if (std::optional<AttributeType> attribute_type =
+            StringToAttributeType(pass_key, *entity_type, ar.type_name)) {
+      attributes.emplace_back(*attribute_type, std::move(ar.value),
+                              std::move(ar.context));
+    }
   }
 
   // Remove attributes that don't belong to the entity according to the schema.
   // (The schema may have changed and this attribute may be outdated.)
-  std::erase_if(attributes, [&type_name](const AttributeInstance& a) {
-    return EntityType(type_name) != a.type().entity_type();
+  std::erase_if(attributes, [&entity_type](const AttributeInstance& a) {
+    return *entity_type != a.type().entity_type();
   });
 
-  EntityInstance entity =
-      EntityInstance(EntityType(type_name), std::move(attributes),
-                     std::move(guid), std::move(nickname), date_modified);
-
-  // Validate the "required attributes" constraint.
-  auto all_present = [&entity](DenseSet<AttributeType> as) {
-    return std::ranges::all_of(as, [&](const AttributeType& a) {
-      return entity.attribute(a).has_value();
-    });
-  };
-  if (std::ranges::none_of(entity.type().required_attributes(), all_present)) {
+  if (attributes.empty()) {
     return std::nullopt;
   }
-  return std::move(entity);
+
+  return EntityInstance(*entity_type, std::move(attributes), std::move(guid),
+                        std::move(nickname), date_modified);
 }
 
+// If "--autofill-wipe-entities" is present, drops the tables and creates
+// new ones.
+//
+// If "--autofill-add-test-entities" is present, adds two example entities.
+//
 // TODO(crbug.com/388590912): Remove when test data is no longer needed.
-void AddTestDataIfNeeded(EntityTable& table) {
-  if (!base::FeatureList::IsEnabled(features::kAutofillAiTestData)) {
+void HandleTestSwitchesIfNeeded(sql::Database* db, EntityTable& table) {
+  const bool wipe = base::CommandLine::ForCurrentProcess()->HasSwitch(
+      "autofill-wipe-entities");
+  const bool add = base::CommandLine::ForCurrentProcess()->HasSwitch(
+      "autofill-add-test-entities");
+  if (!wipe && !add) {
     return;
   }
 
-  // We skip subsequent calls so that test data isn't re-added after it was
-  // deleted.
+  // Handle the switches only once.
   static bool has_been_called = false;
   if (has_been_called) {
     return;
   }
   has_been_called = true;
 
-  using enum AttributeTypeName;
-  table.AddEntityInstance(EntityInstance(
-      EntityType(EntityTypeName::kPassport),
-      {AttributeInstance(AttributeType(kPassportNumber), "123", {}),
-       AttributeInstance(AttributeType(kPassportName), "Pippi Långstrump", {}),
-       AttributeInstance(AttributeType(kPassportCountry), "Sweden", {}),
-       AttributeInstance(AttributeType(kPassportExpiryDate), "09/2098", {}),
-       AttributeInstance(AttributeType(kPassportIssueDate), "10/1998", {})},
-      base::Uuid::ParseLowercase("00000000-0000-4000-8000-000000000000"),
-      "Passie", base::Time::Now()));
-  table.AddEntityInstance(EntityInstance(
-      EntityType(EntityTypeName::kLoyaltyCard),
-      {AttributeInstance(AttributeType(kLoyaltyCardProgram),
-                         "Asterisk Alliance", {}),
-       AttributeInstance(AttributeType(kLoyaltyCardProvider),
-                         "Propeller Airways", {}),
-       AttributeInstance(AttributeType(kLoyaltyCardMemberId), "987", {})},
-      base::Uuid::ParseLowercase("11111111-1111-4111-8111-111111111111"),
-      "Loyie", base::Time::Now()));
+  if (wipe) {
+    DropTableIfExists(db, attributes::kTableName);
+    DropTableIfExists(db, entities::kTableName);
+    table.CreateTablesIfNecessary();
+  }
+
+  if (add) {
+    using enum AttributeTypeName;
+    table.AddOrUpdateEntityInstance(EntityInstance(
+        EntityType(EntityTypeName::kPassport),
+        {AttributeInstance(AttributeType(kPassportNumber), u"123", {}),
+         AttributeInstance(AttributeType(kPassportName), u"Pippi Långstrump",
+                           {}),
+         AttributeInstance(AttributeType(kPassportCountry), u"Sweden", {}),
+         AttributeInstance(AttributeType(kPassportExpiryDate), u"09/2098", {}),
+         AttributeInstance(AttributeType(kPassportIssueDate), u"10/1998", {})},
+        base::Uuid::ParseLowercase("00000000-0000-4000-8000-000000000000"),
+        "Passie", base::Time::Now()));
+    table.AddOrUpdateEntityInstance(EntityInstance(
+        EntityType(EntityTypeName::kLoyaltyCard),
+        {AttributeInstance(AttributeType(kLoyaltyCardProgram),
+                           u"Asterisk Alliance", {}),
+         AttributeInstance(AttributeType(kLoyaltyCardProvider),
+                           u"Propeller Airways", {}),
+         AttributeInstance(AttributeType(kLoyaltyCardMemberId), u"987", {})},
+        base::Uuid::ParseLowercase("11111111-1111-4111-8111-111111111111"),
+        "Loyie", base::Time::Now()));
+  }
 }
 
 }  // namespace
@@ -140,13 +167,42 @@ WebDatabaseTable::TypeKey EntityTable::GetTypeKey() const {
 }
 
 bool EntityTable::CreateTablesIfNecessary() {
+  // TODO(crbug.com/394292801): Remove when we migrate to WebDatabase's
+  // versioning.
+  {
+    CreateTableIfNotExists(db(), /*table_name=*/version::kTableName,
+                           /*column_names_and_types=*/
+                           {{version::kVersion, "INTEGER"}});
+    auto get_table_version = [&] {
+      sql::Statement s;
+      SelectBuilder(db(), s, version::kTableName, {version::kVersion});
+      if (s.Step()) {
+        return s.ColumnInt(0);
+      }
+      constexpr int kDefaultVersion = 0;
+      InsertBuilder(db(), s, version::kTableName, {version::kVersion});
+      s.BindInt(0, kDefaultVersion);
+      s.Run();
+      return kDefaultVersion;
+    };
+    if (get_table_version() != version::kCurrentVersion) {
+      sql::Statement s;
+      UpdateBuilder(db(), s, version::kTableName, {version::kVersion},
+                    /*where_clause=*/"");
+      s.BindInt(0, version::kCurrentVersion);
+      s.Run();
+      DropTableIfExists(db(), attributes::kTableName);
+      DropTableIfExists(db(), entities::kTableName);
+    }
+  }
+
   auto create_attributes_table = [&] {
     return CreateTableIfNotExists(
         db(), /*table_name=*/attributes::kTableName,
         /*column_names_and_types=*/
         {{attributes::kEntityGuid, "TEXT NOT NULL"},
-         {attributes::kType, "INTEGER NOT NULL"},
-         {attributes::kValue, "TEXT NOT NULL"},
+         {attributes::kType, "TEXT NOT NULL"},
+         {attributes::kValueEncrypted, "BLOB NOT NULL"},
          {attributes::kContext, "TEXT"}},
         /*composite_primary_key=*/{attributes::kEntityGuid, attributes::kType});
   };
@@ -155,7 +211,7 @@ bool EntityTable::CreateTablesIfNecessary() {
         db(), /*table_name=*/entities::kTableName,
         /*column_names_and_types=*/
         {{entities::kGuid, "TEXT NOT NULL PRIMARY KEY"},
-         {entities::kType, "INTEGER NOT NULL"},
+         {entities::kType, "TEXT NOT NULL"},
          {entities::kNickname, "TEXT NOT NULL"},
          {entities::kDateModified, "INTEGER NOT NULL"}});
   };
@@ -173,7 +229,7 @@ bool EntityTable::CreateTablesIfNecessary() {
 // the pattern
 //   for (const EntityInstance& old_e : GetEntityInstances()) {
 //     EntityInstance new_ = migrate(old_e);
-//     UpdateEntityInstance(new_e);
+//     AddOrUpdateEntityInstance(new_e);
 //   }
 // where migrate() maps the old to a new EntityInstance. To delete attributes,
 // the identity function suffices because GetEntityInstances() skips unknown
@@ -187,7 +243,7 @@ bool EntityTable::MigrateToVersion(int version,
 }
 
 bool EntityTable::AddEntityInstance(const EntityInstance& entity) {
-  AddTestDataIfNeeded(*this);
+  HandleTestSwitchesIfNeeded(db(), *this);
 
   sql::Transaction transaction(db());
   if (!transaction.Begin()) {
@@ -198,10 +254,15 @@ bool EntityTable::AddEntityInstance(const EntityInstance& entity) {
     sql::Statement s;
     InsertBuilder(db(), s, attributes::kTableName,
                   {attributes::kEntityGuid, attributes::kType,
-                   attributes::kValue, attributes::kContext});
+                   attributes::kValueEncrypted, attributes::kContext});
     s.BindString(0, entity.guid().AsLowercaseString());
-    s.BindInt(1, base::to_underlying(attribute.type().name()));
-    s.BindString(2, attribute.value());
+    s.BindString(1, attribute.type().name_as_string());
+    std::string encrypted_value;
+    if (encryptor()->EncryptString16(attribute.value(), &encrypted_value)) {
+      s.BindString(2, encrypted_value);
+    } else {
+      return false;
+    }
     s.BindString(3, attribute.context().format);
     if (!s.Run()) {
       return false;
@@ -214,7 +275,7 @@ bool EntityTable::AddEntityInstance(const EntityInstance& entity) {
                 {entities::kGuid, entities::kType, entities::kNickname,
                  entities::kDateModified});
   s.BindString(0, entity.guid().AsLowercaseString());
-  s.BindInt(1, base::to_underlying(entity.type().name()));
+  s.BindString(1, entity.type().name_as_string());
   s.BindString(2, entity.nickname());
   s.BindInt64(3, entity.date_modified().ToTimeT());
   if (!s.Run()) {
@@ -223,8 +284,8 @@ bool EntityTable::AddEntityInstance(const EntityInstance& entity) {
   return transaction.Commit();
 }
 
-bool EntityTable::UpdateEntityInstance(const EntityInstance& entity) {
-  AddTestDataIfNeeded(*this);
+bool EntityTable::AddOrUpdateEntityInstance(const EntityInstance& entity) {
+  HandleTestSwitchesIfNeeded(db(), *this);
 
   sql::Transaction transaction(db());
   return transaction.Begin() && RemoveEntityInstance(entity.guid()) &&
@@ -232,7 +293,7 @@ bool EntityTable::UpdateEntityInstance(const EntityInstance& entity) {
 }
 
 bool EntityTable::RemoveEntityInstance(const base::Uuid& guid) {
-  AddTestDataIfNeeded(*this);
+  HandleTestSwitchesIfNeeded(db(), *this);
 
   sql::Transaction transaction(db());
   return transaction.Begin() &&
@@ -246,7 +307,7 @@ bool EntityTable::RemoveEntityInstance(const base::Uuid& guid) {
 
 bool EntityTable::RemoveEntityInstancesModifiedBetween(base::Time delete_begin,
                                                        base::Time delete_end) {
-  AddTestDataIfNeeded(*this);
+  HandleTestSwitchesIfNeeded(db(), *this);
 
   if (delete_begin.is_null()) {
     delete_begin = base::Time::Min();
@@ -282,25 +343,28 @@ bool EntityTable::RemoveEntityInstancesModifiedBetween(base::Time delete_begin,
 }
 
 std::vector<EntityInstance> EntityTable::GetEntityInstances() const {
-  AddTestDataIfNeeded(const_cast<EntityTable&>(*this));
+  HandleTestSwitchesIfNeeded(db(), const_cast<EntityTable&>(*this));
 
   // Collects all attributes, keyed by the owning entity's GUID.
-  std::map<base::Uuid, std::vector<AttributeInstance>> attributes;
+  std::map<base::Uuid, std::vector<AttributeRecord>> attribute_records;
   {
     sql::Statement s;
     SelectBuilder(db(), s, attributes::kTableName,
                   {attributes::kEntityGuid, attributes::kType,
-                   attributes::kValue, attributes::kContext});
+                   attributes::kValueEncrypted, attributes::kContext});
     while (s.Step()) {
       base::Uuid entity_guid = base::Uuid::ParseLowercase(s.ColumnString(0));
-      auto type_name = static_cast<AttributeTypeName>(s.ColumnInt(1));
-      std::string value = s.ColumnString(2);
+      std::string type_name = s.ColumnString(1);
+      std::u16string decrypted_value;
+      if (!encryptor()->DecryptString16(s.ColumnString(2), &decrypted_value)) {
+        continue;
+      }
       AttributeInstance::Context context;
       context.format = s.ColumnString(3);
-      if (std::optional<AttributeInstance> a = ValidateAttributeInstance(
-              type_name, std::move(value), std::move(context))) {
-        attributes[entity_guid].push_back(*std::move(a));
-      }
+      attribute_records[entity_guid].push_back(
+          {.type_name = std::move(type_name),
+           .value = std::move(decrypted_value),
+           .context = std::move(context)});
     }
     if (!s.Succeeded()) {
       return {};
@@ -317,16 +381,16 @@ std::vector<EntityInstance> EntityTable::GetEntityInstances() const {
                    entities::kDateModified});
     while (s.Step()) {
       base::Uuid guid = base::Uuid::ParseLowercase(s.ColumnString(0));
-      auto type_name = static_cast<EntityTypeName>(s.ColumnInt(1));
+      std::string type_name = s.ColumnString(1);
       std::string nickname = s.ColumnString(2);
       base::Time date_modified = base::Time::FromTimeT(s.ColumnInt64(3));
-      auto nh = attributes.extract(guid);
-      if (std::optional<EntityInstance> e = ValidateEntityInstance(
-              type_name,
-              !nh.empty() ? std::move(nh.mapped())
-                          : std::vector<AttributeInstance>{},
-              std::move(guid), std::move(nickname), date_modified)) {
-        entities.push_back(*std::move(e));
+
+      if (auto attributes = attribute_records.extract(guid)) {
+        if (std::optional<EntityInstance> e = ValidateInstance(
+                /*pass_key=*/{}, type_name, std::move(attributes.mapped()),
+                std::move(guid), std::move(nickname), date_modified)) {
+          entities.push_back(*std::move(e));
+        }
       }
     }
     if (!s.Succeeded()) {

@@ -64,10 +64,14 @@ std::string_view ConvertIconToPrintableString(Suggestion::Icon icon) {
       return "kHttpWarning";
     case Suggestion::Icon::kHttpsInvalid:
       return "kHttpsInvalid";
+    case Suggestion::Icon::kIdCard:
+      return "kIdCard";
     case Suggestion::Icon::kKey:
       return "kKey";
     case Suggestion::Icon::kLocation:
       return "kLocation";
+    case Suggestion::Icon::kLoyalty:
+      return "kLoyalty";
     case Suggestion::Icon::kMagic:
       return "kMagic";
     case Suggestion::Icon::kOfferTag:
@@ -84,6 +88,8 @@ std::string_view ConvertIconToPrintableString(Suggestion::Icon icon) {
       return "kSettingsAndroid";
     case Suggestion::Icon::kUndo:
       return "kUndo";
+    case Suggestion::Icon::kVehicle:
+      return "kVehicle";
     case Suggestion::Icon::kCardGeneric:
       return "kCardGeneric";
     case Suggestion::Icon::kCardAmericanExpress:
@@ -172,10 +178,8 @@ Suggestion::PlusAddressPayload::~PlusAddressPayload() = default;
 Suggestion::AutofillAiPayload::AutofillAiPayload() = default;
 
 Suggestion::AutofillAiPayload::AutofillAiPayload(
-    const base::flat_map<FieldGlobalId, std::u16string>& values_to_fill,
-    const DenseSet<FieldFillingSkipReason>& ignorable_skip_reasons)
-    : values_to_fill(std::move(values_to_fill)),
-      ignorable_skip_reasons(std::move(ignorable_skip_reasons)) {}
+    const base::flat_map<FieldGlobalId, std::u16string>& values_to_fill)
+    : values_to_fill(std::move(values_to_fill)) {}
 
 Suggestion::AutofillAiPayload::AutofillAiPayload(const AutofillAiPayload&) =
     default;

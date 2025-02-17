@@ -7,9 +7,11 @@
 #include "base/feature_list.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "chrome/browser/glic/glic_test_environment.h"
 #include "chrome/browser/optimization_guide/browser_test_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/organization/tab_organization_service.h"
 #include "chrome/browser/ui/tabs/organization/tab_organization_utils.h"
@@ -32,6 +34,8 @@
 
 #if BUILDFLAG(ENABLE_GLIC)
 #include "chrome/browser/glic/glic_keyed_service_factory.h"
+#include "chrome/browser/glic/glic_test_util.h"
+#include "chrome/browser/ui/views/tabs/glic_button.h"
 #endif  // BUILDFLAG(ENABLE_GLIC)
 
 class TabStripActionContainerBrowserTest : public InProcessBrowserTest {
@@ -42,6 +46,26 @@ class TabStripActionContainerBrowserTest : public InProcessBrowserTest {
          features::kTabstripComboButton, features::kTabstripDeclutter},
         {});
     TabOrganizationUtils::GetInstance()->SetIgnoreOptGuideForTesting(true);
+  }
+
+  void SetUpOnMainThread() override {
+    InProcessBrowserTest::SetUpOnMainThread();
+
+#if BUILDFLAG(ENABLE_GLIC)
+    glic_test_environment_ =
+        std::make_unique<glic::GlicTestEnvironment>(browser()->profile());
+    glic::ForceSigninAndModelExecutionCapability(browser()->profile());
+#endif
+  }
+
+  void SetUpInProcessBrowserTestFixture() override {
+    InProcessBrowserTest::SetUpInProcessBrowserTestFixture();
+    create_services_subscription_ =
+        BrowserContextDependencyManager::GetInstance()
+            ->RegisterCreateServicesCallbackForTesting(
+                base::BindRepeating(&TabStripActionContainerBrowserTest::
+                                        OnWillCreateBrowserContextServices,
+                                    base::Unretained(this)));
   }
 
   TabStripModel* tab_strip_model() { return browser()->tab_strip_model(); }
@@ -103,7 +127,18 @@ class TabStripActionContainerBrowserTest : public InProcessBrowserTest {
   }
 
  private:
+  void OnWillCreateBrowserContextServices(content::BrowserContext* context) {
+    IdentityTestEnvironmentProfileAdaptor::
+        SetIdentityTestEnvironmentFactoriesOnBrowserContext(context);
+  }
+
   base::test::ScopedFeatureList feature_list_;
+  std::unique_ptr<IdentityTestEnvironmentProfileAdaptor>
+      identity_test_environment_adaptor_;
+  base::CallbackListSubscription create_services_subscription_;
+#if BUILDFLAG(ENABLE_GLIC)
+  std::unique_ptr<glic::GlicTestEnvironment> glic_test_environment_;
+#endif
 };
 
 IN_PROC_BROWSER_TEST_F(TabStripActionContainerBrowserTest, ShowsDeclutterChip) {
@@ -342,6 +377,25 @@ IN_PROC_BROWSER_TEST_F(TabStripActionContainerBrowserTest,
       glic::GlicKeyedServiceFactory::GetGlicKeyedService(
           browser()->GetProfile());
 
-  EXPECT_TRUE(glic_keyed_service->window_controller().HasWindow());
+  EXPECT_TRUE(glic_keyed_service->IsWindowShowing());
+}
+
+IN_PROC_BROWSER_TEST_F(TabStripActionContainerBrowserTest,
+                       ShowAndHideGlicButtonWhenGlicNudgeButtonShows) {
+  ShowTabStripNudgeButton(GlicNudgeButton());
+  tab_strip_action_container()
+      ->animation_session_for_testing()
+      ->ResetAnimationForTesting(1);
+  tab_strip_action_container()->GetWidget()->LayoutRootViewIfNecessary();
+
+  EXPECT_FALSE(tab_strip_action_container()->GetGlicButton()->GetVisible());
+  SetLockedExpansionMode(LockedExpansionMode::kWillHide, GlicNudgeButton());
+
+  OnButtonDismissed(GlicNudgeButton());
+
+  tab_strip_action_container()
+      ->animation_session_for_testing()
+      ->ResetAnimationForTesting(1);
+  EXPECT_TRUE(tab_strip_action_container()->GetGlicButton()->GetVisible());
 }
 #endif  // BUILDFLAG(ENABLE_GLIC)

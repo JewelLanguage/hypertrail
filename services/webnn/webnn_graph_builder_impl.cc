@@ -547,7 +547,7 @@ class OperationValidationContext {
 
   template <typename Operation>
   bool ValidateUnaryOperation(const Operation& operation,
-                              const webnn::SupportedDataTypes& input_constraint,
+                              const webnn::SupportedTensors& input_constraint,
                               size_t operation_id);
 
   bool ValidateCastOperation(const mojom::ElementWiseUnary& operation,
@@ -673,7 +673,7 @@ OperationValidationContext::ValidateOperationsAndGetDependencies(
 template <typename Operation>
 bool OperationValidationContext::ValidateUnaryOperation(
     const Operation& operation,
-    const webnn::SupportedDataTypes& input_constraint,
+    const webnn::SupportedTensors& input_constraint,
     size_t operation_id) {
   if (!processed_operands_.contains(operation.input_operand_id)) {
     return false;
@@ -690,8 +690,7 @@ bool OperationValidationContext::ValidateUnaryOperation(
     return false;
   }
 
-  const auto input_data_type = input->descriptor.data_type();
-  if (!input_constraint.Has(input_data_type)) {
+  if (!input_constraint.Supports(input->descriptor)) {
     // The data type is not in the constraint.
     return false;
   }
@@ -715,18 +714,14 @@ bool OperationValidationContext::ValidateCastOperation(
     // The unary operator is invalid.
     return false;
   }
-  if (!base::ranges::equal(output->descriptor.shape(),
-                           input->descriptor.shape())) {
+  if (!std::ranges::equal(output->descriptor.shape(),
+                          input->descriptor.shape())) {
     // The output shape is not expected.
     return false;
   }
 
-  if (!context_properties_->data_type_limits.cast_input.Has(
-          input->descriptor.data_type())) {
-    return false;
-  }
-  if (!context_properties_->data_type_limits.cast_input.Has(
-          output->descriptor.data_type())) {
+  if (!context_properties_->data_type_limits.cast_input.SupportsAll(
+          {input->descriptor, output->descriptor})) {
     return false;
   }
 
@@ -1131,7 +1126,7 @@ bool OperationValidationContext::ValidateElementWiseBinary(
     // The input shapes are not broadcastable.
     return false;
   }
-  if (!base::ranges::equal(output->descriptor.shape(), dims_output.value())) {
+  if (!std::ranges::equal(output->descriptor.shape(), dims_output.value())) {
     // The output shape is not expected.
     return false;
   }
@@ -1236,8 +1231,8 @@ bool OperationValidationContext::ValidateExpand(const mojom::Expand& expand,
     // The expand operator is invalid.
     return false;
   }
-  if (!context_properties_->data_type_limits.expand_input.Has(
-          input->descriptor.data_type())) {
+  if (!context_properties_->data_type_limits.expand_input.Supports(
+          input->descriptor)) {
     return false;
   }
   if (output->descriptor.data_type() != input->descriptor.data_type()) {
@@ -1251,7 +1246,7 @@ bool OperationValidationContext::ValidateExpand(const mojom::Expand& expand,
     // The input shape is not broadcastable to the output shape.
     return false;
   }
-  CHECK(base::ranges::equal(output_shape.value(), output->descriptor.shape()));
+  CHECK(std::ranges::equal(output_shape.value(), output->descriptor.shape()));
 
   return true;
 }
@@ -2143,8 +2138,8 @@ bool OperationValidationContext::ValidateReshape(const mojom::Reshape& reshape,
     // The reshape operator is invalid.
     return false;
   }
-  if (!context_properties_->data_type_limits.reshape_input.Has(
-          input->descriptor.data_type())) {
+  if (!context_properties_->data_type_limits.reshape_input.Supports(
+          input->descriptor)) {
     return false;
   }
   if (output->descriptor.data_type() != input->descriptor.data_type()) {

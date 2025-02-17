@@ -48,6 +48,7 @@
 #include "chrome/browser/content_index/content_index_provider_factory.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/contextual_cueing/contextual_cueing_service_factory.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
 #include "chrome/browser/data_sharing/data_sharing_service_factory.h"
 #include "chrome/browser/device_api/managed_configuration_api_factory.h"
@@ -78,8 +79,10 @@
 #include "chrome/browser/history_clusters/history_clusters_service_factory.h"
 #include "chrome/browser/omnibox/autocomplete_controller_emitter_factory.h"
 #include "chrome/browser/passage_embeddings/passage_embedder_model_observer_factory.h"
+#include "chrome/browser/permissions/prediction_model_handler_provider_factory.h"
 #include "chrome/browser/profiles/batch_upload/batch_upload_service_factory.h"
 #include "chrome/browser/regional_capabilities/regional_capabilities_service_factory.h"
+#include "chrome/browser/search_engines/template_url_prepopulate_data_resolver_factory.h"
 #include "components/services/on_device_translation/buildflags/buildflags.h"
 
 #if !BUILDFLAG(IS_FUCHSIA)
@@ -111,6 +114,7 @@
 #if BUILDFLAG(CHROME_ROOT_STORE_CERT_MANAGEMENT_UI)
 #include "chrome/browser/net/server_certificate_database_service_factory.h"
 #endif  //  BUILDFLAG(CHROME_ROOT_STORE_CERT_MANAGEMENT_UI)
+#include "chrome/browser/enterprise/connectors/connectors_service.h"
 #include "chrome/browser/notifications/metrics/notification_metrics_logger_factory.h"
 #include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/notifications/notifier_state_tracker_factory.h"
@@ -119,6 +123,7 @@
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/origin_trials/origin_trials_factory.h"
 #include "chrome/browser/page_content_annotations/page_content_annotations_service_factory.h"
+#include "chrome/browser/page_content_annotations/page_content_extraction_service_factory.h"
 #include "chrome/browser/page_image_service/image_service_factory.h"
 #include "chrome/browser/page_info/about_this_site_service_factory.h"
 #include "chrome/browser/page_info/merchant_trust_service_factory.h"
@@ -163,14 +168,6 @@
 #include "chrome/browser/push_messaging/push_messaging_service_factory.h"
 #include "chrome/browser/reading_list/reading_list_model_factory.h"
 #include "chrome/browser/reduce_accept_language/reduce_accept_language_factory.h"
-#include "chrome/browser/safe_browsing/chrome_password_protection_service_factory.h"
-#include "chrome/browser/safe_browsing/chrome_ping_manager_factory.h"
-#include "chrome/browser/safe_browsing/client_side_detection_service_factory.h"
-#include "chrome/browser/safe_browsing/notification_content_detection_service_factory.h"
-#include "chrome/browser/safe_browsing/safe_browsing_metrics_collector_factory.h"
-#include "chrome/browser/safe_browsing/safe_browsing_navigation_observer_manager_factory.h"
-#include "chrome/browser/safe_browsing/tailored_security/tailored_security_service_factory.h"
-#include "chrome/browser/safe_browsing/url_lookup_service_factory.h"
 #include "chrome/browser/safe_browsing/verdict_cache_manager_factory.h"
 #include "chrome/browser/search_engine_choice/search_engine_choice_service_factory.h"
 #include "chrome/browser/search_engines/template_url_fetcher_factory.h"
@@ -178,6 +175,7 @@
 #include "chrome/browser/search_provider_logos/logo_service_factory.h"
 #include "chrome/browser/segmentation_platform/segmentation_platform_service_factory.h"
 #include "chrome/browser/send_tab_to_self/send_tab_to_self_client_service_factory.h"
+#include "chrome/browser/serial/serial_chooser_context_factory.h"
 #include "chrome/browser/sessions/session_data_service_factory.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/sharing/sharing_service_factory.h"
@@ -321,7 +319,6 @@
 #include "ash/constants/ash_features.h"
 #include "chrome/browser/apps/almanac_api_client/device_info_manager_factory.h"
 #include "chrome/browser/apps/app_preload_service/app_preload_service_factory.h"
-#include "chrome/browser/apps/app_service/subscriber_crosapi_factory.h"
 #include "chrome/browser/ash/app_list/app_list_syncable_service_factory.h"
 #include "chrome/browser/ash/file_manager/cloud_upload_prefs_watcher.h"
 #include "chrome/browser/ash/file_manager/cloud_upload_prompt_prefs_handler.h"
@@ -429,6 +426,14 @@
 
 #if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
 #include "chrome/browser/safe_browsing/chrome_enterprise_url_lookup_service_factory.h"
+#include "chrome/browser/safe_browsing/chrome_password_protection_service_factory.h"
+#include "chrome/browser/safe_browsing/chrome_ping_manager_factory.h"
+#include "chrome/browser/safe_browsing/client_side_detection_service_factory.h"
+#include "chrome/browser/safe_browsing/notification_content_detection_service_factory.h"
+#include "chrome/browser/safe_browsing/safe_browsing_metrics_collector_factory.h"
+#include "chrome/browser/safe_browsing/safe_browsing_navigation_observer_manager_factory.h"
+#include "chrome/browser/safe_browsing/tailored_security/tailored_security_service_factory.h"
+#include "chrome/browser/safe_browsing/url_lookup_service_factory.h"
 #endif
 
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
@@ -436,7 +441,6 @@
 #include "chrome/browser/autocomplete/on_device_tail_model_service_factory.h"
 #include "chrome/browser/autofill/autofill_field_classification_model_service_factory.h"
 #include "chrome/browser/password_manager/password_field_classification_model_handler_factory.h"
-#include "chrome/browser/permissions/prediction_model_handler_provider_factory.h"
 #endif
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
@@ -467,7 +471,6 @@
 #endif
 
 #if BUILDFLAG(ENTERPRISE_CLOUD_CONTENT_ANALYSIS)
-#include "chrome/browser/enterprise/connectors/connectors_service.h"
 #include "chrome/browser/enterprise/connectors/reporting/browser_crash_event_router.h"
 #include "chrome/browser/enterprise/connectors/reporting/extension_install_event_router.h"
 #include "chrome/browser/enterprise/connectors/reporting/extension_telemetry_event_router_factory.h"
@@ -509,7 +512,6 @@
 #include "chrome/browser/screen_ai/screen_ai_service_router_factory.h"
 #include "chrome/browser/search/background/ntp_background_service_factory.h"
 #include "chrome/browser/search/background/ntp_custom_background_service_factory.h"
-#include "chrome/browser/serial/serial_chooser_context_factory.h"
 #include "chrome/browser/speech/speech_recognition_service_factory.h"
 #include "chrome/browser/ui/global_media_controls/media_notification_service_factory.h"
 #include "chrome/browser/ui/performance_controls/performance_controls_hats_service_factory.h"
@@ -554,8 +556,11 @@
 
 #if BUILDFLAG(ENTERPRISE_DATA_CONTROLS)
 #include "chrome/browser/enterprise/data_controls/chrome_rules_service.h"
+
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
 #include "chrome/browser/enterprise/data_controls/reporting_service.h"
-#endif
+#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+#endif  // BUILDFLAG(ENTERPRISE_DATA_CONTROLS)
 
 #if BUILDFLAG(CHROME_ROOT_STORE_CERT_MANAGEMENT_UI)
 #include "chrome/browser/net/server_certificate_database_service_factory.h"
@@ -662,7 +667,6 @@ void ChromeBrowserMainExtraPartsProfiles::
 #endif
 #if BUILDFLAG(IS_CHROMEOS)
   apps::DeviceInfoManagerFactory::GetInstance();
-  apps::SubscriberCrosapiFactory::GetInstance();
 #endif
 #if BUILDFLAG(ENABLE_SESSION_SERVICE)
   AppSessionServiceFactory::GetInstance();
@@ -789,6 +793,9 @@ void ChromeBrowserMainExtraPartsProfiles::
   commerce::ShoppingServiceFactory::GetInstance();
   ConsentAuditorFactory::GetInstance();
   ContentIndexProviderFactory::GetInstance();
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+  contextual_cueing::ContextualCueingServiceFactory::GetInstance();
+#endif
   CookieControlsServiceFactory::GetInstance();
   CookieSettingsFactory::GetInstance();
 #if BUILDFLAG(IS_CHROMEOS)
@@ -801,7 +808,8 @@ void ChromeBrowserMainExtraPartsProfiles::
 
 // TODO(b/352728209): Add back this service when reporting is supported on
 // Android.
-#if BUILDFLAG(ENTERPRISE_DATA_CONTROLS) && !BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(ENTERPRISE_DATA_CONTROLS) && !BUILDFLAG(IS_ANDROID) && \
+    BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   data_controls::ReportingServiceFactory::GetInstance();
 #endif
 #if BUILDFLAG(ENTERPRISE_DATA_CONTROLS)
@@ -835,9 +843,7 @@ void ChromeBrowserMainExtraPartsProfiles::
 #if BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
   enterprise_connectors::BrowserCrashEventRouterFactory::GetInstance();
 #endif
-#if BUILDFLAG(ENTERPRISE_CLOUD_CONTENT_ANALYSIS)
   enterprise_connectors::ConnectorsServiceFactory::GetInstance();
-#endif
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS)
   enterprise_connectors::DeviceTrustConnectorServiceFactory::GetInstance();
@@ -848,7 +854,8 @@ void ChromeBrowserMainExtraPartsProfiles::
   enterprise_connectors::ExtensionTelemetryEventRouterFactory::GetInstance();
 #endif
 #if (BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)) && \
-    BUILDFLAG(ENTERPRISE_LOCAL_CONTENT_ANALYSIS)
+    BUILDFLAG(ENTERPRISE_LOCAL_CONTENT_ANALYSIS) &&                    \
+    BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   enterprise_connectors::LocalBinaryUploadServiceFactory::GetInstance();
 #endif
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
@@ -1063,6 +1070,7 @@ void ChromeBrowserMainExtraPartsProfiles::
   OriginKeyedPermissionActionServiceFactory::GetInstance();
   OriginTrialsFactory::GetInstance();
   PageContentAnnotationsServiceFactory::GetInstance();
+  page_content_annotations::PageContentExtractionServiceFactory::GetInstance();
   page_image_service::ImageServiceFactory::EnsureFactoryBuilt();
   page_load_metrics::PageLoadMetricsMemoryTrackerFactory::GetInstance();
 #if !BUILDFLAG(IS_ANDROID)
@@ -1121,14 +1129,13 @@ void ChromeBrowserMainExtraPartsProfiles::
   policy::UserPolicySigninServiceFactory::GetInstance();
 #endif
   PolicyBlocklistFactory::GetInstance();
-#if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
   if (base::FeatureList::IsEnabled(
           permissions::features::kPermissionOnDeviceNotificationPredictions) ||
       base::FeatureList::IsEnabled(
-          permissions::features::kPermissionOnDeviceGeolocationPredictions)) {
+          permissions::features::kPermissionOnDeviceGeolocationPredictions) ||
+      base::FeatureList::IsEnabled(permissions::features::kPermissionsAIv1)) {
     PredictionModelHandlerProviderFactory::GetInstance();
   }
-#endif  // BUILDFLAG(BUILD_WITH_TFLITE_LIB)
   PredictionServiceFactory::GetInstance();
   predictors::AutocompleteActionPredictorFactory::GetInstance();
   predictors::LoadingPredictorFactory::GetInstance();
@@ -1188,19 +1195,23 @@ void ChromeBrowserMainExtraPartsProfiles::
 #if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   safe_browsing::ChromeEnterpriseRealTimeUrlLookupServiceFactory::GetInstance();
 #endif
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   safe_browsing::ChromePasswordProtectionServiceFactory::GetInstance();
   safe_browsing::ChromePingManagerFactory::GetInstance();
   safe_browsing::ClientSideDetectionServiceFactory::GetInstance();
+#endif
 #if BUILDFLAG(FULL_SAFE_BROWSING)
   safe_browsing::CloudBinaryUploadServiceFactory::GetInstance();
   safe_browsing::ExtensionTelemetryServiceFactory::GetInstance();
   safe_browsing::HashRealTimeServiceFactory::GetInstance();
 #endif
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   safe_browsing::NotificationContentDetectionServiceFactory::GetInstance();
   safe_browsing::RealTimeUrlLookupServiceFactory::GetInstance();
   safe_browsing::SafeBrowsingMetricsCollectorFactory::GetInstance();
   safe_browsing::SafeBrowsingNavigationObserverManagerFactory::GetInstance();
   safe_browsing::TailoredSecurityServiceFactory::GetInstance();
+#endif
   safe_browsing::VerdictCacheManagerFactory::GetInstance();
   SafeSearchFactory::GetInstance();
 #if BUILDFLAG(IS_ANDROID)
@@ -1237,9 +1248,7 @@ void ChromeBrowserMainExtraPartsProfiles::
   SearchPrefetchServiceFactory::GetInstance();
   segmentation_platform::SegmentationPlatformServiceFactory::GetInstance();
   send_tab_to_self::SendTabToSelfClientServiceFactory::GetInstance();
-#if !BUILDFLAG(IS_ANDROID)
   SerialChooserContextFactory::GetInstance();
-#endif
 #if BUILDFLAG(ENABLE_SESSION_SERVICE)
   SessionDataServiceFactory::GetInstance();
 #endif
@@ -1306,6 +1315,7 @@ void ChromeBrowserMainExtraPartsProfiles::
 #endif
   TabRestoreServiceFactory::GetInstance();
   TemplateURLFetcherFactory::GetInstance();
+  TemplateURLPrepopulateData::ResolverFactory::GetInstance();
   TemplateURLServiceFactory::GetInstance();
 #if !BUILDFLAG(IS_ANDROID)
   ThemeServiceFactory::GetInstance();

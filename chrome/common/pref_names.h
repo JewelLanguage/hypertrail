@@ -1326,6 +1326,10 @@ inline constexpr char kShowHomeButton[] = "browser.show_home_button";
 // toolbar.
 inline constexpr char kShowForwardButton[] = "browser.show_forward_button";
 
+// A boolean pref set to true if Gemini integration be enabled. This is managed
+// by enterprise policy.
+inline constexpr char kGeminiSettings[] = "browser.gemini_settings";
+
 // Comma separated list of domain names (e.g. "google.com,school.edu").
 // When this pref is set, the user will be able to access Google Apps
 // only using an account that belongs to one of the domains from this pref.
@@ -2012,7 +2016,6 @@ inline constexpr char kSkyVaultMigrationStartTime[] =
 // *************** LOCAL STATE ***************
 // These are attached to the machine/installation
 
-#if !BUILDFLAG(IS_ANDROID)
 // Used to store the value of the SerialAllowAllPortsForUrls policy.
 inline constexpr char kManagedSerialAllowAllPortsForUrls[] =
     "managed.serial_allow_all_ports_for_urls";
@@ -2021,6 +2024,7 @@ inline constexpr char kManagedSerialAllowAllPortsForUrls[] =
 inline constexpr char kManagedSerialAllowUsbDevicesForUrls[] =
     "managed.serial_allow_usb_devices_for_urls";
 
+#if !BUILDFLAG(IS_ANDROID)
 // Used to store the value of the WebHidAllowAllDevicesForUrls policy.
 inline constexpr char kManagedWebHidAllowAllDevicesForUrls[] =
     "managed.web_hid_allow_all_devices_for_urls";
@@ -2388,6 +2392,18 @@ inline constexpr char kNtpCustomizeChromeButtonOpenCount[] =
     "NewTabPage.CustomizeChromeButtonOpenCount";
 // List keeping track of disabled NTP modules.
 inline constexpr char kNtpDisabledModules[] = "NewTabPage.DisabledModules";
+// List keeping track of modules hidden in Customize Chrome.
+inline constexpr char kNtpCustomizeChromeHiddenModules[] =
+    "NewTabPage.CustomizeChromeHiddenModules";
+// List keeping track of modules not allowed to show on New Tab Page.
+inline constexpr char kNtpHiddenModules[] = "NewTabPage.HiddenModules";
+// Time the Microsoft files module was last dismissed.
+inline constexpr char kNtpMicrosoftFilesModuleLastDismissedTime[] =
+    "NewTabPage.MicrosoftFilesModuleLastDismissedTime";
+// The next time file suggestions can be requested after hitting a throttling
+// error.
+inline constexpr char kNtpMicrosoftFilesModuleRetryAfterTime[] =
+    "NewTabPage.MicrosoftFilesModuleRetryAfterTime";
 // List keeping track of NTP modules order.
 inline constexpr char kNtpModulesOrder[] = "NewTabPage.ModulesOrder";
 // Whether NTP modules are visible.
@@ -2398,6 +2414,13 @@ inline constexpr char kNtpModulesLoadedCountDict[] =
 // Dictionary of number of times the user has interacted with a module.
 inline constexpr char kNtpModulesInteractedCountDict[] =
     "NewTabPage.ModulesInteractedCountDict";
+// Whether a user's file attachment page can be successfully retrieved. Kept in
+// sync with `kOutlookCalendarLastAttachmentRequestTime.`
+inline constexpr char kNtpOutlookCalendarLastAttachmentRequestSuccess[] =
+    "NewTabPage.OutlookCalendar.LastAttachmentRequestSuccess";
+// The last time the validity of an attachment's resource URL was checked.
+inline constexpr char kNtpOutlookCalendarLastAttachmentRequestTime[] =
+    "NewTabPage.OutlookCalendar.LastAttachmentRequestTime";
 // Time the Outlook Calendar module was last dismissed.
 inline constexpr char kNtpOutlookCalendarLastDismissedTime[] =
     "NewTabPage.OutlookCalendar.LastDismissedTime";
@@ -2453,6 +2476,12 @@ inline constexpr char kDevToolsDiscoverUsbDevicesEnabled[] =
 
 // Maps of files edited locally using DevTools.
 inline constexpr char kDevToolsEditedFiles[] = "devtools.edited_files";
+
+// List of automatic file systems added in DevTools. This holds a dictionary
+// of `fileSystemPath`, `fileSystemUUID` pairs.
+// See http://go/chrome-devtools:automatic-workspace-folders-design for details.
+inline constexpr char kDevToolsAutomaticFileSystems[] =
+    "devtools.automatic_file_systems";
 
 // List of file system paths added in DevTools.
 inline constexpr char kDevToolsFileSystemPaths[] = "devtools.file_system_paths";
@@ -3035,11 +3064,6 @@ inline constexpr char kLogoutStartedLast[] = "chromeos.logout-started";
 inline constexpr char kReportArcStatusEnabled[] =
     "arc.status_reporting_enabled";
 
-// A string preference indicating the name of the OS level task scheduler
-// configuration to use.
-inline constexpr char kSchedulerConfiguration[] =
-    "chromeos.scheduler_configuration";
-
 // Dictionary indicating current network bandwidth throttling settings.
 // Contains a boolean (is throttling enabled) and two integers (upload rate
 // and download rate in kbits/s to throttle to)
@@ -3261,8 +3285,6 @@ inline constexpr char kOsUpdateHandlerEnabled[] = "os_update_handler_enabled";
 inline constexpr char kFeatureNotificationsEnabled[] =
     "feature_notifications_enabled";
 #endif  // BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
-
-inline constexpr char kInternalOnlyUisEnabled[] = "internal_only_uis_enabled";
 
 // An enum that controls what level of toasts we show to the user.
 inline constexpr char kToastAlertLevel[] = "settings.toast.alert_level";
@@ -4226,14 +4248,6 @@ inline constexpr char kCAPlatformIntegrationEnabled[] =
     "certificates.ca_platform_integration_enabled";
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS)
-// Integer that indicates whether the user's NSS certificates have been
-// migrated to ServerCertificateDatabase. The value is a
-// ServerCertificateDatabaseService::NSSMigrationResultPref enum.
-inline constexpr char kNSSCertsMigratedToServerCertDb[] =
-    "certificates.nss_certs_migrated_to_server_cert_db";
-#endif
-
 // Integer value controlling whether to show any enterprise badging on a managed
 // profile.
 // - 0: Hide all badging
@@ -4283,6 +4297,10 @@ inline constexpr char kExtensibleEnterpriseSSOEnabled[] =
 // Allow or don't allow bypassing WebAudio output buffering
 inline constexpr char kWebAudioOutputBufferingEnabled[] =
     "web_audio_output_buffering_enabled";
+
+// Boolean that specifies whether a ServiceWorker can control srcdoc iframe.
+inline constexpr char kServiceWorkerToControlSrcdocIframeEnabled[] =
+    "worker.service_worker_to_control_srcdoc_iframe_enabled";
 
 // Boolean that specifies whether a controller inherits if a blob URL
 // is set as a SharedWorker script URL.

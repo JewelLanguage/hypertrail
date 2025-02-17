@@ -30,7 +30,6 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -252,13 +251,6 @@ void FormStructure::DetermineNonActiveHeuristicTypes(
     std::optional<FieldCandidatesMap> active_predictions,
     ParsingContext& context) {
 #if BUILDFLAG(USE_INTERNAL_AUTOFILL_PATTERNS)
-  if (base::FeatureList::IsEnabled(autofill_ai::kAutofillAi)) {
-    // Run the parser for the AutofillAi.
-    context.pattern_file = PatternFile::kAutofillAi;
-    AssignBestFieldTypes(ParseFieldTypesWithPatterns(context),
-                         HeuristicSource::kAutofillAiRegexes);
-  }
-
   if (GetActiveHeuristicSource() == HeuristicSource::kDefaultRegexes) {
     return;
   }
@@ -475,7 +467,7 @@ bool FormStructure::ShouldUploadUkm(bool require_classified_field) const {
                 field->html_type() != HtmlFieldType::kUnspecified);
       };
 
-  size_t num_text_fields = base::ranges::count_if(
+  size_t num_text_fields = std::ranges::count_if(
       fields(), require_classified_field ? is_focusable_predicted_text_field
                                          : is_focusable_text_field);
   if (num_text_fields == 0) {
@@ -486,7 +478,7 @@ bool FormStructure::ShouldUploadUkm(bool require_classified_field) const {
   // "search" in its name/id/placeholder, the function return false and the form
   // is not recorded into UKM. The form is considered a search box.
   if (num_text_fields == 1) {
-    auto it = base::ranges::find_if(
+    auto it = std::ranges::find_if(
         fields(), require_classified_field ? is_focusable_predicted_text_field
                                            : is_focusable_text_field);
     if (base::ToLowerASCII((*it)->placeholder()).find(u"search") !=
@@ -651,6 +643,12 @@ void FormStructure::RetrieveFromCache(const FormStructure& cached_form,
         field->set_heuristic_type(s, cached_field->heuristic_type(s));
       }
       field->SetHtmlType(cached_field->html_type(), cached_field->html_mode());
+      if (reason == RetrieveFromCacheReason::kFormCacheUpdateWithoutParsing) {
+        // TODO: crbug.com/392179445 - Also do this for `kFormImport`, i.e.,
+        // remove the `if` condition.
+        field->set_credit_card_number_offset(
+            cached_field->credit_card_number_offset());
+      }
       field->set_section(cached_field->section());
       field->set_only_fill_when_focused(cached_field->only_fill_when_focused());
 
@@ -825,7 +823,7 @@ size_t FormStructure::field_count() const {
 }
 
 const AutofillField* FormStructure::GetFieldById(FieldGlobalId field_id) const {
-  auto it = base::ranges::find(
+  auto it = std::ranges::find(
       fields_, field_id, [](const auto& field) { return field->global_id(); });
   return it != fields_.end() ? it->get() : nullptr;
 }

@@ -15,7 +15,6 @@
 #include "base/functional/callback_helpers.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/link_capturing/intent_picker_info.h"
 #include "chrome/browser/lifetime/browser_close_manager.h"
 #include "chrome/browser/share/share_attempt.h"
@@ -330,6 +329,9 @@ class BrowserWindow : public ui::BaseWindow,
   // transition if |animate| is true.
   virtual void UpdateCustomTabBarVisibility(bool visible, bool animate) = 0;
 
+  // Updates the visibility of the scrim that covers the content area.
+  virtual void SetContentScrimVisibility(bool visible) = 0;
+
   // Resets the toolbar's tab state for |contents|.
   virtual void ResetToolbarTabState(content::WebContents* contents) = 0;
 
@@ -418,14 +420,6 @@ class BrowserWindow : public ui::BaseWindow,
   // Shows the Bookmark bubble. |url| is the URL being bookmarked,
   // |already_bookmarked| is true if the url is already bookmarked.
   virtual void ShowBookmarkBubble(const GURL& url, bool already_bookmarked) = 0;
-
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  // Checks if the user is eligible for the iOS Password Promo Bubble. If they
-  // are, make a final eligibility check with a call to the segmentation
-  // platform with `MaybeShowIOSPasswordPromoBubble` passed as callback. That
-  // method may create/show a bubble to the user.
-  virtual void VerifyUserEligibilityIOSPasswordPromoBubble() = 0;
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
   // Shows the Screenshot bubble.
   virtual sharing_hub::ScreenshotCapturedBubble* ShowScreenshotCapturedBubble(
@@ -618,9 +612,9 @@ class BrowserWindow : public ui::BaseWindow,
   // of a full titlebar. This is only supported for desktop web apps.
   virtual bool IsBorderlessModeEnabled() const = 0;
 
-  // Notifies `BrowserView` about the resizable boolean having been set vith
+  // Notifies `BrowserView` about the resizable boolean having been set with
   // `window.setResizable(bool)` API.
-  virtual void OnCanResizeFromWebAPIChanged() = 0;
+  virtual void OnWebApiWindowResizableChanged() = 0;
 
   // Returns the overall resizability of the `BrowserView` when considering
   // both the value set by the `window.setResizable(bool)` API and browser's

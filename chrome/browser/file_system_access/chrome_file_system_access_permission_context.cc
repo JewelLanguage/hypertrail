@@ -4,6 +4,7 @@
 
 #include "chrome/browser/file_system_access/chrome_file_system_access_permission_context.h"
 
+#include <algorithm>
 #include <iterator>
 #include <memory>
 #include <optional>
@@ -20,7 +21,6 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/path_service.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
@@ -35,14 +35,12 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/download/download_prefs.h"
-#include "chrome/browser/enterprise/connectors/analysis/content_analysis_delegate.h"
 #include "chrome/browser/file_system_access/file_system_access_permission_request_manager.h"
 #include "chrome/browser/permissions/one_time_permissions_tracker_factory.h"
 #include "chrome/browser/permissions/one_time_permissions_tracker_observer.h"
 #include "chrome/browser/permissions/permission_decision_auto_blocker_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/file_system_access/file_system_access_dangerous_file_dialog.h"
 #include "chrome/browser/ui/file_system_access/file_system_access_dialogs.h"
@@ -59,7 +57,6 @@
 #include "components/permissions/permission_uma_util.h"
 #include "components/permissions/permission_util.h"
 #include "components/safe_browsing/buildflags.h"
-#include "components/safe_browsing/content/common/file_type_policies.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -96,6 +93,12 @@
 #if BUILDFLAG(FULL_SAFE_BROWSING)
 #include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
+#endif
+
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+#include "chrome/browser/enterprise/connectors/analysis/content_analysis_delegate.h"
+#include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
+#include "components/safe_browsing/content/common/file_type_policies.h"
 #endif
 
 #if BUILDFLAG(ENABLE_GUEST_VIEW)
@@ -179,6 +182,7 @@ void ShowFileSystemAccessRestrictedDirectoryDialogOnUIThread(
       origin, handle_type, std::move(callback), web_contents);
 }
 
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
 void ShowFileSystemAccessDangerousFileDialogOnUIThread(
     content::GlobalRenderFrameHostId frame_id,
     const url::Origin& origin,
@@ -207,6 +211,7 @@ void ShowFileSystemAccessDangerousFileDialogOnUIThread(
   ShowFileSystemAccessDangerousFileDialog(origin, path_info,
                                           std::move(callback), web_contents);
 }
+#endif
 
 #if BUILDFLAG(IS_WIN)
 bool ContainsInvalidDNSCharacter(base::FilePath::StringType hostname) {
@@ -495,6 +500,7 @@ bool ShouldBlockAccessToPath(const base::FilePath& path,
   return true;
 }
 
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
 void DoSafeBrowsingCheckOnUIThread(
     content::GlobalRenderFrameHostId frame_id,
     std::unique_ptr<content::FileSystemAccessWriteItem> item,
@@ -533,7 +539,7 @@ void DoSafeBrowsingCheckOnUIThread(
       std::move(item), std::move(callback));
 #else
   std::move(callback).Run(safe_browsing::DownloadCheckResult::UNKNOWN);
-#endif
+#endif  // BUILDFLAG(FULL_SAFE_BROWSING)
 }
 
 ChromeFileSystemAccessPermissionContext::AfterWriteCheckResult
@@ -574,6 +580,7 @@ InterpretSafeBrowsingResult(safe_browsing::DownloadCheckResult result) {
   }
   NOTREACHED();
 }
+#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
 
 std::string GenerateLastPickedDirectoryKey(const std::string& id) {
   return id.empty() ? kDefaultLastPickedDirectoryKey
@@ -591,6 +598,7 @@ std::string_view GetGrantKeyFromGrantType(GrantType type) {
                                    : kPermissionReadableKey;
 }
 
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
 safe_browsing::DownloadFileType::DangerLevel GetFileTypeDangerLevel(
     const base::FilePath& path,
     const url::Origin& origin,
@@ -598,6 +606,7 @@ safe_browsing::DownloadFileType::DangerLevel GetFileTypeDangerLevel(
   return safe_browsing::FileTypePolicies::GetInstance()->GetFileDangerLevel(
       path, origin.GetURL(), profile->GetPrefs());
 }
+#endif
 
 std::string StringOrEmpty(const std::string* s) {
   return s ? *s : std::string();
@@ -605,10 +614,10 @@ std::string StringOrEmpty(const std::string* s) {
 
 bool PathInfosContains(const std::vector<content::PathInfo>& path_infos,
                        const base::FilePath& path) {
-  return base::ranges::any_of(path_infos,
-                              [&path](const content::PathInfo& path_info) {
-                                return path_info.path == path;
-                              });
+  return std::ranges::any_of(path_infos,
+                             [&path](const content::PathInfo& path_info) {
+                               return path_info.path == path;
+                             });
 }
 
 }  // namespace
@@ -940,7 +949,7 @@ class ChromeFileSystemAccessPermissionContext::PermissionGrantImpl
       const content::PathInfo& new_path) {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
     auto entry_it =
-        base::ranges::find_if(grants, [&old_path](const auto& entry) {
+        std::ranges::find_if(grants, [&old_path](const auto& entry) {
           return entry.first == old_path.path;
         });
 
@@ -1587,7 +1596,7 @@ ChromeFileSystemAccessPermissionContext::GetAllGrantedObjects() {
   std::vector<std::unique_ptr<Object>> all_objects;
   for (const auto& origin : GetOriginsWithGrants()) {
     auto objects = GetGrantedObjects(origin);
-    base::ranges::move(objects, std::back_inserter(all_objects));
+    std::ranges::move(objects, std::back_inserter(all_objects));
   }
 
   return all_objects;
@@ -1613,12 +1622,12 @@ ChromeFileSystemAccessPermissionContext::GetOriginsWithGrants() {
 
   // Add origins that have active, granted permission grants.
   for (const auto& it : active_permissions_map_) {
-    if (base::ranges::any_of(it.second.read_grants,
-                             [&](const auto& grant) {
-                               return HasGrantedActivePermissionStatus(
-                                   grant.second);
-                             }) ||
-        base::ranges::any_of(it.second.write_grants, [&](const auto& grant) {
+    if (std::ranges::any_of(it.second.read_grants,
+                            [&](const auto& grant) {
+                              return HasGrantedActivePermissionStatus(
+                                  grant.second);
+                            }) ||
+        std::ranges::any_of(it.second.write_grants, [&](const auto& grant) {
           return HasGrantedActivePermissionStatus(grant.second);
         })) {
       origins.insert(it.first);
@@ -1717,9 +1726,13 @@ bool ChromeFileSystemAccessPermissionContext::CanObtainWritePermission(
 bool ChromeFileSystemAccessPermissionContext::IsFileTypeDangerous(
     const base::FilePath& path,
     const url::Origin& origin) {
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   return GetFileTypeDangerLevel(path, origin,
                                 Profile::FromBrowserContext(profile_)) ==
          safe_browsing::DownloadFileType::DANGEROUS;
+#else
+  return false;
+#endif
 }
 
 void ChromeFileSystemAccessPermissionContext::ConfirmSensitiveEntryAccess(
@@ -1857,6 +1870,7 @@ void ChromeFileSystemAccessPermissionContext::PerformAfterWriteChecks(
     content::GlobalRenderFrameHostId frame_id,
     base::OnceCallback<void(AfterWriteCheckResult)> callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   content::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE,
       base::BindOnce(
@@ -1873,6 +1887,15 @@ void ChromeFileSystemAccessPermissionContext::PerformAfterWriteChecks(
               },
               base::SequencedTaskRunner::GetCurrentDefault(),
               std::move(callback))));
+#else
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          [](base::OnceCallback<void(AfterWriteCheckResult result)> callback) {
+            std::move(callback).Run(AfterWriteCheckResult::kAllow);
+          },
+          std::move(callback)));
+#endif
 }
 
 base::expected<void, std::string>
@@ -1935,6 +1958,7 @@ void ChromeFileSystemAccessPermissionContext::DidCheckPathAgainstBlocklist(
     return;
   }
 
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   // If attempting to save a file with a dangerous extension, prompt the user
   // to make them confirm they actually want to save the file.
   if (handle_type == HandleType::kFile && user_action == UserAction::kSave) {
@@ -1955,6 +1979,7 @@ void ChromeFileSystemAccessPermissionContext::DidCheckPathAgainstBlocklist(
       return;
     }
   }
+#endif
 
   std::move(callback).Run(SensitiveEntryResult::kAllowed);
 }
@@ -1984,7 +2009,7 @@ void ChromeFileSystemAccessPermissionContext::MaybeEvictEntries(
     return;
   }
 
-  base::ranges::sort(entries);
+  std::ranges::sort(entries);
   size_t entries_to_remove = entries.size() - max_ids_per_origin_;
   for (size_t i = 0; i < entries_to_remove; ++i) {
     bool did_remove_entry = dict.Remove(entries[i].second);
@@ -2194,6 +2219,9 @@ ChromeFileSystemAccessPermissionContext::ConvertObjectsToGrants(
     const base::Value::Dict& object_dict = object->value;
     const base::FilePath path =
         base::ValueToFilePath(object_dict.Find(kPermissionPathKey)).value();
+    if (path.empty()) {
+      continue;
+    }
     const std::string display_name =
         StringOrEmpty(object_dict.FindString(kPermissionDisplayNameKey));
     HandleType handle_type =
@@ -2310,7 +2338,7 @@ bool ChromeFileSystemAccessPermissionContext::OriginHasReadAccess(
   // First, check if an origin has read access granted via active permissions.
   auto it = active_permissions_map_.find(origin);
   if (it != active_permissions_map_.end()) {
-    return base::ranges::any_of(it->second.read_grants, [&](const auto& grant) {
+    return std::ranges::any_of(it->second.read_grants, [&](const auto& grant) {
       return HasGrantedActivePermissionStatus(grant.second);
     });
   }
@@ -2325,7 +2353,7 @@ bool ChromeFileSystemAccessPermissionContext::OriginHasReadAccess(
   if (extended_grant_objects.empty()) {
     return false;
   }
-  return base::ranges::any_of(extended_grant_objects, [&](const auto& grant) {
+  return std::ranges::any_of(extended_grant_objects, [&](const auto& grant) {
     return grant->value.FindBool(kPermissionReadableKey).value_or(false);
   });
 }
@@ -2337,10 +2365,9 @@ bool ChromeFileSystemAccessPermissionContext::OriginHasWriteAccess(
   // First, check if an origin has write access granted via active permissions.
   auto it = active_permissions_map_.find(origin);
   if (it != active_permissions_map_.end()) {
-    return base::ranges::any_of(
-        it->second.write_grants, [&](const auto& grant) {
-          return HasGrantedActivePermissionStatus(grant.second);
-        });
+    return std::ranges::any_of(it->second.write_grants, [&](const auto& grant) {
+      return HasGrantedActivePermissionStatus(grant.second);
+    });
   }
   if (!base::FeatureList::IsEnabled(
           features::kFileSystemAccessPersistentPermissions)) {
@@ -2353,7 +2380,7 @@ bool ChromeFileSystemAccessPermissionContext::OriginHasWriteAccess(
   if (extended_grant_objects.empty()) {
     return false;
   }
-  return base::ranges::any_of(extended_grant_objects, [&](const auto& grant) {
+  return std::ranges::any_of(extended_grant_objects, [&](const auto& grant) {
     return grant->value.FindBool(kPermissionWritableKey).value_or(false);
   });
 }
@@ -2818,7 +2845,7 @@ bool ChromeFileSystemAccessPermissionContext::HasPersistedGrantObject(
     GrantType grant_type) {
   auto persisted_grants =
       ObjectPermissionContextBase::GetGrantedObjects(origin);
-  return base::ranges::any_of(persisted_grants, [&](const auto& object) {
+  return std::ranges::any_of(persisted_grants, [&](const auto& object) {
     return HasMatchingValue(object->value, file_path, handle_type, grant_type);
   });
 }
@@ -2983,25 +3010,18 @@ bool ChromeFileSystemAccessPermissionContext::OriginHasExtendedPermission(
   if (!web_app_provider) {
     return false;
   }
-  // TODO(crbug.com/340952100): Evaluate call sites of FindBestAppWithUrlInScope
-  // for correctness.
   auto app_id = web_app_provider->registrar_unsafe().FindBestAppWithUrlInScope(
-      origin.GetURL(),
-      {
-          web_app::proto::InstallState::INSTALLED_WITH_OS_INTEGRATION,
-          web_app::proto::InstallState::INSTALLED_WITHOUT_OS_INTEGRATION,
-      });
-  // TODO(crbug.com/340952100): Evaluate call sites of IsInstallState for
-  // correctness.
-  auto has_actively_installed_app =
+      origin.GetURL(), web_app::WebAppFilter::InstalledInChrome());
+
+  auto app_has_os_integration =
       app_id.has_value() &&
       web_app_provider->registrar_unsafe().GetInstallState(app_id.value()) ==
           web_app::proto::InstallState::INSTALLED_WITH_OS_INTEGRATION;
   // Update the cached value.
-  origin_state.web_app_install_status = has_actively_installed_app
+  origin_state.web_app_install_status = app_has_os_integration
                                             ? WebAppInstallStatus::kInstalled
                                             : WebAppInstallStatus::kUninstalled;
-  return has_actively_installed_app;
+  return app_has_os_integration;
 #endif  // BUILDFLAG(IS_ANDROID)
 }
 

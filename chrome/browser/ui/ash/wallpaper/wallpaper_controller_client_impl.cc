@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/ash/wallpaper/wallpaper_controller_client_impl.h"
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <utility>
@@ -26,7 +27,6 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/path_service.h"
 #include "base/rand_util.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
@@ -40,6 +40,7 @@
 #include "chrome/browser/ash/file_manager/volume_manager.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/ash/wallpaper/wallpaper_drivefs_delegate_impl.h"
+#include "chrome/browser/ash/wallpaper_handlers/google_photos_wallpaper_handlers.h"
 #include "chrome/browser/ash/wallpaper_handlers/wallpaper_fetcher_delegate.h"
 #include "chrome/browser/ash/wallpaper_handlers/wallpaper_handlers.h"
 #include "chrome/browser/browser_process.h"
@@ -474,7 +475,7 @@ void WallpaperControllerClientImpl::ShowWallpaperOnLoginScreen() {
   }
 
   const user_manager::UserList& users =
-      user_manager::UserManager::Get()->GetUsers();
+      user_manager::UserManager::Get()->GetPersistedUsers();
   user_manager::User* public_session = FindPublicSession(users);
 
   // Show the default signin wallpaper if there's no user to display.
@@ -664,7 +665,7 @@ void WallpaperControllerClientImpl::OnGooglePhotosDailyAlbumFetched(
   base::RandomShuffle(photos.begin(), photos.end());
 
   // Get the first photo from the shuffled set that is not in the LRU cache.
-  auto selected_itr = base::ranges::find_if(
+  auto selected_itr = std::ranges::find_if(
       photos,
       [&ids](
           const ash::personalization_app::mojom::GooglePhotosPhotoPtr& photo) {

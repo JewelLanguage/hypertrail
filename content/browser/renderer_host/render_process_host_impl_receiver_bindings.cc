@@ -333,7 +333,7 @@ void RenderProcessHostImpl::IOThreadHostImpl::BindHostReceiver(
   }
 
 #if BUILDFLAG(IS_WIN)
-  if (base::FeatureList::IsEnabled(features::kFontDataService)) {
+  if (base::FeatureList::IsEnabled(features::kFontDataServiceAllWebContents)) {
     if (auto font_data_receiver =
             receiver.As<font_data_service::mojom::FontDataService>()) {
       font_data_service::FontDataServiceImpl::ConnectToFontService(
@@ -391,8 +391,10 @@ void RenderProcessHostImpl::IOThreadHostImpl::BindHostReceiver(
 
   if (auto r = receiver.As<
                discardable_memory::mojom::DiscardableSharedMemoryManager>()) {
-    discardable_memory::DiscardableSharedMemoryManager::Get()->Bind(
-        std::move(r));
+    if (discardable_memory::DiscardableSharedMemoryManager::Get()) {
+      discardable_memory::DiscardableSharedMemoryManager::Get()->Bind(
+          std::move(r));
+    }
     return;
   }
 

@@ -23,7 +23,6 @@
 #include "base/strings/strcat.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/login/quick_unlock/auth_token.h"
@@ -224,7 +223,6 @@ class QuickUnlockPrivateUnitTest
     TestingProfile* profile = profile_manager()->CreateTestingProfile(
         profile_name, std::move(pref_service), u"Test profile",
         1 /* avatar_id */, GetTestingFactories());
-    OnUserProfileCreated(profile_name, profile);
 
     // Setup a primary user.
     ash::ProfileHelper::Get()->SetUserToProfileMappingForTesting(

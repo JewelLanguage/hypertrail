@@ -11,25 +11,21 @@
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/web/public/web_state.h"
-
-#if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
 #import "components/optimization_guide/proto/features/tab_organization.pb.h"
 #import "ios/chrome/browser/optimization_guide/model/optimization_guide_service.h"
 #import "ios/chrome/browser/optimization_guide/model/optimization_guide_service_factory.h"
-#endif
 
 namespace ai {
 
 TabOrganizationServiceImpl::TabOrganizationServiceImpl(
     mojo::PendingReceiver<mojom::TabOrganizationService> receiver,
     WebStateList* web_state_list,
-    bool start_on_device) {
+    bool start_on_device)
+    : receiver_(this, std::move(receiver)) {
   web_state_list_ = web_state_list;
-#if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
   service_ = OptimizationGuideServiceFactory::GetForProfile(
       ProfileIOS::FromBrowserState(
           web_state_list->GetActiveWebState()->GetBrowserState()));
-#endif
 }
 
 TabOrganizationServiceImpl::~TabOrganizationServiceImpl() = default;
@@ -37,7 +33,6 @@ TabOrganizationServiceImpl::~TabOrganizationServiceImpl() = default;
 void TabOrganizationServiceImpl::ExecuteGroupTabs(
     ::mojo_base::ProtoWrapper request,
     ExecuteGroupTabsCallback callback) {
-#if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
   optimization_guide::proto::TabOrganizationRequest proto_request =
       request.As<optimization_guide::proto::TabOrganizationRequest>().value();
 
@@ -57,26 +52,36 @@ void TabOrganizationServiceImpl::ExecuteGroupTabs(
       optimization_guide::ModelBasedCapabilityKey::kTabOrganization,
       proto_request,
       /*execution_timeout*/ std::nullopt, std::move(result_callback));
-#endif  // BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
 }
 
-#if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
 std::string TabOrganizationServiceImpl::OnGroupTabsResponse(
     optimization_guide::OptimizationGuideModelExecutionResult result) {
   std::string response = "";
+
+  if (!result.response.has_value()) {
+    return base::StrCat({"Server model execution error: ",
+                         service_->ResponseForErrorCode(static_cast<int>(
+                             result.response.error().error()))});
+  }
+
+  auto tab_organization_response = optimization_guide::ParsedAnyMetadata<
+      optimization_guide::proto::TabOrganizationResponse>(
+      result.response.value());
+
+  if (tab_organization_response->tab_groups().empty()) {
+    return "No grouped tabs returned.";
+  }
+
+  const google::protobuf::RepeatedPtrField<optimization_guide::proto::TabGroup>&
+      tab_groups = tab_organization_response->tab_groups();
 
   // The model doesn't necessarily group every tab, so track the tabs that have
   // been grouped in order to later list the ungrouped tabs.
   NSMutableSet<NSNumber*>* groupedTabIdentifiers = [NSMutableSet set];
 
-  auto parsed = optimization_guide::ParsedAnyMetadata<
-      optimization_guide::proto::TabOrganizationResponse>(
-      result.response.value());
-
   // For each tab group, print its name and the information of each tab within
   // it.
-  for (const optimization_guide::proto::TabGroup& tab_group :
-       parsed->tab_groups()) {
+  for (const optimization_guide::proto::TabGroup& tab_group : tab_groups) {
     response +=
         base::StringPrintf("Group name: %s\n", tab_group.label().c_str());
 
@@ -105,6 +110,5 @@ std::string TabOrganizationServiceImpl::OnGroupTabsResponse(
 
   return response;
 }
-#endif  // BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
 
 }  // namespace ai

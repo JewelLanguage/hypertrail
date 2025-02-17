@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "base/component_export.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
 #include "base/timer/elapsed_timer.h"
@@ -496,8 +497,10 @@ class COMPONENT_EXPORT(AX_PLATFORM) __declspec(
   // consumer.
   virtual void OnReferenced();
 
-  // Invoked when the instance is fully dereferenced. This generally means that
-  // an accessibility consumer has released its last reference to the instance.
+  // Invoked when the instance loses its last reference before being disposed.
+  // This generally means that an accessibility consumer has released its last
+  // reference to the instance. This method will not be called if external
+  // references are held when the instance is disposed.
   virtual void OnDereferenced();
 
   //

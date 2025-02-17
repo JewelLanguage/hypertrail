@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "ash/public/cpp/capture_mode/capture_mode_delegate.h"
+#include "base/cancelable_callback.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/callback.h"
@@ -117,11 +118,13 @@ class ChromeCaptureModeDelegate : public ash::CaptureModeDelegate {
                          ash::OnTextDetectionComplete callback) override;
   void SendRegionSearch(const SkBitmap& image,
                         const gfx::Rect& region,
-                        ash::OnSearchUrlFetchedCallback callback) override;
+                        ash::OnSearchUrlFetchedCallback search_callback,
+                        ash::OnTextDetectionComplete text_callback) override;
   void SendMultimodalSearch(const SkBitmap& image,
                             const gfx::Rect& region,
                             const std::string& text,
                             ash::OnSearchUrlFetchedCallback callback) override;
+  bool IsNetworkConnectionOffline() const override;
   void DeleteRemoteFile(const base::FilePath& path,
                         base::OnceCallback<void(bool)> callback) override;
 
@@ -184,6 +187,10 @@ class ChromeCaptureModeDelegate : public ash::CaptureModeDelegate {
   // A callback that will be invoked when the search URL is fetched.
   ash::OnSearchUrlFetchedCallback on_search_url_fetched_callback_;
 
+  // A callback that will be invoked when the start query response is received
+  // and text is detected.
+  ash::OnTextDetectionComplete on_text_detection_complete_callback_;
+
   // True when a capture mode session is currently active.
   bool is_session_active_ = false;
 
@@ -194,6 +201,13 @@ class ChromeCaptureModeDelegate : public ash::CaptureModeDelegate {
   // OCR used to detect text in a selected capture region.
   scoped_refptr<screen_ai::OpticalCharacterRecognizer>
       optical_character_recognizer_;
+
+  // The callback that will be invoked when the OCR service is initialized. The
+  // callback is canceled if OCR is reset, to prevent the underlying
+  // `OpticalCharacterRecognizer` object from running the callback after the
+  // scoped_refptr `optical_character_recognizer_` is reset.
+  base::CancelableOnceCallback<void(bool is_successful)>
+      ocr_service_initialized_callback_;
 
   // Stores the image and callback for the latest OCR request in the case that
   // the OCR service is not ready yet. These will be used to perform OCR after

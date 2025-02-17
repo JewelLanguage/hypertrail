@@ -574,6 +574,9 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   void RestoreScissorBox();
   void RestoreClearColor();
   void RestoreColorMask();
+  void RestoreVertexArrayObjectBinding();
+  void RestoreProgram();
+  void RestoreActiveTexture();
 
   gpu::gles2::GLES2Interface* ContextGL() const {
     DrawingBuffer* d = GetDrawingBuffer();
@@ -633,9 +636,8 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   };
 
   SkAlphaType GetAlphaType() const override;
-  SkColorType GetSkColorType() const override;
+  viz::SharedImageFormat GetSharedImageFormat() const override;
   gfx::ColorSpace GetColorSpace() const override;
-  sk_sp<SkColorSpace> GetSkColorSpace() const override;
   scoped_refptr<StaticBitmapImage> GetImage(FlushReason) override;
   void SetHdrMetadata(const gfx::HDRMetadata& hdr_metadata) override;
 
@@ -743,6 +745,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   void DrawingBufferClientRestoreMaskAndClearValues() override;
   void DrawingBufferClientRestorePixelPackParameters() override;
   void DrawingBufferClientRestoreTexture2DBinding() override;
+  void DrawingBufferClientRestoreTexture2DArrayBinding() override;
   void DrawingBufferClientRestoreTextureCubeMapBinding() override;
   void DrawingBufferClientRestoreRenderbufferBinding() override;
   void DrawingBufferClientRestoreFramebufferBinding() override;
@@ -901,7 +904,11 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
     enum class CacheType { kImage, kVideo };
     LRUCanvasResourceProviderCache(wtf_size_t capacity, CacheType type);
     // The pointer returned is owned by the image buffer map.
-    CanvasResourceProvider* GetCanvasResourceProvider(const SkImageInfo&);
+    CanvasResourceProvider* GetCanvasResourceProvider(
+        gfx::Size size,
+        viz::SharedImageFormat format,
+        SkAlphaType alpha_type,
+        const gfx::ColorSpace& color_space);
 
    private:
     void BubbleToFront(wtf_size_t idx);
@@ -1851,6 +1858,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
 
   virtual void RestoreCurrentFramebuffer();
   void RestoreCurrentTexture2D();
+  void RestoreCurrentTexture2DArray();
   void RestoreCurrentTextureCubeMap();
 
   void FindNewMaxNonDefaultTextureUnit();

@@ -35,6 +35,7 @@
 <translation id="164952285225495380">এই প্যাকেজটি আগেই Chromium-এ ট্র্যাক করা হয়েছে।</translation>
 <translation id="1707458603865303524">মেসেজে বা অন্যান্য অ্যাপে থাকা লিঙ্ক যখনই খুলবেন তা Chromium-এ খুলুন।</translation>
 <translation id="1722370509450468186">পাসওয়ার্ড আপনার অ্যাকাউন্টে (<ph name="EMAIL" />) সেভ করা হবে।</translation>
+<translation id="1747088204252710672">আপনার জন্য তৈরি কাস্টম ফিড</translation>
 <translation id="1811860791247653035">পছন্দমতো সুবিধা ও অন্যান্য ফিচার ব্যবহার করতে <ph name="FEATURE_NAME_1" /> ও <ph name="FEATURE_NAME_2" />-এ Chromium যোগ করে নিন</translation>
 <translation id="1838412507805038478"><ph name="ISSUER" /> যে এই ওয়েবসাইটের শংসাপত্র প্রকাশ করেছে Chromium তা যাচাই করেছে।</translation>
 <translation id="1839447949248872139">সাধারণত Chromium-এ লিঙ্ক খুলুন</translation>
@@ -69,6 +70,7 @@
 <translation id="2459183986985456602">Chromium-এ 'আমার লেটেস্ট ট্যাব' খুলুন।</translation>
 <translation id="2476409803017965813">Chromium সেটিংস থেকে যেকোনও সময় আপনার বেছে নেওয়া বিকল্প আপডেট করতে পারবেন।</translation>
 <translation id="2478931088402984578"><ph name="BEGIN_BOLD" />Chromium<ph name="END_BOLD" /> বেছে নিন</translation>
+<translation id="2485774047568879945">সহজেই শেয়ার করতে ও লিঙ্ক খুলতে আপনার ডিফল্ট ব্রাউজার হিসেবে Chromium সেট করুন</translation>
 <translation id="2512597191798760956">Chromium আইকন প্রেস করে ধরে রাখুন ও "হোম স্ক্রিন এডিট করুন" বিকল্পে ক্লিক করুন</translation>
 <translation id="2517624234762908348">আপনার Chromium ডেটা সিঙ্ক করুন</translation>
 <translation id="2592940277904433508">Chromium ব্যবহার করা চালিয়ে যান</translation>
@@ -166,6 +168,7 @@
 <translation id="5088872414922783602">হোম স্ক্রিন ডক থেকে আরও দ্রুত Chromium অ্যাক্সেস করুন।</translation>
 <translation id="5124429847818367226">মেসেজ, ডকুমেন্ট ও অন্যান্য অ্যাপ ব্রাউজ করতে বা এইসবের লিঙ্কে ট্যাপ করতে এখন আপনি যেকোনও সময় Chromium ব্যবহার করত পারবেন।</translation>
 <translation id="5131565040785979529">আপনার সাইন-ইন করে থাকা অ্যাকাউন্ট এবং Chromium কীভাবে ব্যবহার করা হয় তা আপনার প্রতিষ্ঠান, <ph name="DOMAIN" />, ম্যানেজ করে।</translation>
+<translation id="5134464247000681876">Gmail, Maps, YouTube থেকে লিঙ্ক ও Chromium-এ অন্যান্য অ্যাপ খুলুন</translation>
 <translation id="5224391634244552924">কোনও পাসওয়ার্ড সেভ করা নেই। আপনি পাসওয়ার্ড সেভ করলে Chromium সেটি চেক করতে পারবে।</translation>
 <translation id="5259423875997548710">Chromium-এ ভিজ্যুয়াল সার্চ করুন।</translation>
 <translation id="5308226104666789935">কোনও আপডেট আছে কিনা, Chromium-এ তা চেক করে দেখা যাচ্ছে না</translation>
@@ -181,10 +184,10 @@
 ২. 'ডিফল্ট ব্রাউজার অ্যাপ' বিকল্পে ট্যাপ করুন
 ৩. Chromium বেছে নিন</translation>
 <translation id="5521125884468363740">একাধিক ডিভাইসে সাইন-ইন করে থাকুন ও সিঙ্ক চালু করে রাখুন, যাতে আপনি যেখান থেকেই Chromium ব্যবহার করুন না কেন, সেখানেই আপনি নিজের ট্যাবগুলি দেখতে পারেন</translation>
-<translation id="5522297504975449419">কিছু Chromium-এর ফিচার আর ব্যবহার করা যাবে না</translation>
 <translation id="5534584691915394889">Chromium ও Google Lens থেকে আপনার Apple ক্যালেন্ডারে ইভেন্ট তৈরি করতে এটি ব্যবহার করা হবে।</translation>
 <translation id="5571094606370987472">Chromium-এর সাম্প্রতিক ট্যাব খোলে।</translation>
 <translation id="5603085937604338780">Chromium</translation>
+<translation id="5657280937522795751">Chromium টগল করুন</translation>
 <translation id="5664395081284292058">Chromium-এ 'আমার লেটেস্ট ট্যাব' খুলুন</translation>
 <translation id="5671188105328420281">Chromium সম্পর্কিত পরামর্শ</translation>
 <translation id="5688047395118852662">Chromium থেকে কীভাবে সবচেয়ে বেশি সুবিধা পেতে পারেন, এই কার্ড সেই ব্যাপারে আপনাকে সাজেশন দেখায়।</translation>
@@ -215,7 +218,6 @@
 <translation id="6268381023930128611">Chromium থেকে সাইন-আউট করবেন?</translation>
 <translation id="6324041800010509197">Chromium-এর ট্যাব গ্রিডে যান</translation>
 <translation id="6325378625795868881">মেসেজ এবং অন্যান্য অ্যাপের লিঙ্কে যেকোনও সময় ট্যাপ করতে Chromium ব্যবহার করুন।</translation>
-<translation id="6337530241089703714">এই ডিভাইস থেকে আপনার Chromium ডেটা মুছবেন না রাখবেন তা বেছে নিন</translation>
 <translation id="6424492062988593837">Chrome আরও ভাল হয়েছে! একটি নতুন ভার্সন উপলব্ধ আছে৷</translation>
 <translation id="6433172051771630690">Chromium থেকে সবচেয়ে বেশি সুবিধা পাওয়া সংক্রান্ত পরামর্শ।</translation>
 <translation id="65045991564554105">Chromium-এর বুকমার্ক দেখুন</translation>
@@ -228,6 +230,7 @@
 <translation id="6752854822223394465">আপনার সংস্থা Chromium সেট আপ করছে...</translation>
 <translation id="6794054469102824109">Chromium ডাইনো গেম খোলে।</translation>
 <translation id="6820823224820483452">Chromium সব পাসওয়ার্ড চেক করতে পারেনি। আগামীকাল আবার চেষ্টা করে দেখুন।</translation>
+<translation id="6830782797004194206">Chromium অটোফিলের মাধ্যমে দ্রুত সাইন-ইন করুন</translation>
 <translation id="6831043979455480757">অনুবাদ</translation>
 <translation id="6852419005633611413">হোম স্ক্রিনের ডক থেকে আরও দ্রুত Chromium অ্যাক্সেস করুন</translation>
 <translation id="6852799557929001644">এই ডিভাইসে অন্যান্য অ্যাপ জুড়ে আপনার Chromium পাসওয়ার্ড এবং আরও অনেক কিছু অ্যাক্সেস করুন।</translation>
@@ -259,6 +262,7 @@
 <translation id="7674213385180944843">সেটিংস &gt; গোপনীয়তা &gt; ক্যামেরা &gt; Chromium খুলুন এবং ক্যামেরা চালু করুন।</translation>
 <translation id="7733418656985455268">Chromium সম্পর্কিত পরামর্শ: Lens-এর মাধ্যমে সার্চ করুন</translation>
 <translation id="7747820849741499258">Chromium-এ সার্চ করুন</translation>
+<translation id="7753923083404296545">Chromium ছদ্মবেশী মোডে খোলা হয়েছে</translation>
 <translation id="7762622637388462191">Chromium ছেড়ে বেরিয়ে আসা বা অন্য অ্যাপে যাওয়ার সময় আপনার ছদ্মবেশী ট্যাব লক করুন।</translation>
 <translation id="7763454117143368771">বিপজ্জনক সাইট থেকে নিরাপদে থাকতে এবং আপনার পাসওয়ার্ড সুরক্ষিত রাখতে আপনার ডিফল্ট ব্রাউজার হিসেবে Chromium ব্যবহার করুন</translation>
 <translation id="7784950022329154821">Chromium বন্ধ করার সময় ছদ্মবেশী ট্যাব লক করুন</translation>
@@ -284,7 +288,6 @@
 <translation id="8197822717502700527">এখন আপনার ডিভাইসেই Chromium ব্যবহার করার সবচেয়ে ভালো সুবিধা পাবেন।</translation>
 <translation id="8240981428553046115">কোনও নতুন আপডেট আছে কিনা তা Chromium-এ চেক করে দেখা যায়নি। পরে আবার চেষ্টা করুন।</translation>
 <translation id="8254729934443216898">নতুন ফিচার ব্যবহার করে দেখুন এবং Chromium-এর সবচেয়ে বেশি সুবিধা উপভোগ করুন।</translation>
-<translation id="829047622686389424">আপনার জন্য তৈরি কাস্টম ফিড।</translation>
 <translation id="8293572045658095405">আপনি Chromium ছদ্মবেশী মোড ব্যবহার করছেন</translation>
 <translation id="830951810931292870">Chromium-এ 'ছদ্মবেশী' মোডে ইনপুট দেওয়া URL খোলে।</translation>
 <translation id="8409374867500149834">ক্ষতিকর ওয়েবসাইটের জন্য আপনার কাছে Chromium-এর সবচেয়ে শক্তিশালী নিরাপত্তা আছে</translation>
@@ -306,7 +309,6 @@
 <translation id="8866191443434488382">Chromium আপনার ভিজিট করা সাইটে ট্র্যাকিং নম্বর শনাক্ত করবে এবং 'নতুন ট্যাব' পৃষ্ঠায় প্যাকেজ সংক্রান্ত আপডেট দেবে। সকলের জন্য এই ফিচার দিতে ও 'শপিং' ফিচারের উন্নতি করতে প্যাকেজ ট্র্যাকিং নম্বর ও ওয়েবসাইটের নাম Chromium-এ পাঠানো হবে। আপনি যেকোনও সময় <ph name="BEGIN_LINK" />প্যাকেজ ট্র্যাকিং সেটিংস<ph name="END_LINK" /> থেকে এটি আপডেট করতে পারবেন।</translation>
 <translation id="8880024619507699923">Chromium ব্যবহার করতে আপনার সংস্থার প্রয়োজন অনুযায়ী আপনাকে সাইন-ইন করতে হবে। <ph name="BEGIN_LINK" />আরও জানুন<ph name="END_LINK" /></translation>
 <translation id="8900052431807804054">Chromium-এর সবচেয়ে বেশি সুরক্ষার সুবিধা পান</translation>
-<translation id="894437814105052438">আপনি সাইন-আউট করলে, Chromium আপনার Google অ্যাকাউন্টে কোনও নতুন ডেটা সিঙ্ক করবে না। আগে সিঙ্ক করা ডেটা অ্যাকাউন্টে থেকে যাবে।</translation>
 <translation id="8950326149985259075">{THRESHOLD,plural, =1{Chromium {THRESHOLD} মিনিট ধরে ব্যবহার না করা হলে এমনটি হয়}one{Chromium {THRESHOLD} মিনিট ধরে ব্যবহার না করা হলে এমনটি হয়}other{Chromium {THRESHOLD} মিনিট ধরে ব্যবহার না করা হলে এমনটি হয়}}</translation>
 <translation id="8963279154877372067">দাম কমলে বিজ্ঞপ্তি পেতে Chromium বিজ্ঞপ্তিতে অনুমতি দিন</translation>
 <translation id="8975812008711371178">Chromium-এ ভয়েসের মাধ্যমে সার্চ করুন</translation>

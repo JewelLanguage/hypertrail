@@ -390,15 +390,12 @@ bool GridLineResolver::operator==(const GridLineResolver& other) const {
 }
 
 void GridLineResolver::InitialAndFinalPositionsFromStyle(
-    const ComputedStyle& grid_item_style,
+    const ComputedStyle& item_style,
     GridTrackSizingDirection track_direction,
     GridPosition& initial_position,
     GridPosition& final_position) const {
-  const bool is_for_columns = track_direction == kForColumns;
-  initial_position = is_for_columns ? grid_item_style.GridColumnStart()
-                                    : grid_item_style.GridRowStart();
-  final_position = is_for_columns ? grid_item_style.GridColumnEnd()
-                                  : grid_item_style.GridRowEnd();
+  initial_position = item_style.TrackStart(*style_, track_direction);
+  final_position = item_style.TrackEnd(*style_, track_direction);
 
   // We must handle the placement error handling code here instead of in the
   // StyleAdjuster because we don't want to overwrite the specified values.
@@ -505,9 +502,9 @@ wtf_size_t GridLineResolver::ExplicitGridColumnCount() const {
     return subgridded_columns_span_size_;
   }
 
-  wtf_size_t column_count =
-      style_->GridTemplateColumns().track_list.TrackCountWithoutAutoRepeat() +
-      AutoRepeatTrackCount(kForColumns);
+  wtf_size_t column_count = style_->TemplateTracks(kForColumns)
+                                .track_list.TrackCountWithoutAutoRepeat() +
+                            AutoRepeatTrackCount(kForColumns);
   if (const auto& grid_template_areas = style_->GridTemplateAreas()) {
     column_count = std::max(column_count, grid_template_areas->column_count);
   }
@@ -520,9 +517,9 @@ wtf_size_t GridLineResolver::ExplicitGridRowCount() const {
     return subgridded_rows_span_size_;
   }
 
-  wtf_size_t row_count =
-      style_->GridTemplateRows().track_list.TrackCountWithoutAutoRepeat() +
-      AutoRepeatTrackCount(kForRows);
+  wtf_size_t row_count = style_->TemplateTracks(kForRows)
+                             .track_list.TrackCountWithoutAutoRepeat() +
+                         AutoRepeatTrackCount(kForRows);
   if (const auto& grid_template_areas = style_->GridTemplateAreas()) {
     row_count = std::max(row_count, grid_template_areas->row_count);
   }
@@ -709,15 +706,6 @@ wtf_size_t GridLineResolver::SpanSizeFromPositions(
   return span_position.SpanPosition();
 }
 
-wtf_size_t GridLineResolver::SpanSizeForAutoPlacedItem(
-    const ComputedStyle& grid_item_style,
-    GridTrackSizingDirection track_direction) const {
-  GridPosition initial_position, final_position;
-  InitialAndFinalPositionsFromStyle(grid_item_style, track_direction,
-                                    initial_position, final_position);
-  return SpanSizeFromPositions(initial_position, final_position);
-}
-
 int GridLineResolver::ResolveNamedGridLinePosition(
     const GridPosition& position,
     GridPositionSide side) const {
@@ -812,10 +800,10 @@ int GridLineResolver::ResolveGridPosition(const GridPosition& position,
 }
 
 GridSpan GridLineResolver::ResolveGridPositionsFromStyle(
-    const ComputedStyle& grid_item_style,
+    const ComputedStyle& item_style,
     GridTrackSizingDirection track_direction) const {
   GridPosition initial_position, final_position;
-  InitialAndFinalPositionsFromStyle(grid_item_style, track_direction,
+  InitialAndFinalPositionsFromStyle(item_style, track_direction,
                                     initial_position, final_position);
 
   const bool initial_should_be_resolved_against_opposite_position =

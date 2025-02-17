@@ -4,6 +4,7 @@
 
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_update_manager.h"
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <type_traits>
@@ -22,7 +23,6 @@
 #include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "base/rand_util.h"
-#include "base/ranges/algorithm.h"
 #include "base/scoped_observation.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
@@ -281,7 +281,7 @@ IsolatedWebAppUpdateManager::IsolatedWebAppUpdateManager(
     base::TimeDelta update_discovery_frequency)
     : profile_(profile),
       automatic_updates_enabled_(
-          content::IsolatedWebAppsPolicy::AreIsolatedWebAppsEnabled(&profile) &&
+          content::AreIsolatedWebAppsEnabled(&profile) &&
           // Similar to extensions, we don't do any automatic updates in guest
           // sessions.
           !profile.IsGuestSession() &&
@@ -485,12 +485,22 @@ void IsolatedWebAppUpdateManager::DiscoverUpdatesForApp(
     bool allow_downgrades,
     const std::optional<base::Version>& pinned_version,
     bool dev_mode) {
+  auto keep_alive = std::make_unique<ScopedKeepAlive>(
+      KeepAliveOrigin::ISOLATED_WEB_APP_UPDATE,
+      KeepAliveRestartOption::DISABLED);
+  auto profile_keep_alive =
+      profile_->IsOffTheRecord()
+          ? nullptr
+          : std::make_unique<ScopedProfileKeepAlive>(
+                &*profile_, ProfileKeepAliveOrigin::kIsolatedWebAppUpdate);
+
   task_queue_.Push(std::make_unique<IsolatedWebAppUpdateDiscoveryTask>(
       IwaUpdateDiscoveryTaskParams(update_manifest_url, update_channel,
                                    allow_downgrades, pinned_version, url_info,
                                    dev_mode),
       provider_->scheduler(), provider_->registrar_unsafe(),
-      profile_->GetURLLoaderFactory()));
+      profile_->GetURLLoaderFactory(), std::move(keep_alive),
+      std::move(profile_keep_alive)));
 
   task_queue_.MaybeStartNextTask();
 }
@@ -907,7 +917,7 @@ void IsolatedWebAppUpdateManager::TaskQueue::Clear() {
 bool IsolatedWebAppUpdateManager::TaskQueue::
     EnsureQueuedUpdateApplyTaskHasStarted(const webapps::AppId& app_id) {
   auto task_it =
-      base::ranges::find_if(update_apply_tasks_, [&app_id](const auto& task) {
+      std::ranges::find_if(update_apply_tasks_, [&app_id](const auto& task) {
         return task->url_info().app_id() == app_id;
       });
   if (task_it == update_apply_tasks_.end()) {
@@ -950,7 +960,7 @@ void IsolatedWebAppUpdateManager::TaskQueue::MaybeStartNextTask() {
 
 bool IsolatedWebAppUpdateManager::TaskQueue::IsUpdateApplyTaskQueued(
     const webapps::AppId& app_id) const {
-  return base::ranges::any_of(update_apply_tasks_, [&app_id](const auto& task) {
+  return std::ranges::any_of(update_apply_tasks_, [&app_id](const auto& task) {
     return task->url_info().app_id() == app_id;
   });
 }
@@ -972,10 +982,10 @@ void IsolatedWebAppUpdateManager::TaskQueue::StartUpdateApplyTask(
 }
 
 bool IsolatedWebAppUpdateManager::TaskQueue::IsAnyTaskRunning() const {
-  return base::ranges::any_of(
+  return std::ranges::any_of(
              update_discovery_tasks_,
              [](const auto& task) { return task->has_started(); }) ||
-         base::ranges::any_of(update_apply_tasks_, [](const auto& task) {
+         std::ranges::any_of(update_apply_tasks_, [](const auto& task) {
            return task->has_started();
          });
 }
@@ -983,8 +993,8 @@ bool IsolatedWebAppUpdateManager::TaskQueue::IsAnyTaskRunning() const {
 void IsolatedWebAppUpdateManager::TaskQueue::OnUpdateDiscoveryTaskCompleted(
     IsolatedWebAppUpdateDiscoveryTask* task_ptr,
     IsolatedWebAppUpdateDiscoveryTask::CompletionStatus status) {
-  auto task_it = base::ranges::find_if(update_discovery_tasks_,
-                                       base::MatchesUniquePtr(task_ptr));
+  auto task_it = std::ranges::find_if(update_discovery_tasks_,
+                                      base::MatchesUniquePtr(task_ptr));
   CHECK(task_it != update_discovery_tasks_.end());
   std::unique_ptr<IsolatedWebAppUpdateDiscoveryTask> task = std::move(*task_it);
   update_discovery_tasks_.erase(task_it);
@@ -1007,8 +1017,8 @@ void IsolatedWebAppUpdateManager::TaskQueue::OnUpdateDiscoveryTaskCompleted(
 void IsolatedWebAppUpdateManager::TaskQueue::OnUpdateApplyTaskCompleted(
     IsolatedWebAppUpdateApplyTask* task_ptr,
     IsolatedWebAppUpdateApplyTask::CompletionStatus status) {
-  auto task_it = base::ranges::find_if(update_apply_tasks_,
-                                       base::MatchesUniquePtr(task_ptr));
+  auto task_it = std::ranges::find_if(update_apply_tasks_,
+                                      base::MatchesUniquePtr(task_ptr));
   CHECK(task_it != update_apply_tasks_.end());
   std::unique_ptr<IsolatedWebAppUpdateApplyTask> task = std::move(*task_it);
   update_apply_tasks_.erase(task_it);

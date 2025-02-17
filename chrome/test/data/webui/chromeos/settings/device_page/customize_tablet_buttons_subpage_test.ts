@@ -4,8 +4,9 @@
 
 import 'chrome://os-settings/lazy_load.js';
 
-import {SettingsCustomizeTabletButtonsSubpageElement} from 'chrome://os-settings/lazy_load.js';
-import {fakeGraphicsTabletButtonActions, fakeGraphicsTablets, FakeInputDeviceSettingsProvider, getInputDeviceSettingsProvider, GraphicsTablet, Router, routes, setupFakeInputDeviceSettingsProvider} from 'chrome://os-settings/os_settings.js';
+import type {SettingsCustomizeTabletButtonsSubpageElement} from 'chrome://os-settings/lazy_load.js';
+import type {FakeInputDeviceSettingsProvider, GraphicsTablet} from 'chrome://os-settings/os_settings.js';
+import {fakeGraphicsTabletButtonActions, fakeGraphicsTablets, getInputDeviceSettingsProvider, Router, routes, setupFakeInputDeviceSettingsProvider} from 'chrome://os-settings/os_settings.js';
 import {assertDeepEquals, assertEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 
@@ -64,7 +65,7 @@ suite('<settings-customize-tablet-buttons-subpage>', () => {
         assertEquals(Router.getInstance().currentRoute, routes.DEVICE);
       });
 
-  test('button action list fetched from provider', async () => {
+  test('button action list fetched from provider', () => {
     const graphicsTablet: GraphicsTablet = page.selectedTablet;
     assertTrue(!!graphicsTablet);
     assertEquals(graphicsTablet.id, fakeGraphicsTablets[0]!.id);
@@ -117,7 +118,7 @@ suite('<settings-customize-tablet-buttons-subpage>', () => {
             Router.getInstance().currentRoute, routes.CUSTOMIZE_TABLET_BUTTONS);
         assertEquals(
             'Add or locate buttons on your tablet',
-            page.shadowRoot!.querySelector<HTMLDivElement>(
+            page.shadowRoot!.querySelector<HTMLElement>(
                                 '.help-title')!.textContent!.trim());
         // Go to the second tablet subpage with metadata.
         const url = new URLSearchParams({
@@ -129,7 +130,7 @@ suite('<settings-customize-tablet-buttons-subpage>', () => {
         await flushTasks();
         assertEquals(
             'Locate buttons on your tablet',
-            page.shadowRoot!.querySelector<HTMLDivElement>(
+            page.shadowRoot!.querySelector<HTMLElement>(
                                 '.help-title')!.textContent!.trim());
       });
 });

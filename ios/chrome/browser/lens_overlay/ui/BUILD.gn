@@ -115,6 +115,7 @@ source_set("progress_bar") {
     "//base",
     "//components/strings",
     "//ios/chrome/app/strings",
+    "//ios/chrome/common:string_conversions",
     "//ios/third_party/material_components_ios",
     "//ui/base",
   ]
@@ -127,6 +128,7 @@ source_set("entry_point") {
   ]
   deps = [
     "//ios/chrome/app/strings",
+    "//ios/chrome/browser/lens_overlay/coordinator:lens_overlay_availability",
     "//ios/chrome/browser/shared/public/commands",
     "//ios/chrome/browser/shared/ui/elements",
     "//ios/chrome/browser/shared/ui/symbols",

@@ -143,6 +143,10 @@ class TestLensOverlayQueryController : public LensOverlayQueryController {
     return last_user_action_;
   }
 
+  const int& num_full_image_requests_sent() const {
+    return num_full_image_requests_sent_;
+  }
+
   const int& num_interaction_requests_sent() const {
     return num_interaction_requests_sent_;
   }
@@ -169,6 +173,15 @@ class TestLensOverlayQueryController : public LensOverlayQueryController {
     return it == latency_gen_204_counter_.end() ? 0 : it->second;
   }
 
+  const std::optional<std::string>& last_latency_gen204_analytics_id() const {
+    return last_latency_gen204_analytics_id_;
+  }
+
+  const std::optional<std::string>& last_task_completion_gen204_analytics_id()
+      const {
+    return last_task_completion_gen204_analytics_id_;
+  }
+
   void StartQueryFlow(
       const SkBitmap& screenshot,
       GURL page_url,
@@ -178,9 +191,6 @@ class TestLensOverlayQueryController : public LensOverlayQueryController {
       lens::MimeType underlying_content_type,
       float ui_scale_factor,
       base::TimeTicks invocation_time) override;
-
-  void SendTaskCompletionGen204IfEnabled(
-      lens::mojom::UserAction user_action) override;
 
   void SendRegionSearch(
       lens::mojom::CenterRotatedBoxPtr region,
@@ -213,7 +223,7 @@ class TestLensOverlayQueryController : public LensOverlayQueryController {
   std::unique_ptr<EndpointFetcher> CreateEndpointFetcher(
       lens::LensOverlayServerRequest* request,
       const GURL& fetch_url,
-      const std::string& http_method,
+      const HttpMethod& http_method,
       const base::TimeDelta& timeout,
       const std::vector<std::string>& request_headers,
       const std::vector<std::string>& cors_exempt_headers,
@@ -225,6 +235,10 @@ class TestLensOverlayQueryController : public LensOverlayQueryController {
       std::string vit_query_param_value,
       std::optional<base::TimeDelta> cluster_info_latency,
       std::optional<std::string> encoded_analytics_id) override;
+
+  void SendTaskCompletionGen204IfEnabled(
+      std::string encoded_analytics_id,
+      lens::mojom::UserAction user_action) override;
 
   // The fake response to return for cluster info requests.
   lens::LensOverlayServerClusterInfoResponse fake_cluster_info_response_;
@@ -305,6 +319,9 @@ class TestLensOverlayQueryController : public LensOverlayQueryController {
   // The last user action sent by the query controller.
   std::optional<lens::mojom::UserAction> last_user_action_;
 
+  // The number of full image objects requests sent by the query controller.
+  int num_full_image_requests_sent_ = 0;
+
   // The number of interaction requests sent by the query controller.
   int num_interaction_requests_sent_ = 0;
 
@@ -323,6 +340,12 @@ class TestLensOverlayQueryController : public LensOverlayQueryController {
 
   // The number of partial page content requests sent by the query controller.
   int num_partial_page_content_requests_sent_ = 0;
+
+  // The last analytics id attached to a latency gen204 ping.
+  std::optional<std::string> last_latency_gen204_analytics_id_;
+
+  // The last analytics id attached to a task completion gen204 ping.
+  std::optional<std::string> last_task_completion_gen204_analytics_id_;
 
   // Tracker for the number of latency request events sent by the query
   // controller.

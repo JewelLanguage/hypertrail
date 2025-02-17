@@ -15,6 +15,7 @@ AutofillBubbleSignInPromoInteractiveUITest.*
 BatchUploadDialogViewPixelTest.*
 BookmarkBubbleViewBrowserTest.*
 BookmarkEditorViewBrowserTest.*
+BrowserViewScrimPixelTest.*
 BubbleFrameViewBrowserTest.*
 ChromeLabs*UiTest.*
 ChromeSignoutConfirmationPromptPixelTest.*
@@ -73,6 +74,10 @@ BookmarkAccountStorageMoveDialogPixelTest*
 NewTabPageTest.*
 OfferNotificationBubbleViewPixelBrowserTest.*
 OutdatedUpgradeBubbleTest.*
+PageActionPixelIconsHiddenTest.*
+PageActionPixelShowIconTest.*
+PageActionPixelShowChipTest.*
+PageActionPixelTestShowChipReduced.*
 PageInfoBubbleViewAboutThisSiteDialogBrowserTest.*
 PageInfoBubbleViewDialogBrowserTest.*
 PageInfoBubbleViewPrivacySandboxDialogBrowserTest.*

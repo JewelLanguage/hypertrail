@@ -34,7 +34,7 @@ BASE_FEATURE(kApiPermissionsHostAccessRequests,
 
 BASE_FEATURE(kApiUserScriptsExecute,
              "ApiUserScriptsExecute",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kApiUserScriptsMultipleWorlds,
              "ApiUserScriptsMultipleWorlds",
@@ -68,7 +68,7 @@ BASE_FEATURE(kEnableWebHidInWebView,
 
 BASE_FEATURE(kExtensionDisableUnsupportedDeveloper,
              "ExtensionDisableUnsupportedDeveloper",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kExtensionDynamicURLRedirection,
              "ExtensionDynamicURLRedirection",
@@ -106,6 +106,10 @@ BASE_FEATURE(kAllowLegacyMV2Extensions,
 BASE_FEATURE(kExtensionSourceUrlEnforcement,
              "ExtensionSourceUrlEnforcement",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kExtensionWARForRedirect,
+             "ExtensionWARForRedirect",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kExtensionWebFileHandlers,
              "ExtensionWebFileHandlers",
@@ -198,6 +202,10 @@ BASE_FEATURE(kRemoveCoreSiteInstance,
 
 BASE_FEATURE(kUserScriptUserExtensionToggle,
              "UserScriptUserExtensionToggle",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kDebuggerAPIRestrictedToDevMode,
+             "DebuggerAPIRestrictedToDevMode",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace extensions_features

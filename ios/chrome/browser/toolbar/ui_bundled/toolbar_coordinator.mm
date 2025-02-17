@@ -10,7 +10,7 @@
 #import "ios/chrome/browser/location_bar/ui_bundled/location_bar_coordinator.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_util.h"
-#import "ios/chrome/browser/omnibox/model/omnibox_position_browser_agent.h"
+#import "ios/chrome/browser/omnibox/model/omnibox_position/omnibox_position_browser_agent.h"
 #import "ios/chrome/browser/orchestrator/ui_bundled/omnibox_focus_orchestrator.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_presentation_context.h"
 #import "ios/chrome/browser/prerender/model/prerender_service.h"
@@ -269,8 +269,7 @@
   BOOL canShowTabStrip = IsRegularXRegularSizeClass(self.traitEnvironment);
 
   // Hide the toolbar when displaying content suggestions without the tab
-  // strip, without the focused omnibox, and for UI Refresh, only when in
-  // split toolbar mode.
+  // strip, without the focused omnibox, only when in split toolbar mode.
   BOOL hideToolbar = isNTP && !isOffTheRecord &&
                      ![self isOmniboxFirstResponder] &&
                      ![self showingOmniboxPopup] && !canShowTabStrip &&
@@ -467,6 +466,15 @@
         self.browser->GetCommandDispatcher(), ApplicationCommands);
     [applicationCommandsHandler dismissModalDialogsWithCompletion:nil];
   }
+}
+
+- (void)locationBarExpandedInViewController:
+    (PrimaryToolbarViewController*)viewController {
+  // Do nothing.
+}
+- (void)locationBarContractedInViewController:
+    (PrimaryToolbarViewController*)viewController {
+  // Do nothing.
 }
 
 #pragma mark - SideSwipeToolbarInteracting

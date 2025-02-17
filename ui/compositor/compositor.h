@@ -46,6 +46,7 @@
 #include "ui/compositor/compositor_lock.h"
 #include "ui/compositor/compositor_metrics_tracker_host.h"
 #include "ui/compositor/compositor_observer.h"
+#include "ui/compositor/compositor_property_tree_delegate.h"
 #include "ui/compositor/host_begin_frame_observer.h"
 #include "ui/compositor/layer_animator_collection.h"
 #include "ui/display/types/display_constants.h"
@@ -100,6 +101,7 @@ class Layer;
 class ScopedAnimationDurationScaleMode;
 class ScrollInputHandler;
 class CompositorMetricsTracker;
+class CompositorPropertyTreeDelegate;
 struct PendingBeginFrameArgs;
 
 constexpr int kCompositorLockTimeoutMs = 67;
@@ -138,6 +140,17 @@ class COMPOSITOR_EXPORT ContextFactory {
 
   // Gets the frame sink manager host instance.
   virtual viz::HostFrameSinkManager* GetHostFrameSinkManager() = 0;
+};
+
+// Factory object to create a ExternalBeginFrameControllerClient on demand.
+class COMPOSITOR_EXPORT ExternalBeginFrameControllerClientFactory {
+ public:
+  virtual ~ExternalBeginFrameControllerClientFactory() = default;
+
+  // Create a new client.
+  virtual mojo::PendingAssociatedRemote<
+      viz::mojom::ExternalBeginFrameControllerClient>
+  CreateExternalBeginFrameControllerClient() = 0;
 };
 
 // Compositor object to take care of GPU painting.
@@ -538,6 +551,20 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
   ScopedKeepSurfaceAliveCallback TakeScopedKeepSurfaceAliveCallback(
       const viz::SurfaceId& surface_id);
 
+  CompositorPropertyTreeDelegate* property_tree_delegate() {
+    return property_tree_delegate_.get();
+  }
+
+  ExternalBeginFrameControllerClientFactory*
+  external_begin_frame_controler_client_factory() {
+    return external_begin_frame_controler_client_factory_.get();
+  }
+
+  void SetExternalBeginFrameControllerClientFactory(
+      ExternalBeginFrameControllerClientFactory* factory) {
+    external_begin_frame_controler_client_factory_ = factory;
+  }
+
  private:
   friend class base::RefCounted<Compositor>;
   friend class TotalAnimationThroughputReporter;
@@ -576,6 +603,8 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
   mojo::AssociatedRemote<viz::mojom::DisplayPrivate> display_private_;
   mojo::AssociatedRemote<viz::mojom::ExternalBeginFrameController>
       external_begin_frame_controller_;
+  raw_ptr<ExternalBeginFrameControllerClientFactory>
+      external_begin_frame_controler_client_factory_;
 
   std::unique_ptr<PendingBeginFrameArgs> pending_begin_frame_args_;
 
@@ -606,7 +635,7 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
   bool widget_valid_ = false;
   bool layer_tree_frame_sink_requested_ = false;
   const viz::FrameSinkId frame_sink_id_;
-  scoped_refptr<cc::Layer> root_web_layer_;
+  scoped_refptr<cc::Layer> root_cc_layer_;
   std::unique_ptr<cc::AnimationHost> animation_host_;
   std::unique_ptr<cc::LayerTreeHost> host_;
   base::WeakPtr<cc::InputHandler> input_handler_weak_;
@@ -683,6 +712,14 @@ class COMPOSITOR_EXPORT Compositor : public base::PowerSuspendObserver,
   };
   using CompositorMetricsTrackerMap = base::flat_map<TrackerId, TrackerState>;
   CompositorMetricsTrackerMap compositor_metrics_tracker_map_;
+
+  // TODO(crbug.com/389771428): This holds a transitional object that
+  // will be used to migrate from using layer trees to property trees and
+  // layer lists. We can remove this once the code has been
+  // fully converted to using property trees and layer lists and then
+  // go back to using the cc::Compositor's default logic for that mode.
+  bool uses_layer_lists_ = false;
+  std::unique_ptr<CompositorPropertyTreeDelegate> property_tree_delegate_;
 
   base::WeakPtrFactory<Compositor> context_creation_weak_ptr_factory_{this};
   base::WeakPtrFactory<Compositor> weak_ptr_factory_{this};

@@ -20,14 +20,14 @@ namespace blink {
 
 class LayoutObject;
 
+using InlineItems = HeapVector<Member<InlineItem>>;
+
 // Class representing a single text node or styled inline element with text
 // content segmented by style, text direction, sideways rotation, font fallback
 // priority (text, symbol, emoji, etc), and script (but not by font).
 // In this representation TextNodes are merged up into their parent inline
 // element where possible.
-class CORE_EXPORT InlineItem {
-  DISALLOW_NEW();
-
+class CORE_EXPORT InlineItem final : public GarbageCollected<InlineItem> {
  public:
   enum InlineItemType {
     kText,
@@ -97,6 +97,12 @@ class CORE_EXPORT InlineItem {
            TextType() == TextItemType::kSymbolMarker);
     SetTextType(TextItemType::kSymbolMarker);
   }
+
+  // The index in `InlineItems`. The value is valid only after `UpdateIndex()`
+  // was run.
+  wtf_size_t Index() const { return index_; }
+  // Same as `Index()`. Use this variant if before `UpdateIndex()` was run.
+  wtf_size_t Index(base::span<const Member<InlineItem>>) const;
 
   const ShapeResult* TextShapeResult() const { return shape_result_.Get(); }
   ShapeResult* CloneTextShapeResult() {
@@ -235,12 +241,12 @@ class CORE_EXPORT InlineItem {
     is_end_collapsible_newline_ = is_newline;
   }
 
-  static void Split(HeapVector<InlineItem>&, unsigned index, unsigned offset);
+  static void Split(InlineItems&, unsigned index, unsigned offset);
 
   // RunSegmenter properties.
   unsigned SegmentData() const { return segment_data_; }
   static void SetSegmentData(const RunSegmenter::RunSegmenterRange& range,
-                             HeapVector<InlineItem>* items);
+                             InlineItems* items);
 
   RunSegmenter::RunSegmenterRange CreateRunSegmenterRange() const {
     // Only `kText` has the `segment_data_`, see `InlineItem::SetSegmentData`.
@@ -260,10 +266,13 @@ class CORE_EXPORT InlineItem {
       shape_result_ = nullptr;
     bidi_level_ = level;
   }
-  static unsigned SetBidiLevel(HeapVector<InlineItem>&,
+  static unsigned SetBidiLevel(InlineItems&,
                                unsigned index,
                                unsigned end_offset,
                                UBiDiLevel);
+
+  // Update `InlineItem::Index()` for the given list.
+  static void UpdateIndex(base::span<Member<InlineItem>> items);
 
   void AssertOffset(unsigned offset) const { DCHECK(IsValidOffset(offset)); }
   void AssertEndOffset(unsigned offset) const;
@@ -280,6 +289,7 @@ class CORE_EXPORT InlineItem {
   Member<const ShapeResult> shape_result_{
       nullptr, Member<const ShapeResult>::AtomicInitializerTag{}};
   Member<LayoutObject> layout_object_;
+  wtf_size_t index_ = 0;
 
   InlineItemType type_;
   unsigned text_type_ : 3 = static_cast<unsigned>(TextItemType::kNormal);

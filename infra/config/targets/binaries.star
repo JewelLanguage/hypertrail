@@ -159,7 +159,7 @@ targets.binaries.windowed_test_launcher(
 
 targets.binaries.windowed_test_launcher(
     name = "ash_components_unittests",
-    label = "//ash/components:ash_components_unittests",
+    label = "//chromeos/ash/experiences:ash_components_unittests",
 )
 
 targets.binaries.windowed_test_launcher(
@@ -842,6 +842,8 @@ targets.binaries.console_test_launcher(
 targets.binaries.windowed_test_launcher(
     name = "dawn_end2end_tests",
     label = "//third_party/dawn/src/dawn/tests:dawn_end2end_tests",
+    # All references have been moved to starlark
+    skip_usage_check = True,
 )
 
 targets.binaries.script(
@@ -1060,12 +1062,16 @@ targets.binaries.console_test_launcher(
 targets.binaries.windowed_test_launcher(
     name = "gl_tests",
     label = "//gpu:gl_tests",
+    # All references have been moved to starlark
+    skip_usage_check = True,
     args = [],
 )
 
 targets.binaries.windowed_test_launcher(
     name = "gl_unittests",
     label = "//ui/gl:gl_unittests",
+    # All references have been moved to starlark
+    skip_usage_check = True,
 )
 
 targets.binaries.windowed_test_launcher(
@@ -1702,20 +1708,6 @@ targets.binaries.generated_script(
 targets.binaries.generated_script(
     name = "performance_test_suite_android_trichrome_chrome_google_bundle",
     label = "//chrome/test:performance_test_suite_android_trichrome_chrome_google_bundle",
-)
-
-# TODO(https://crbug.com/378731077): Remove when migration is done.
-targets.binaries.generated_script(
-    name = "performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle",
-    label = "//chrome/test:performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle",
-    skip_usage_check = True,  # Necessary until Pinpoint targets are migrated.
-)
-
-# TODO(https://crbug.com/378731077): Remove when migration is done.
-targets.binaries.generated_script(
-    name = "performance_test_suite_android_clank_trichrome_bundle",
-    label = "//chrome/test:performance_test_suite_android_clank_trichrome_bundle",
-    skip_usage_check = True,  # Necessary until Pinpoint targets are migrated.
 )
 
 targets.binaries.script(

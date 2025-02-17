@@ -187,10 +187,6 @@ class StoreMetricsReporterTest : public SyncUsernameTestBase {
         prefs::kProfileStoreMigratedToOSCryptAsync, false);
     prefs_.registry()->RegisterBooleanPref(
         prefs::kAccountStoreMigratedToOSCryptAsync, false);
-#if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
-    prefs_.registry()->RegisterDictionaryPref(
-        prefs::kAccountStoragePerAccountSettings);
-#endif
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
     prefs_.registry()->RegisterBooleanPref(
         prefs::kBiometricAuthenticationBeforeFilling, false);
@@ -534,6 +530,15 @@ TEST_F(StoreMetricsReporterTest, ReportAccountsPerSiteHiResMetricsTest) {
       "PasswordManager.ProfileStore.AccountsPerSiteHiRes3."
       "Overall."
       "WithoutCustomPassphrase",
+      2, 2);
+
+  histogram_tester.ExpectBucketCount(
+      "PasswordManager.ProfileStore.AccountsPerSiteHiRes3."
+      "Overall",
+      1, 7);
+  histogram_tester.ExpectBucketCount(
+      "PasswordManager.ProfileStore.AccountsPerSiteHiRes3."
+      "Overall",
       2, 2);
 
   // In this test both profile and account store contained the same 10 test
@@ -951,6 +956,15 @@ TEST_F(StoreMetricsReporterTest,
       "PasswordManager.AccountStore.AccountsPerSiteHiRes3."
       "Overall."
       "WithoutCustomPassphrase",
+      2, 2);
+
+  histogram_tester.ExpectBucketCount(
+      "PasswordManager.AccountStore.AccountsPerSiteHiRes3."
+      "Overall",
+      1, 7);
+  histogram_tester.ExpectBucketCount(
+      "PasswordManager.AccountStore.AccountsPerSiteHiRes3."
+      "Overall",
       2, 2);
 
   // In this test both profile and account store contained the same 11 test
@@ -1406,20 +1420,20 @@ TEST_F(StoreMetricsReporterTest, MultiStoreMetrics) {
       CreateForm(kRealm2, "identicaluser1", "identicalpass1"));
 
   for (bool syncing : {false, true}) {
-    for (bool opted_in : {false, true}) {
+    for (bool account_storage_enabled : {false, true}) {
       test_sync_service()->SetSignedIn(syncing ? signin::ConsentLevel::kSync
                                                : signin::ConsentLevel::kSignin);
       ASSERT_EQ(test_sync_service()->IsSyncFeatureEnabled(), syncing);
-      if (opted_in) {
+      if (account_storage_enabled) {
         test_sync_service()->GetUserSettings()->SetSelectedTypes(
             /*sync_everything=*/true, syncer::UserSelectableTypeSet::All());
       } else {
         test_sync_service()->GetUserSettings()->SetSelectedTypes(
             /*sync_everything=*/false, syncer::UserSelectableTypeSet());
       }
-      ASSERT_EQ(features_util::IsOptedInForAccountStorage(pref_service(),
-                                                          sync_service()),
-                opted_in);
+      ASSERT_EQ(features_util::IsAccountStorageEnabled(pref_service(),
+                                                       sync_service()),
+                account_storage_enabled);
 
       // In every pass in the loop, StoreMetricsReporter uses the same pref
       // service. Set the kLastTimePasswordStoreMetricsReported to make sure
@@ -1438,7 +1452,7 @@ TEST_F(StoreMetricsReporterTest, MultiStoreMetrics) {
       // stores, i.e. to background task runners.
       RunUntilIdle();
 
-      if (opted_in) {
+      if (account_storage_enabled) {
         histogram_tester.ExpectUniqueSample(
             "PasswordManager.AccountStoreVsProfileStore4."
             "Additional",

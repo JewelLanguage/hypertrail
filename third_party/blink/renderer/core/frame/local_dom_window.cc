@@ -603,7 +603,7 @@ scoped_refptr<base::SingleThreadTaskRunner> LocalDOMWindow::GetTaskRunner(
 }
 
 void LocalDOMWindow::ReportPermissionsPolicyViolation(
-    mojom::blink::PermissionsPolicyFeature feature,
+    network::mojom::PermissionsPolicyFeature feature,
     mojom::blink::PolicyDisposition disposition,
     const std::optional<String>& reporting_endpoint,
     const String& message) const {
@@ -648,11 +648,12 @@ void LocalDOMWindow::ReportPermissionsPolicyViolation(
 }
 
 void LocalDOMWindow::ReportPotentialPermissionsPolicyViolation(
-    mojom::blink::PermissionsPolicyFeature feature,
+    network::mojom::PermissionsPolicyFeature feature,
     mojom::blink::PolicyDisposition disposition,
     const std::optional<String>& reporting_endpoint,
     const String& message,
-    const String& allow_attribute) const {
+    const String& allow_attribute,
+    const String& src_attribute) const {
   CHECK(GetFrame());
 
   // Construct the potential permissions policy violation report.
@@ -665,7 +666,7 @@ void LocalDOMWindow::ReportPotentialPermissionsPolicyViolation(
 
   PermissionsPolicyViolationReportBody* body =
       MakeGarbageCollected<PermissionsPolicyViolationReportBody>(
-          feature_name, message, disp_str, allow_attribute);
+          feature_name, message, disp_str, allow_attribute, src_attribute);
 
   Report* report = MakeGarbageCollected<Report>(
       ReportType::kPotentialPermissionsPolicyViolation, Url().GetString(),
@@ -812,7 +813,7 @@ void LocalDOMWindow::CountWebDXFeature(mojom::blink::WebDXFeature feature) {
 }
 
 void LocalDOMWindow::CountPermissionsPolicyUsage(
-    mojom::blink::PermissionsPolicyFeature feature,
+    network::mojom::PermissionsPolicyFeature feature,
     UseCounterImpl::PermissionsPolicyUsageType type) {
   if (!GetFrame())
     return;
@@ -953,10 +954,13 @@ void LocalDOMWindow::DispatchPersistedPageshowEvent(
 
 void LocalDOMWindow::DispatchPagehideEvent(
     PageTransitionEventPersistence persistence) {
-  if (document_->IsPrerendering()) {
-    // Do not dispatch the event while prerendering.
-    return;
+  if (!base::FeatureList::IsEnabled(features::kPageHideEventForPrerender2)) {
+    if (document_->IsPrerendering()) {
+      // Do not dispatch the event while prerendering.
+      return;
+    }
   }
+
   if (document_->UnloadStarted()) {
     // We've already dispatched pagehide (since it's the first thing we do when
     // starting unload) and shouldn't dispatch it again. We might get here on
@@ -2270,7 +2274,7 @@ DOMWindow* LocalDOMWindow::open(v8::Isolate* isolate,
     UseCounter::Count(*entered_window,
                       WebFeature::kPartitionedPopin_OpenAttempt);
     if (!IsFeatureEnabled(
-            mojom::blink::PermissionsPolicyFeature::kPartitionedPopins,
+            network::mojom::PermissionsPolicyFeature::kPartitionedPopins,
             ReportOptions::kReportOnFailure)) {
       exception_state.ThrowSecurityError(
           "Permissions-Policy: `popin` access denied.",
@@ -2309,6 +2313,9 @@ DOMWindow* LocalDOMWindow::open(v8::Isolate* isolate,
     if (top_level_site != blob_url_site) {
       UseCounter::Count(document(),
                         WebFeature::kCrossTopLevelSiteBlobURLNavigation);
+      AuditsIssue::ReportPartitioningBlobURLIssue(
+          entered_window, completed_url.GetString(),
+          mojom::blink::PartitioningBlobURLInfo::kEnforceNoopenerForNavigation);
       if (base::FeatureList::IsEnabled(
               features::kEnforceNoopenerOnBlobURLNavigation) &&
           !base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -2494,9 +2501,21 @@ void LocalDOMWindow::Trace(Visitor* visitor) const {
 }
 
 bool LocalDOMWindow::CrossOriginIsolatedCapability() const {
-  return Agent::IsCrossOriginIsolated() &&
-         IsFeatureEnabled(
-             mojom::blink::PermissionsPolicyFeature::kCrossOriginIsolated) &&
+  // When crossOriginIsolation is enabled by DocumentIsolationPolicy, it ignores
+  // the restriction placed on COI capability by the CrossOriginIsolated
+  // permission policy. This is because the permission policy is necessary for
+  // defending against cross-origin iframes when COI is enabled by COOP + COEP.
+  // But with DocumentIsolationPolicy, the cross-origin iframe is guaranteed to
+  // be out-of-process, so there is no risk to it having COI capability.
+  // Therefore, it is safe to ignore the permission policy in this case.
+  // TODO(crbug.com/393522283): Ensure the COI status of a context is properly
+  // computed in the browser process and just pass it instead of passing several
+  // booleans to the renderer process and having it do the computation.
+  bool permission_policy_allows_coi =
+      IsFeatureEnabled(
+          network::mojom::PermissionsPolicyFeature::kCrossOriginIsolated) ||
+      GetPolicyContainer()->GetPolicies().cross_origin_isolation_enabled_by_dip;
+  return Agent::IsCrossOriginIsolated() && permission_policy_allows_coi &&
          GetPolicyContainer()->GetPolicies().allow_cross_origin_isolation;
 }
 
@@ -2578,16 +2597,12 @@ Fence* LocalDOMWindow::fence() {
     return nullptr;
   }
   if (!GetFrame()->IsInFencedFrameTree()) {
-    // We temporarily allow window.fence in iframes with fenced frame reporting
-    // metadata (navigated by urn:uuids).
-    // If we are in an iframe that doesn't qualify, return nullptr.
+    // We temporarily allow window.fence in iframes loaded via
+    // FencedFrameConfigs (navigated by a config's associated urn:uuid since
+    // iframes don't support config objects directly). If we are in an iframe
+    // that doesn't qualify, return nullptr.
     if (!blink::features::IsAllowURNsInIframeEnabled() ||
-        !GetFrame()->GetDocument()->Loader()->FencedFrameProperties() ||
-        !GetFrame()
-             ->GetDocument()
-             ->Loader()
-             ->FencedFrameProperties()
-             ->has_fenced_frame_reporting()) {
+        !GetFrame()->GetDocument()->Loader()->FencedFrameProperties()) {
       return nullptr;
     }
   }

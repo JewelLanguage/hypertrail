@@ -14,7 +14,6 @@
 #include "base/notreached.h"
 #include "base/numerics/checked_math.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -24,11 +23,22 @@
 #include "services/webnn/public/cpp/context_properties.h"
 #include "services/webnn/public/cpp/operand_descriptor.h"
 #include "services/webnn/public/cpp/supported_data_types.h"
+#include "services/webnn/public/cpp/supported_tensors.h"
 #include "services/webnn/public/cpp/webnn_errors.h"
 
 namespace webnn {
 
 namespace {
+
+// The error message labels for corresponding operands.
+static constexpr char kConditionParam[] = "condition";
+static constexpr char kFalseValueParam[] = "falseValue";
+static constexpr char kIndicesParam[] = "indices";
+static constexpr char kScaleParam[] = "scale";
+static constexpr char kSlopeParam[] = "slope";
+static constexpr char kTrueValueParam[] = "trueValue";
+static constexpr char kUpdatesParam[] = "updates";
+static constexpr char kZeroPointParam[] = "zeroPoint";
 
 // Calculate the output size for conv2d based on WebNN spec:
 // https://www.w3.org/TR/webnn/#api-mlgraphbuilder-conv2d
@@ -296,7 +306,7 @@ base::expected<void, std::string> ValidateRecurrentNetworkOperand(
         label, base::StringPrintf("The %s operand should be a %zu-D tensor.",
                                   operand_name, expected_shape.size())));
   }
-  if (!base::ranges::equal(operand.shape(), expected_shape)) {
+  if (!std::ranges::equal(operand.shape(), expected_shape)) {
     return base::unexpected(ErrorWithLabel(
         label,
         base::StringPrintf("The %s operand shape is invalid.", operand_name)));
@@ -318,12 +328,10 @@ base::expected<OperandDescriptor, std::string> ValidateSoftmaxAndInferOutput(
     const OperandDescriptor& input,
     uint32_t axis,
     std::string_view label) {
-  if (!context_properties.data_type_limits.softmax_input.Has(
-          input.data_type())) {
+  if (!context_properties.data_type_limits.softmax_input.Supports(input)) {
     return base::unexpected(ErrorWithLabel(
-        label, NotSupportedInputArgumentTypeError(
-                   input.data_type(),
-                   context_properties.data_type_limits.softmax_input)));
+        label, NotSupportedInputArgumentError(
+                   input, context_properties.data_type_limits.softmax_input)));
   }
   if (axis >= input.Rank()) {
     return base::unexpected(
@@ -340,12 +348,11 @@ base::expected<OperandDescriptor, std::string> ValidateArgMinMaxAndInferOutput(
     uint32_t axis,
     OperandDataType output_data_type,
     bool keep_dimensions) {
-  if (!context_properties.data_type_limits.arg_min_max_input.Has(
-          input.data_type())) {
+  if (!context_properties.data_type_limits.arg_min_max_input.Supports(input)) {
     return base::unexpected(ErrorWithLabel(
-        label, NotSupportedInputArgumentTypeError(
-                   input.data_type(),
-                   context_properties.data_type_limits.arg_min_max_input)));
+        label,
+        NotSupportedInputArgumentError(
+            input, context_properties.data_type_limits.arg_min_max_input)));
   }
 
   if (!context_properties.data_type_limits.arg_min_max_output.Has(
@@ -370,11 +377,10 @@ ValidateSplitAndInferOutput(const ContextProperties& context_properties,
                             const OperandDescriptor& input,
                             const SplitAttribute& attributes) {
   const std::string& label = attributes.label;
-  if (!context_properties.data_type_limits.split_input.Has(input.data_type())) {
+  if (!context_properties.data_type_limits.split_input.Supports(input)) {
     return base::unexpected(ErrorWithLabel(
-        label, NotSupportedInputArgumentTypeError(
-                   input.data_type(),
-                   context_properties.data_type_limits.split_input)));
+        label, NotSupportedInputArgumentError(
+                   input, context_properties.data_type_limits.split_input)));
   }
 
   if (attributes.axis >= input.Rank()) {
@@ -419,8 +425,8 @@ ValidateSplitAndInferOutput(const ContextProperties& context_properties,
                  attributes.splits)) {
     const auto& splits =
         absl::get<base::span<const uint32_t>>(attributes.splits);
-    if (base::ranges::any_of(splits,
-                             [](uint32_t split) { return split == 0; })) {
+    if (std::ranges::any_of(splits,
+                            [](uint32_t split) { return split == 0; })) {
       return base::unexpected(
           ErrorWithLabel(label, "All splits must be greater than zero."));
     }
@@ -824,11 +830,6 @@ ValidateCumulativeSumAndInferOutput(const ContextProperties& context_properties,
                                     const OperandDescriptor& input,
                                     const uint32_t axis,
                                     std::string_view label) {
-  if (input.Rank() == 0) {
-    return base::unexpected(
-        ErrorWithLabel(label, "The input should not be a scalar."));
-  }
-
   if (input.Rank() <= axis) {
     return base::unexpected(ErrorWithLabel(
         label, base::StringPrintf("The axis (%u) must be in the range [0, N-1] "
@@ -837,12 +838,12 @@ ValidateCumulativeSumAndInferOutput(const ContextProperties& context_properties,
                                   axis, input.Rank())));
   }
 
-  if (!context_properties.data_type_limits.cumulative_sum_input.Has(
-          input.data_type())) {
+  if (!context_properties.data_type_limits.cumulative_sum_input.Supports(
+          input)) {
     return base::unexpected(ErrorWithLabel(
-        label, NotSupportedInputArgumentTypeError(
-                   input.data_type(),
-                   context_properties.data_type_limits.cumulative_sum_input)));
+        label,
+        NotSupportedInputArgumentError(
+            input, context_properties.data_type_limits.cumulative_sum_input)));
   }
 
   // The data type and shape of input determine the output.
@@ -852,6 +853,8 @@ ValidateCumulativeSumAndInferOutput(const ContextProperties& context_properties,
 // This helper method is intended to validate scale and zero_point
 // operands of quantizeLinear and dequantizeLinear against the input
 // operand.
+// TODO(crbug.com/396176047): Make scale and zero_point's rank match with
+// input.
 base::expected<void, std::string>
 ValidateScaleZeroPointOperandShapeIsCompatibleWithInput(
     base::span<const uint32_t> input_shape,
@@ -876,7 +879,7 @@ ValidateScaleZeroPointOperandShapeIsCompatibleWithInput(
     }
   }
 
-  if (!base::ranges::equal(scale_shape, zero_point_shape)) {
+  if (!std::ranges::equal(scale_shape, zero_point_shape)) {
     return base::unexpected(ErrorWithLabel(
         label, "The shape of scale and zero point must be the same."));
   }
@@ -894,13 +897,22 @@ ValidateDequantizeLinearAndInferOutput(
   RETURN_IF_ERROR(ValidateScaleZeroPointOperandShapeIsCompatibleWithInput(
       input.shape(), scale.shape(), zero_point.shape(), label));
 
-  if (!context_properties.data_type_limits.dequantize_linear_input.Has(
-          input.data_type())) {
+  if (!context_properties.data_type_limits.dequantize_linear_input.Supports(
+          input)) {
     return base::unexpected(ErrorWithLabel(
         label,
-        NotSupportedInputArgumentTypeError(
-            input.data_type(),
+        NotSupportedInputArgumentError(
+            input,
             context_properties.data_type_limits.dequantize_linear_input)));
+  }
+
+  if (!context_properties.data_type_limits.dequantize_linear_zero_point
+           .Supports(zero_point)) {
+    return base::unexpected(ErrorWithLabel(
+        label,
+        NotSupportedArgumentError(
+            kZeroPointParam, zero_point,
+            context_properties.data_type_limits.dequantize_linear_zero_point)));
   }
 
   if (input.data_type() != zero_point.data_type()) {
@@ -908,12 +920,12 @@ ValidateDequantizeLinearAndInferOutput(
         label, "The data type of input and zero point must be the same."));
   }
 
-  if (!context_properties.data_type_limits.dequantize_linear_scale.Has(
-          scale.data_type())) {
+  if (!context_properties.data_type_limits.dequantize_linear_scale.Supports(
+          scale)) {
     return base::unexpected(ErrorWithLabel(
         label,
-        NotSupportedInputArgumentTypeError(
-            scale.data_type(),
+        NotSupportedArgumentError(
+            kScaleParam, scale,
             context_properties.data_type_limits.dequantize_linear_scale)));
   }
 
@@ -928,16 +940,10 @@ base::expected<OperandDescriptor, std::string> ValidatePadAndInferOutput(
     base::span<const uint32_t> beginning_padding,
     base::span<const uint32_t> ending_padding,
     std::string_view label) {
-  if (input.Rank() == 0) {
-    return base::unexpected(
-        ErrorWithLabel(label, "The input should not be a scalar."));
-  }
-
-  if (!context_properties.data_type_limits.pad_input.Has(input.data_type())) {
+  if (!context_properties.data_type_limits.pad_input.Supports(input)) {
     return base::unexpected(ErrorWithLabel(
-        label,
-        NotSupportedInputArgumentTypeError(
-            input.data_type(), context_properties.data_type_limits.pad_input)));
+        label, NotSupportedInputArgumentError(
+                   input, context_properties.data_type_limits.pad_input)));
   }
 
   // Validate the beginning_padding and ending_padding.
@@ -1063,12 +1069,7 @@ base::expected<OperandDescriptor, std::string> ValidatePool2dAndInferOutput(
     Pool2dKind kind) {
   const std::string& label = attributes.label;
   // Validate input operand and set its sizes.
-  if (input.Rank() != 4) {
-    return base::unexpected(
-        ErrorWithLabel(label, "The input should be a 4-D tensor."));
-  }
-
-  const SupportedDataTypes& data_type_constraint = [&](Pool2dKind kind) {
+  const SupportedTensors& tensor_constraint = [&](Pool2dKind kind) {
     switch (kind) {
       case Pool2dKind::kAverage:
         return context_properties.data_type_limits.average_pool2d_input;
@@ -1079,13 +1080,13 @@ base::expected<OperandDescriptor, std::string> ValidatePool2dAndInferOutput(
     }
   }(kind);
 
-  if (!data_type_constraint.Has(input.data_type())) {
-    return base::unexpected(
-        ErrorWithLabel(label, NotSupportedInputArgumentTypeError(
-                                  input.data_type(), data_type_constraint)));
+  if (!tensor_constraint.Supports(input)) {
+    return base::unexpected(ErrorWithLabel(
+        label, NotSupportedInputArgumentError(input, tensor_constraint)));
   }
 
   const std::vector<uint32_t>& input_shape = input.shape();
+  CHECK_EQ(input_shape.size(), 4u);
   // The layout option specifies the layout format of the input tensor.
   uint32_t input_batches, input_channels, input_height, input_width;
   switch (attributes.layout) {
@@ -1230,18 +1231,11 @@ base::expected<OperandDescriptor, std::string> ValidateResample2dAndInferOutput(
         scales_or_sizes,
     base::span<const uint32_t> axes,
     std::string_view label) {
-  // Validate the input.
-  if (input.Rank() != 4) {
-    return base::unexpected(
-        ErrorWithLabel(label, "The input must be a 4-D tensor."));
-  }
-
-  if (!context_properties.data_type_limits.resample2d_input.Has(
-          input.data_type())) {
+  if (!context_properties.data_type_limits.resample2d_input.Supports(input)) {
     return base::unexpected(ErrorWithLabel(
-        label, NotSupportedInputArgumentTypeError(
-                   input.data_type(),
-                   context_properties.data_type_limits.resample2d_input)));
+        label,
+        NotSupportedInputArgumentError(
+            input, context_properties.data_type_limits.resample2d_input)));
   }
 
   if (axes.size() != 2) {
@@ -1309,12 +1303,10 @@ base::expected<OperandDescriptor, std::string> ValidateReverseAndInferOutput(
     std::string_view label) {
   RETURN_IF_ERROR(ValidateAxes(axes, input.Rank(), label));
 
-  if (!context_properties.data_type_limits.reverse_input.Has(
-          input.data_type())) {
+  if (!context_properties.data_type_limits.reverse_input.Supports(input)) {
     return base::unexpected(ErrorWithLabel(
-        label, NotSupportedInputArgumentTypeError(
-                   input.data_type(),
-                   context_properties.data_type_limits.reverse_input)));
+        label, NotSupportedInputArgumentError(
+                   input, context_properties.data_type_limits.reverse_input)));
   }
 
   return input;
@@ -1346,7 +1338,6 @@ base::expected<OperandDescriptor, std::string> ValidateGatherAndInferOutput(
                    context_properties.data_type_limits.gather_input)));
   }
 
-  static constexpr char kIndicesParam[] = "indices";
   if (!context_properties.data_type_limits.gather_indices.Has(
           indices.data_type())) {
     return base::unexpected(ErrorWithLabel(
@@ -1366,7 +1357,7 @@ base::expected<OperandDescriptor, std::string> ValidateGatherAndInferOutput(
   output_shape.reserve(checked_output_rank.ValueOrDie());
   for (uint32_t i = 0; i < input.Rank(); ++i) {
     if (i == axis) {
-      base::ranges::copy(indices.shape(), std::back_inserter(output_shape));
+      std::ranges::copy(indices.shape(), std::back_inserter(output_shape));
     } else {
       output_shape.push_back(input.shape()[i]);
     }
@@ -1404,7 +1395,6 @@ ValidateGatherElementsAndInferOutput(
                    context_properties.data_type_limits.gather_elements_input)));
   }
 
-  static constexpr char kIndicesParam[] = "indices";
   if (!context_properties.data_type_limits.gather_elements_indices.Has(
           indices.data_type())) {
     return base::unexpected(ErrorWithLabel(
@@ -1459,7 +1449,7 @@ base::expected<OperandDescriptor, std::string> ValidateGatherNDAndInferOutput(
     return base::unexpected(
         ErrorWithLabel(label, "The input should not be a scalar."));
   }
-  static constexpr char kIndicesParam[] = "indices";
+
   if (!context_properties.data_type_limits.gather_nd_indices.Has(
           indices.data_type())) {
     return base::unexpected(ErrorWithLabel(
@@ -1486,10 +1476,10 @@ base::expected<OperandDescriptor, std::string> ValidateGatherNDAndInferOutput(
 
   std::vector<uint32_t> output_shape;
   output_shape.reserve(checked_output_rank.ValueOrDie());
-  base::ranges::copy(indices.shape().begin(), indices.shape().end() - 1,
-                     std::back_inserter(output_shape));
-  base::ranges::copy(input.shape().begin() + indices_last_dimension_size,
-                     input.shape().end(), std::back_inserter(output_shape));
+  std::ranges::copy(indices.shape().begin(), indices.shape().end() - 1,
+                    std::back_inserter(output_shape));
+  std::ranges::copy(input.shape().begin() + indices_last_dimension_size,
+                    input.shape().end(), std::back_inserter(output_shape));
 
   return OperandDescriptor::Create(context_properties, input.data_type(),
                                    std::move(output_shape), label);
@@ -1533,13 +1523,13 @@ base::expected<OperandDescriptor, std::string> ValidateGemmAndInferOutput(
 
   std::vector<uint32_t> shape_a = a.shape();
   if (attributes.a_transpose) {
-    base::ranges::reverse(shape_a);
+    std::ranges::reverse(shape_a);
   }
   // The second input 2-D tensor with shape [K, N] if bTranspose is false, or
   // [N, K] if bTranspose is true.
   std::vector<uint32_t> shape_b = b.shape();
   if (attributes.b_transpose) {
-    base::ranges::reverse(shape_b);
+    std::ranges::reverse(shape_b);
   }
   // The number of columns in the first matrix must be equal to the number of
   // rows in the second matrix.
@@ -1888,7 +1878,7 @@ ValidateLayerNormalizationAndInferOutput(
   // The dimensions for layerNormalization to reduce along.
   std::vector<uint32_t> reduction_dimensions;
   reduction_dimensions.reserve(axes.size());
-  base::ranges::transform(
+  std::ranges::transform(
       axes, std::back_inserter(reduction_dimensions),
       [&input_dimensions](uint32_t axis) { return input_dimensions[axis]; });
 
@@ -2206,12 +2196,11 @@ base::expected<OperandDescriptor, std::string> ValidateConcatAndInferOutput(
 
   const auto output_type = inputs[0].data_type();
 
-  static constexpr char kInputsParam[] = "inputs";
   if (!context_properties.data_type_limits.concat_inputs.Has(output_type)) {
     return base::unexpected(ErrorWithLabel(
-        label, NotSupportedArgumentTypeError(
-                   kInputsParam, output_type,
-                   context_properties.data_type_limits.concat_inputs)));
+        label,
+        NotSupportedInputArgumentTypeError(
+            output_type, context_properties.data_type_limits.concat_inputs)));
   }
 
   // The loop skips the first input to avoid repeated checks.
@@ -2265,12 +2254,19 @@ base::expected<OperandDescriptor, std::string> ValidatePreluAndInferOutput(
     const OperandDescriptor& input,
     const OperandDescriptor& slope,
     std::string_view label) {
-  if (!context_properties.data_type_limits.prelu_input.Has(input.data_type())) {
+  if (!context_properties.data_type_limits.prelu_input.Supports(input)) {
     return base::unexpected(ErrorWithLabel(
-        label, NotSupportedInputArgumentTypeError(
-                   input.data_type(),
+        label, NotSupportedInputArgumentError(
+                   input, context_properties.data_type_limits.prelu_input)));
+  }
+
+  if (!context_properties.data_type_limits.prelu_input.Supports(slope)) {
+    return base::unexpected(ErrorWithLabel(
+        label, NotSupportedArgumentError(
+                   kSlopeParam, slope,
                    context_properties.data_type_limits.prelu_input)));
   }
+
   if (input.data_type() != slope.data_type()) {
     return base::unexpected(ErrorWithLabel(
         label, "The data type of slope doesn't match the data type of input."));
@@ -2298,11 +2294,19 @@ ValidateQuantizeLinearAndInferOutput(
   RETURN_IF_ERROR(ValidateScaleZeroPointOperandShapeIsCompatibleWithInput(
       input.shape(), scale.shape(), zero_point.shape(), label));
 
-  if (!context_properties.data_type_limits.quantize_linear_input.Has(
-          input.data_type())) {
+  if (!context_properties.data_type_limits.quantize_linear_input.Supports(
+          input)) {
     return base::unexpected(ErrorWithLabel(
-        label, NotSupportedInputArgumentTypeError(
-                   input.data_type(),
+        label,
+        NotSupportedInputArgumentError(
+            input, context_properties.data_type_limits.quantize_linear_input)));
+  }
+
+  if (!context_properties.data_type_limits.quantize_linear_input.Supports(
+          scale)) {
+    return base::unexpected(ErrorWithLabel(
+        label, NotSupportedArgumentError(
+                   kScaleParam, scale,
                    context_properties.data_type_limits.quantize_linear_input)));
   }
 
@@ -2311,12 +2315,12 @@ ValidateQuantizeLinearAndInferOutput(
         label, "The data type of input and scale must be the same."));
   }
 
-  if (!context_properties.data_type_limits.quantize_linear_zero_point.Has(
-          zero_point.data_type())) {
+  if (!context_properties.data_type_limits.quantize_linear_zero_point.Supports(
+          zero_point)) {
     return base::unexpected(ErrorWithLabel(
         label,
-        NotSupportedInputArgumentTypeError(
-            zero_point.data_type(),
+        NotSupportedArgumentError(
+            kZeroPointParam, zero_point,
             context_properties.data_type_limits.quantize_linear_zero_point)));
   }
   // The data type of zero_point determines the output type.
@@ -2329,11 +2333,10 @@ base::expected<OperandDescriptor, std::string> ValidateTileAndInferOutput(
     const OperandDescriptor& input,
     base::span<const uint32_t> repetitions,
     std::string_view label) {
-  if (!context_properties.data_type_limits.tile_input.Has(input.data_type())) {
+  if (!context_properties.data_type_limits.tile_input.Supports(input)) {
     return base::unexpected(ErrorWithLabel(
-        label, NotSupportedInputArgumentTypeError(
-                   input.data_type(),
-                   context_properties.data_type_limits.tile_input)));
+        label, NotSupportedInputArgumentError(
+                   input, context_properties.data_type_limits.tile_input)));
   }
 
   if (repetitions.size() != input.Rank()) {
@@ -2366,12 +2369,11 @@ base::expected<OperandDescriptor, std::string> ValidateTransposeAndInferOutput(
     const OperandDescriptor& input,
     base::span<const uint32_t> permutation,
     std::string_view label) {
-  if (!context_properties.data_type_limits.transpose_input.Has(
-          input.data_type())) {
+  if (!context_properties.data_type_limits.transpose_input.Supports(input)) {
     return base::unexpected(ErrorWithLabel(
-        label, NotSupportedInputArgumentTypeError(
-                   input.data_type(),
-                   context_properties.data_type_limits.transpose_input)));
+        label,
+        NotSupportedInputArgumentError(
+            input, context_properties.data_type_limits.transpose_input)));
   }
 
   if (permutation.size() != static_cast<size_t>(input.Rank())) {
@@ -2402,16 +2404,11 @@ base::expected<OperandDescriptor, std::string> ValidateSliceAndInferOutput(
     const SliceAttributes& attributes) {
   const std::string& label = attributes.label;
   const auto input_rank = input.Rank();
-  if (input_rank == 0) {
-    return base::unexpected(
-        ErrorWithLabel(label, "The input should not be a scalar."));
-  }
 
-  if (!context_properties.data_type_limits.slice_input.Has(input.data_type())) {
+  if (!context_properties.data_type_limits.slice_input.Supports(input)) {
     return base::unexpected(ErrorWithLabel(
-        label, NotSupportedInputArgumentTypeError(
-                   input.data_type(),
-                   context_properties.data_type_limits.slice_input)));
+        label, NotSupportedInputArgumentError(
+                   input, context_properties.data_type_limits.slice_input)));
   }
 
   if (attributes.starts.size() != input_rank) {
@@ -2498,7 +2495,7 @@ base::expected<OperandDescriptor, std::string> ValidateReduceAndInferOutput(
     std::string_view label,
     base::span<const uint32_t> axes,
     bool keep_dimensions) {
-  const SupportedDataTypes& data_type_constraint = [&](ReduceKind kind) {
+  const SupportedTensors& tensor_constraint = [&](ReduceKind kind) {
     switch (kind) {
       case ReduceKind::kL1:
         return context_properties.data_type_limits.reduce_l1_input;
@@ -2523,10 +2520,9 @@ base::expected<OperandDescriptor, std::string> ValidateReduceAndInferOutput(
     }
   }(kind);
 
-  if (!data_type_constraint.Has(input.data_type())) {
-    return base::unexpected(
-        ErrorWithLabel(label, NotSupportedInputArgumentTypeError(
-                                  input.data_type(), data_type_constraint)));
+  if (!tensor_constraint.Supports(input)) {
+    return base::unexpected(ErrorWithLabel(
+        label, NotSupportedInputArgumentError(input, tensor_constraint)));
   }
 
   ASSIGN_OR_RETURN(std::vector<uint32_t> output_shape,
@@ -2545,22 +2541,21 @@ ValidateScatterElementsAndInferOutput(
     const OperandDescriptor& updates,
     const uint32_t axis,
     std::string_view label) {
-  if (!context_properties.data_type_limits.scatter_elements_input.Has(
-          input.data_type())) {
+  if (!context_properties.data_type_limits.scatter_elements_input.Supports(
+          input)) {
     return base::unexpected(ErrorWithLabel(
         label,
-        NotSupportedInputArgumentTypeError(
-            input.data_type(),
+        NotSupportedInputArgumentError(
+            input,
             context_properties.data_type_limits.scatter_elements_input)));
   }
 
-  static constexpr char kIndicesParam[] = "indices";
-  if (!context_properties.data_type_limits.scatter_elements_indices.Has(
-          indices.data_type())) {
+  if (!context_properties.data_type_limits.scatter_elements_indices.Supports(
+          indices)) {
     return base::unexpected(ErrorWithLabel(
         label,
-        NotSupportedArgumentTypeError(
-            kIndicesParam, indices.data_type(),
+        NotSupportedArgumentError(
+            kIndicesParam, indices,
             context_properties.data_type_limits.scatter_elements_indices)));
   }
 
@@ -2569,11 +2564,6 @@ ValidateScatterElementsAndInferOutput(
         ErrorWithLabel(label,
                        "The updates tensor data type should be the same as "
                        "input data type."));
-  }
-
-  if (input.Rank() == 0) {
-    return base::unexpected(
-        ErrorWithLabel(label, "The input should not be a scalar."));
   }
 
   if (input.Rank() <= axis) {
@@ -2615,21 +2605,27 @@ base::expected<OperandDescriptor, std::string> ValidateScatterNDAndInferOutput(
     const OperandDescriptor& indices,
     const OperandDescriptor& updates,
     std::string_view label) {
-  if (!context_properties.data_type_limits.scatter_nd_input.Has(
-          input.data_type())) {
+  if (!context_properties.data_type_limits.scatter_nd_input.Supports(input)) {
     return base::unexpected(ErrorWithLabel(
-        label, NotSupportedInputArgumentTypeError(
-                   input.data_type(),
-                   context_properties.data_type_limits.scatter_nd_input)));
+        label,
+        NotSupportedInputArgumentError(
+            input, context_properties.data_type_limits.scatter_nd_input)));
   }
 
-  static constexpr char kIndicesParam[] = "indices";
-  if (!context_properties.data_type_limits.scatter_nd_indices.Has(
-          indices.data_type())) {
+  if (!context_properties.data_type_limits.scatter_nd_indices.Supports(
+          indices)) {
     return base::unexpected(ErrorWithLabel(
-        label, NotSupportedArgumentTypeError(
-                   kIndicesParam, indices.data_type(),
+        label, NotSupportedArgumentError(
+                   kIndicesParam, indices,
                    context_properties.data_type_limits.scatter_nd_indices)));
+  }
+
+  if (!context_properties.data_type_limits.scatter_nd_updates.Supports(
+          updates)) {
+    return base::unexpected(ErrorWithLabel(
+        label, NotSupportedArgumentError(
+                   kUpdatesParam, updates,
+                   context_properties.data_type_limits.scatter_nd_updates)));
   }
 
   // Updates tensor's data type should be the same as input's.
@@ -2638,16 +2634,6 @@ base::expected<OperandDescriptor, std::string> ValidateScatterNDAndInferOutput(
         ErrorWithLabel(label,
                        "The updates tensor data type should be the same as "
                        "input data type."));
-  }
-
-  if (input.Rank() == 0) {
-    return base::unexpected(
-        ErrorWithLabel(label, "The input should not be a scalar."));
-  }
-
-  if (indices.Rank() == 0) {
-    return base::unexpected(
-        ErrorWithLabel(label, "The indices should not be a scalar."));
   }
 
   const uint32_t indices_last_dim_size = indices.shape()[indices.Rank() - 1];
@@ -2671,11 +2657,11 @@ base::expected<OperandDescriptor, std::string> ValidateScatterNDAndInferOutput(
 
   std::vector<uint32_t> expected_updates_shape;
   expected_updates_shape.reserve(checked_updates_rank.ValueOrDie());
-  base::ranges::copy(indices.shape().begin(), indices.shape().end() - 1,
-                     std::back_inserter(expected_updates_shape));
-  base::ranges::copy(input.shape().begin() + indices_last_dim_size,
-                     input.shape().end(),
-                     std::back_inserter(expected_updates_shape));
+  std::ranges::copy(indices.shape().begin(), indices.shape().end() - 1,
+                    std::back_inserter(expected_updates_shape));
+  std::ranges::copy(input.shape().begin() + indices_last_dim_size,
+                    input.shape().end(),
+                    std::back_inserter(expected_updates_shape));
 
   if (expected_updates_shape != updates.shape()) {
     return base::unexpected(
@@ -2690,20 +2676,11 @@ base::expected<OperandDescriptor, std::string> ValidateTriangularAndInferOutput(
     const ContextProperties& context_properties,
     const OperandDescriptor& input,
     std::string_view label) {
-  // According to WebNN spec:
-  // https://www.w3.org/TR/webnn/#api-mlgraphbuilder-triangular, the input
-  // tensor which is at least 2-D.
-  if (input.Rank() < 2) {
+  if (!context_properties.data_type_limits.triangular_input.Supports(input)) {
     return base::unexpected(ErrorWithLabel(
-        label, "The input rank must be larger than or equal to 2."));
-  }
-
-  if (!context_properties.data_type_limits.triangular_input.Has(
-          input.data_type())) {
-    return base::unexpected(ErrorWithLabel(
-        label, NotSupportedInputArgumentTypeError(
-                   input.data_type(),
-                   context_properties.data_type_limits.triangular_input)));
+        label,
+        NotSupportedInputArgumentError(
+            input, context_properties.data_type_limits.triangular_input)));
   }
 
   // The output tensor of triangular is the same shape and the same type as the
@@ -2717,30 +2694,25 @@ base::expected<OperandDescriptor, std::string> ValidateWhereAndInferOutput(
     const OperandDescriptor& true_value,
     const OperandDescriptor& false_value,
     std::string_view label) {
-  static constexpr char kConditionParam[] = "condition";
-  if (!context_properties.data_type_limits.where_condition.Has(
-          condition.data_type())) {
+  if (!context_properties.data_type_limits.where_condition.Supports(
+          condition)) {
     return base::unexpected(ErrorWithLabel(
-        label, NotSupportedArgumentTypeError(
-                   kConditionParam, condition.data_type(),
+        label, NotSupportedArgumentError(
+                   kConditionParam, condition,
                    context_properties.data_type_limits.where_condition)));
   }
 
-  static constexpr char kTrueValueParam[] = "trueValue";
-  if (!context_properties.data_type_limits.where_value.Has(
-          true_value.data_type())) {
+  if (!context_properties.data_type_limits.where_value.Supports(true_value)) {
     return base::unexpected(ErrorWithLabel(
-        label, NotSupportedArgumentTypeError(
-                   kTrueValueParam, true_value.data_type(),
+        label, NotSupportedArgumentError(
+                   kTrueValueParam, true_value,
                    context_properties.data_type_limits.where_value)));
   }
 
-  static constexpr char kFalseValueParam[] = "falseValue";
-  if (!context_properties.data_type_limits.where_value.Has(
-          false_value.data_type())) {
+  if (!context_properties.data_type_limits.where_value.Supports(false_value)) {
     return base::unexpected(ErrorWithLabel(
-        label, NotSupportedArgumentTypeError(
-                   kFalseValueParam, false_value.data_type(),
+        label, NotSupportedArgumentError(
+                   kFalseValueParam, false_value,
                    context_properties.data_type_limits.where_value)));
   }
 
@@ -2772,7 +2744,7 @@ base::expected<OperandDescriptor, std::string> ValidateWhereAndInferOutput(
 base::expected<void, std::string> ValidateAxes(base::span<const uint32_t> axes,
                                                uint32_t rank,
                                                std::string_view label) {
-  if (base::ranges::any_of(axes, [rank](uint32_t axis) {
+  if (std::ranges::any_of(axes, [rank](uint32_t axis) {
         return base::MakeStrictNum(axis) >= rank;
       })) {
     return base::unexpected(ErrorWithLabel(

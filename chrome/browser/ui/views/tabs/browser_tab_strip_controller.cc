@@ -8,11 +8,11 @@
 #include <memory>
 #include <utility>
 
-#include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -27,8 +27,6 @@
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/tab_ui_helper.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_keyed_service.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_service_factory.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_group.h"
@@ -82,8 +80,12 @@
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "ash/public/cpp/window_properties.h"
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_delegate.h"
+#include "chromeos/ash/experiences/system_web_apps/types/system_web_app_delegate.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
+
+#if defined(USE_AURA)
+#include "ui/aura/window.h"
+#endif
 
 using base::UserMetricsAction;
 using content::WebContents;
@@ -102,6 +104,24 @@ BrowserView* GetSourceBrowserViewInTabDragging() {
     }
   }
   return nullptr;
+}
+
+void DialogTimingToSource(
+    base::OnceCallback<void(CloseTabSource)> callback,
+    CloseTabSource source,
+    tab_groups::DeletionDialogController::DeletionDialogTiming timing) {
+  switch (timing) {
+    case tab_groups::DeletionDialogController::DeletionDialogTiming::
+        Synchronous: {
+      std::move(callback).Run(source);
+      return;
+    }
+    case tab_groups::DeletionDialogController::DeletionDialogTiming::
+        Asynchronous: {
+      std::move(callback).Run(CloseTabSource::kFromNonUIEvent);
+      return;
+    }
+  }
 }
 
 }  // namespace
@@ -375,7 +395,7 @@ void BrowserTabStripController::AddSelectionFromAnchorTo(int model_index) {
 void BrowserTabStripController::OnCloseTab(
     int model_index,
     CloseTabSource source,
-    base::OnceCallback<void()> callback) {
+    base::OnceCallback<void(CloseTabSource)> callback) {
   if (!web_app::IsTabClosable(model_, model_index)) {
     return;
   }
@@ -395,13 +415,14 @@ void BrowserTabStripController::OnCloseTab(
     // to prompt the user before the browser is allowed to close.
     const Browser::WarnBeforeClosingResult result =
         browser_view_->browser()->MaybeWarnBeforeClosing(base::BindOnce(
-            [](TabStrip* tab_strip, int model_index, CloseTabSource source,
+            [](TabStrip* tab_strip, int model_index,
                Browser::WarnBeforeClosingResult result) {
               if (result == Browser::WarnBeforeClosingResult::kOkToClose) {
-                tab_strip->CloseTab(tab_strip->tab_at(model_index), source);
+                tab_strip->CloseTab(tab_strip->tab_at(model_index),
+                                    CloseTabSource::kFromNonUIEvent);
               }
             },
-            base::Unretained(tabstrip_), model_index, source));
+            base::Unretained(tabstrip_), model_index));
 
     if (result != Browser::WarnBeforeClosingResult::kOkToClose) {
       return;
@@ -412,17 +433,20 @@ void BrowserTabStripController::OnCloseTab(
   std::vector<tab_groups::TabGroupId> groups_to_delete =
       model_->GetGroupsDestroyedFromRemovingIndices({model_index});
 
-  if (tab_groups::IsTabGroupsSaveV2Enabled() && !groups_to_delete.empty()) {
-    // If the user is destroying the last tab in the group via the tabstrip, a
-    // dialog is shown that will decide whether to destroy the tab or not. It
-    // will first ungroup the tab, then close the tab.
-    tab_groups::SavedTabGroupUtils::MaybeShowSavedTabGroupDeletionDialog(
-        browser_view_->browser(),
-        tab_groups::DeletionDialogController::DialogType::CloseTabAndDelete,
-        groups_to_delete, std::move(callback));
-  } else {
-    std::move(callback).Run();
+  if (!tab_groups::IsTabGroupsSaveV2Enabled() || groups_to_delete.empty()) {
+    std::move(callback).Run(source);
+    return;
   }
+
+  auto timing_mapped_callback =
+      base::BindOnce(&DialogTimingToSource, std::move(callback), source);
+
+  // If the user is destroying the last tab in a saved or shared group via the
+  // tabstrip, a dialog is shown that will decide whether to destroy the tab or
+  // not. It will first ungroup the tab, then close the tab.
+  tab_groups::SavedTabGroupUtils::MaybeShowSavedTabGroupDeletionDialog(
+      browser_view_->browser(), tab_groups::GroupDeletionReason::ClosedLastTab,
+      groups_to_delete, std::move(timing_mapped_callback));
 }
 
 void BrowserTabStripController::CloseTab(int model_index) {
@@ -808,10 +832,6 @@ void BrowserTabStripController::OnTabGroupChanged(
       tabstrip_->OnGroupEditorOpened(change.group);
       break;
     }
-    case TabGroupChange::kContentsChanged: {
-      tabstrip_->OnGroupContentsChanged(change.group);
-      break;
-    }
     case TabGroupChange::kVisualsChanged: {
       const TabGroupChange::VisualsChange* visuals_delta =
           change.GetVisualsChange();
@@ -869,10 +889,20 @@ void BrowserTabStripController::TabBlockedStateChanged(WebContents* contents,
 }
 
 void BrowserTabStripController::TabGroupedStateChanged(
-    std::optional<tab_groups::TabGroupId> group,
+    TabStripModel* tab_strip_model,
+    std::optional<tab_groups::TabGroupId> old_group,
+    std::optional<tab_groups::TabGroupId> new_group,
     tabs::TabInterface* tab,
     int index) {
-  tabstrip_->AddTabToGroup(std::move(group), index);
+  tabstrip_->AddTabToGroup(new_group, index);
+
+  if (old_group.has_value()) {
+    tabstrip_->OnGroupContentsChanged(old_group.value());
+  }
+
+  if (new_group.has_value()) {
+    tabstrip_->OnGroupContentsChanged(new_group.value());
+  }
 }
 
 void BrowserTabStripController::SetTabNeedsAttentionAt(int index,

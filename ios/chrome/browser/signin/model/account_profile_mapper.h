@@ -14,8 +14,10 @@
 #import "base/observer_list_types.h"
 #import "base/scoped_observation.h"
 #import "google_apis/gaia/gaia_id.h"
+#import "ios/chrome/browser/signin/model/account_widget_updater.h"
 #import "ios/chrome/browser/signin/model/system_identity_manager.h"
 
+@protocol ChangeProfileCommands;
 class GaiaId;
 class ProfileManagerIOS;
 @protocol SystemIdentity;
@@ -29,14 +31,18 @@ class AccountProfileMapper {
     ~Observer() override = default;
 
     // Called when the list of identities in a profile has changed.
-    virtual void OnIdentityListChanged() {}
+    virtual void OnIdentitiesInProfileChanged() {}
 
     // Called when the list of identities on device has changed.
     virtual void OnIdentitiesOnDeviceChanged() {}
 
-    // Called when information about `identity` (such as the name or the image)
-    // have been updated.
-    virtual void OnIdentityUpdated(id<SystemIdentity> identity) {}
+    // Called when information about an `identity` (such as the name or the
+    // image) in a profile have been updated.
+    virtual void OnIdentityInProfileUpdated(id<SystemIdentity> identity) {}
+
+    // Called when information about an `identity` (such as the name or the
+    // image) on the device have been updated.
+    virtual void OnIdentityOnDeviceUpdated(id<SystemIdentity> identity) {}
 
     // Called on identity refresh token updated events.
     // `identity` is the the identity for which the refresh token was updated.
@@ -69,6 +75,9 @@ class AccountProfileMapper {
   AccountProfileMapper& operator=(const AccountProfileMapper&) = delete;
 
   ~AccountProfileMapper();
+
+  // Sets the ChangeProfileCommands handler.
+  void SetChangeProfileCommandsHandler(id<ChangeProfileCommands> handler);
 
   // Adds/removes observers for a profile based on `profile_name`.
   void AddObserver(Observer* observer, std::string_view profile_name);
@@ -174,6 +183,8 @@ class AccountProfileMapper {
   raw_ptr<SystemIdentityManager> system_identity_manager_;
 
   raw_ptr<ProfileManagerIOS> profile_manager_;
+
+  std::unique_ptr<AccountWidgetUpdater> widget_updater_;
 
   std::unique_ptr<Assigner> assigner_;
 

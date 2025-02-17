@@ -205,7 +205,7 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
                                    const ContainerSelector&,
                                    const TreeScope* selector_tree_scope);
 
-  Font ComputeFont(Element&, const ComputedStyle&, const CSSPropertyValueSet&);
+  Font* ComputeFont(Element&, const ComputedStyle&, const CSSPropertyValueSet&);
 
   // FIXME: Rename to reflect the purpose, like didChangeFontSize or something.
   void InvalidateMatchedPropertiesCache();
@@ -345,7 +345,9 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
 
   void ApplyPropertiesFromCascade(StyleResolverState&, StyleCascade& cascade);
 
-  bool ApplyAnimatedStyle(StyleResolverState&, StyleCascade&);
+  bool ApplyAnimatedStyle(StyleResolverState&,
+                          StyleCascade&,
+                          const StyleRecalcContext&);
   void ApplyAnchorData(StyleResolverState&);
 
   void ApplyCallbackSelectors(StyleResolverState&);
@@ -359,6 +361,20 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
 
   bool IsForcedColorsModeEnabled() const;
 
+  enum UASheetCacheKeyIndex {
+    kHTMLUASheet,
+    kSVGUASheet,
+    kMathMLUASheet,
+    kFullscreenUASheet,
+    kPrintUASheet,
+    kQuirksUASheet,
+    kViewSourceUASheet,
+    kForcedColorsUASheet,
+    kJSONUASheet,
+    kViewTransitionUASheet,
+    kPseudoElementUASheet,
+  };
+
   template <typename Functor>
   void ForEachUARulesForElement(const Element& element,
                                 ElementRuleCollector* collector,
@@ -370,6 +386,11 @@ class CORE_EXPORT StyleResolver final : public GarbageCollected<StyleResolver> {
   const subtle::UncompressedMember<const ComputedStyle> initial_style_;
   const subtle::UncompressedMember<const ComputedStyle> initial_style_for_img_;
   SelectorFilter selector_filter_;
+
+  // Micro 1-element cache.
+  Member<RuleSet> media_controls_cache_key_;
+  RuleSetGroup media_controls_cached_rule_set_group_{
+      /*rule_set_group_index=*/0u};
 
   Member<Document> document_;
   Member<StyleRuleUsageTracker> tracker_;

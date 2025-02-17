@@ -11,13 +11,13 @@
 #include <utility>
 #include <vector>
 
-#include "base/auto_reset.h"
 #include "base/check_op.h"
 #include "base/containers/adapters.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/ranges.h"
+#include "base/strings/to_string.h"
 #include "base/task/common/task_annotator.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
@@ -1034,8 +1034,8 @@ void SurfaceAggregator::EmitSurfaceContent(
       features::kAllowForceMergeRenderPassWithRequireOverlayQuads);
   const bool force_merge_pass =
       allow_forced_merge_pass && !merge_pass && pass_is_mergeable &&
-      base::ranges::any_of(dest_pass_list_->back()->quad_list,
-                           &OverlayCandidate::RequiresOverlay);
+      std::ranges::any_of(dest_pass_list_->back()->quad_list,
+                          &OverlayCandidate::RequiresOverlay);
 
   if (merge_pass || force_merge_pass) {
     // Compute a clip rect in |dest_pass| coordinate space to ensure merged
@@ -2576,7 +2576,7 @@ void SurfaceAggregator::DebugLogSurface(const Surface* surface,
           static_cast<int>(referenced_surfaces_.size()),
           surface->surface_id().ToString().c_str(),
           surface->size_in_pixels().ToString().c_str(),
-          will_draw ? "true" : "false");
+          base::ToString(will_draw).c_str());
 }
 
 }  // namespace viz

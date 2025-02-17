@@ -55,6 +55,10 @@ class CollaborationServiceImpl : public CollaborationService,
       const data_sharing::GroupId& group_id) override;
   std::optional<data_sharing::GroupData> GetGroupData(
       const data_sharing::GroupId& group_id) override;
+  void DeleteGroup(const data_sharing::GroupId& group_id,
+                   base::OnceCallback<void(bool)> callback) override;
+  void LeaveGroup(const data_sharing::GroupId& group_id,
+                  base::OnceCallback<void(bool)> callback) override;
 
   // SyncServiceObserver implementation.
   void OnStateChanged(syncer::SyncService* sync) override;
@@ -84,7 +88,17 @@ class CollaborationServiceImpl : public CollaborationService,
   SigninStatus GetSigninStatus();
   CollaborationStatus GetCollaborationStatus();
   void RefreshServiceStatus();
-  void ExitConflictingFlows();
+  void ExitConflictingFlows(base::OnceCallback<void()> finish_callback);
+  void StartJoinFlowInternal(
+      std::unique_ptr<CollaborationControllerDelegate> delegate,
+      const data_sharing::GroupToken& token);
+  void StartShareOrManageFlowInternal(
+      std::unique_ptr<CollaborationControllerDelegate> delegate,
+      const tab_groups::EitherGroupID& group_id);
+  void OnCollaborationGroupRemoved(
+      const data_sharing::GroupId& group_id,
+      base::OnceCallback<void(bool)> callback,
+      data_sharing::DataSharingService::PeopleGroupActionOutcome result);
 
   ServiceStatus current_status_;
   base::ScopedObservation<syncer::SyncService, syncer::SyncServiceObserver>

@@ -12,6 +12,7 @@
 #include "components/omnibox/browser/autocomplete_provider_client.h"
 #include "components/omnibox/browser/autocomplete_provider_listener.h"
 #include "components/omnibox/browser/unscoped_extension_provider_delegate.h"
+#include "components/omnibox/browser/zero_suggest_provider.h"
 #include "components/search_engines/template_url_service.h"
 
 UnscopedExtensionProvider::UnscopedExtensionProvider(
@@ -35,14 +36,25 @@ void UnscopedExtensionProvider::Start(const AutocompleteInput& input,
   Stop(/*clear_cached_results=*/!minimal_changes,
        /*due_to_user_inactivity=*/false);
 
+  // Unscoped mode input should not be redirected to an extension in incognito.
+  if (client_->IsOffTheRecord()) {
+    return;
+  }
+
   // Extension suggestions are not allowed in keyword mode.
   if (input.InKeywordMode()) {
     return;
   }
 
-  // Extension suggestions are not allowed for zero-suggest or empty inputs.
-  if (input.IsZeroSuggest() ||
-      input.type() == metrics::OmniboxInputType::EMPTY) {
+  // See if zero suggest provider is eligible for zero suggest suggestions.
+  // This prevents only unscoped extension suggestions from appearing when
+  // other zps suggestions are not available.
+  auto [_, eligible] =
+      ZeroSuggestProvider::GetResultTypeAndEligibility(client_, input);
+
+  if ((input.IsZeroSuggest() ||
+       input.type() == metrics::OmniboxInputType::EMPTY) &&
+      !eligible) {
     return;
   }
 
@@ -71,8 +83,28 @@ void UnscopedExtensionProvider::Start(const AutocompleteInput& input,
 
 void UnscopedExtensionProvider::Stop(bool clear_cached_results,
                                      bool due_to_user_inactivity) {
-  AutocompleteProvider::Stop(clear_cached_results, due_to_user_inactivity);
-  delegate_->Stop(clear_cached_results);
+  // Ignore the stop timer since extension suggestions might take longer than
+  // 1500ms to generate (the stop timer gets triggered due to user inactivity).
+  if (!due_to_user_inactivity) {
+    AutocompleteProvider::Stop(clear_cached_results, due_to_user_inactivity);
+    delegate_->Stop(clear_cached_results);
+  }
+}
+
+void UnscopedExtensionProvider::DeleteMatch(const AutocompleteMatch& match) {
+  const std::u16string& suggestion_text = match.contents;
+  std::erase_if(matches_, [&match](const AutocompleteMatch& i) {
+    return i.keyword == match.keyword &&
+           i.fill_into_edit == match.fill_into_edit;
+  });
+
+  const TemplateURL* const template_url =
+      GetTemplateURLService()->GetTemplateURLForKeyword(match.keyword);
+
+  if ((template_url->type() == TemplateURL::OMNIBOX_API_EXTENSION) &&
+      delegate_) {
+    delegate_->DeleteSuggestion(template_url, suggestion_text);
+  }
 }
 
 TemplateURLService* UnscopedExtensionProvider::GetTemplateURLService() const {

@@ -6,6 +6,7 @@
 #define COMPONENTS_COLLABORATION_INTERNAL_MESSAGING_MESSAGING_BACKEND_SERVICE_IMPL_H_
 
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
@@ -70,7 +71,11 @@ class MessagingBackendServiceImpl : public MessagingBackendService,
   std::vector<ActivityLogItem> GetActivityLog(
       const ActivityLogQueryParams& params) override;
   void ClearDirtyTabMessagesForGroup(
-      tab_groups::EitherGroupID group_id) override;
+      const data_sharing::GroupId& collaboration_group_id) override;
+  void ClearPersistentMessage(
+      const base::Uuid& message_id,
+      std::optional<PersistentNotificationType> type) override;
+  void RemoveMessages(const std::vector<base::Uuid>& message_ids) override;
   void AddActivityLogForTesting(
       data_sharing::GroupId collaboration_id,
       const std::vector<ActivityLogItem>& activity_log) override;
@@ -114,6 +119,10 @@ class MessagingBackendServiceImpl : public MessagingBackendService,
  private:
   void OnStoreInitialized(bool success);
 
+  void ClearDirtyTabMessagesForGroup(
+      const data_sharing::GroupId& collaboration_group_id,
+      const std::optional<tab_groups::SavedTabGroup>& tab_group);
+
   // We need to be able to find the currently selected tab on startup so we know
   // what changed in OnTabSelected.
   void SetCurrentlySelectedTabOnStartup();
@@ -139,6 +148,7 @@ class MessagingBackendServiceImpl : public MessagingBackendService,
 
   // Uses the provided data to create TabGroupMessageMetadata.
   TabGroupMessageMetadata CreateTabGroupMessageMetadataFromCollaborationId(
+      const collaboration_pb::Message& message,
       std::optional<tab_groups::SavedTabGroup> tab_group,
       std::optional<data_sharing::GroupId> collaboration_group_id);
 
@@ -185,6 +195,11 @@ class MessagingBackendServiceImpl : public MessagingBackendService,
       const std::optional<tab_groups::SavedTabGroup>& tab_group,
       const std::optional<tab_groups::SavedTabGroupTab>& tab,
       const std::optional<PersistentNotificationType>& type);
+
+  InstantMessage CreateInstantMessage(
+      const collaboration_pb::Message& message,
+      const std::optional<tab_groups::SavedTabGroup>& tab_group,
+      const std::optional<tab_groups::SavedTabGroupTab>& tab);
 
   // Creates individual messages based on `base_message` per type, and notifies
   // oservers to display the messages.

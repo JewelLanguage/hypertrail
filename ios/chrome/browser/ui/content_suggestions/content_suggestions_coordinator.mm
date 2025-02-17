@@ -153,6 +153,7 @@
 #import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_show_more_view_controller.h"
 #import "ios/chrome/browser/ui/content_suggestions/set_up_list/set_up_list_tap_delegate.h"
 #import "ios/chrome/browser/ui/content_suggestions/set_up_list/utils.h"
+#import "ios/chrome/browser/ui/content_suggestions/shop_card/shop_card_mediator.h"
 #import "ios/chrome/browser/ui/content_suggestions/tab_resumption/tab_resumption_mediator.h"
 #import "ios/chrome/browser/ui/content_suggestions/tips/tips_magic_stack_mediator.h"
 #import "ios/chrome/browser/ui/content_suggestions/tips/tips_metrics.h"
@@ -274,6 +275,7 @@ using segmentation_platform::TipIdentifier;
   MostVisitedTilesMediator* _mostVisitedTilesMediator;
   TabResumptionMediator* _tabResumptionMediator;
   PriceTrackingPromoMediator* _priceTrackingPromoMediator;
+  ShopCardMediator* _shopCardMediator;
   SendTabPromoMediator* _sendTabPromoMediator;
 
   MagicStackCollectionViewController* _magicStackCollectionView;
@@ -288,7 +290,7 @@ using segmentation_platform::TipIdentifier;
   DCHECK(self.browser);
   DCHECK(self.NTPActionsDelegate);
   if (self.started) {
-    // Prevent this coordinator from being started twice in a row
+    // Prevent this coordinator from being started twice in a row.
     return;
   }
   _started = YES;
@@ -348,6 +350,9 @@ using segmentation_platform::TipIdentifier;
 
   self.contentSuggestionsMediator = [[ContentSuggestionsMediator alloc] init];
 
+  ChromeAccountManagerService* accountManagerService =
+      ChromeAccountManagerServiceFactory::GetForProfile(profile);
+
   NSMutableArray* moduleMediators = [NSMutableArray array];
 
   _mostVisitedTilesMediator = [[MostVisitedTilesMediator alloc]
@@ -355,8 +360,8 @@ using segmentation_platform::TipIdentifier;
                   prefService:prefs
              largeIconService:largeIconService
                largeIconCache:cache
-       URLLoadingBrowserAgent:UrlLoadingBrowserAgent::FromBrowser(
-                                  self.browser)];
+       URLLoadingBrowserAgent:UrlLoadingBrowserAgent::FromBrowser(self.browser)
+        accountManagerService:accountManagerService];
   _mostVisitedTilesMediator.contentSuggestionsDelegate = self.delegate;
   _mostVisitedTilesMediator.contentSuggestionsMetricsRecorder =
       self.contentSuggestionsMetricsRecorder;
@@ -389,7 +394,9 @@ using segmentation_platform::TipIdentifier;
         initWithLocalState:GetApplicationContext()->GetLocalState()
                prefService:prefs
            identityManager:identityManager
-                   browser:self.browser];
+                   browser:self.browser
+           shoppingService:commerce::ShoppingServiceFactory::GetForProfile(
+                               profile)];
     _tabResumptionMediator.NTPActionsDelegate = self.NTPActionsDelegate;
     _tabResumptionMediator.contentSuggestionsMetricsRecorder =
         self.contentSuggestionsMetricsRecorder;
@@ -418,6 +425,16 @@ using segmentation_platform::TipIdentifier;
     _priceTrackingPromoMediator.actionDelegate = self;
     _priceTrackingPromoMediator.NTPActionsDelegate = self.NTPActionsDelegate;
     [moduleMediators addObject:_priceTrackingPromoMediator];
+  }
+  if (base::FeatureList::IsEnabled(commerce::kShopCard) &&
+      (commerce::kShopCardVariation.Get() == commerce::kShopCardArm1 ||
+       commerce::kShopCardVariation.Get() == commerce::kShopCardArm2)) {
+    // If ShopCard experiment is on, create the ShopCard mediator.
+    // Note at this point we don't know which of the 4 variants will show.
+    _shopCardMediator = [[ShopCardMediator alloc]
+        initWithShoppingService:commerce::ShoppingServiceFactory::GetForProfile(
+                                    profile)];
+    [moduleMediators addObject:_shopCardMediator];
   }
 
   if (IsIOSParcelTrackingEnabled() &&
@@ -1282,7 +1299,7 @@ using segmentation_platform::TipIdentifier;
   ShowSigninCommand* command = [[ShowSigninCommand alloc]
       initWithOperation:operation
                identity:nil
-            accessPoint:signin_metrics::AccessPoint::ACCESS_POINT_SET_UP_LIST
+            accessPoint:signin_metrics::AccessPoint::kSetUpList
             promoAction:signin_metrics::PromoAction::
                             PROMO_ACTION_NO_SIGNIN_PROMO
              completion:completion];
@@ -1477,7 +1494,7 @@ using segmentation_platform::TipIdentifier;
 
 - (bool)hasIdentitiesOnDevice {
   ProfileIOS* profile = self.browser->GetProfile();
-  if (AreSeparateProfilesForManagedAccountsEnabled()) {
+  if (IsUseAccountListFromIdentityManagerEnabled()) {
     return !IdentityManagerFactory::GetForProfile(profile)
                 ->GetAccountsOnDevice()
                 .empty();

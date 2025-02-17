@@ -46,7 +46,6 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.InputHintChecker;
 import org.chromium.base.Log;
 import org.chromium.base.PowerMonitor;
-import org.chromium.base.SysUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.memory.MemoryPurgeManager;
 import org.chromium.base.metrics.RecordHistogram;
@@ -60,7 +59,6 @@ import org.chromium.base.supplier.UnownedUserDataSupplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ActivityUtils;
-import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.ChromeActivitySessionTracker;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.ChromeKeyboardVisibilityDelegate;
@@ -172,6 +170,7 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelectorProfileSupplier;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorSupplier;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.chrome.browser.tinker_tank.TinkerTankDelegate;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
@@ -505,12 +504,6 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
                 (profile) -> {
                     BookmarkModel bookmarkModel =
                             profile == null ? null : BookmarkModel.getForProfile(profile);
-                    // Give BookmarkBridge a Supplier<PartnerBookmark.BookmarkIterator> so that
-                    // PartnerBookmarksShim can be loaded lazily when BookmarkModel is needed.
-                    // Set this prior to setting the BookmarkModel supplier to ensure that the
-                    // bookmark model can be loaded immediately when it's available
-                    bookmarkModel.setPartnerBookmarkIteratorSupplier(
-                            () -> AppHooks.get().getPartnerBookmarkIterator());
                     mBookmarkModelSupplier.set(bookmarkModel);
                 });
 
@@ -609,7 +602,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
                     new TabContentManager(
                             this,
                             mBrowserControlsManagerSupplier.get(),
-                            !SysUtils.isLowEndDevice(),
+                            !TabUiFeatureUtilities.shouldUseListMode(),
                             tabModelSelector != null ? tabModelSelector::getTabById : null,
                             TabWindowManagerSingleton.getInstance()));
 
@@ -792,6 +785,10 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         // outside the UI thread. This call should fully initialize the CompositorView if it hasn't
         // been yet.
         mCompositorViewHolderSupplier.get().setRootView(rootView);
+        mCompositorViewHolderSupplier
+                .get()
+                .getCompositorView()
+                .setActivityTabProvider(getActivityTabProvider());
 
         super.onInitialLayoutInflationComplete();
     }
@@ -1483,18 +1480,21 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     public void onProvideAssistContent(AssistContent outContent) {
         Tab tab = getActivityTab();
         // No information is provided in incognito mode and overview mode.
-        if (tab != null && !tab.isIncognito() && !isInOverviewMode()) {
+        if (tab != null && !tab.isOffTheRecord() && !isInOverviewMode()) {
             outContent.setWebUri(Uri.parse(tab.getUrl().getSpec()));
             PageContentProviderMetrics.recordUrlAttachedToAssistContent(true);
+            EnterpriseInfo.OwnedState enterpriseInfoState =
+                    EnterpriseInfo.getInstance().getDeviceEnterpriseInfoSync();
 
             if (ChromeFeatureList.isEnabled(ChromeFeatureList.ANDROID_PDF_ASSIST_CONTENT)
                     && tab.getNativePage() instanceof PdfPage pdfPage) {
-                EnterpriseInfo.OwnedState state =
-                        EnterpriseInfo.getInstance().getDeviceEnterpriseInfoSync();
+
                 RecordHistogram.recordBooleanHistogram(
-                        "Android.Pdf.AssistContent.IsEnterpriseInfoCached", state != null);
-                if (state == null) return;
-                String structuredData = pdfPage.requestAssistContent(state.mProfileOwned);
+                        "Android.Pdf.AssistContent.IsEnterpriseInfoCached",
+                        enterpriseInfoState != null);
+                if (enterpriseInfoState == null) return;
+                String structuredData =
+                        pdfPage.requestAssistContent(enterpriseInfoState.mProfileOwned);
                 PageContentProviderMetrics.recordPdfStructuredDataAttachedToAssistContent(
                         structuredData != null);
                 if (structuredData != null) {
@@ -1502,9 +1502,15 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
                 }
             } else if (ChromeFeatureList.isEnabled(ChromeFeatureList.PAGE_CONTENT_PROVIDER)
                     && UrlUtilities.isHttpOrHttps(tab.getUrl())) {
+                PageContentProviderMetrics.recordEnterpriseInfoCacheStateForWebAssistContent(
+                        enterpriseInfoState != null);
+                if (enterpriseInfoState == null) return;
+
                 String pageContentStructuredData =
                         PageContentProviderImpl.getAssistContentStructuredDataForUrl(
-                                tab.getUrl().getSpec(), getActivityTabProvider());
+                                tab.getUrl().getSpec(),
+                                getActivityTabProvider(),
+                                enterpriseInfoState.mProfileOwned);
                 PageContentProviderMetrics.recordWebStructuredDataAttachedToAssistContent(
                         pageContentStructuredData != null);
                 if (pageContentStructuredData != null) {
@@ -1708,23 +1714,9 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
                 new ModalDialogManager(
                         new AppModalPresenter(this),
                         ModalDialogManager.ModalDialogType.APP,
-                        getEdgeToEdgeStateProvider());
+                        getEdgeToEdgeStateProvider(),
+                        EdgeToEdgeUtils.isEdgeToEdgeEverywhereEnabled());
         return dialogManager;
-    }
-
-    @Override
-    protected boolean supportsEdgeToEdge() {
-        // TODO (crbug.com/377959826): Check whether bottom chin is implemented once top insets are
-        //  properly accounted for in the edge-to-edge logic. Return false when bottom chin is
-        //  enabled, true otherwise.
-        return false;
-    }
-
-    @Override
-    protected boolean shouldContentFitWindowInsets() {
-        return EdgeToEdgeUtils.isEdgeToEdgeEverywhereEnabled()
-                && !EdgeToEdgeUtils.isEdgeToEdgeBottomChinEnabled()
-                && !EdgeToEdgeUtils.isEdgeToEdgeWebOptInEnabled();
     }
 
     /**
@@ -2371,7 +2363,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
             RecordHistogram.recordEnumeratedHistogram(
                     "Settings.OpenSettingsFromMenu.PerProfileType",
                     type,
-                    BrowserProfileType.MAX_VALUE + 1);
+                    BrowserProfileType.MAX_VALUE);
             return true;
         }
 
@@ -2399,11 +2391,11 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
             }
             RecordUserAction.record("MobileMenuHistory");
             HistoryManagerUtils.showHistoryManager(
-                    this, currentTab, getTabModelSelector().isIncognitoSelected());
+                    this, currentTab, getTabModelSelector().getCurrentModel().getProfile());
             RecordHistogram.recordEnumeratedHistogram(
                     "Android.OpenHistoryFromMenu.PerProfileType",
                     type,
-                    BrowserProfileType.MAX_VALUE + 1);
+                    BrowserProfileType.MAX_VALUE);
             return true;
         }
 
@@ -2462,6 +2454,12 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         if (id == R.id.offline_page_id) {
             DownloadUtils.downloadOfflinePage(this, currentTab);
             RecordUserAction.record("MobileMenuDownloadPage");
+            return true;
+        }
+
+        if (id == R.id.download_page_id) {
+            DownloadUtils.downloadOfflinePage(this, currentTab);
+            RecordUserAction.record("MobileMenuItemDownloadPage");
             return true;
         }
 
@@ -2762,13 +2760,14 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     }
 
     /**
-     * Switch between phone and tablet mode and do the tab re-parenting in the meantime.
-     * Also update switch USE_MOBILE_UA depends on whether the device is tablet sized.
+     * Switch between phone and tablet mode and do the tab re-parenting in the meantime. Also update
+     * switch USE_MOBILE_UA depends on whether the device is tablet sized.
+     *
      * @param isTablet whether the current screen is tablet size.
      * @return whether screen layout change lead to a recreate.
      */
     private boolean onScreenLayoutSizeChange(boolean isTablet) {
-        DeviceUtils.updateDeviceSpecificUserAgentSwitch(isTablet);
+        DeviceUtils.updateDeviceSpecificUserAgentSwitch(this);
 
         if (mTabReparentingControllerSupplier.get() != null && !mIsTabReparentingPrepared) {
             mTabReparentingControllerSupplier.get().prepareTabsForReparenting();

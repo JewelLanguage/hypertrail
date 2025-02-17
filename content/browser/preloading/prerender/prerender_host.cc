@@ -8,7 +8,9 @@
 #include <optional>
 
 #include "base/debug/alias.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/observer_list.h"
 #include "base/run_loop.h"
@@ -1178,6 +1180,7 @@ void PrerenderHost::SetFailureReason(
     case PrerenderFinalStatus::kTabClosedWithoutUserGesture:
     case PrerenderFinalStatus::kSpeculationRuleRemoved:
     case PrerenderFinalStatus::kOtherPrerenderedPageActivated:
+    case PrerenderFinalStatus::kBrowsingDataRemoved:
       return;
     case PrerenderFinalStatus::kDestroyed:
     case PrerenderFinalStatus::kLowEndDevice:
@@ -1245,7 +1248,6 @@ void PrerenderHost::SetFailureReason(
     case PrerenderFinalStatus::kAllPrerenderingCanceled:
     case PrerenderFinalStatus::kWindowClosed:
     case PrerenderFinalStatus::kSlowNetwork:
-    case PrerenderFinalStatus::kV8OptimizerDisabled:
     case PrerenderFinalStatus::kPrerenderFailedDuringPrefetch:
       if (attempt_) {
         attempt_->SetFailureReason(
@@ -1525,7 +1527,6 @@ bool PrerenderHost::ShouldAbortNavigationBecausePrefetchUnavailable() const {
       case PreloadingEligibility::kHttpsOnly:
       case PreloadingEligibility::kHttpOrHttpsOnly:
       case PreloadingEligibility::kSlowNetwork:
-      case PreloadingEligibility::kV8OptimizerDisabled:
       case PreloadingEligibility::kUserHasCookies:
       case PreloadingEligibility::kNonDefaultStoragePartition:
       case PreloadingEligibility::kRetryAfter:

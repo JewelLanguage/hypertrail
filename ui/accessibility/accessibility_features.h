@@ -63,6 +63,10 @@ AX_BASE_EXPORT bool IsAccessibilityPruneRedundantInlineConnectivityEnabled();
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityTreeForViews);
 AX_BASE_EXPORT bool IsAccessibilityTreeForViewsEnabled();
 
+// Serialize Views' accessibility data as soon as it changes.
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kViewsAccessibilitySerializeOnDataChange);
+AX_BASE_EXPORT bool IsViewsAccessibilitySerializeOnDataChangeEnabled();
+
 // Use Alternative mechanism for acquiring image descriptions.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kImageDescriptionsAlternateRouting);
 AX_BASE_EXPORT bool IsImageDescriptionsAlternateRoutingEnabled();
@@ -111,6 +115,11 @@ AX_BASE_EXPORT bool IsTextBasedAudioDescriptionEnabled();
 // process to handle document markers, which will be platform agnositc)
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kUseAXPositionForDocumentMarkers);
 AX_BASE_EXPORT bool IsUseAXPositionForDocumentMarkersEnabled();
+
+// Randomly turn the accessibility engine on based on certain conditions. We do
+// not put this flag in chrome://flags so we can get the cleanest data possible.
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAXRandomizedStressTests);
+AX_BASE_EXPORT bool IsAXRandomizedStressTestsEnabled();
 
 #if BUILDFLAG(IS_WIN)
 // Use Chrome-specific accessibility COM API.
@@ -169,6 +178,10 @@ AX_BASE_EXPORT bool IsAccessibilityMagnifierFollowsChromeVoxEnabled();
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityMouseKeys);
 AX_BASE_EXPORT bool IsAccessibilityMouseKeysEnabled();
 
+// Show captions on a braille display.
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityCaptionsOnBrailleDisplay);
+AX_BASE_EXPORT bool IsAccessibilityCaptionsOnBrailleDisplayEnabled();
+
 // Controls whether the shake cursor to locate feature is available.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityShakeToLocate);
 AX_BASE_EXPORT bool IsAccessibilityShakeToLocateEnabled();
@@ -198,6 +211,11 @@ AX_BASE_EXPORT bool IsAccessibilityManifestV3EnabledForEnhancedNetworkTts();
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if !BUILDFLAG(IS_ANDROID)
+// Use the AXTree fixing code, which may be an assortment of different
+// tools/methods to fix the AXTree. This is not available on Android.
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAXTreeFixing);
+AX_BASE_EXPORT bool IsAXTreeFixingEnabled();
+
 // Use the experimental Accessibility Service.
 // TODO(katydek): Provide a more descriptive name here.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityService);
@@ -276,6 +294,16 @@ AX_BASE_EXPORT bool IsAccessibilityRemoteUIAppEnabled();
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kBlockRootWindowAccessibleNameChangeEvent);
 AX_BASE_EXPORT bool IsBlockRootWindowAccessibleNameChangeEventEnabled();
 #endif  // BUILDFLAG(IS_MAC)
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+// Enable the component updater to download the wasm tts engine component.
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kWasmTtsComponentUpdaterEnabled);
+AX_BASE_EXPORT bool IsWasmTtsComponentUpdaterEnabled();
+// Disable the wasm tts engine component to use dev version local extension
+// files.
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kWasmTtsEngineAutoInstallDisabled);
+AX_BASE_EXPORT bool IsWasmTtsEngineAutoInstallDisabled();
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 
 }  // namespace features
 

@@ -42,16 +42,19 @@ class EchoAIManagerImpl : public blink::mojom::AIManager {
   EchoAIManagerImpl();
 
   // `blink::mojom::AIManager` implementation.
-  void CanCreateLanguageModel(CanCreateLanguageModelCallback callback) override;
+  void CanCreateLanguageModel(
+      blink::mojom::AILanguageModelAvailabilityOptionsPtr options,
+      CanCreateLanguageModelCallback callback) override;
   void CreateLanguageModel(
       mojo::PendingRemote<blink::mojom::AIManagerCreateLanguageModelClient>
           client,
       blink::mojom::AILanguageModelCreateOptionsPtr options) override;
-  void CanCreateSummarizer(CanCreateSummarizerCallback callback) override;
+  void CanCreateSummarizer(blink::mojom::AISummarizerCreateOptionsPtr options,
+                           CanCreateSummarizerCallback callback) override;
   void CreateSummarizer(
       mojo::PendingRemote<blink::mojom::AIManagerCreateSummarizerClient> client,
       blink::mojom::AISummarizerCreateOptionsPtr options) override;
-  void GetModelInfo(GetModelInfoCallback callback) override;
+  void GetLanguageModelParams(GetLanguageModelParamsCallback callback) override;
   void CanCreateWriter(blink::mojom::AIWriterCreateOptionsPtr options,
                        CanCreateWriterCallback callback) override;
   void CreateWriter(

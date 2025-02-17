@@ -79,7 +79,7 @@ class PictureInPictureMetricIntegrationTest
   }
 
   void ExpectBlinkCounterUMABucketCount(const blink::mojom::WebFeature& sample,
-                                        base::HistogramBase::Count count) {
+                                        base::HistogramBase::Count32 count) {
     histogram_tester()->ExpectBucketCount(kBlinkUseCounterHistogram, sample,
                                           count);
   }
@@ -103,10 +103,8 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureMetricIntegrationTest,
   // Close browser to trigger metric recording.
   CloseBrowserSynchronously(browser());
 
-  // TODO(crbug.com/368058093): Update once determined if UKM can be added.
-  //
-  // Verify that a UKM metric entry for Blink_UseCounter was not recorded.
-  ASSERT_FALSE(RecordedMetricForBlinkCounterUKMEntry(
+  // Verify that a UKM metric entry for Blink_UseCounter was recorded.
+  ASSERT_TRUE(RecordedMetricForBlinkCounterUKMEntry(
       blink::mojom::WebFeature::kMediaSessionEnterPictureInPicture,
       test_page_url));
 

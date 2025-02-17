@@ -25,6 +25,7 @@
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/profiles/profile_picker.h"
 #include "chrome/browser/ui/signin/signin_view_controller.h"
+#include "chrome/browser/ui/signin/signin_view_controller_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -54,6 +55,11 @@
 #include "ui/views/layout/layout_types.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
+
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+#include "chrome/browser/ui/signin/chrome_signout_confirmation_prompt.h"
+#include "chrome/browser/ui/webui/signin/signout_confirmation/signout_confirmation_ui.h"
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
 namespace {
 
@@ -161,6 +167,28 @@ SigninViewControllerDelegateViews::CreateProfileCustomizationWebView(
   web_ui->Initialize(
       base::BindOnce(&CloseModalSigninInBrowser, browser->AsWeakPtr(),
                      show_profile_switch_iph, show_supervised_user_iph));
+  return web_view;
+}
+
+// static
+std::unique_ptr<views::WebView>
+SigninViewControllerDelegateViews::CreateSignoutConfirmationWebView(
+    Browser* browser,
+    ChromeSignoutConfirmationPromptVariant variant,
+    base::OnceCallback<void(ChromeSignoutConfirmationChoice)> callback) {
+  // Set an initial height of 0 since the actual dialog's height will be set
+  // dynamically based on its contents, so the initial height does not matter.
+  std::unique_ptr<views::WebView> web_view = CreateDialogWebView(
+      browser, GURL(chrome::kChromeUISignoutConfirmationURL),
+      /*dialog_height=*/0, kModalDialogWidth,
+      InitializeSigninWebDialogUI(false));
+
+  SignoutConfirmationUI* web_ui = web_view->GetWebContents()
+                                      ->GetWebUI()
+                                      ->GetController()
+                                      ->GetAs<SignoutConfirmationUI>();
+  DCHECK(web_ui);
+  web_ui->Initialize(browser, variant, std::move(callback));
   return web_view;
 }
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
@@ -283,6 +311,25 @@ SigninViewControllerDelegateViews::GetWebContentsModalDialogHost() {
   return browser_->window()->GetWebContentsModalDialogHost();
 }
 
+void SigninViewControllerDelegateViews::OnViewAddedToWidget(
+    View* observed_view) {
+  DCHECK_EQ(observed_view, content_view_);
+
+  // If the web view contains a WebUI, explicitly set the corner radii to clip
+  // the WebUI contents within the corner radii.
+  // Workaround for crbug.com/358379367.
+  if (content_view_->GetWebContents() &&
+      content_view_->GetWebContents()->GetWebUI()) {
+    content_view_->holder()->SetCornerRadii(
+        gfx::RoundedCornersF(GetCornerRadius()));
+  }
+}
+
+void SigninViewControllerDelegateViews::OnViewIsDeleting(View* observed_view) {
+  DCHECK_EQ(observed_view, content_view_);
+  content_view_observation_.Reset();
+}
+
 SigninViewControllerDelegateViews::SigninViewControllerDelegateViews(
     std::unique_ptr<views::WebView> content_view,
     Browser* browser,
@@ -301,6 +348,7 @@ SigninViewControllerDelegateViews::SigninViewControllerDelegateViews(
   DCHECK(browser_->tab_strip_model()->GetActiveWebContents())
       << "A tab must be active to present the sign-in modal dialog.";
   DCHECK(content_view_);
+  content_view_observation_.Observe(content_view_);
 
   // Use the layout manager of `this` to automatically translate its preferred
   // size to the owning Widget.
@@ -399,8 +447,8 @@ void SigninViewControllerDelegateViews::DisplayModal() {
           this, host_web_contents);
       if (should_show_close_button_) {
         auto border = std::make_unique<views::BubbleBorder>(
-            views::BubbleBorder::NONE, views::BubbleBorder::STANDARD_SHADOW,
-            kColorProfilesReauthDialogBorder);
+            views::BubbleBorder::NONE, views::BubbleBorder::STANDARD_SHADOW);
+        border->SetColor(kColorProfilesReauthDialogBorder);
         GetBubbleFrameView()->SetBubbleBorder(std::move(border));
       }
       constrained_window::ShowModalDialog(
@@ -476,6 +524,18 @@ SigninViewControllerDelegate::CreateProfileCustomizationDelegate(
       browser, ui::mojom::ModalType::kWindow, false, false,
       is_local_profile_creation);
 }
+
+// static
+SigninViewControllerDelegate*
+SigninViewControllerDelegate::CreateSignoutConfirmationDelegate(
+    Browser* browser,
+    ChromeSignoutConfirmationPromptVariant variant,
+    base::OnceCallback<void(ChromeSignoutConfirmationChoice)> callback) {
+  return new SigninViewControllerDelegateViews(
+      SigninViewControllerDelegateViews::CreateSignoutConfirmationWebView(
+          browser, variant, std::move(callback)),
+      browser, ui::mojom::ModalType::kWindow, true, false);
+}
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
@@ -487,6 +547,7 @@ SigninViewControllerDelegate::CreateManagedUserNoticeDelegate(
         create_param) {
   bool profile_creation_required_by_policy =
       create_param->profile_creation_required_by_policy;
+  bool is_oidc_enrollment = create_param->is_oidc_account;
 
   if (profile_creation_required_by_policy &&
       base::FeatureList::IsEnabled(
@@ -546,9 +607,12 @@ SigninViewControllerDelegate::CreateManagedUserNoticeDelegate(
 
   // Block all navigations to avoid users bypassing the dialog using another
   // window.
+  // Does not block navigation to OIDC profile enrollment landing page since we
+  // need to display information there.
   if (profile_creation_required_by_policy &&
       base::FeatureList::IsEnabled(
-          features::kManagedProfileRequiredInterstitial)) {
+          features::kManagedProfileRequiredInterstitial) &&
+      !is_oidc_enrollment) {
     content::WebContents* active_contents =
         browser->tab_strip_model()->GetActiveWebContents();
     // Reload the active web contents so that the managed profile required

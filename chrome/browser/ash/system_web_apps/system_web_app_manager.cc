@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
 
+#include <algorithm>
 #include <iterator>
 #include <memory>
 #include <optional>
@@ -32,7 +33,6 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/one_shot_event.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
@@ -69,8 +69,6 @@
 #include "chrome/browser/ash/system_web_apps/system_web_app_background_task.h"
 #include "chrome/browser/ash/system_web_apps/system_web_app_icon_checker.h"
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager_factory.h"
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_background_task_info.h"
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_delegate.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profiles_state.h"
@@ -86,6 +84,8 @@
 #include "chrome/browser/web_applications/web_app_system_web_app_delegate_map_utils.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/common/chrome_features.h"
+#include "chromeos/ash/experiences/system_web_apps/types/system_web_app_background_task_info.h"
+#include "chromeos/ash/experiences/system_web_apps/types/system_web_app_delegate.h"
 #include "components/prefs/pref_service.h"
 #include "components/version_info/version_info.h"
 #include "components/webapps/browser/install_result_code.h"
@@ -208,7 +208,7 @@ web_app::ExternalInstallOptions CreateInstallOptionsForSystemApp(
       delegate.ShouldHandleFileOpenIntents();
 
   const auto& search_terms = delegate.GetAdditionalSearchTerms();
-  base::ranges::transform(
+  std::ranges::transform(
       search_terms, std::back_inserter(install_options.additional_search_terms),
       &l10n_util::GetStringUTF8);
   return install_options;
@@ -657,7 +657,7 @@ void SystemWebAppManager::RecordSystemWebAppInstallResults(
   // the install success rate.
   std::map<GURL, web_app::ExternallyManagedAppManager::InstallResult>
       results_to_report;
-  base::ranges::copy_if(
+  std::ranges::copy_if(
       install_results,
       std::inserter(results_to_report, results_to_report.end()),
       [](const auto& url_and_result) {

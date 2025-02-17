@@ -262,6 +262,12 @@
   <message name="IDS_EXTENSIONS_ITEM_ALLOW_INCOGNITO" desc="The text next to the checkbox to enable an extension in Incognito mode.">
     Allow in Incognito
   </message>
+  <message name="IDS_EXTENSIONS_ITEM_ALLOW_USER_SCRIPTS" desc="The text next to the checkbox to enable an extension to run user scripts.">
+    Allow User Scripts
+  </message>
+  <message name="IDS_EXTENSIONS_ALLOW_USER_SCRIPTS_WARNING" desc="Warns the user that the extension will be able to run code not review by Google. Displayed in extensions management UI after an extension is selected to allow these scripts.">
+    The extension will be able to run code which has not been reviewed by Google. It may be unsafe and you should only enable this if you know what you are doing.
+  </message>
   <message name="IDS_EXTENSIONS_ITEM_DEPENDENCIES" desc="The label above a list of any extensions that depend on this extension.">
     The following extensions depend on this extension:
   </message>
@@ -499,6 +505,9 @@
   <message name="IDS_EXTENSIONS_EDIT_SHORTCUT_BUTTON_LABEL" desc="The label for a button to edit the shortcut.">
     Edit shortcut <ph name="SHORTCUT">$1</ph> for <ph name="EXTENSION_NAME">$2</ph>
   </message>
+  <message name="IDS_EXTENSIONS_SET_SHORTCUT_IN_SYSTEM_SETTINGS" desc="The label to indicate that shortcuts are managed in system settings instead of within Chrome.">
+    Set in system settings
+  </message>
   <message name="IDS_EXTENSIONS_SHORTCUT_SCOPE_LABEL" desc="The label for the dropdown menu that lets the user choose the scope of an extension command (within chrome or global).">
     Scope of <ph name="SHORTCUT">$1</ph> for <ph name="EXTENSION_NAME">$2</ph>
   </message>
@@ -590,6 +599,9 @@
   <message name="IDS_EXTENSIONS_SC_KEEP_EXT" desc="The label on the overflow menu to keep an extension.">
     Keep this extension
   </message>
+  <message name="IDS_EXTENSIONS_SC_THREEDOT_DETAILS" desc="The label on the overflow menu to go to the extensions detail page.">
+    Get more details
+  </message>
   <message name="IDS_EXTENSIONS_SC_REMOVE_ALL" desc="The generic label for a button to remove all extensions.">
     Remove all
   </message>
@@ -668,7 +680,7 @@
   </message>
 </if>
 
-<if expr="chromeos_ash">
+<if expr="is_chromeos">
   <!-- Extensions Kiosk apps -->
   <message name="IDS_EXTENSIONS_MANAGE_KIOSK_APP" desc="Label of the button to bring up kiosk management overlay on chrome extensions page.">
     Manage kiosk applications

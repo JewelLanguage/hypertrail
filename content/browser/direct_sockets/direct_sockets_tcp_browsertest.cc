@@ -48,6 +48,7 @@
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
+#include "third_party/blink/public/common/permissions_policy/permissions_policy_declaration.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -747,7 +748,7 @@ class NoCoiPermissionIsolatedWebAppContentBrowserClient
       WebContents* web_contents,
       const url::Origin& app_origin) override {
     return {{blink::ParsedPermissionsPolicyDeclaration(
-        blink::mojom::PermissionsPolicyFeature::kDirectSockets,
+        network::mojom::PermissionsPolicyFeature::kDirectSockets,
         /*allowed_origins=*/{},
         /*self_if_matches=*/app_origin,
         /*matches_all_origins=*/false, /*matches_opaque_src=*/false)}};

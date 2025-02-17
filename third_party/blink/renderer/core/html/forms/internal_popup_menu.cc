@@ -464,7 +464,7 @@ void InternalPopupMenu::AddElementStyle(ItemIterationContext& context,
 
     const FontDescription& base_font = context.BaseFont();
     const FontDescription& font_description =
-        style->GetFont().GetFontDescription();
+        style->GetFont()->GetFontDescription();
     if (base_font.ComputedPixelSize() != font_description.ComputedPixelSize()) {
       // We don't use FontDescription::specifiedSize() because this element
       // might have its own zoom level.
@@ -579,7 +579,8 @@ CSSFontSelector* InternalPopupMenu::CreateCSSFontSelector(
 }
 
 void InternalPopupMenu::SetValueAndClosePopup(int num_value,
-                                              const String& string_value) {
+                                              const String& string_value,
+                                              const bool is_keyboard_event) {
   DCHECK(popup_);
   DCHECK(owner_element_);
   if (!string_value.empty()) {
@@ -608,9 +609,17 @@ void InternalPopupMenu::SetValueAndClosePopup(int num_value,
     event.SetTimeStamp(base::TimeTicks::Now());
     Element* owner = &OwnerElement();
     if (LocalFrame* frame = owner->GetDocument().GetFrame()) {
-      frame->GetEventHandler().HandleTargetedMouseEvent(
-          owner, event, event_type_names::kMouseup, Vector<WebMouseEvent>(),
-          Vector<WebMouseEvent>());
+      // Only dispatch mouseup event when the interaction was not keyboard
+      // initiated.
+      // https://crbug.com/40698108
+      if (!RuntimeEnabledFeatures::
+              SelectNoMouseUpForKeyboardSelectionEnabled() ||
+          !is_keyboard_event) {
+        frame->GetEventHandler().HandleTargetedMouseEvent(
+            owner, event, event_type_names::kMouseup, Vector<WebMouseEvent>(),
+            Vector<WebMouseEvent>());
+      }
+
       frame->GetEventHandler().HandleTargetedMouseEvent(
           owner, event, event_type_names::kClick, Vector<WebMouseEvent>(),
           Vector<WebMouseEvent>());
@@ -757,8 +766,8 @@ void InternalPopupMenu::SetMenuListOptionsBoundsInAXTree(
   Frame* frame = owner_element_->GetDocument().GetFrame();
   while (frame->Owner()) {
     if (auto* frame_view = frame->View()) {
-        gfx::Point frame_point = frame_view->Location();
-        popup_origin.Offset(-frame_point.x(), -frame_point.y());
+      gfx::Point frame_point = frame_view->Location();
+      popup_origin.Offset(-frame_point.x(), -frame_point.y());
     }
     frame = frame->Parent();
   }

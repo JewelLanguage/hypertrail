@@ -727,6 +727,7 @@ void RemoteFrame::ScrollRectToVisible(
 
   scroll_into_view_util::ScrollRectToVisible(*owner_object, absolute_rect,
                                              std::move(params),
+                                             /*container=*/nullptr,
                                              /*from_remote_frame=*/true);
 }
 
@@ -746,9 +747,9 @@ void RemoteFrame::IntrinsicSizingInfoOfChildChanged(
   sizing_info.aspect_ratio = info->aspect_ratio;
   sizing_info.has_width = info->has_width;
   sizing_info.has_height = info->has_height;
-  View()->SetIntrinsicSizeInfo(sizing_info);
+  View()->SetNaturalDimensions(sizing_info);
 
-  owner->IntrinsicSizingInfoChanged();
+  owner->NaturalSizingInfoChanged();
 }
 
 // Update the proxy's SecurityContext with new sandbox flags or permissions

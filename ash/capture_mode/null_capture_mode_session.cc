@@ -135,8 +135,15 @@ ActionButtonView* NullCaptureModeSession::AddActionButton(
 
 void NullCaptureModeSession::AddSmartActionsButton() {}
 
+void NullCaptureModeSession::MaybeShowScannerDisclaimer(
+    base::RepeatingClosure accept_callback,
+    base::RepeatingClosure decline_callback) {}
+
 void NullCaptureModeSession::OnScannerActionsFetched(
-    std::vector<ScannerActionViewModel> scanner_actions) {}
+    ScannerSession::FetchActionsResponse actions_response) {}
+
+void NullCaptureModeSession::ShowActionContainerError(
+    const std::u16string& error_message) {}
 
 void NullCaptureModeSession::InitInternal() {
   layer()->SetName("NullCaptureModeSession");

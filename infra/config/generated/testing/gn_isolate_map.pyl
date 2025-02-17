@@ -125,7 +125,7 @@
     "type": "windowed_test_launcher",
   },
   "ash_components_unittests": {
-    "label": "//ash/components:ash_components_unittests",
+    "label": "//chromeos/ash/experiences:ash_components_unittests",
     "type": "windowed_test_launcher",
   },
   "ash_pixeltests": {
@@ -819,6 +819,7 @@
   "dawn_end2end_tests": {
     "label": "//third_party/dawn/src/dawn/tests:dawn_end2end_tests",
     "type": "windowed_test_launcher",
+    "skip_usage_check": True,
   },
   "dawn_perf_tests": {
     "label": "//third_party/dawn/src/dawn/tests:dawn_perf_tests",
@@ -967,10 +968,12 @@
   "gl_tests": {
     "label": "//gpu:gl_tests",
     "type": "windowed_test_launcher",
+    "skip_usage_check": True,
   },
   "gl_unittests": {
     "label": "//ui/gl:gl_unittests",
     "type": "windowed_test_launcher",
+    "skip_usage_check": True,
   },
   "gl_unittests_ozone": {
     "label": "//ui/gl:gl_unittests_ozone",
@@ -1418,10 +1421,6 @@
     "label": "//components/optimization_guide/internal:ondevice_model_benchmark",
     "type": "additional_compile_target",
   },
-  "ondevice_model_example": {
-    "label": "//components/optimization_guide/internal:ondevice_model_example",
-    "type": "additional_compile_target",
-  },
   "ondevice_stability_tests": {
     "label": "//components/optimization_guide/internal/testing:ondevice_stability_tests",
     "type": "generated_script",
@@ -1512,16 +1511,6 @@
   "performance_test_suite": {
     "label": "//chrome/test:performance_test_suite",
     "type": "generated_script",
-  },
-  "performance_test_suite_android_clank_trichrome_bundle": {
-    "label": "//chrome/test:performance_test_suite_android_clank_trichrome_bundle",
-    "type": "generated_script",
-    "skip_usage_check": True,
-  },
-  "performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle": {
-    "label": "//chrome/test:performance_test_suite_android_clank_trichrome_chrome_google_64_32_bundle",
-    "type": "generated_script",
-    "skip_usage_check": True,
   },
   "performance_test_suite_android_trichrome_chrome_google_64_32_bundle": {
     "label": "//chrome/test:performance_test_suite_android_trichrome_chrome_google_64_32_bundle",

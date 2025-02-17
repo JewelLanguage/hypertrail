@@ -4,7 +4,6 @@
 
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
-import 'chrome://resources/cr_elements/cr_icons.css.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/cr_elements/cr_toggle/cr_toggle.js';
 import 'chrome://resources/cr_elements/cr_tooltip/cr_tooltip.js';
@@ -285,6 +284,10 @@ export class ExtensionsDetailViewElement extends
     return this.data.incognitoAccess.isEnabled && this.incognitoAvailable;
   }
 
+  protected showUserScriptSectionToggle_(): boolean {
+    return this.data.userScriptsAccess.isEnabled;
+  }
+
   protected onEnableToggleChange_() {
     this.delegate.setItemEnabled(this.data.id, this.$.enableToggle.checked);
     this.$.enableToggle.checked = this.isEnabled_();
@@ -374,7 +377,7 @@ export class ExtensionsDetailViewElement extends
   protected onPinnedToToolbarChange_() {
     this.delegate.setItemPinnedToToolbar(
         this.data.id,
-        this.shadowRoot!
+        this.shadowRoot
             .querySelector<ExtensionsToggleRowElement>(
                 '#pin-to-toolbar')!.checked);
   }
@@ -382,15 +385,23 @@ export class ExtensionsDetailViewElement extends
   protected onAllowIncognitoChange_() {
     this.delegate.setItemAllowedIncognito(
         this.data.id,
-        this.shadowRoot!
+        this.shadowRoot
             .querySelector<ExtensionsToggleRowElement>(
                 '#allow-incognito')!.checked);
+  }
+
+  protected onAllowUserScriptsChange_() {
+    this.delegate.setItemAllowedUserScripts(
+        this.data.id,
+        this.shadowRoot
+            .querySelector<ExtensionsToggleRowElement>(
+                '#allow-user-scripts')!.checked);
   }
 
   protected onAllowOnFileUrlsChange_() {
     this.delegate.setItemAllowedOnFileUrls(
         this.data.id,
-        this.shadowRoot!
+        this.shadowRoot
             .querySelector<ExtensionsToggleRowElement>(
                 '#allow-on-file-urls')!.checked);
   }
@@ -398,7 +409,7 @@ export class ExtensionsDetailViewElement extends
   protected onCollectErrorsChange_() {
     this.delegate.setItemCollectsErrors(
         this.data.id,
-        this.shadowRoot!
+        this.shadowRoot
             .querySelector<ExtensionsToggleRowElement>(
                 '#collect-errors')!.checked);
   }
@@ -473,7 +484,7 @@ export class ExtensionsDetailViewElement extends
 
   protected onShowAccessRequestsChange_() {
     const showAccessRequestsToggle =
-        this.shadowRoot!.querySelector<ExtensionsToggleRowElement>(
+        this.shadowRoot.querySelector<ExtensionsToggleRowElement>(
             '#show-access-requests-toggle');
     assert(showAccessRequestsToggle);
     this.delegate.setShowAccessRequestsInToolbar(

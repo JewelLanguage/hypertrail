@@ -42,6 +42,7 @@
 #include "net/http/http_status_code.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/webid/login_status_options.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/gfx/image/image_unittest_util.h"
 #include "url/gurl.h"
@@ -482,7 +483,8 @@ class TestIdpNetworkRequestManager : public MockIdpNetworkRequestManager {
 
   void DownloadAndDecodeImage(const GURL& url,
                               ImageCallback callback) override {
-    EXPECT_TRUE(url == GURL(kAccountPicture) || url == GURL(kAccountPicture404))
+    EXPECT_TRUE(url == GURL(kAccountPicture) ||
+                url == GURL(kAccountPicture404) || url == GURL(kRpBrandIconUrl))
         << url;
     ++num_fetched_[FetchedEndpoint::PICTURE];
     if (url == GURL(kAccountPicture404)) {
@@ -843,12 +845,15 @@ class TestPermissionDelegate : public NiceMock<MockPermissionDelegate> {
     return (it != idp_signin_statuses_.end()) ? it->second : std::nullopt;
   }
 
-  void SetIdpSigninStatus(const url::Origin& idp_origin,
-                          bool idp_signin_status) override {
+  void SetIdpSigninStatus(
+      const url::Origin& idp_origin,
+      bool idp_signin_status,
+      base::optional_ref<const blink::common::webid::LoginStatusOptions>
+          options) override {
     idp_signin_statuses_[idp_origin] = idp_signin_status;
     // Call parent so that EXPECT_CALL() works.
-    NiceMock<MockPermissionDelegate>::SetIdpSigninStatus(idp_origin,
-                                                         idp_signin_status);
+    NiceMock<MockPermissionDelegate>::SetIdpSigninStatus(
+        idp_origin, idp_signin_status, std::nullopt);
   }
 };
 
@@ -868,7 +873,7 @@ class TestIdentityRegistry : public NiceMock<MockIdentityRegistry> {
 
   explicit TestIdentityRegistry(
       content::WebContents* web_contents,
-      base::WeakPtr<FederatedIdentityModalDialogViewDelegate> delegate,
+      base::WeakPtr<IdentityRegistryDelegate> delegate,
       const GURL& idp_config_url)
       : NiceMock<MockIdentityRegistry>(web_contents, delegate, idp_config_url) {
   }
@@ -1841,6 +1846,7 @@ TEST_F(FederatedAuthRequestImplTest, WellKnownNotInListButRegistered) {
       .WillOnce(Return(registry));
 
   RunAuthTest(requestParameters, kExpectationSuccess, config);
+  EXPECT_FALSE(DidFetch(FetchedEndpoint::CLIENT_METADATA));
 }
 
 // Test that the well-known file has too many provider urls.
@@ -3009,6 +3015,9 @@ TEST_F(FederatedAuthRequestImplTest, MetricsForSuccessfulSignInCase) {
   histogram_tester_.ExpectUniqueSample(
       "Blink.FedCm.VerifyingDialogResult",
       static_cast<int>(FedCmVerifyingDialogResult::kSuccessExplicit), 1);
+  histogram_tester_.ExpectUniqueSample(
+      "Blink.FedCm.FrameType",
+      static_cast<int>(FedCmRequesterFrameType::kMainFrame), 1);
 
   ExpectUKMPresence("Timing.ShowAccountsDialog");
   ExpectUKMPresenceInternal(
@@ -3029,6 +3038,8 @@ TEST_F(FederatedAuthRequestImplTest, MetricsForSuccessfulSignInCase) {
   ExpectUkmValue(
       "VerifyingDialogResult",
       static_cast<int>(FedCmVerifyingDialogResult::kSuccessExplicit));
+  ExpectUkmValue("FrameType",
+                 static_cast<int>(FedCmRequesterFrameType::kMainFrame));
 
   ExpectStatusMetrics(TokenStatus::kSuccessUsingTokenInHttpResponse);
   CheckAllFedCmSessionIDs();
@@ -3866,7 +3877,7 @@ TEST_F(FederatedAuthRequestImplTest, ReorderMultipleAccounts) {
 // IdpSigninStatus bit.
 TEST_F(FederatedAuthRequestImplTest, IdpSigninStatusTestFirstTimeFetchSuccess) {
   EXPECT_CALL(*test_permission_delegate_,
-              SetIdpSigninStatus(OriginFromString(kProviderUrlFull), true))
+              SetIdpSigninStatus(OriginFromString(kProviderUrlFull), true, _))
       .Times(1);
 
   std::unique_ptr<IdpNetworkRequestManagerParamChecker> checker =
@@ -3883,7 +3894,7 @@ TEST_F(FederatedAuthRequestImplTest, IdpSigninStatusTestFirstTimeFetchSuccess) {
 TEST_F(FederatedAuthRequestImplTest,
        IdpSigninStatusTestFirstTimeFetchNoFailureUi) {
   EXPECT_CALL(*test_permission_delegate_,
-              SetIdpSigninStatus(OriginFromString(kProviderUrlFull), false))
+              SetIdpSigninStatus(OriginFromString(kProviderUrlFull), false, _))
       .Times(1);
   MockConfiguration configuration = kConfigurationValid;
   configuration.idp_info[kProviderUrlFull].accounts_response.parse_status =
@@ -4278,7 +4289,7 @@ TEST_F(
   test_permission_delegate_
       ->idp_signin_statuses_[OriginFromString(kProviderUrlFull)] = std::nullopt;
   EXPECT_CALL(*test_permission_delegate_,
-              SetIdpSigninStatus(OriginFromString(kProviderUrlFull), true));
+              SetIdpSigninStatus(OriginFromString(kProviderUrlFull), true, _));
 
   RunAuthTest(kDefaultRequestParameters, kExpectationSuccess,
               kConfigurationValid);
@@ -5204,7 +5215,6 @@ class IdpNetworkRequestMetricsRecorder : public TestIdpNetworkRequestManager {
 
   void SendSuccessfulTokenRequestMetrics(
       const GURL& metrics_endpoint_url,
-      bool did_show_ui,
       base::TimeDelta api_call_to_show_dialog_time,
       base::TimeDelta show_dialog_to_continue_clicked_time,
       base::TimeDelta account_selected_to_token_response_time,
@@ -6334,7 +6344,7 @@ TEST_F(FederatedAuthRequestImplTest, GetDisclosureFieldsEmpty) {
   base::test::ScopedFeatureList list;
   list.InitAndEnableFeature(features::kFedCmAuthz);
   // An unknown field is being requested.
-  EXPECT_THAT(GetDisclosureFields({"phone"}), ElementsAre());
+  EXPECT_THAT(GetDisclosureFields({"address"}), ElementsAre());
   // Nothing is requested.
   EXPECT_THAT(GetDisclosureFields({}), ElementsAre());
 }
@@ -6349,13 +6359,32 @@ TEST_F(FederatedAuthRequestImplTest, GetDisclosureFields) {
   // When the default fields are explicitly passed, we should mediate them.
   EXPECT_THAT(GetDisclosureFields({"name", "email", "picture"}),
               ElementsAre(Field::kName, Field::kEmail, Field::kPicture));
-  // When a superset of the default fields is passed, we should mediate the
-  // default fields.
+  // When a superset of the supported fields is passed, we should mediate the
+  // supported fields.
   EXPECT_THAT(
       GetDisclosureFields({"name", "email", "picture", "locale", "phone"}),
       ElementsAre(Field::kName, Field::kEmail, Field::kPicture));
 }
 
+TEST_F(FederatedAuthRequestImplTest,
+       GetDisclosureFieldsWithAlternativeIdentifiers) {
+  base::test::ScopedFeatureList list;
+  list.InitAndEnableFeature(features::kFedCmAlternativeIdentifiers);
+  // When a superset of the supported fields is passed, we should mediate the
+  // supported fields.
+  EXPECT_THAT(
+      GetDisclosureFields({"name", "email", "picture", "locale", "phone"}),
+      ElementsAre(Field::kName, Field::kEmail, Field::kPicture,
+                  Field::kPhoneNumber));
+}
+
+TEST_F(FederatedAuthRequestImplTest,
+       GetDisclosureFieldsWithAlternativeIdentifiersDisabled) {
+  base::test::ScopedFeatureList list;
+  list.InitAndDisableFeature(features::kFedCmAlternativeIdentifiers);
+  // We should only support the new identifiers if the flag is enabled
+  EXPECT_THAT(GetDisclosureFields({"username", "phone"}), ElementsAre());
+}
 TEST_F(FederatedAuthRequestImplTest, GetDisclosureFieldsSubsetOfDefault) {
   base::test::ScopedFeatureList list;
   list.InitWithFeatures({features::kFedCmAuthz, features::kFedCmFlexibleFields},

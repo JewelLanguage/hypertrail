@@ -10,7 +10,7 @@
 # Devices
 # tags: [ android-nexus-5x android-pixel-2 android-pixel-4
 #             android-pixel-6 android-shield-android-tv android-sm-a137f
-#             android-sm-a235m android-sm-s911u1
+#             android-sm-a236b android-sm-s911u1
 #         chromeos-board-amd64-generic chromeos-board-eve chromeos-board-jacuzzi
 #             chromeos-board-octopus chromeos-board-volteer
 #         fuchsia-board-astro fuchsia-board-nelson fuchsia-board-sherlock
@@ -78,6 +78,8 @@
 #         webgpu-service-worker
 #         webgpu-dedicated-worker
 #         webgpu-shared-worker ]
+# WebGPU Compat context
+# tags: [ compat-default compat-min-es31 ]
 # Clang coverage
 # tags: [ clang-coverage no-clang-coverage ]
 # Skia Graphite
@@ -482,13 +484,6 @@ crbug.com/1426916 [ chromeos chromeos-board-amd64-generic passthrough ] deqp/fun
 crbug.com/891953 [ mac ] WebglExtension_OVR_multiview2 [ Failure ]
 crbug.com/891953 [ android ] WebglExtension_OVR_multiview2 [ Failure ]
 
-# Platform-independent failures due to a WebGL roll.
-crbug.com/371971708 conformance/context/context-lost.html [ Failure ]
-crbug.com/371971708 conformance/offscreencanvas/context-lost-restored-worker.html [ Failure ]
-crbug.com/371971708 conformance/offscreencanvas/context-lost-restored.html [ Failure ]
-crbug.com/371971708 conformance/offscreencanvas/context-lost-worker.html [ Failure ]
-crbug.com/371971708 conformance/offscreencanvas/context-lost.html [ Failure ]
-crbug.com/371971708 conformance2/state/gl-enum-tests.html [ Failure ]
 
 # ========================
 # Conformance expectations
@@ -532,14 +527,13 @@ crbug.com/365680830 [ mac angle-metal apple ] deqp/functional/gles3/occlusionque
 
 crbug.com/angleproject/4417 [ win angle-d3d11 ] conformance2/rendering/framebuffer-render-to-layer-angle-issue.html [ Failure ]
 crbug.com/angleproject/1465 [ win angle-d3d11 ] conformance2/glsl3/tricky-loop-conditions.html [ Failure ]
+crbug.com/angleproject/389733590 [ win angle-d3d11 ] conformance/extensions/khr-parallel-shader-compile.html [ RetryOnFailure ]
 
 ## Win / NVIDIA ##
 
 crbug.com/1073613 [ angle-d3d11 win nvidia ] conformance2/textures/misc/tex-3d-mipmap-levels-intel-bug.html [ Failure ]
 crbug.com/1073613 [ angle-d3d11 win nvidia ] conformance2/textures/misc/tex-mipmap-levels.html [ Failure ]
 crbug.com/1073613 [ angle-d3d11 win nvidia ] deqp/functional/gles3/shadertexturefunction/texturesize.html [ Failure ]
-crbug.com/389733590 [ angle-d3d11 win nvidia ] conformance/extensions/khr-parallel-shader-compile.html [ RetryOnFailure ]
-
 
 ## Win / AMD ##
 
@@ -549,11 +543,10 @@ crbug.com/389733590 [ angle-d3d11 win nvidia ] conformance/extensions/khr-parall
 # wildcard flaky suppression for all of the tests.
 crbug.com/483282 [ angle-d3d11 win amd ] conformance2/rendering/blitframebuffer-stencil-only.html [ Failure ]
 
-
-
-
 ## Win / Intel ##
 
+crbug.com/384257970 [ angle-d3d11 intel-0x9bc5 win ] conformance/textures/canvas_sub_rectangle/* [ RetryOnFailure ]
+crbug.com/384257970 [ angle-d3d11 intel-0x9bc5 win ] conformance2/textures/canvas_sub_rectangle/* [ RetryOnFailure ]
 
 ## Win / Adreno 690 / D3D11
 crbug.com/1523062 [ win11 qualcomm-0x41333430 angle-d3d11 ] conformance/rendering/bind-framebuffer-flush-bug.html [ Failure ]
@@ -671,7 +664,7 @@ crbug.com/630800 [ angle-opengl intel mac ] conformance2/rendering/framebuffer-c
 crbug.com/630800 [ nvidia mac ] conformance2/rendering/framebuffer-completeness-unaffected.html [ Failure ]
 crbug.com/630800 [ angle-opengl intel mac ] deqp/functional/gles3/fbocompleteness.html [ Failure ]
 crbug.com/630800 [ nvidia mac ] deqp/functional/gles3/fbocompleteness.html [ Failure ]
-crbug.com/1289803 [ angle-opengl mac mac-x86_64 oop-c ] conformance2/extensions/webgl-multi-draw-instanced-base-vertex-base-instance.html [ Failure ]
+crbug.com/1289803 [ angle-opengl mac-x86_64 oop-c sonoma ] conformance2/extensions/webgl-multi-draw-instanced-base-vertex-base-instance.html [ Failure ]
 
 
 ## Mac Retina NVIDIA ##
@@ -683,9 +676,6 @@ crbug.com/996344 [ mac nvidia-0xfe9 ] conformance2/textures/misc/tex-base-level-
 crbug.com/784817 [ mac nvidia-0xfe9 ] conformance/glsl/bugs/init-array-with-loop.html [ Failure ]
 crbug.com/772651 [ mac nvidia ] conformance/glsl/bugs/vector-scalar-arithmetic-inside-loop-complex.html [ Failure ]
 crbug.com/795052 [ mac nvidia-0xfe9 ] conformance2/uniforms/draw-with-uniform-blocks.html [ Failure ]
-crbug.com/1457723 [ bigsur nvidia-0xfe9 angle-opengl ] conformance2/textures/canvas_sub_rectangle/tex-3d-* [ Failure ]
-crbug.com/1475765 [ bigsur nvidia-0xfe9 angle-opengl ] conformance/textures/canvas_sub_rectangle/tex-2d-rgba-rgba-unsigned_short_5_5_5_1.html [ Failure ]
-crbug.com/1475765 [ angle-opengl bigsur nvidia-0xfe9 nvidia_lt_31.0.15.4601 ] conformance2/textures/canvas_sub_rectangle/tex-2d-rgb5_a1-rgba-unsigned_short_5_5_5_1.html [ Failure ]
 crbug.com/1488444 [ mac-x86_64 nvidia-0xfe9 angle-opengl passthrough ] conformance2/rendering/vertex-id-large-count.html [ Failure ]
 
 ## Mac AMD ##
@@ -746,7 +736,6 @@ crbug.com/328102507 [ mac amd angle-opengl graphite-disabled asan ] conformance/
 
 crbug.com/372295133 [ amd-0x679e angle-metal monterey passthrough ] deqp/functional/gles3/textureshadow/2d_array_linear_mipmap_linear_equal.html [ Failure ]
 crbug.com/374696517 [ mac amd-0x7340 angle-metal ] deqp/functional/gles3/uniformbuffers/random.html [ RetryOnFailure ]
-crbug.com/374691239 [ amd-0x679e angle-metal monterey ] deqp/functional/gles3/texturefiltering/2d_array_combinations_05.html [ RetryOnFailure ]
 
 ## Mac Intel ##
 
@@ -808,6 +797,8 @@ crbug.com/982292 [ mac nvidia angle-opengl passthrough ] deqp/functional/gles3/i
 
 ## Mac ASAN ##
 
+# Flaky glyph cache miss
+crbug.com/396434680 [ asan mac amd-0x7340 passthrough ] deqp/functional/gles3/fbocolorbuffer/tex2darray_02.html [ Failure ]
 
 ####################
 # Linux failures   #
@@ -918,7 +909,15 @@ crbug.com/angleproject/7904 [ chromeos chromeos-board-amd64-generic passthrough 
 # New extension tests failing on ChromeOS VM
 crbug.com/angleproject/8315 [ chromeos chromeos-board-amd64-generic passthrough ] WebglExtension_EXT_render_snorm [ Failure ]
 
+crbug.com/326755442 [ chromeos intel mesa_ge_21.0 passthrough ] conformance2/extensions/ext-render-snorm.html [ Failure ]
 
+## Volteer ##
+crbug.com/332743717 [ chromeos cros-chrome chromeos-board-volteer ] conformance2/canvas/drawingbuffer-storage-test.html [ Failure ]
+crbug.com/40947854 [ chromeos cros-chrome chromeos-board-volteer ] conformance2/rendering/blitframebuffer-filter-outofbounds.html [ Failure ]
+crbug.com/40947856 [ chromeos cros-chrome chromeos-board-volteer ] conformance2/textures/canvas_sub_rectangle/tex-2d-r8ui-red_integer-unsigned_byte.html [ Failure ]
+crbug.com/40947856 [ chromeos cros-chrome chromeos-board-volteer ] conformance2/textures/webgl_canvas/tex-2d-r8ui-red_integer-unsigned_byte.html [ Failure ]
+# Fragment position generation rounds incorrectly on intel line primitives.
+crbug.com/40947858 [ chromeos intel passthrough ] deqp/functional/gles3/clipping.html [ Failure ]
 
 ##############################
 # Linux Failures #

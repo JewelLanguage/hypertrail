@@ -110,6 +110,7 @@ ProductSpecificationsUI::ProductSpecificationsUI(content::WebUI* web_ui)
       {"menuOpenInNewWindow", IDS_COMPARE_CONTEXT_MENU_OPEN_IN_NEW_WINDOW},
       {"menuRename", IDS_COMPARE_CONTEXT_MENU_RENAME},
       {"menuTooltipMore", IDS_COMPARE_EDIT_MORE},
+      {"notAvailableTooltip", IDS_COMPARE_DESCRIPTION_NOT_AVAILABLE},
       {"numSelected", IDS_COMPARE_NUM_ITEMS_SELECTED},
       {"offlineMessage", IDS_COMPARE_OFFLINE_TOAST_MESSAGE},
       {"openProductPage", IDS_COMPARE_OPEN_PRODUCT_PAGE_IN_NEW_TAB},
@@ -127,6 +128,7 @@ ProductSpecificationsUI::ProductSpecificationsUI(content::WebUI* web_ui)
       {"tableNameInputA11yLabel", IDS_COMPARE_TITLE_INPUT_A11Y_LABEL},
       {"thumbsDown", IDS_THUMBS_DOWN},
       {"thumbsUp", IDS_THUMBS_UP},
+      {"undoTableDeletion", IDS_COMPARE_UNDO_TABLE_DELETION},
       {"yourComparisonTables", IDS_COMPARE_YOUR_COMPARISON_TABLES},
   };
   source->AddLocalizedStrings(kLocalizedStrings);
@@ -153,6 +155,8 @@ ProductSpecificationsUI::ProductSpecificationsUI(content::WebUI* web_ui)
 
   auto plural_string_handler = std::make_unique<PluralStringHandler>();
   plural_string_handler->AddLocalizedString("numItems", IDS_COMPARE_NUM_ITEMS);
+  plural_string_handler->AddLocalizedString(
+      "deletionToastMessage", IDS_COMPARE_TABLE_DELETION_TOAST_MESSAGE);
   web_ui->AddMessageHandler(std::move(plural_string_handler));
 }
 

@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/base64.h"
+#include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/metrics/histogram_functions.h"
@@ -54,9 +55,11 @@
 #include "extensions/browser/image_loader.h"
 #include "extensions/browser/path_util.h"
 #include "extensions/browser/ui_util.h"
+#include "extensions/browser/user_script_manager.h"
 #include "extensions/browser/warning_service.h"
 #include "extensions/common/api/extension_action/action_info.h"
 #include "extensions/common/command.h"
+#include "extensions/common/extension_features.h"
 #include "extensions/common/extension_set.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/install_warning.h"
@@ -73,6 +76,7 @@
 #include "extensions/grit/extensions_browser_resources.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/accelerators/command.h"
+#include "ui/base/accelerators/global_accelerator_listener/global_accelerator_listener.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -335,6 +339,22 @@ bool CanAccessSiteData(PermissionsManager* permissions_manager,
              .ShouldWarnAllHosts() ||
          PermissionsParser::GetOptionalPermissions(&extension)
              .ShouldWarnAllHosts();
+}
+
+// Returns whether the extension has permission to run user scripts or can
+// request permission to do so.
+bool CanRunOrRequestUserScripts(const Extension& extension) {
+  // TODO(crbug.com/390138269): Once finch flag is default, remove the
+  // feature restriction.
+  if (!base::FeatureList::IsEnabled(
+          extensions_features::kUserScriptUserExtensionToggle)) {
+    return false;
+  }
+
+  return extension.permissions_data()->HasAPIPermission(
+             mojom::APIPermissionID::kUserScripts) ||
+         PermissionsParser::GetOptionalPermissions(&extension)
+             .HasAPIPermission(mojom::APIPermissionID::kUserScripts);
 }
 
 // Populates the |permissions| data for the given |extension|.
@@ -616,6 +636,10 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
   // Commands.
   if (is_enabled)
     ConstructCommands(command_service_, extension.id(), &info->commands);
+  info->is_command_registration_handled_externally =
+      ui::GlobalAcceleratorListener::GetInstance() &&
+      ui::GlobalAcceleratorListener::GetInstance()
+          ->IsRegistrationHandledExternally();
 
   // Dependent extensions.
   if (extension.is_shared_module()) {
@@ -635,25 +659,24 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
   info->description = extension.description();
 
   // Disable reasons.
-  int disable_reasons = extension_prefs_->GetDisableReasons(extension.id());
+  DisableReasonSet disable_reasons =
+      extension_prefs_->GetDisableReasons(extension.id());
   info->disable_reasons.suspicious_install =
-      (disable_reasons & disable_reason::DISABLE_NOT_VERIFIED) != 0;
+      disable_reasons.contains(disable_reason::DISABLE_NOT_VERIFIED);
   info->disable_reasons.corrupt_install =
-      (disable_reasons & disable_reason::DISABLE_CORRUPTED) != 0;
-  info->disable_reasons.update_required =
-      (disable_reasons & disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY) !=
-      0;
+      disable_reasons.contains(disable_reason::DISABLE_CORRUPTED);
+  info->disable_reasons.update_required = disable_reasons.contains(
+      disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY);
   info->disable_reasons.blocked_by_policy =
-      (disable_reasons & disable_reason::DISABLE_BLOCKED_BY_POLICY) != 0;
+      disable_reasons.contains(disable_reason::DISABLE_BLOCKED_BY_POLICY);
   info->disable_reasons.reloading =
-      (disable_reasons & disable_reason::DISABLE_RELOAD) != 0;
-  bool custodian_approval_required =
-      (disable_reasons & disable_reason::DISABLE_CUSTODIAN_APPROVAL_REQUIRED) !=
-      0;
+      disable_reasons.contains(disable_reason::DISABLE_RELOAD);
+  bool custodian_approval_required = disable_reasons.contains(
+      disable_reason::DISABLE_CUSTODIAN_APPROVAL_REQUIRED);
   info->disable_reasons.custodian_approval_required =
       custodian_approval_required;
   bool permissions_increase =
-      (disable_reasons & disable_reason::DISABLE_PERMISSIONS_INCREASE) != 0;
+      disable_reasons.contains(disable_reason::DISABLE_PERMISSIONS_INCREASE);
   info->disable_reasons.parent_disabled_permissions =
       supervised_user::AreExtensionsPermissionsEnabled(profile) &&
       !supervised_user::
@@ -661,15 +684,13 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
       !profile->GetPrefs()->GetBoolean(
           prefs::kSupervisedUserExtensionsMayRequestPermissions) &&
       (custodian_approval_required || permissions_increase);
-  info->disable_reasons.published_in_store_required =
-      (disable_reasons &
-       disable_reason::DISABLE_PUBLISHED_IN_STORE_REQUIRED_BY_POLICY) != 0;
-  info->disable_reasons.unsupported_manifest_version =
-      (disable_reasons &
-       disable_reason::DISABLE_UNSUPPORTED_MANIFEST_VERSION) != 0;
+  info->disable_reasons.published_in_store_required = disable_reasons.contains(
+      disable_reason::DISABLE_PUBLISHED_IN_STORE_REQUIRED_BY_POLICY);
+  info->disable_reasons.unsupported_manifest_version = disable_reasons.contains(
+      disable_reason::DISABLE_UNSUPPORTED_MANIFEST_VERSION);
   info->disable_reasons.unsupported_developer_extension =
-      (disable_reasons &
-       disable_reason::DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION) != 0;
+      disable_reasons.contains(
+          disable_reason::DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION);
 
   // Error collection.
   bool error_console_enabled =
@@ -704,6 +725,16 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
   info->incognito_access.is_enabled = util::CanBeIncognitoEnabled(&extension);
   info->incognito_access.is_active =
       util::IsIncognitoEnabled(extension.id(), browser_context_);
+
+  // User Scripts toggle.
+  info->user_scripts_access.is_enabled = CanRunOrRequestUserScripts(extension);
+  const UserScriptManager* user_script_manager =
+      ExtensionSystem::Get(browser_context_)->user_script_manager();
+  if (user_script_manager) {  // Not created in some unit tests.
+    info->user_scripts_access.is_active =
+        // User scripts will be able to run if the user has enabled the toggle.
+        user_script_manager->IsUserScriptPrefEnabled(extension.id());
+  }
 
   // Install warnings, but only if unpacked, the error console isn't enabled
   // (otherwise it shows these), and we're in developer mode (normal users don't

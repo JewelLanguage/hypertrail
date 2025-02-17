@@ -20,6 +20,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill/core/browser/data_model/entity_type.h"
 #include "components/autofill/core/browser/data_quality/autofill_data_util.h"
 #include "components/autofill/core/browser/field_type_utils.h"
 #include "components/autofill/core/browser/field_types.h"
@@ -106,13 +107,16 @@ std::optional<FieldTypeSet> GetFieldTypesToFillFromFillingProduct(
       }
       return field_types;
     case FillingProduct::kAutofillAi:
-      for (FieldType field_type : kAllFieldTypes) {
-        if (IsAddressType(field_type)) {
-          field_types.insert(field_type);
+      static constexpr auto kAutofillAiFieldTypes = []() {
+        DenseSet<FieldType> result;
+        for (AttributeType type : DenseSet<AttributeType>::all()) {
+          result.insert(type.field_type());
         }
-      }
-      field_types.insert_all({UNKNOWN_TYPE, IMPROVED_PREDICTION});
-      return field_types;
+        // Some attributes may map to `UNKNOWN_TYPE` - remove that.
+        result.erase(UNKNOWN_TYPE);
+        return result;
+      }();
+      return kAutofillAiFieldTypes;
     case FillingProduct::kPassword:
       for (FieldType field_type : kAllFieldTypes) {
         if (FieldTypeGroupSet({FieldTypeGroup::kUsernameField,
@@ -223,6 +227,7 @@ bool AllowPaymentSwapping(const AutofillField& trigger_field,
 bool ShouldRecordFillingHistory(FillingProduct filling_product) {
   switch (filling_product) {
     case FillingProduct::kAddress:
+    case FillingProduct::kAutofillAi:
     case FillingProduct::kCreditCard:
     case FillingProduct::kPlusAddresses:
       return true;
@@ -232,7 +237,6 @@ bool ShouldRecordFillingHistory(FillingProduct filling_product) {
     case FillingProduct::kAutocomplete:
     case FillingProduct::kPassword:
     case FillingProduct::kCompose:
-    case FillingProduct::kAutofillAi:
       return false;
   }
   NOTREACHED();
@@ -520,7 +524,6 @@ void FormFiller::FillOrPreviewForm(
     const FillingPayload& filling_payload,
     FormStructure& form_structure,
     AutofillField& autofill_trigger_field,
-    DenseSet<FieldFillingSkipReason> ignorable_skip_reasons,
     AutofillTriggerSource trigger_source,
     bool is_refill) {
   FillingProduct filling_product =
@@ -578,24 +581,13 @@ void FormFiller::FillOrPreviewForm(
   }
 
   // `FormFiller::GetFieldFillingSkipReasons` returns for each field a generic
-  // list of reason for skipping each field. Some of these reasons might not be
-  // relevant for the current context (given `ignorable_skip_reasons`) so we
-  // filter them out from the start.
+  // list of reason for skipping each field.
   base::flat_map<FieldGlobalId, DenseSet<FieldFillingSkipReason>> skip_reasons =
-      base::MakeFlatMap<FieldGlobalId, DenseSet<FieldFillingSkipReason>>(
-          GetFieldFillingSkipReasons(
-              result_fields, form_structure, autofill_trigger_field,
-              refill_context ? refill_context->type_groups_originally_filled
-                             : std::optional<DenseSet<FieldTypeGroup>>(),
-              filling_product, is_refill),
-          {},
-          [&ignorable_skip_reasons](
-              const std::pair<FieldGlobalId, DenseSet<FieldFillingSkipReason>>&
-                  field_id_and_skip_reasons) {
-            auto [field_id, field_skip_reasons] = field_id_and_skip_reasons;
-            field_skip_reasons.erase_all(ignorable_skip_reasons);
-            return std::make_pair(field_id, field_skip_reasons);
-          });
+      GetFieldFillingSkipReasons(
+          result_fields, form_structure, autofill_trigger_field,
+          refill_context ? refill_context->type_groups_originally_filled
+                         : std::optional<DenseSet<FieldTypeGroup>>(),
+          filling_product, is_refill);
 
   // This loop sets the values to fill in the `result_fields`. The
   // `result_fields` are sent to the renderer, whereas the very similar
@@ -711,15 +703,15 @@ void FormFiller::FillOrPreviewForm(
       safe_filled_fields.old_values.push_back(
           form.FindFieldByGlobalId(field_id));
       safe_filled_fields.new_values.push_back([&] {
-        auto fields_it = base::ranges::find(result_fields, field_id,
-                                            &FormFieldData::global_id);
+        auto fields_it = std::ranges::find(result_fields, field_id,
+                                           &FormFieldData::global_id);
         return fields_it != result_fields.end() ? &*fields_it : nullptr;
       }());
       safe_filled_fields.cached.push_back(
           form_structure.GetFieldById(field_id));
     } else {
-      auto it = base::ranges::find(form.fields(), field_id,
-                                   &FormFieldData::global_id);
+      auto it =
+          std::ranges::find(form.fields(), field_id, &FormFieldData::global_id);
       CHECK(it != result_fields.end());
       std::string field_number =
           base::StringPrintf("Field %zu", it - result_fields.begin());
@@ -842,7 +834,7 @@ void FormFiller::TriggerRefill(const FormData& form,
             field->renderer_id());
       };
   auto it =
-      base::ranges::max_element(*form_structure, {}, comparison_attributes);
+      std::ranges::max_element(*form_structure, {}, comparison_attributes);
   AutofillField* autofill_field =
       it != form_structure->end() ? it->get() : nullptr;
   bool found_matching_element =
@@ -860,8 +852,7 @@ void FormFiller::TriggerRefill(const FormData& form,
       [&](const auto& profile_or_credit_card) {
         FillOrPreviewForm(mojom::ActionPersistence::kFill, form,
                           &profile_or_credit_card, *form_structure,
-                          *autofill_field, /*ignorable_skip_reasons=*/{},
-                          trigger_source,
+                          *autofill_field, trigger_source,
                           /*is_refill=*/true);
       },
       refill_context->profile_or_credit_card);

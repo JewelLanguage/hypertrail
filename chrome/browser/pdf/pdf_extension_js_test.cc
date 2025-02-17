@@ -8,11 +8,13 @@
 
 #include "base/base_paths.h"
 #include "base/command_line.h"
+#include "base/files/scoped_temp_dir.h"
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/icu_test_util.h"
 #include "base/test/run_until.h"
 #include "base/test/with_feature_override.h"
+#include "base/threading/thread_restrictions.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -32,6 +34,7 @@
 #include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/file_system_chooser_test_helpers.h"
 #include "content/public/test/scoped_time_zone.h"
 #include "extensions/test/result_catcher.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -40,6 +43,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/shell_dialogs/select_file_dialog.h"
 #include "url/gurl.h"
 
 class PDFExtensionJSTestBase : public PDFExtensionTestBase {
@@ -322,6 +326,19 @@ IN_PROC_BROWSER_TEST_P(PDFExtensionJSTest, ViewerToolbarDropdown) {
   RunTestsInJsModule("viewer_toolbar_dropdown_test.js", "test.pdf");
 }
 #endif  // BUILDFLAG(ENABLE_INK)
+
+IN_PROC_BROWSER_TEST_P(PDFExtensionJSTest, ViewerFilePicker) {
+  base::ScopedAllowBlockingForTesting allow_blocking;
+
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  base::FilePath save_path = temp_dir.GetPath().AppendASCII("saved.pdf");
+
+  ui::SelectFileDialog::SetFactory(
+      std::make_unique<content::FakeSelectFileDialogFactory>(
+          std::vector<base::FilePath>{save_path}));
+  RunTestsInJsModule("viewer_file_picker_test.js", "test.pdf");
+}
 
 // PDFExtensionJSTest with forced Pacific Time Zone.
 class PDFExtensionPacificTimeZoneJSTest : public PDFExtensionJSTest {

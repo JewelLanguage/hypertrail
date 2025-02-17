@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "cc/layers/texture_layer.h"
 
 #include <stddef.h>
@@ -59,7 +64,7 @@ using ::testing::AtLeast;
 using ::testing::InvokeWithoutArgs;
 using ::testing::Mock;
 
-// TODO(crbug.com/40883999): settings new expecations after
+// TODO(crbug.com/40883999): settings new expectations after
 // VerifyAndClearExpectations is undefined behavior. See
 // http://google.github.io/googletest/gmock_cook_book.html#forcing-a-verification
 #define EXPECT_SET_NEEDS_COMMIT(expect, code_to_test)                 \
@@ -674,9 +679,9 @@ class TextureLayerImplWithMailboxThreadedCallback : public LayerTreeTest {
         !layer_tree_host()->GetSettings().single_thread_proxy_scheduler;
     return std::make_unique<TestLayerTreeFrameSink>(
         compositor_context_provider, std::move(worker_context_provider),
-        /*shared_image_interface=*/nullptr, gpu_memory_buffer_manager(),
-        renderer_settings, &debug_settings_, task_runner_provider(),
-        synchronous_composite, disable_display_vsync, refresh_rate);
+        /*shared_image_interface=*/nullptr, renderer_settings, &debug_settings_,
+        task_runner_provider(), synchronous_composite, disable_display_vsync,
+        refresh_rate);
   }
 
   void AdvanceTestCase() {
@@ -1509,10 +1514,9 @@ class SoftwareTextureLayerTest : public LayerTreeTest {
         !HasImplThread() &&
         !layer_tree_host()->GetSettings().single_thread_proxy_scheduler;
     auto sink = std::make_unique<TestLayerTreeFrameSink>(
-        nullptr, nullptr, shared_image_interface_sw,
-        gpu_memory_buffer_manager(), renderer_settings, &debug_settings_,
-        task_runner_provider(), synchronous_composite, disable_display_vsync,
-        refresh_rate);
+        nullptr, nullptr, shared_image_interface_sw, renderer_settings,
+        &debug_settings_, task_runner_provider(), synchronous_composite,
+        disable_display_vsync, refresh_rate);
     frame_sink_ = sink.get();
     num_frame_sinks_created_++;
     return sink;
@@ -1559,13 +1563,12 @@ class SoftwareTextureLayerSwitchTreesTest : public SoftwareTextureLayerTest {
             std::move(transferable_resource), std::move(release_callback));
       } break;
       case 2:
-        // When the layer is removed from the tree, the bitmap should be
+        // When the layer is removed from the tree, the layer should be
         // unregistered.
         texture_layer_->RemoveFromParent();
         break;
       case 3:
-        // When the layer is added to a new tree, the SharedBitmapId is
-        // registered again.
+        // When the layer is added to a new tree, the layer is registered again.
         root_->AddChild(texture_layer_);
         break;
       case 4:
@@ -1644,8 +1647,8 @@ class SoftwareTextureLayerPurgeMemoryTest : public SoftwareTextureLayerTest {
   }
 
   void DrawLayersOnThread(LayerTreeHostImpl* host_impl) override {
-    // TextureLayerImpl will have registered the SharedBitmapId at this point.
-    // Call OnPurgeMemory() to ensure that the same SharedBitmapId doesn't get
+    // TextureLayerImpl will have registered the layer at this point.
+    // Call OnPurgeMemory() to ensure that the same layer doesn't get
     // registered again on the next draw.
     if (step_ == 1)
       base::MemoryPressureListener::SimulatePressureNotification(
@@ -1708,7 +1711,7 @@ class SoftwareTextureLayerMultipleResourceTest
                 viz::TransferableResource::ResourceSource::kTileRasterTask);
 
         // Give the TextureLayer a resource so it contributes to the frame. It
-        // doesn't need to register the SharedBitmapId otherwise.
+        // doesn't need to register the layer otherwise.
         auto release_callback1 =
             base::BindOnce(&DeleteSharedImage, std::move(shared_image1_));
         auto release_callback2 =
@@ -1795,8 +1798,7 @@ class SoftwareTextureLayerLoseFrameSinkTest : public SoftwareTextureLayerTest {
         // The frame sink is lost. The host will make a new one and submit
         // another frame, with the id being registered again.
         layer_tree_host()->SetVisible(false);
-        first_frame_sink_ =
-            layer_tree_host()->ReleaseLayerTreeFrameSink().get();
+        layer_tree_host()->ReleaseLayerTreeFrameSink();
         layer_tree_host()->SetVisible(true);
         texture_layer_->SetNeedsDisplay();
         EXPECT_FALSE(released_);
@@ -1841,9 +1843,6 @@ class SoftwareTextureLayerLoseFrameSinkTest : public SoftwareTextureLayerTest {
   int verified_frames_ = 0;
   int source_frame_number_ = 0;
   bool released_ = false;
-  // Keeps a pointer value of the first frame sink, which will be removed
-  // from the host and destroyed.
-  raw_ptr<void, AcrossTasksDanglingUntriaged> first_frame_sink_;
 };
 
 SINGLE_AND_MULTI_THREAD_TEST_F(SoftwareTextureLayerLoseFrameSinkTest);

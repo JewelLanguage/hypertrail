@@ -505,7 +505,7 @@ TEST_P(CreditCardRiskBasedAuthenticatorCardMetadataTest, MetadataSignal) {
   if (MetadataEnabled() && CardNameAvailable() && CardArtAvailable()) {
     EXPECT_NE(
         signals.end(),
-        base::ranges::find(
+        std::ranges::find(
             signals,
             ClientBehaviorConstants::kShowingCardArtImageAndCardProductName));
   } else {
@@ -529,6 +529,8 @@ class CreditCardRiskBasedAuthenticatorCardBenefitsTest
     CreditCardRiskBasedAuthenticatorTest::SetUp();
     scoped_feature_list_.InitWithFeatureStates(
         {{features::kAutofillEnableCardBenefitsForAmericanExpress,
+          IsCreditCardBenefitsEnabled()},
+         {features::kAutofillEnableCardBenefitsForBmo,
           IsCreditCardBenefitsEnabled()}});
     card_ = test::GetMaskedServerCard();
     autofill_client()->set_last_committed_primary_main_frame_url(
@@ -559,7 +561,7 @@ INSTANTIATE_TEST_SUITE_P(
                           &test::GetActiveCreditCardCategoryBenefit,
                           &test::GetActiveCreditCardMerchantBenefit),
         ::testing::Bool(),
-        ::testing::Values("amex")));
+        ::testing::Values("amex", "bmo")));
 
 // Checks that ClientBehaviorConstants::kShowingCardBenefits is populated as a
 // signal if a card benefit was shown when unmasking a credit card suggestion
@@ -575,8 +577,8 @@ TEST_P(CreditCardRiskBasedAuthenticatorCardBenefitsTest,
   std::vector<ClientBehaviorConstants> signals =
       payments_network_interface()->unmask_request()->client_behavior_signals;
 
-  EXPECT_EQ(base::ranges::find(signals,
-                               ClientBehaviorConstants::kShowingCardBenefits) !=
+  EXPECT_EQ(std::ranges::find(signals,
+                              ClientBehaviorConstants::kShowingCardBenefits) !=
                 signals.end(),
             IsCreditCardBenefitsEnabled());
 }

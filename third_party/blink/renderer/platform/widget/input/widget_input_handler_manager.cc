@@ -26,7 +26,7 @@
 #include "base/types/pass_key.h"
 #include "build/build_config.h"
 #include "cc/base/features.h"
-#include "cc/input/browser_controls_offset_tags_info.h"
+#include "cc/input/browser_controls_offset_tag_modifications.h"
 #include "cc/metrics/event_metrics.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/paint_holding_reason.h"
@@ -701,6 +701,8 @@ void WidgetInputHandlerManager::DispatchEvent(
   if (!widget_is_embedded_ &&
       (suppressing_input_events_state_ &
        static_cast<uint16_t>(SuppressingInputEventsBits::kHasNotPainted))) {
+    // TODO(https://crbug.com/40057499): Remove the old metric and related code,
+    // including the states like `widget_is_embedded_`.
     main_thread_task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&WidgetInputHandlerManager::StartFirstPaintMaxDelayTimer,
@@ -719,17 +721,8 @@ void WidgetInputHandlerManager::DispatchEvent(
 
   uint16_t suppress_input = suppressing_input_events_state_;
 
-  bool ignore_first_paint = !base::FeatureList::IsEnabled(
-      blink::features::kDropInputEventsBeforeFirstPaint);
-  // TODO(https://crbug.com/1490296): Investigate the possibility of a stale
-  // subframe after navigation.
-  if (widget_is_embedded_) {
-    ignore_first_paint = true;
-  }
-  if (ignore_first_paint) {
-    suppress_input &=
-        ~static_cast<uint16_t>(SuppressingInputEventsBits::kHasNotPainted);
-  }
+  suppress_input &=
+      ~static_cast<uint16_t>(SuppressingInputEventsBits::kHasNotPainted);
 
   if (dev_tools_session_attached_ || !ignore_hidden_input_) {
     suppress_input &=
@@ -1309,15 +1302,15 @@ void WidgetInputHandlerManager::UpdateBrowserControlsState(
     cc::BrowserControlsState constraints,
     cc::BrowserControlsState current,
     bool animate,
-    base::optional_ref<const cc::BrowserControlsOffsetTagsInfo>
-        offset_tags_info) {
+    base::optional_ref<const cc::BrowserControlsOffsetTagModifications>
+        offset_tag_modifications) {
   if (!input_handler_proxy_) {
     return;
   }
 
   DCHECK(InputThreadTaskRunner()->BelongsToCurrentThread());
-  input_handler_proxy_->UpdateBrowserControlsState(constraints, current,
-                                                   animate, offset_tags_info);
+  input_handler_proxy_->UpdateBrowserControlsState(
+      constraints, current, animate, offset_tag_modifications);
 }
 
 void WidgetInputHandlerManager::FlushCompositorQueueForTesting() {

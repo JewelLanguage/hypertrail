@@ -2949,12 +2949,15 @@ TEST_F(AttributionResolverTest, GetAttributionReportsExceedLimit_Shuffles) {
 }
 
 TEST_F(AttributionResolverTest, GetAttributionDataKeysSet) {
+  base::HistogramTester histograms;
+
   auto expected_1 = AttributionDataModel::DataKey(
       url::Origin::Create(GURL("https://a.r.test")));
   auto expected_2 = AttributionDataModel::DataKey(
       url::Origin::Create(GURL("https://b.r.test")));
   auto expected_3 = AttributionDataModel::DataKey(
       url::Origin::Create(GURL("https://c.r.test")));
+  auto expected_origin_4 = url::Origin::Create(GURL("https://d.r.test"));
 
   auto s1 =
       SourceBuilder()
@@ -2988,8 +2991,13 @@ TEST_F(AttributionResolverTest, GetAttributionDataKeysSet) {
       /*remaining_budget=*/std::nullopt,
       /*source_id=*/std::nullopt);
 
+  storage()->StoreOsRegistrations({expected_origin_4});
+
   EXPECT_THAT(storage()->GetAllDataKeys(),
-              ElementsAre(expected_1, expected_2, expected_3));
+              ElementsAre(expected_1, expected_2, expected_3,
+                          AttributionDataModel::DataKey(expected_origin_4)));
+
+  histograms.ExpectTotalCount("Conversions.GetAllDataKeysTime", 1);
 }
 
 TEST_F(AttributionResolverTest, SourceDebugKey_RoundTrips) {

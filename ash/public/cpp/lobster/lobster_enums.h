@@ -14,8 +14,21 @@ enum class ASH_PUBLIC_EXPORT LobsterMode {
   kDownload,
 };
 
+enum class ASH_PUBLIC_EXPORT LobsterConsentStatus {
+  // Users have neither approved nor declined the Lobster consent.
+  kUnset,
+  // Users have approved the Lobster consent.
+  kApproved,
+  // Users have declined the Lobster consent.
+  kDeclined,
+};
+
 enum class ASH_PUBLIC_EXPORT LobsterStatus {
+  // The feature requires user consent before use.
+  kConsentNeeded,
+  // The feature is enabled for use.
   kEnabled,
+  // The feature is blocked from use.
   kBlocked,
 };
 
@@ -25,7 +38,10 @@ enum class ASH_PUBLIC_EXPORT LobsterSystemCheck {
   kInvalidAccountCapabilities,
   kInvalidAccountType,
   kInvalidRegion,
-  kMaxValue = kInvalidRegion,
+  kInvalidInputField,
+  kSettingsOff,
+  kNoInternetConnection,
+  kMaxValue = kNoInternetConnection,
 };
 
 enum class ASH_PUBLIC_EXPORT LobsterErrorCode {

@@ -258,7 +258,7 @@ suite('<bookmarks-list> command manager integration test', function() {
     flush();
   });
 
-  test('show context menu', async () => {
+  test('show context menu', () => {
     const commandManager =
         app.shadowRoot!.querySelector('bookmarks-command-manager')!;
     const list = app.shadowRoot!.querySelector('bookmarks-list')!;
@@ -268,9 +268,10 @@ suite('<bookmarks-list> command manager integration test', function() {
 
     assertEquals(MenuSource.LIST, commandManager.getMenuSourceForTesting());
     const menuCommands =
-        commandManager.shadowRoot!.querySelectorAll('.dropdown-item');
+        commandManager.shadowRoot!.querySelectorAll<HTMLElement>(
+            '.dropdown-item');
     assertDeepEquals(
         [Command.ADD_BOOKMARK.toString(), Command.ADD_FOLDER.toString()],
-        Array.from(menuCommands).map(el => el.getAttribute('command')));
+        Array.from(menuCommands).map(el => el.dataset['command']));
   });
 });

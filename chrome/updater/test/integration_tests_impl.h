@@ -374,6 +374,10 @@ void ExpectPolicyStatusValues(
     VARIANT_BOOL expected_has_conflict);
 void ExpectLegacyPolicyStatusSucceeds(UpdaterScope scope);
 
+void LegacyInstallApp(UpdaterScope scope,
+                      const std::string& app_id,
+                      const base::Version& version);
+
 // Calls a function defined in test/service/win/rpc_client.py.
 // Entries of the `arguments` dictionary should be the function's parameter
 // name/value pairs.
@@ -471,6 +475,7 @@ void RunFakeLegacyUpdater(UpdaterScope scope);
 // Dismiss the installation completion dialog, then wait for the process
 // exit.
 void CloseInstallCompleteDialog(const std::u16string& bundle_name,
+                                const std::wstring& lang,
                                 const std::wstring& child_window_text_to_find,
                                 bool verify_app_logo_loaded = false);
 #endif  // BUILDFLAG(IS_WIN)
@@ -505,7 +510,8 @@ void RunOfflineInstall(UpdaterScope scope,
 
 void RunOfflineInstallOsNotSupported(UpdaterScope scope,
                                      bool is_legacy_install,
-                                     bool is_silent_install);
+                                     bool is_silent_install,
+                                     const std::string& language);
 
 base::CommandLine MakeElevated(base::CommandLine command_line);
 
@@ -578,6 +584,9 @@ void ExpectDeviceManagementPolicyFetchRequestViaCompanionApp(
     bool first_request = true,
     bool rotate_public_key = false,
     std::optional<GURL> target_url = std::nullopt);
+void ExpectDeviceManagementPolicyValidationRequestViaCompanionApp(
+    ScopedServer* test_server,
+    const std::string& dm_token);
 void ExpectProxyPacScriptRequest(ScopedServer* test_server);
 
 #if BUILDFLAG(IS_MAC)

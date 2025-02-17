@@ -35,6 +35,8 @@
 namespace extensions {
 namespace {
 
+using net::ERR_BLOCKED_BY_CLIENT;
+
 void RestrictProcessCount() {
   // Set the maximum number of processes to 1.  This is a soft limit that
   // we're allowed to exceed if processes *must* not share, which is the case
@@ -101,9 +103,6 @@ class CrossOriginIsolationTest : public CrossOriginIsolationTestBase {
     const char* background_script = nullptr;
     const char* extension_only_keys = R"(
       "web_accessible_resources": ["test.html"],
-      "browser_action": {
-          "default_title": "foo"
-      },
     )";
     if (options.is_platform_app) {
       background_script = R"(
@@ -282,12 +281,10 @@ IN_PROC_BROWSER_TEST_F(CrossOriginIsolationTest,
   EXPECT_NE(coi_app_background_render_frame_host->GetProcess(),
             non_coi_background_render_frame_host->GetProcess());
 }
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 // Tests that a web accessible frame from a cross origin isolated extension is
 // not cross origin isolated.
-// TODO(https://crbug.com/388110291): Port to desktop Android. The URL of the
-// extension_iframe is "about:blank#blocked" for unclear reasons. Also, the
-// chrome.browserAction API is not yet supported.
 IN_PROC_BROWSER_TEST_F(CrossOriginIsolationTest, WebAccessibleFrame) {
   RestrictProcessCount();
 
@@ -399,17 +396,18 @@ IN_PROC_BROWSER_TEST_F(CrossOriginIsolationTest, WebAccessibleFrame) {
 
   // Finally make some extension API calls to ensure both cross-origin-isolated
   // and non-cross-origin-isolated extension contexts are considered
-  // "privileged".
+  // "privileged". Use chrome.extension.isAllowedIncognitoAccess because it is
+  // supported on desktop Android.
   {
     auto verify_is_privileged_context = [](content::RenderFrameHost* host) {
       const char* kScript = R"(
         new Promise(resolve => {
-          chrome.browserAction.getTitle({}, title => {
-            resolve(title);
+          chrome.extension.isAllowedIncognitoAccess(allowed => {
+            resolve(allowed);
           });
         });
       )";
-      EXPECT_EQ("foo", content::EvalJs(host, kScript));
+      EXPECT_EQ(false, content::EvalJs(host, kScript));
     };
 
     {
@@ -424,7 +422,6 @@ IN_PROC_BROWSER_TEST_F(CrossOriginIsolationTest, WebAccessibleFrame) {
     }
   }
 }
-#endif  // !BUILDFLAG(IS_ANDROID)
 
 // Test that an extension service worker for a cross origin isolated extension
 // is not cross origin isolated. See crbug.com/1131404.
@@ -570,7 +567,7 @@ IN_PROC_BROWSER_TEST_F(CrossOriginIsolationTest,
 
 // Tests extension messaging between cross origin isolated and
 // non-cross-origin-isolated frames of an extension.
-// TODO(https://crbug.com/388110291): Port to desktop Android when
+// TODO(https://crbug.com/383366125): Port to desktop Android when
 // chrome.runtime.sendMessage() works there.
 IN_PROC_BROWSER_TEST_F(CrossOriginIsolationTest, ExtensionMessaging_Frames) {
   RestrictProcessCount();
@@ -661,7 +658,7 @@ IN_PROC_BROWSER_TEST_F(CrossOriginIsolationTest, ExtensionMessaging_Frames) {
 // Tests extension messaging between a cross origin isolated extension frame and
 // the extension service worker which is not cross origin isolated (and hence in
 // a different process).
-// TODO(https://crbug.com/388110291): Port to desktop Android when
+// TODO(https://crbug.com/383366125): Port to desktop Android when
 // chrome.runtime.sendMessage() works there.
 IN_PROC_BROWSER_TEST_F(CrossOriginIsolationTest,
                        ExtensionMessaging_ServiceWorker) {
@@ -737,12 +734,12 @@ IN_PROC_BROWSER_TEST_F(CrossOriginIsolationTest,
     EXPECT_TRUE(catcher.GetNextResult()) << catcher.message();
   }
 }
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 // Verify extension resource access if it's in an iframe. Regression test for
 // crbug.com/1343610.
-// TODO(https://crbug.com/388110291): Port to desktop Android when we have a
-// cross-platform replacement for NavigateParams.
-IN_PROC_BROWSER_TEST_F(ExtensionBrowserTest, ExtensionResourceInIframe) {
+IN_PROC_BROWSER_TEST_F(ExtensionPlatformBrowserTest,
+                       ExtensionResourceInIframe) {
   EXPECT_TRUE(embedded_test_server()->Start());
 
   // Load an extension that has one web accessible resource.
@@ -769,9 +766,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionBrowserTest, ExtensionResourceInIframe) {
     // Navigate the main frame with a renderer initiated navigation to a blank
     // web page. This should succeed.
     const GURL gurl = embedded_test_server()->GetURL("/iframe_blank.html");
-    EXPECT_TRUE(ui_test_utils::NavigateToURL(browser(), gurl));
-    content::WebContents* web_contents =
-        browser()->tab_strip_model()->GetActiveWebContents();
+    content::WebContents* web_contents = GetActiveWebContents();
+    EXPECT_TRUE(content::NavigateToURL(web_contents, gurl));
     content::RenderFrameHost* main_frame = web_contents->GetPrimaryMainFrame();
     content::RenderFrameHost* iframe = content::ChildFrameAt(main_frame, 0);
     EXPECT_TRUE(iframe);
@@ -791,14 +787,12 @@ IN_PROC_BROWSER_TEST_F(ExtensionBrowserTest, ExtensionResourceInIframe) {
   // Prevent navigation from a web frame to a non-web accessible resource.
   {
     GURL invalid_request_url = GURL(kExtensionInvalidRequestURL);
-    net::Error err_blocked_by_client = net::ERR_BLOCKED_BY_CLIENT;
 
     // Navigate the main frame with a renderer initiated navigation to a blank
     // web page. This should succeed.
     const GURL gurl = embedded_test_server()->GetURL("/iframe_blank.html");
-    EXPECT_TRUE(ui_test_utils::NavigateToURL(browser(), gurl));
-    content::WebContents* web_contents =
-        browser()->tab_strip_model()->GetActiveWebContents();
+    content::WebContents* web_contents = GetActiveWebContents();
+    EXPECT_TRUE(content::NavigateToURL(web_contents, gurl));
     content::RenderFrameHost* main_frame = web_contents->GetPrimaryMainFrame();
     content::RenderFrameHost* iframe = content::ChildFrameAt(main_frame, 0);
     EXPECT_TRUE(iframe);
@@ -810,7 +804,13 @@ IN_PROC_BROWSER_TEST_F(ExtensionBrowserTest, ExtensionResourceInIframe) {
     EXPECT_TRUE(content::NavigateIframeToURL(web_contents, "test", target));
     nav_observer.Wait();
     EXPECT_FALSE(nav_observer.last_navigation_succeeded());
-    EXPECT_EQ(err_blocked_by_client, nav_observer.last_net_error_code());
+#if !BUILDFLAG(IS_ANDROID)
+    // TODO(crbug.com/388110291): Figure out why this doesn't work on Android.
+    // The navigation is correctly blocked, but the error code is different and
+    // the iframe pointer is invalidated.
+    EXPECT_EQ(ERR_BLOCKED_BY_CLIENT, nav_observer.last_net_error_code());
+#endif
+    iframe = content::ChildFrameAt(web_contents->GetPrimaryMainFrame(), 0);
     EXPECT_EQ(invalid_request_url, iframe->GetLastCommittedURL());
 
     // Navigate the iframe with a browser initiated navigation to an extension
@@ -819,12 +819,17 @@ IN_PROC_BROWSER_TEST_F(ExtensionBrowserTest, ExtensionResourceInIframe) {
     content::TestNavigationObserver reload_observer(web_contents);
     EXPECT_TRUE(iframe->Reload());
     reload_observer.Wait();
-    EXPECT_EQ(err_blocked_by_client, reload_observer.last_net_error_code());
+#if !BUILDFLAG(IS_ANDROID)
+    EXPECT_EQ(ERR_BLOCKED_BY_CLIENT, reload_observer.last_net_error_code());
+#endif
     iframe = content::ChildFrameAt(web_contents->GetPrimaryMainFrame(), 0);
     EXPECT_FALSE(reload_observer.last_navigation_succeeded());
     EXPECT_EQ(invalid_request_url, iframe->GetLastCommittedURL());
 
+#if !BUILDFLAG(IS_ANDROID)
     // Verify iframe browser initiated navigation (to test real UI behavior).
+    // TODO(https://crbug.com/391922825): Port to desktop Android when we have a
+    // cross-platform replacement for NavigateParams.
     iframe = content::ChildFrameAt(web_contents->GetPrimaryMainFrame(), 0);
     content::TestNavigationObserver browser_initiated_observer(target);
     NavigateParams params(browser(), target, ui::PAGE_TRANSITION_RELOAD);
@@ -834,14 +839,14 @@ IN_PROC_BROWSER_TEST_F(ExtensionBrowserTest, ExtensionResourceInIframe) {
     browser_initiated_observer.WatchExistingWebContents();
     ui_test_utils::NavigateToURL(&params);
     browser_initiated_observer.Wait();
-    EXPECT_EQ(err_blocked_by_client,
+    EXPECT_EQ(ERR_BLOCKED_BY_CLIENT,
               browser_initiated_observer.last_net_error_code());
     EXPECT_FALSE(browser_initiated_observer.last_navigation_succeeded());
     iframe = content::ChildFrameAt(web_contents->GetPrimaryMainFrame(), 0);
     EXPECT_EQ(target, iframe->GetLastCommittedURL());
+#endif  // !BUILDFLAG(IS_ANDROID)
   }
 }
-#endif  // !BUILDFLAG(IS_ANDROID)
 
 }  // namespace
 }  // namespace extensions

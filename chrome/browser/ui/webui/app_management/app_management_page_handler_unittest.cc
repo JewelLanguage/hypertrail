@@ -6,11 +6,10 @@
 #include <string>
 #include <vector>
 
-#include "ash/components/arc/arc_features.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
 #include "chrome/browser/apps/link_capturing/link_capturing_feature_test_support.h"
-#include "chrome/browser/apps/link_capturing/link_capturing_features.h"
+#include "chrome/browser/web_applications/link_capturing_features.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom-shared.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/test/web_app_test.h"
@@ -18,6 +17,7 @@
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chromeos/ash/experiences/arc/arc_features.h"
 #include "content/public/test/browser_task_environment.h"
 #include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -79,7 +79,7 @@ class AppManagementPageHandlerTestBase
 
     mojo::PendingReceiver<app_management::mojom::Page> page;
     mojo::Remote<app_management::mojom::PageHandler> handler;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     handler_ = std::make_unique<AppManagementPageHandlerChromeOs>(
         handler.BindNewPipeAndPassReceiver(),
         page.InitWithNewPipeAndPassRemote(), profile(), *delegate_);
@@ -821,7 +821,7 @@ TEST_P(AppManagementPageHandlerTestBase, NavigationCapturingUserChoice) {
 #endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 class AppManagementPageHandlerArcTest
     : public AppManagementPageHandlerTestBase {
  public:
@@ -943,15 +943,17 @@ TEST_P(AppManagementPageHandlerArcTest, SetAppLocale) {
 INSTANTIATE_TEST_SUITE_P(
     ,
     AppManagementPageHandlerArcTest,
-    testing::Values(apps::test::LinkCapturingFeatureVersion::kV1DefaultOff),
+    testing::Values(apps::test::LinkCapturingFeatureVersion::kV1DefaultOff,
+                    apps::test::LinkCapturingFeatureVersion::kV2DefaultOff),
     apps::test::LinkCapturingVersionToString);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 INSTANTIATE_TEST_SUITE_P(
     ,
     AppManagementPageHandlerTestBase,
 #if BUILDFLAG(IS_CHROMEOS)
-    testing::Values(apps::test::LinkCapturingFeatureVersion::kV1DefaultOff)
+    testing::Values(apps::test::LinkCapturingFeatureVersion::kV1DefaultOff,
+                    apps::test::LinkCapturingFeatureVersion::kV2DefaultOff)
 #else
     testing::Values(apps::test::LinkCapturingFeatureVersion::kV2DefaultOff,
                     apps::test::LinkCapturingFeatureVersion::kV2DefaultOn)

@@ -14,7 +14,6 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/favicon/favicon_utils.h"
@@ -63,10 +62,7 @@
 #include "ui/menus/simple_menu_model.h"
 #include "url/gurl.h"
 
-// This should be after all other #includes.
-#if defined(_WINDOWS_)  // Detect whether windows.h was included.
 #include "base/win/windows_h_disallowed.h"
-#endif  // defined(_WINDOWS_)
 
 namespace {
 
@@ -216,14 +212,7 @@ void TabStripPageHandler::OnTabGroupChanged(const TabGroupChange& change) {
   switch (change.type) {
     case TabGroupChange::kCreated:
     case TabGroupChange::kEditorOpened:
-    case TabGroupChange::kContentsChanged: {
-      // TabGroupChange::kCreated events are unnecessary as the front-end will
-      // assume a group was created if there is a tab-group-state-changed event
-      // with a new group ID. TabGroupChange::kContentsChanged events are
-      // handled by TabGroupStateChanged.
       break;
-    }
-
     case TabGroupChange::kVisualsChanged: {
       TabGroupModel* group_model = browser_->tab_strip_model()->group_model();
       if (group_model) {
@@ -252,14 +241,16 @@ void TabStripPageHandler::OnTabGroupChanged(const TabGroupChange& change) {
 }
 
 void TabStripPageHandler::TabGroupedStateChanged(
-    std::optional<tab_groups::TabGroupId> group,
+    TabStripModel* tab_strip_model,
+    std::optional<tab_groups::TabGroupId> old_group,
+    std::optional<tab_groups::TabGroupId> new_group,
     tabs::TabInterface* tab,
     int index) {
   TRACE_EVENT0("browser", "TabStripPageHandler:TabGroupedStateChanged");
   const SessionID::id_type tab_id =
       extensions::ExtensionTabUtil::GetTabId(tab->GetContents());
-  if (group.has_value()) {
-    page_->TabGroupStateChanged(tab_id, index, group.value().ToString());
+  if (new_group.has_value()) {
+    page_->TabGroupStateChanged(tab_id, index, new_group.value().ToString());
   } else {
     page_->TabGroupStateChanged(tab_id, index, std::optional<std::string>());
   }

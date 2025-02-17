@@ -18,20 +18,6 @@ const int kHistogramPageTransitionMaxKnownValue =
     static_cast<int>(ui::PAGE_TRANSITION_KEYWORD_GENERATED);
 const int kHistogramPageTransitionFallbackValue =
     kHistogramFilteringBehaviorSpacing - 1;
-constexpr char kParentAccessBaseURL[] =
-    "https://families.google.com/parentaccess";
-// URL to which the parent access widget redirects on approval.
-constexpr char kParentAccessContinueURL[] = "https://families.google.com";
-constexpr char kParentAcessIOSCallerID[] = "qSTnVRdQ";
-
-GURL GetParentAccessURL(const std::string& caller_id) {
-  GURL url(kParentAccessBaseURL);
-  GURL::Replacements replacements;
-  std::string query = base::StrCat(
-      {"callerid=", caller_id, "&continue=", kParentAccessContinueURL});
-  replacements.SetQueryStr(query);
-  return url.ReplaceComponents(replacements);
-}
 }  // namespace
 
 static_assert(kHistogramPageTransitionMaxKnownValue <
@@ -144,9 +130,4 @@ extern const char kClassifyUrlThrottleStatusHistogramName[] =
     "SupervisedUsers.ClassifyUrlThrottle.Status";
 extern const char kClassifyUrlThrottleFinalStatusHistogramName[] =
     "SupervisedUsers.ClassifyUrlThrottle.FinalStatus";
-
-GURL GetParentAccessURLForIOS() {
-  return GetParentAccessURL(kParentAcessIOSCallerID);
-}
-
 }  // namespace supervised_user

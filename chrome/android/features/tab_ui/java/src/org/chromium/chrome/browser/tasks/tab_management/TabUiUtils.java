@@ -15,9 +15,9 @@ import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 
 import org.chromium.base.Callback;
+import org.chromium.base.Token;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.collaboration.CollaborationServiceFactory;
-import org.chromium.chrome.browser.data_sharing.DataSharingServiceFactory;
 import org.chromium.chrome.browser.data_sharing.DataSharingTabManager;
 import org.chromium.chrome.browser.data_sharing.ui.shared_image_tiles.SharedImageTilesCoordinator;
 import org.chromium.chrome.browser.data_sharing.ui.shared_image_tiles.SharedImageTilesView;
@@ -33,12 +33,11 @@ import org.chromium.chrome.browser.tabmodel.TabGroupTitleUtils;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelActionListener;
+import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager.MaybeBlockingResult;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.components.browser_ui.widget.ActionConfirmationResult;
 import org.chromium.components.collaboration.CollaborationService;
-import org.chromium.components.data_sharing.DataSharingService;
 import org.chromium.components.data_sharing.GroupData;
-import org.chromium.components.data_sharing.PeopleGroupActionOutcome;
 import org.chromium.components.data_sharing.member_role.MemberRole;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
@@ -122,6 +121,8 @@ public class TabUiUtils {
     public static void ungroupTabGroup(TabGroupModelFilter filter, int tabId) {
         TabModel tabModel = filter.getTabModel();
         int rootId = tabModel.getTabById(tabId).getRootId();
+        if (rootId == Tab.INVALID_TAB_ID) return;
+
         filter.getTabUngrouper().ungroupTabs(rootId, /* trailing= */ true, /* allowDialog= */ true);
     }
 
@@ -183,7 +184,6 @@ public class TabUiUtils {
         TabModel tabModel = filter.getTabModel();
         Profile profile = tabModel.getProfile();
         TabGroupSyncService tabGroupSyncService = TabGroupSyncServiceFactory.getForProfile(profile);
-        DataSharingService dataSharingService = DataSharingServiceFactory.getForProfile(profile);
         IdentityManager identityManager =
                 IdentityServicesProvider.get().getIdentityManager(profile);
         CollaborationService collaborationService =
@@ -209,16 +209,23 @@ public class TabUiUtils {
         }
 
         @MemberRole
-        int memberRole = TabShareUtils.getSelfMemberRole(shareGroup, account.getGaiaId());
-        Callback<Integer> onActionConfirmation =
-                (@ActionConfirmationResult Integer result) -> {
-                    if (result != ActionConfirmationResult.CONFIRMATION_NEGATIVE) {
+        int memberRole = collaborationService.getCurrentUserRoleForGroup(collaborationId);
+        Callback<MaybeBlockingResult> onActionConfirmation =
+                (MaybeBlockingResult maybeBlockingResult) -> {
+                    if (maybeBlockingResult.result
+                            != ActionConfirmationResult.CONFIRMATION_NEGATIVE) {
+                        assert maybeBlockingResult.finishBlocking != null;
                         exitCollaborationWithoutWarning(
                                 context,
                                 modalDialogManager,
-                                dataSharingService,
+                                collaborationService,
                                 collaborationId,
-                                memberRole);
+                                memberRole,
+                                maybeBlockingResult.finishBlocking);
+                    } else if (maybeBlockingResult.finishBlocking != null) {
+                        assert false : "Should not be reachable.";
+                        // Do the safe thing and run the runnable anyway.
+                        maybeBlockingResult.finishBlocking.run();
                     }
                 };
 
@@ -241,25 +248,52 @@ public class TabUiUtils {
     }
 
     /**
+     * Returns whether an IPH should be shown for Tab Group Sync for the given tab group ID.
+     *
+     * @param tabGroupSyncService The sync service to get tab group data form.
+     * @param tabGroupId The local tab group ID.
+     * @return Whether to show Tab Group Sync IPH.
+     */
+    public static boolean shouldShowIphForSync(
+            TabGroupSyncService tabGroupSyncService, Token tabGroupId) {
+        if (tabGroupSyncService == null || tabGroupId == null) return false;
+        @Nullable
+        SavedTabGroup savedTabGroup = tabGroupSyncService.getGroup(new LocalTabGroupId(tabGroupId));
+        // Don't try to show the IPH if the group is:
+        // 1) Not in TabGroupSyncService for some reason.
+        // 2) A shared tab group.
+        // 3) Created locally.
+        if (savedTabGroup == null
+                || TabShareUtils.isCollaborationIdValid(savedTabGroup.collaborationId)
+                || !tabGroupSyncService.isRemoteDevice(savedTabGroup.creatorCacheGuid)) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
      * Leaves or deletes a given collaboration.
      *
      * @param context Used to load resources.
      * @param modalDialogManager Used to show error dialogs.
-     * @param dataSharingService Called to do the actual leave or delete action.
+     * @param collaborationService Called to do the actual leave or delete action.
      * @param collaborationId Used to identify the collaboration.
      * @param memberRole Used to decide which way to exit the group.
+     * @param finishedRunnable Invoked when the server RPC is complete.
      */
     public static void exitCollaborationWithoutWarning(
             Context context,
             ModalDialogManager modalDialogManager,
-            DataSharingService dataSharingService,
+            CollaborationService collaborationService,
             String collaborationId,
-            @MemberRole int memberRole) {
-        Callback<Integer> callback = bindOnLeaveOrDeleteGroup(context, modalDialogManager);
+            @MemberRole int memberRole,
+            @Nullable Runnable finishedRunnable) {
+        Callback<Boolean> callback =
+                bindOnLeaveOrDeleteGroup(context, modalDialogManager, finishedRunnable);
         if (memberRole == MemberRole.OWNER) {
-            dataSharingService.deleteGroup(collaborationId, callback);
+            collaborationService.deleteGroup(collaborationId, callback);
         } else if (memberRole == MemberRole.MEMBER) {
-            dataSharingService.leaveGroup(collaborationId, callback);
+            collaborationService.leaveGroup(collaborationId, callback);
         } else {
             showGenericErrorDialog(context, modalDialogManager);
         }
@@ -284,8 +318,8 @@ public class TabUiUtils {
         Tab tab = filter.getTabModel().getTabById(tabId);
         LocalTabGroupId localTabGroupId = TabGroupSyncUtils.getLocalTabGroupId(tab);
 
-        dataSharingTabManager.createGroupFlow(
-                activity, tabGroupDisplayName, localTabGroupId, (ignored) -> {});
+        dataSharingTabManager.createOrManageFlow(
+                activity, /* syncId= */ null, localTabGroupId, (ignored) -> {});
     }
 
     /**
@@ -313,10 +347,16 @@ public class TabUiUtils {
         container.addView(imageTilesView, layoutParams);
     }
 
-    private static Callback<Integer> bindOnLeaveOrDeleteGroup(
-            Context context, ModalDialogManager modalDialogManager) {
-        return (@PeopleGroupActionOutcome Integer outcome) -> {
-            if (outcome != PeopleGroupActionOutcome.SUCCESS) {
+    private static Callback<Boolean> bindOnLeaveOrDeleteGroup(
+            Context context,
+            ModalDialogManager modalDialogManager,
+            @Nullable Runnable finishedRunnable) {
+        return (Boolean success) -> {
+            // Invoke the runnable first since it may be necessary to hide the prior dialog before
+            // showing the error.
+            if (finishedRunnable != null) finishedRunnable.run();
+
+            if (!Boolean.TRUE.equals(success)) {
                 showGenericErrorDialog(context, modalDialogManager);
             }
         };
@@ -360,15 +400,15 @@ public class TabUiUtils {
 
         for (int i = 0; i < tabList.getCount(); i++) {
             if (tabList.getTabAt(i).getTabHasSensitiveContent()) {
-                contentSensitivitySetter.onResult(/* contentIsSensitive= */ true);
-                RecordHistogram.recordBooleanHistogram(histogram, /* contentIsSensitive= */ true);
+                contentSensitivitySetter.onResult(/* result= */ true);
+                RecordHistogram.recordBooleanHistogram(histogram, /* sample= */ true);
                 return;
             }
         }
         // If not marked as not sensitive, the tab switcher might remain sensitive from a previous
         // set of tabs.
-        contentSensitivitySetter.onResult(/* contentIsSensitive= */ false);
-        RecordHistogram.recordBooleanHistogram(histogram, /* contentIsSensitive= */ false);
+        contentSensitivitySetter.onResult(/* result= */ false);
+        RecordHistogram.recordBooleanHistogram(histogram, /* sample= */ false);
     }
 
     /** Returns whether any tabs have sensitive content. */

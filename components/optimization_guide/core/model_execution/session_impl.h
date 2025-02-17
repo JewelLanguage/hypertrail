@@ -15,6 +15,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
 #include "components/optimization_guide/core/model_execution/feature_keys.h"
+#include "components/optimization_guide/core/model_execution/multimodal_message.h"
 #include "components/optimization_guide/core/model_execution/on_device_context.h"
 #include "components/optimization_guide/core/model_execution/on_device_execution.h"
 #include "components/optimization_guide/core/model_execution/on_device_model_feature_adapter.h"
@@ -59,6 +60,7 @@ class SessionImpl : public OptimizationGuideModelExecutor::Session {
   // optimization_guide::OptimizationGuideModelExecutor::Session:
   const TokenLimits& GetTokenLimits() const override;
   const proto::Any& GetOnDeviceFeatureMetadata() const override;
+  void SetInput(MultimodalMessage request) override;
   void AddContext(
       const google::protobuf::MessageLite& request_metadata) override;
   void Score(const std::string& text,
@@ -81,18 +83,12 @@ class SessionImpl : public OptimizationGuideModelExecutor::Session {
   bool ShouldUseOnDeviceModel() const;
 
  private:
-  AddContextResult AddContextImpl(
-      const google::protobuf::MessageLite& request_metadata);
+  AddContextResult AddContextImpl(MultimodalMessage request);
 
   void DestroyOnDeviceState();
 
   // Called when an on-device execution flow terminates, and can be cleaned up.
   void OnDeviceExecutionTerminated(bool healthy);
-
-  // Returns a new message created by merging `request` into `context_`. This
-  // is a bit tricky since we don't know the type of MessageLite.
-  std::unique_ptr<google::protobuf::MessageLite> MergeContext(
-      const google::protobuf::MessageLite& request);
 
   // Helper function to get the size of request in tokens with boolean flag to
   // control if we are extracting the context or the execution text.
@@ -104,7 +100,7 @@ class SessionImpl : public OptimizationGuideModelExecutor::Session {
   const ModelBasedCapabilityKey feature_;
   ExecuteRemoteFn execute_remote_fn_;
 
-  std::unique_ptr<google::protobuf::MessageLite> context_;
+  MultimodalMessage context_;
   base::TimeTicks context_start_time_;
 
   // Manages the on-device session holding the processed context.

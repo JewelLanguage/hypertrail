@@ -11,9 +11,10 @@
 #import "base/metrics/field_trial_params.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
+#import "ios/chrome/browser/banner_promo/model/default_browser_banner_promo_app_agent.h"
 #import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_animator.h"
 #import "ios/chrome/browser/keyboard/ui_bundled/UIKeyCommand+Chrome.h"
-#import "ios/chrome/browser/omnibox/ui_bundled/omnibox_ui_features.h"
+#import "ios/chrome/browser/omnibox/public/omnibox_ui_features.h"
 #import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/dynamic_type_util.h"
@@ -21,6 +22,7 @@
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/adaptive_toolbar_view_controller+subclassing.h"
+#import "ios/chrome/browser/toolbar/ui_bundled/banner_promo_view.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/buttons/toolbar_button.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/buttons/toolbar_button_factory.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/buttons/toolbar_configuration.h"
@@ -32,6 +34,11 @@
 #import "ios/chrome/browser/toolbar/ui_bundled/tab_groups/ui/tab_group_indicator_view.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/common/ui/util/ui_util.h"
+
+namespace {
+// Duration for the banner promo appearance/disappearance animation
+const base::TimeDelta kBannerPromoAnimationDuration = base::Seconds(0.5);
+}  // namespace
 
 // TODO(crbug.com/374808149): Clean up the killswitch.
 BASE_FEATURE(kPrimaryToolbarViewDidLoadUpdateViews,
@@ -155,6 +162,8 @@ BASE_FEATURE(kPrimaryToolbarViewDidLoadUpdateViews,
   // set to topLayoutGuide after the view creation on iOS 10.
   [self.view setUp];
 
+  self.view.bannerPromo.delegate = self.bannerPromoDelegate;
+
   // Reference the location bar container as the top omnibox layout guide.
   // Force the synchronous layout update, as this fixes the screen rotation
   // animation in this case.
@@ -165,6 +174,7 @@ BASE_FEATURE(kPrimaryToolbarViewDidLoadUpdateViews,
       [self verticalMarginForLocationBarForFullscreenProgress:1];
 }
 
+#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
   // iOS 17 and later introduce a new way to handle trait changes. If the OS
@@ -174,6 +184,7 @@ BASE_FEATURE(kPrimaryToolbarViewDidLoadUpdateViews,
   }
   [self updateViews:self.view previousTraitCollection:previousTraitCollection];
 }
+#endif
 
 - (void)viewDidLoad {
   [super viewDidLoad];
@@ -242,6 +253,15 @@ BASE_FEATURE(kPrimaryToolbarViewDidLoadUpdateViews,
   }
 }
 
+- (BOOL)locationBarIsExpanded {
+  for (NSLayoutConstraint* constraint in self.view.expandedConstraints) {
+    if (!constraint.isActive) {
+      return false;
+    }
+  }
+  return true;
+}
+
 #pragma mark - SharingPositioner
 
 - (UIView*)sourceView {
@@ -273,6 +293,7 @@ BASE_FEATURE(kPrimaryToolbarViewDidLoadUpdateViews,
 - (void)expandLocationBar {
   [self deactivateViewLocationBarConstraints];
   [NSLayoutConstraint activateConstraints:self.view.expandedConstraints];
+  [self.delegate locationBarExpandedInViewController:self];
   [self.view layoutIfNeeded];
 }
 
@@ -284,6 +305,7 @@ BASE_FEATURE(kPrimaryToolbarViewDidLoadUpdateViews,
   } else {
     [NSLayoutConstraint activateConstraints:self.view.contractedConstraints];
   }
+  [self.delegate locationBarContractedInViewController:self];
   [self.view layoutIfNeeded];
 }
 
@@ -330,15 +352,47 @@ BASE_FEATURE(kPrimaryToolbarViewDidLoadUpdateViews,
 #pragma mark - PrimaryToolbarConsumer
 
 - (void)showBannerPromo {
+  [self.view prepareToShowBannerPromo];
+  [self.view.superview layoutIfNeeded];
+
+  __weak __typeof(self) weakSelf = self;
+  [UIView animateWithDuration:kBannerPromoAnimationDuration.InSecondsF()
+                   animations:^{
+                     [weakSelf showBannerPromoAnimationBlock];
+                   }];
+}
+
+// Helper method to actually do the animation to show the banner promo.
+- (void)showBannerPromoAnimationBlock {
   [self.view showBannerPromo];
   [self.toolbarHeightDelegate toolbarsHeightChanged];
+  [self.view.superview layoutIfNeeded];
 }
 
 - (void)hideBannerPromo {
-  [self.view hideBannerPromo];
-  [self.toolbarHeightDelegate toolbarsHeightChanged];
+  [self.view.superview layoutIfNeeded];
+  __weak __typeof(self) weakSelf = self;
+  [UIView animateWithDuration:kBannerPromoAnimationDuration.InSecondsF()
+      animations:^{
+        [weakSelf hideBannerPromoAnimationBlock];
+      }
+      completion:^(BOOL completed) {
+        [weakSelf hideBannerPromoCompletionBlock];
+      }];
 }
 
+// Helper method to actually do the animation to hide the banner promo.
+- (void)hideBannerPromoAnimationBlock {
+  [self.view hideBannerPromo];
+  [self.toolbarHeightDelegate toolbarsHeightChanged];
+  [self.view.superview layoutIfNeeded];
+}
+
+// Helper method for completion.
+- (void)hideBannerPromoCompletionBlock {
+  [self.view cleanupAfterHideBannerPromo];
+  [self.view.superview layoutIfNeeded];
+}
 #pragma mark - Private
 
 // Adjusts the layout and appearance of views in response to changes in

@@ -172,6 +172,7 @@ PrivacyIndicatorsTrayItemView::PrivacyIndicatorsTrayItemView(Shelf* shelf)
   auto add_icon_to_container = [&container_view]() {
     auto icon = std::make_unique<views::ImageView>();
     icon->SetPaintToLayer();
+    icon->layer()->SetFillsBoundsOpaquely(false);
     icon->SetVisible(false);
     return container_view->AddChildView(std::move(icon));
   };
@@ -579,16 +580,16 @@ void PrivacyIndicatorsTrayItemView::UpdateTooltipText() {
           : std::u16string();
 
   if (cam_and_mic_status.empty()) {
-    SetCachedTooltipText(screen_share_status);
+    SetTooltipText(screen_share_status);
     return;
   }
 
   if (screen_share_status.empty()) {
-    SetCachedTooltipText(cam_and_mic_status);
+    SetTooltipText(cam_and_mic_status);
     return;
   }
 
-  SetCachedTooltipText(
+  SetTooltipText(
       l10n_util::GetStringFUTF16(IDS_PRIVACY_INDICATORS_VIEW_TOOLTIP,
                                  {cam_and_mic_status, screen_share_status},
                                  /*offsets=*/nullptr));

@@ -19,6 +19,20 @@ class GPUSupportedLimits final : public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
+#ifdef WGPU_BREAKING_CHANGE_FLATTEN_LIMITS
+  explicit GPUSupportedLimits(const wgpu::Limits& limits);
+
+  static void MakeUndefined(wgpu::Limits* out);
+  // Returns true if populated, false if not and the ScriptPromiseResolverBase
+  // has been rejected.
+  static bool Populate(
+      wgpu::Limits* out,
+      const HeapVector<
+          std::pair<String,
+                    Member<V8UnionUndefinedOrUnsignedLongLongEnforceRange>>>&
+          in,
+      ScriptPromiseResolverBase*);
+#else
   explicit GPUSupportedLimits(const wgpu::SupportedLimits& limits);
 
   static void MakeUndefined(wgpu::RequiredLimits* out);
@@ -31,6 +45,7 @@ class GPUSupportedLimits final : public ScriptWrappable {
                     Member<V8UnionUndefinedOrUnsignedLongLongEnforceRange>>>&
           in,
       ScriptPromiseResolverBase*);
+#endif  // WGPU_BREAKING_CHANGE_FLATTEN_LIMITS
 
   GPUSupportedLimits(const GPUSupportedLimits&) = delete;
   GPUSupportedLimits& operator=(const GPUSupportedLimits&) = delete;
@@ -67,8 +82,6 @@ class GPUSupportedLimits final : public ScriptWrappable {
   unsigned maxComputeWorkgroupSizeY() const;
   unsigned maxComputeWorkgroupSizeZ() const;
   unsigned maxComputeWorkgroupsPerDimension() const;
-  unsigned minSubgroupSize() const;
-  unsigned maxSubgroupSize() const;
   unsigned maxStorageBuffersInFragmentStage() const;
   unsigned maxStorageTexturesInFragmentStage() const;
   unsigned maxStorageBuffersInVertexStage() const;
@@ -76,9 +89,6 @@ class GPUSupportedLimits final : public ScriptWrappable {
 
  private:
   wgpu::Limits limits_;
-
-  bool subgroup_limits_initialized_;
-  wgpu::DawnExperimentalSubgroupLimits subgroup_limits_;
 };
 
 }  // namespace blink

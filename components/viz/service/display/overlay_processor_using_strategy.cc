@@ -24,7 +24,6 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
@@ -178,7 +177,7 @@ bool IsOccludedByMaskCandidates(
     return false;
   }
 
-  return base::ranges::any_of(
+  return std::ranges::any_of(
       mask_candidates.begin(), mask_candidates.end(),
       [&candidate](const auto& iter) {
         return candidate.occluding_mask_keys.contains(
@@ -518,7 +517,7 @@ gfx::Rect OverlayProcessorUsingStrategy::ComputeDamageExcludingOverlays(
       curr_surface_damage.Intersect(existing_damage);
 
       // Only add damage back in if it is not occluded by any overlays.
-      bool is_occluded = base::ranges::any_of(
+      bool is_occluded = std::ranges::any_of(
           occluding_rects, [&curr_surface_damage](const gfx::Rect& occluder) {
             return occluder.Contains(curr_surface_damage);
           });
@@ -827,11 +826,6 @@ bool OverlayProcessorUsingStrategy::AttemptWithStrategies(
   bool has_required_overlay = false;
   bool attempted_scaling_required_overlays = false;
   for (auto&& candidate : proposed_candidates) {
-    // Underlays change the material so we save it here to record proper UMA.
-    DrawQuad::Material quad_material =
-        candidate.strategy->GetUMAEnum() != OverlayStrategy::kUnknown
-            ? candidate.quad_iter->material
-            : DrawQuad::Material::kInvalid;
     if (candidate.candidate.requires_overlay) {
       has_required_overlay = true;
     }
@@ -886,8 +880,6 @@ bool OverlayProcessorUsingStrategy::AttemptWithStrategies(
       LogStrategyEnumUMA(candidate.strategy->GetUMAEnum());
       last_successful_strategy_ = candidate.strategy;
       OnOverlaySwitchUMA(OverlayProposedCandidate::ToProposeKey(candidate));
-      UMA_HISTOGRAM_ENUMERATION("Viz.DisplayCompositor.OverlayQuadMaterial",
-                                quad_material);
       if (candidate.candidate.requires_overlay) {
         // Track how much we can downscale successfully.
         float scale_factor = GetMinScaleFactor(candidate.candidate);
@@ -966,7 +958,7 @@ bool OverlayProcessorUsingStrategy::AttemptMultipleOverlays(
   // After sorting in `SortProposedOverlayCandidates()`, all the candidates with
   // display masks will be in the beginning of `sorted_candidates`.
   ConstOverlayProposedCandidateIterator first_candidate_without_masks =
-      base::ranges::find_if(
+      std::ranges::find_if(
           sorted_candidates.begin(), sorted_candidates.end(),
           [](const OverlayProposedCandidate& candidate) {
             return !candidate.candidate.has_rounded_display_masks;

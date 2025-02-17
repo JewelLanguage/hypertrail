@@ -85,12 +85,6 @@ extern const base::FeatureParam<int> kInterventionDialogStringVersion;
 // profile that is different from the last active browser.
 extern const base::FeatureParam<bool> kInterventionShowMixedProfileSuggestions;
 
-#if BUILDFLAG(IS_WIN)
-// Prefetch the main browser DLL when a new node is added to the PM graph
-// and no prefetch has been done within a reasonable timeframe.
-BASE_DECLARE_FEATURE(kPrefetchVirtualMemoryPolicy);
-#endif
-
 // This represents the duration that the performance intervention button
 // should remain in the toolbar after the user dismisses the intervention
 // dialog without taking the suggested action.
@@ -186,6 +180,9 @@ BASE_DECLARE_FEATURE(kFreezingOnBatterySaverForTesting);
 // tab discarding.
 BASE_DECLARE_FEATURE(kFreezingFollowsDiscardOptOut);
 
+// When enabled, the freezing eligibility UKM event may be recorded.
+BASE_DECLARE_FEATURE(kRecordFreezingEligibilityUKM);
+
 // When enabled, Resource Attribution measurements will include contexts for
 // individual origins.
 BASE_DECLARE_FEATURE(kResourceAttributionIncludeOrigins);
@@ -200,6 +197,10 @@ BASE_DECLARE_FEATURE(kUnimportantFramesPriority);
 // When enabled, the begin frame rate of visible unimportant frames would be
 // reduced to half of normal frame rate.
 BASE_DECLARE_FEATURE(kThrottleUnimportantFrameRate);
+
+// When enabled, keep the default search engine render process host alive
+// (crbug.com/365958798).
+BASE_DECLARE_FEATURE(kKeepDefaultSearchEngineRendererAlive);
 
 }  // namespace performance_manager::features
 

@@ -46,6 +46,7 @@ import org.chromium.components.autofill.AddressNormalizer.NormalizedAddressReque
 import org.chromium.components.autofill.AutofillProfile;
 import org.chromium.components.autofill.Completable;
 import org.chromium.components.autofill.EditableOption;
+import org.chromium.components.autofill.FieldType;
 import org.chromium.components.browser_ui.settings.SettingsNavigation;
 import org.chromium.components.payments.AbortReason;
 import org.chromium.components.payments.ErrorStrings;
@@ -145,7 +146,6 @@ public class PaymentUiService
     private SectionInformation mPaymentMethodsSection;
     private SectionInformation mShippingAddressesSection;
     private ContactDetailsSection mContactSection;
-    private boolean mHaveRequestedAutofillData = true;
     private List<AutofillProfile> mAutofillProfiles;
     private TabModelSelector mObservedTabModelSelector;
     private TabModel mObservedTabModel;
@@ -426,23 +426,6 @@ public class PaymentUiService
         return mContactSection != null ? (AutofillContact) mContactSection.getSelectedItem() : null;
     }
 
-    /** Get the contact editor on PaymentRequest UI. */
-    private ContactEditor getContactEditor() {
-        return mContactEditor;
-    }
-
-    /** @return The autofill profiles. */
-    private List<AutofillProfile> getAutofillProfiles() {
-        return mAutofillProfiles;
-    }
-
-    /**
-     * @return Whether PaymentRequestUi has requested autofill data.
-     */
-    public boolean haveRequestedAutofillData() {
-        return mHaveRequestedAutofillData;
-    }
-
     /**
      * Called when the merchant calls complete() to complete the payment request.
      * @param result The completion status of the payment request, defined in {@link
@@ -509,19 +492,6 @@ public class PaymentUiService
                                     /* includeNameInLabel= */ false));
         }
 
-        if (mParams.getPaymentOptions().requestShipping) {
-            boolean haveCompleteShippingAddress = false;
-            for (int i = 0; i < mAutofillProfiles.size(); i++) {
-                if (AutofillAddress.checkAddressCompletionStatus(
-                                mAutofillProfiles.get(i), personalDataManager)
-                        == AutofillAddress.CompletionStatus.COMPLETE) {
-                    haveCompleteShippingAddress = true;
-                    break;
-                }
-            }
-            mHaveRequestedAutofillData &= haveCompleteShippingAddress;
-        }
-
         PaymentOptions options = mParams.getPaymentOptions();
         if (PaymentOptionsUtils.requestAnyContactInformation(mParams.getPaymentOptions())) {
             // Do not persist changes on disk in OffTheRecord mode.
@@ -532,20 +502,6 @@ public class PaymentUiService
                             options.requestPayerEmail,
                             /* saveToDisk= */ !mIsOffTheRecord,
                             personalDataManager);
-            boolean haveCompleteContactInfo = false;
-            for (int i = 0; i < getAutofillProfiles().size(); i++) {
-                AutofillProfile profile = getAutofillProfiles().get(i);
-                if (getContactEditor()
-                                .checkContactCompletionStatus(
-                                        profile.getFullName(),
-                                        profile.getPhoneNumber(),
-                                        profile.getEmailAddress())
-                        == ContactEditor.COMPLETE) {
-                    haveCompleteContactInfo = true;
-                    break;
-                }
-            }
-            mHaveRequestedAutofillData &= haveCompleteContactInfo;
         }
         mHasInitialized = true;
     }
@@ -1231,10 +1187,11 @@ public class PaymentUiService
                 PersonalDataManagerFactory.getForProfile(Profile.fromWebContents(mWebContents));
         for (int i = 0; i < mAutofillProfiles.size(); i++) {
             AutofillProfile profile = mAutofillProfiles.get(i);
-            mAddressEditor.addPhoneNumberIfValid(profile.getPhoneNumber());
+            mAddressEditor.addPhoneNumberIfValid(
+                    profile.getInfo(FieldType.PHONE_HOME_WHOLE_NUMBER));
 
             // Only suggest addresses that have a street address.
-            if (!TextUtils.isEmpty(profile.getStreetAddress())) {
+            if (!TextUtils.isEmpty(profile.getInfo(FieldType.ADDRESS_HOME_STREET_ADDRESS))) {
                 addresses.add(new AutofillAddress(context, profile, personalDataManager));
             }
         }

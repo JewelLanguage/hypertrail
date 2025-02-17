@@ -22,6 +22,7 @@
 #include "components/saved_tab_groups/public/saved_tab_group.h"
 #include "components/saved_tab_groups/public/saved_tab_group_tab.h"
 #include "components/saved_tab_groups/public/types.h"
+#include "components/saved_tab_groups/public/utils.h"
 #include "components/saved_tab_groups/test_support/saved_tab_group_test_utils.h"
 #include "components/sync/protocol/saved_tab_group_specifics.pb.h"
 #include "components/tab_groups/tab_group_color.h"
@@ -41,6 +42,7 @@ using testing::IsEmpty;
 using testing::Not;
 using testing::NotNull;
 using testing::Pointee;
+using testing::SizeIs;
 using testing::UnorderedElementsAre;
 
 MATCHER_P(HasGroupId, guid, "") {
@@ -133,8 +135,7 @@ class SavedTabGroupModelTest : public ::testing::Test {
   SavedTabGroupModelTest()
       : id_1_(base::Uuid::GenerateRandomV4()),
         id_2_(base::Uuid::GenerateRandomV4()),
-        id_3_(base::Uuid::GenerateRandomV4()) {
-  }
+        id_3_(base::Uuid::GenerateRandomV4()) {}
 
   ~SavedTabGroupModelTest() override { RemoveTestData(); }
 
@@ -392,6 +393,31 @@ TEST_F(SavedTabGroupModelTest, RemoveTabFromGroup) {
   test::CompareSavedTabGroupTabs(group->saved_tabs(), {group->saved_tabs()[0]});
 }
 
+TEST_F(SavedTabGroupModelTest, RemoveSharedTabFromGroup) {
+  SavedTabGroup shared_group =
+      saved_tab_group_model_->Get(id_2_)->CloneAsSharedTabGroup(
+          CollaborationId("collaboration"));
+  ASSERT_THAT(shared_group.saved_tabs(), SizeIs(2));
+  ASSERT_THAT(shared_group.last_removed_tabs_metadata(), IsEmpty());
+  saved_tab_group_model_->AddedLocally(shared_group);
+
+  // Remove one shared tab and verify that its metadata is stored in the group.
+  GaiaId removed_by("user_id");
+  base::Uuid tab_guid_to_remove =
+      shared_group.saved_tabs().back().saved_tab_guid();
+  saved_tab_group_model_->RemoveTabFromGroupFromSync(
+      shared_group.saved_guid(), tab_guid_to_remove, removed_by);
+
+  const std::map<base::Uuid, SavedTabGroup::RemovedTabMetadata>&
+      removed_tabs_metadata =
+          saved_tab_group_model_->Get(shared_group.saved_guid())
+              ->last_removed_tabs_metadata();
+  ASSERT_THAT(removed_tabs_metadata,
+              UnorderedElementsAre(testing::Key(tab_guid_to_remove)));
+  EXPECT_EQ(removed_tabs_metadata.at(tab_guid_to_remove).removed_by,
+            removed_by);
+}
+
 // Tests that a group is removed from the model when the last tab is removed
 // from it.
 TEST_F(SavedTabGroupModelTest, RemoveLastTabFromGroupLocally) {
@@ -640,8 +666,8 @@ TEST_F(SavedTabGroupModelTest, MergePinnedGroupRetainPosition) {
   EXPECT_EQ(0, group2->position());
 
   // Verify group 2 should be the 1st one in the list.
-    ASSERT_THAT(GetSavedTabGroupIds(),
-                testing::ElementsAre(guid2, guid1, id_3_, id_2_, id_1_));
+  ASSERT_THAT(GetSavedTabGroupIds(),
+              testing::ElementsAre(guid2, guid1, id_3_, id_2_, id_1_));
 
   // Change group 2 position from 0 to 1.
   SavedTabGroup updated_group2(*group2);
@@ -661,8 +687,8 @@ TEST_F(SavedTabGroupModelTest, MergePinnedGroupRetainPosition) {
   EXPECT_EQ(1, merged_group->position());
 
   // Verify group 2 should be the 2nd one in the list.
-    ASSERT_THAT(GetSavedTabGroupIds(),
-                testing::ElementsAre(guid1, guid2, id_3_, id_2_, id_1_));
+  ASSERT_THAT(GetSavedTabGroupIds(),
+              testing::ElementsAre(guid1, guid2, id_3_, id_2_, id_1_));
 }
 
 TEST_F(SavedTabGroupModelTest, MergeSharedTabGroupAttribution) {
@@ -697,7 +723,7 @@ TEST_F(SavedTabGroupModelTest, MergeTabsFromModel) {
   SavedTabGroupTab tab1 = saved_tab_group_model_->Get(id_1_)->saved_tabs()[0];
   SavedTabGroupTab tab2(tab1);
   tab2.SetTitle(u"Updated Title");
-  tab2.SetURL(GURL("chrome://updated_url"));
+  tab2.SetURL(GURL("http://foo.com"));
 
   const SavedTabGroupTab* merged_tab =
       saved_tab_group_model_->MergeRemoteTab(tab2);
@@ -708,6 +734,24 @@ TEST_F(SavedTabGroupModelTest, MergeTabsFromModel) {
   EXPECT_EQ(tab2.creation_time_windows_epoch_micros(),
             merged_tab->creation_time_windows_epoch_micros());
   EXPECT_EQ(tab2.update_time_windows_epoch_micros(),
+            merged_tab->update_time_windows_epoch_micros());
+}
+
+TEST_F(SavedTabGroupModelTest, MergeTabsWithUnsupportedURLFromModel) {
+  SavedTabGroupTab tab1 = saved_tab_group_model_->Get(id_1_)->saved_tabs()[0];
+  SavedTabGroupTab remote_tab(tab1);
+  remote_tab.SetTitle(u"Updated Title");
+  remote_tab.SetURL(GURL(kChromeSavedTabGroupUnsupportedURL));
+
+  const SavedTabGroupTab* merged_tab =
+      saved_tab_group_model_->MergeRemoteTab(remote_tab);
+
+  EXPECT_EQ(tab1.url(), merged_tab->url());
+  EXPECT_EQ(remote_tab.saved_tab_guid(), merged_tab->saved_tab_guid());
+  EXPECT_EQ(remote_tab.saved_group_guid(), merged_tab->saved_group_guid());
+  EXPECT_EQ(remote_tab.creation_time_windows_epoch_micros(),
+            merged_tab->creation_time_windows_epoch_micros());
+  EXPECT_EQ(remote_tab.update_time_windows_epoch_micros(),
             merged_tab->update_time_windows_epoch_micros());
 }
 
@@ -1100,9 +1144,9 @@ TEST_F(SavedTabGroupModelObserverTest, MoveElement) {
   saved_tab_group_model_->ReorderGroupLocally(stg_2.saved_guid(), 2);
 
   EXPECT_TRUE(reordered_called_);
-    EXPECT_EQ(0, saved_tab_group_model_->GetIndexOf(stg_3.saved_guid()));
-    EXPECT_EQ(1, saved_tab_group_model_->GetIndexOf(stg_1.saved_guid()));
-    EXPECT_EQ(2, saved_tab_group_model_->GetIndexOf(stg_2.saved_guid()));
+  EXPECT_EQ(0, saved_tab_group_model_->GetIndexOf(stg_3.saved_guid()));
+  EXPECT_EQ(1, saved_tab_group_model_->GetIndexOf(stg_1.saved_guid()));
+  EXPECT_EQ(2, saved_tab_group_model_->GetIndexOf(stg_2.saved_guid()));
 }
 
 TEST_F(SavedTabGroupModelObserverTest, ReordedTabsUpdatePositions) {
@@ -1251,6 +1295,27 @@ TEST_F(SavedTabGroupModelObserverTest, UpdateLocalCacheGuidForTabs) {
   EXPECT_EQ(retrieved_group->creator_cache_guid(), cache_guid2);
   EXPECT_EQ(retrieved_tab1->creator_cache_guid(), cache_guid2);
   EXPECT_EQ(retrieved_tab2->creator_cache_guid(), std::nullopt);
+}
+
+TEST_F(SavedTabGroupModelObserverTest,
+       ShouldMarkSharedTabGroupsAsTransitioned) {
+  SavedTabGroup saved_group = test::CreateTestSavedTabGroup();
+  saved_tab_group_model_->AddedLocally(saved_group);
+
+  SavedTabGroup shared_group =
+      saved_group.CloneAsSharedTabGroup(CollaborationId("collaboration"));
+  saved_tab_group_model_->AddedLocally(shared_group);
+  ASSERT_TRUE(saved_tab_group_model_->Get(shared_group.saved_guid())
+                  ->is_transitioning_to_shared());
+
+  ClearSignals();
+  ASSERT_THAT(retrieved_group_, IsEmpty());
+
+  saved_tab_group_model_->MarkTransitionedToShared(shared_group.saved_guid());
+  EXPECT_FALSE(saved_tab_group_model_->Get(shared_group.saved_guid())
+                   ->is_transitioning_to_shared());
+  EXPECT_THAT(retrieved_group_,
+              UnorderedElementsAre(HasGroupId(shared_group.saved_guid())));
 }
 
 }  // namespace

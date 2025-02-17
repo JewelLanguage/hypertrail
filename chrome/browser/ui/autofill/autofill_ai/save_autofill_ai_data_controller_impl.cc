@@ -5,6 +5,8 @@
 #include "chrome/browser/ui/autofill/autofill_ai/save_autofill_ai_data_controller_impl.h"
 
 #include "base/memory/weak_ptr.h"
+#include "base/notreached.h"
+#include "base/types/optional_ref.h"
 #include "chrome/browser/ui/autofill/autofill_ai/save_autofill_ai_data_controller.h"
 #include "chrome/browser/ui/autofill/autofill_bubble_base.h"
 #include "chrome/browser/ui/autofill/autofill_bubble_controller_base.h"
@@ -12,8 +14,13 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "components/autofill/core/browser/data_model/entity_instance.h"
+#include "components/autofill/core/browser/data_model/entity_type.h"
 #include "components/autofill/core/browser/integrators/autofill_ai_delegate.h"
+#include "components/autofill_ai/core/browser/autofill_ai_client.h"
+#include "components/strings/grit/components_strings.h"
 #include "content/public/browser/navigation_handle.h"
+#include "ui/base/l10n/l10n_util.h"
 
 namespace autofill_ai {
 
@@ -59,19 +66,15 @@ SaveAutofillAiDataController* SaveAutofillAiDataController::GetOrCreate(
 }
 
 void SaveAutofillAiDataControllerImpl::OfferSave(
-    std::vector<optimization_guide::proto::UserAnnotationsEntry>
-        autofill_ai_data,
-    user_annotations::PromptAcceptanceCallback prompt_acceptance_callback,
-    LearnMoreClickedCallback learn_more_clicked_callback,
-    UserFeedbackCallback user_feedback_callback) {
+    autofill::EntityInstance autofill_ai_data,
+    AutofillAiClient::SavePromptAcceptanceCallback
+        save_prompt_acceptance_callback) {
   // Don't show the bubble if it's already visible.
   if (bubble_view()) {
     return;
   }
   autofill_ai_data_ = std::move(autofill_ai_data);
-  prompt_acceptance_callback_ = std::move(prompt_acceptance_callback);
-  learn_more_clicked_callback_ = std::move(learn_more_clicked_callback);
-  user_feedback_callback_ = std::move(user_feedback_callback);
+  save_prompt_acceptance_callback_ = std::move(save_prompt_acceptance_callback);
   DoShowBubble();
 }
 
@@ -79,39 +82,38 @@ void SaveAutofillAiDataControllerImpl::OnSaveButtonClicked() {
   OnBubbleClosed(AutofillAiBubbleClosedReason::kAccepted);
 }
 
+std::u16string SaveAutofillAiDataControllerImpl::GetDialogTitle() const {
+  switch (autofill_ai_data_->type().name()) {
+    case autofill::EntityTypeName::kVehicle:
+      return l10n_util::GetStringUTF16(
+          IDS_AUTOFILL_AI_SAVE_VEHICLE_ENTITY_DIALOG_TITLE);
+    case autofill::EntityTypeName::kPassport:
+      return l10n_util::GetStringUTF16(
+          IDS_AUTOFILL_AI_SAVE_PASSPORT_ENTITY_DIALOG_TITLE);
+
+    case autofill::EntityTypeName::kDriversLicense:
+      return l10n_util::GetStringUTF16(
+          IDS_AUTOFILL_AI_SAVE_DRIVERS_LICENSE_ENTITY_DIALOG_TITLE);
+
+    case autofill::EntityTypeName::kLoyaltyCard:
+      return l10n_util::GetStringUTF16(
+          IDS_AUTOFILL_AI_SAVE_LOYALTY_CARD_ENTITY_DIALOG_TITLE);
+  }
+  NOTREACHED();
+}
+
 void SaveAutofillAiDataControllerImpl::OnBubbleClosed(
     SaveAutofillAiDataController::AutofillAiBubbleClosedReason closed_reason) {
   set_bubble_view(nullptr);
   UpdatePageActionIcon();
-  if (!prompt_acceptance_callback_.is_null()) {
-    std::move(prompt_acceptance_callback_)
-        .Run({/*prompt_was_accepted=*/closed_reason ==
-                  AutofillAiBubbleClosedReason::kAccepted,
-              /*did_user_interact=*/
-              GetUserInteractionFromAutofillAiBubbleClosedReason(closed_reason),
-              did_trigger_thumbs_up_, did_trigger_thumbs_down_});
-  }
-}
-
-void SaveAutofillAiDataControllerImpl::OnThumbsUpClicked() {
-  if (!user_feedback_callback_.is_null()) {
-    std::move(user_feedback_callback_)
-        .Run(AutofillAiDelegate::UserFeedback::kThumbsUp);
-  }
-  did_trigger_thumbs_up_ = true;
-}
-
-void SaveAutofillAiDataControllerImpl::OnThumbsDownClicked() {
-  if (!user_feedback_callback_.is_null()) {
-    std::move(user_feedback_callback_)
-        .Run(AutofillAiDelegate::UserFeedback::kThumbsDown);
-  }
-  did_trigger_thumbs_down_ = true;
-}
-
-void SaveAutofillAiDataControllerImpl::OnLearnMoreClicked() {
-  if (!learn_more_clicked_callback_.is_null()) {
-    std::move(learn_more_clicked_callback_).Run();
+  if (!save_prompt_acceptance_callback_.is_null()) {
+    std::move(save_prompt_acceptance_callback_)
+        .Run(
+            {/*did_user_interact=*/
+             GetUserInteractionFromAutofillAiBubbleClosedReason(closed_reason),
+             /*entity=*/closed_reason == AutofillAiBubbleClosedReason::kAccepted
+                 ? std::exchange(autofill_ai_data_, std::nullopt)
+                 : std::nullopt});
   }
 }
 
@@ -133,7 +135,7 @@ SaveAutofillAiDataControllerImpl::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
 }
 
-const std::vector<optimization_guide::proto::UserAnnotationsEntry>&
+base::optional_ref<const autofill::EntityInstance>
 SaveAutofillAiDataControllerImpl::GetAutofillAiData() const {
   return autofill_ai_data_;
 }

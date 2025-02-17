@@ -16,15 +16,16 @@
 #import "base/strings/sys_string_conversions.h"
 #import "components/password_manager/core/browser/password_manager_metrics_util.h"
 #import "components/strings/grit/components_strings.h"
+#import "ios/chrome/browser/credential_provider/model/features.h"
 #import "ios/chrome/browser/settings/ui_bundled/password/password_manager_ui_features.h"
 #import "ios/chrome/browser/settings/ui_bundled/password/password_settings/password_settings_constants.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
-#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_detail_icon_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_image_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_info_button_cell.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_info_button_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_link_header_footer_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_multi_detail_text_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_cell.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_item.h"
@@ -78,6 +79,20 @@ typedef NS_ENUM(NSInteger, ModelLoadStatus) {
   ModelLoadComplete,
 };
 
+// Helper method that returns the string to use as title for `savePasswordsItem`
+// and `managedSavePasswordsItem`.
+NSString* GetSavePasswordsItemTitle() {
+  return l10n_util::GetNSString(IOSPasskeysM2Enabled()
+                                    ? IDS_IOS_OFFER_TO_SAVE_PASSWORDS_PASSKEYS
+                                    : IDS_IOS_OFFER_TO_SAVE_PASSWORDS);
+}
+
+// Whether automatic passkey upgrades feature is enabled.
+BOOL AutomaticPasskeyUpgradeFeatureEnabled() {
+  return base::FeatureList::IsEnabled(
+      kCredentialProviderAutomaticPasskeyUpgrade);
+}
+
 }  // namespace
 
 @interface PasswordSettingsViewController () {
@@ -86,6 +101,9 @@ typedef NS_ENUM(NSInteger, ModelLoadStatus) {
 
   // The item related to the button for exporting passwords.
   TableViewTextItem* _exportPasswordsItem;
+
+  // The footer item related to the button for deleting credentials.
+  TableViewLinkHeaderFooterItem* _deleteCredentialsFooterItem;
 
   // Whether or not Chromium has been enabled as a credential provider at the
   // iOS level. This may not be known at load time; the detail text showing on
@@ -110,6 +128,10 @@ typedef NS_ENUM(NSInteger, ModelLoadStatus) {
 
 // Whether or not the Password Manager is managed by enterprise policy.
 @property(nonatomic, assign, getter=isManagedByPolicy) BOOL managedByPolicy;
+
+// Whether automatic passkey upgrades setting is managed by enterprise policy.
+// If managed, the switch controlling this settings should not be displayed.
+@property(nonatomic, assign) BOOL automaticPasskeyUpgradesManagedByPolicy;
 
 // Indicates whether or not "Offer to Save Passwords" is set to enabled.
 @property(nonatomic, assign, getter=isSavePasswordsEnabled)
@@ -151,7 +173,7 @@ typedef NS_ENUM(NSInteger, ModelLoadStatus) {
 // The item showing the current status of Passwords in Other Apps (i.e.,
 // credential provider).
 @property(nonatomic, readonly)
-    TableViewDetailIconItem* passwordsInOtherAppsItem;
+    TableViewMultiDetailTextItem* passwordsInOtherAppsItem;
 
 // The item related to the switch for the automatic passkey upgrades setting.
 @property(nonatomic, readonly)
@@ -267,8 +289,7 @@ typedef NS_ENUM(NSInteger, ModelLoadStatus) {
   [model addItem:[self passwordsInOtherAppsItem]
       toSectionWithIdentifier:SectionIdentifierPasswordsInOtherApps];
 
-  if (IOSPasskeysM2Enabled()) {
-    // TODO(crbug.com/358343061): Add item for the policy enforced toggle.
+  if ([self shouldDisplayPasskeyUpgradesSwitch]) {
     [model addSectionWithIdentifier:
                SectionIdentifierAutomaticPasskeyUpgradesSwitch];
     [model addItem:[self automaticPasskeyUpgradesSwitchItem]
@@ -298,12 +319,13 @@ typedef NS_ENUM(NSInteger, ModelLoadStatus) {
     // Delete credentials button.
     [model addSectionWithIdentifier:SectionIdentifierDeleteCredentialsButton];
     _deleteCredentialsItem = [self makeDeleteCredentialsItem];
-    [self updateDeleteAllCredentialsButton];
+    _deleteCredentialsFooterItem = [self makeCredentialDeletionFooterItem];
+    [self updateDeleteAllCredentialsSection];
     [model addItem:_deleteCredentialsItem
         toSectionWithIdentifier:SectionIdentifierDeleteCredentialsButton];
 
     // Add footer for the delete credential section.
-    [model setFooter:[self makeCredentialDeletionFooterItem]
+    [model setFooter:_deleteCredentialsFooterItem
         forSectionWithIdentifier:SectionIdentifierDeleteCredentialsButton];
   }
 
@@ -425,9 +447,7 @@ typedef NS_ENUM(NSInteger, ModelLoadStatus) {
 
   _savePasswordsItem =
       [[TableViewSwitchItem alloc] initWithType:ItemTypeSavePasswordsSwitch];
-  _savePasswordsItem.text = l10n_util::GetNSString(
-      IOSPasskeysM2Enabled() ? IDS_IOS_OFFER_TO_SAVE_PASSWORDS_PASSKEYS
-                             : IDS_IOS_OFFER_TO_SAVE_PASSWORDS);
+  _savePasswordsItem.text = GetSavePasswordsItemTitle();
   _savePasswordsItem.accessibilityIdentifier =
       kPasswordSettingsSavePasswordSwitchTableViewId;
   [self updateSavePasswordsSwitch];
@@ -443,8 +463,7 @@ typedef NS_ENUM(NSInteger, ModelLoadStatus) {
 
   _managedSavePasswordsItem = [[TableViewInfoButtonItem alloc]
       initWithType:ItemTypeManagedSavePasswords];
-  _managedSavePasswordsItem.text =
-      l10n_util::GetNSString(IDS_IOS_OFFER_TO_SAVE_PASSWORDS);
+  _managedSavePasswordsItem.text = GetSavePasswordsItemTitle();
   _managedSavePasswordsItem.accessibilityHint =
       l10n_util::GetNSString(IDS_IOS_TOGGLE_SETTING_MANAGED_ACCESSIBILITY_HINT);
   _managedSavePasswordsItem.accessibilityIdentifier =
@@ -503,12 +522,12 @@ typedef NS_ENUM(NSInteger, ModelLoadStatus) {
   return _bulkMovePasswordsToAccountButtonItem;
 }
 
-- (TableViewDetailIconItem*)passwordsInOtherAppsItem {
+- (TableViewMultiDetailTextItem*)passwordsInOtherAppsItem {
   if (_passwordsInOtherAppsItem) {
     return _passwordsInOtherAppsItem;
   }
 
-  _passwordsInOtherAppsItem = [[TableViewDetailIconItem alloc]
+  _passwordsInOtherAppsItem = [[TableViewMultiDetailTextItem alloc]
       initWithType:ItemTypePasswordsInOtherApps];
   _passwordsInOtherAppsItem.text = l10n_util::GetNSString(
       IOSPasskeysM2Enabled() ? IDS_IOS_SETTINGS_PASSWORDS_PASSKEYS_IN_OTHER_APPS
@@ -686,6 +705,20 @@ typedef NS_ENUM(NSInteger, ModelLoadStatus) {
                 withRowAnimation:UITableViewRowAnimationAutomatic];
 }
 
+- (void)setAutomaticPasskeyUpgradesManagedByPolicy:(BOOL)managed {
+  if (_automaticPasskeyUpgradesManagedByPolicy == managed) {
+    return;
+  }
+
+  _automaticPasskeyUpgradesManagedByPolicy = managed;
+
+  if (self.modelLoadStatus == ModelNotLoaded) {
+    return;
+  }
+
+  [self updateAutomaticPasskeyUpgradesSwitch];
+}
+
 - (void)setSavePasswordsEnabled:(BOOL)enabled {
   if (_savePasswordsEnabled == enabled) {
     return;
@@ -748,7 +781,7 @@ typedef NS_ENUM(NSInteger, ModelLoadStatus) {
   [self updateOnDeviceEncryptionSectionWithOldState:oldState];
 }
 
-- (void)updateDeleteAllCredentialsButton {
+- (void)updateDeleteAllCredentialsSection {
   if (self.modelLoadStatus == ModelNotLoaded ||
       !base::FeatureList::IsEnabled(
           password_manager::features::kIOSEnableDeleteAllSavedCredentials)) {
@@ -758,14 +791,26 @@ typedef NS_ENUM(NSInteger, ModelLoadStatus) {
     _deleteCredentialsItem.textColor = [UIColor colorNamed:kRedColor];
     _deleteCredentialsItem.accessibilityTraits &=
         ~UIAccessibilityTraitNotEnabled;
+
+    _deleteCredentialsFooterItem.text = l10n_util::GetNSString(
+        IDS_IOS_PASSWORD_SETTINGS_CREDENTIAL_DELETION_TEXT);
   } else {
     // Disable, rather than remove, because the button will go back and forth
     // between enabled/disabled status as the flow progresses.
     _deleteCredentialsItem.textColor = [UIColor colorNamed:kTextSecondaryColor];
     _deleteCredentialsItem.accessibilityTraits |=
         UIAccessibilityTraitNotEnabled;
+
+    _deleteCredentialsFooterItem.text = l10n_util::GetNSString(
+        IDS_IOS_PASSWORD_SETTINGS_NO_CREDENTIAL_DELETION_TEXT);
   }
-  [self reconfigureCellsForItems:@[ _deleteCredentialsItem ]];
+
+  NSIndexSet* section = [NSIndexSet
+      indexSetWithIndex:[self.tableViewModel
+                            sectionForSectionIdentifier:
+                                SectionIdentifierDeleteCredentialsButton]];
+  [self.tableView reloadSections:section
+                withRowAnimation:UITableViewRowAnimationAutomatic];
 }
 
 - (void)updateExportPasswordsButton {
@@ -942,7 +987,7 @@ typedef NS_ENUM(NSInteger, ModelLoadStatus) {
 // current state of `_passwordsInOtherAppsEnabled`.
 - (void)updatePasswordsInOtherAppsItem {
   if (_passwordsInOtherAppsEnabled.has_value()) {
-    self.passwordsInOtherAppsItem.detailText =
+    self.passwordsInOtherAppsItem.trailingDetailText =
         _passwordsInOtherAppsEnabled.value()
             ? l10n_util::GetNSString(IDS_IOS_SETTING_ON)
             : l10n_util::GetNSString(IDS_IOS_SETTING_OFF);
@@ -1040,8 +1085,9 @@ typedef NS_ENUM(NSInteger, ModelLoadStatus) {
 // Returns section index for the change GPM Pin button.
 - (NSInteger)computeGPMPinSectionIndex {
   NSInteger previousSection =
-      IOSPasskeysM2Enabled() ? SectionIdentifierAutomaticPasskeyUpgradesSwitch
-                             : SectionIdentifierPasswordsInOtherApps;
+      [self shouldDisplayPasskeyUpgradesSwitch]
+          ? SectionIdentifierAutomaticPasskeyUpgradesSwitch
+          : SectionIdentifierPasswordsInOtherApps;
   return [self.tableViewModel sectionForSectionIdentifier:previousSection] + 1;
 }
 
@@ -1056,11 +1102,64 @@ typedef NS_ENUM(NSInteger, ModelLoadStatus) {
   if ([tableViewModel hasSectionForSectionIdentifier:
                           SectionIdentifierGooglePasswordManagerPin]) {
     previousSection = SectionIdentifierGooglePasswordManagerPin;
-  } else if (IOSPasskeysM2Enabled()) {
+  } else if ([self shouldDisplayPasskeyUpgradesSwitch]) {
     previousSection = SectionIdentifierAutomaticPasskeyUpgradesSwitch;
   }
 
   return [tableViewModel sectionForSectionIdentifier:previousSection] + 1;
+}
+
+// Updates the view to by either adding or removing the automatic passkey
+// upgrades switch section based on whether password manager or saving passkeys
+// is controlled by enterprise policy (in those cases there is no point in
+// displaying the switch).
+- (void)updateAutomaticPasskeyUpgradesSwitch {
+  if (self.modelLoadStatus != ModelLoadComplete) {
+    return;
+  }
+
+  TableViewModel* model = self.tableViewModel;
+  BOOL shouldDisplaySwitch = [self shouldDisplayPasskeyUpgradesSwitch];
+  if ([model hasSectionForSectionIdentifier:
+                 SectionIdentifierAutomaticPasskeyUpgradesSwitch] ==
+      shouldDisplaySwitch) {
+    return;
+  }
+
+  UITableView* tableView = self.tableView;
+  if (shouldDisplaySwitch) {
+    NSInteger previousSectionIndex = [model
+        sectionForSectionIdentifier:SectionIdentifierPasswordsInOtherApps];
+    [model insertSectionWithIdentifier:
+               SectionIdentifierAutomaticPasskeyUpgradesSwitch
+                               atIndex:previousSectionIndex + 1];
+    [model addItem:[self automaticPasskeyUpgradesSwitchItem]
+        toSectionWithIdentifier:
+            SectionIdentifierAutomaticPasskeyUpgradesSwitch];
+    NSIndexSet* indexSet = [NSIndexSet
+        indexSetWithIndex:
+            [model sectionForSectionIdentifier:
+                       SectionIdentifierAutomaticPasskeyUpgradesSwitch]];
+    [tableView insertSections:indexSet
+             withRowAnimation:UITableViewRowAnimationAutomatic];
+  } else {
+    NSInteger section =
+        [model sectionForSectionIdentifier:
+                   SectionIdentifierAutomaticPasskeyUpgradesSwitch];
+    [model removeSectionWithIdentifier:
+               SectionIdentifierAutomaticPasskeyUpgradesSwitch];
+    [tableView deleteSections:[NSIndexSet indexSetWithIndex:section]
+             withRowAnimation:UITableViewRowAnimationAutomatic];
+  }
+}
+
+// Automatic passkey upgrades switch should be displayed if the feature is
+// enabled and is not managed by an enterprise policy.
+// TODO(crbug.com/358343061): Consult with UX how this should relate to
+// `_savePasswordsEnabled`.
+- (BOOL)shouldDisplayPasskeyUpgradesSwitch {
+  return AutomaticPasskeyUpgradeFeatureEnabled() &&
+         !self.automaticPasskeyUpgradesManagedByPolicy;
 }
 
 @end

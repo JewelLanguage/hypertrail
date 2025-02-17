@@ -20,6 +20,7 @@
 #include "third_party/blink/renderer/core/event_interface_names.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
 #include "third_party/blink/renderer/core/frame/deprecation/deprecation.h"
+#include "third_party/blink/renderer/core/frame/history_util.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
@@ -206,42 +207,84 @@ void NavigateEvent::intercept(NavigationInterceptOptions* options,
     navigation_action_handlers_list_.push_back(options->handler());
 }
 
-void NavigateEvent::commit(ExceptionState& exception_state) {
-  if (!PerformSharedChecks("commit", exception_state)) {
-    return;
+bool NavigateEvent::PerformSharedCommitChecks(const String& function_name,
+                                              ExceptionState& exception_state) {
+  if (!PerformSharedChecks(function_name, exception_state)) {
+    return false;
   }
 
   if (intercept_state_ == InterceptState::kNone) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidStateError,
-        "intercept() must be called before commit().");
-    return;
+        "intercept() must be called before " + function_name + "().");
+    return false;
   }
   if (ShouldCommitImmediately()) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
-                                      "commit() may only be used if { commit: "
-                                      "'after-transition' } was specified.");
-    return;
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        function_name +
+            "() may only be used if a navigate event was "
+            "intercepted with { commit: 'after-transition' } specified.");
+    return false;
   }
   if (IsBeingDispatched()) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidStateError,
-        "commit() may not be called during event dispatch");
-    return;
+        function_name + "() may not be called during event dispatch");
+    return false;
   }
   if (intercept_state_ == InterceptState::kFinished) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidStateError,
-        "commit() may not be called after transition completes.");
-    return;
+        function_name + "() may not be called after transition completes.");
+    return false;
   }
   if (intercept_state_ == InterceptState::kCommitted ||
       intercept_state_ == InterceptState::kScrolled) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
-                                      "commit() already called.");
+                                      "navigation has already committed.");
+    return false;
+  }
+  return true;
+}
+
+void NavigateEvent::commit(ExceptionState& exception_state) {
+  if (!PerformSharedCommitChecks("commit", exception_state)) {
     return;
   }
   CommitNow();
+}
+
+void NavigateEvent::redirect(const String& url_string,
+                             ExceptionState& exception_state) {
+  if (!PerformSharedCommitChecks("redirect", exception_state)) {
+    return;
+  }
+
+  if (navigation_type_ != V8NavigationType::Enum::kPush &&
+      navigation_type_ != V8NavigationType::Enum::kReplace) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidStateError,
+        "redirect() may only be used on push and replace navigations.");
+    return;
+  }
+
+  KURL url = KURL(DomWindow()->BaseURL(), url_string);
+  if (!url.IsValid()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kSyntaxError,
+                                      "Invalid URL '" + url.GetString() + "'.");
+    return;
+  }
+  if (!CanChangeToUrlForHistoryApi(url, DomWindow()->GetSecurityOrigin(),
+                                   DomWindow()->Url())) {
+    exception_state.ThrowSecurityError(
+        "Cannot redirect to '" + url.ElidedString() +
+        "' in a document with origin '" +
+        DomWindow()->GetSecurityOrigin()->ToString() + "' and URL '" +
+        DomWindow()->Url().ElidedString() + "'.");
+    return;
+  }
+  dispatch_params_->url = url;
 }
 
 void NavigateEvent::MaybeCommitImmediately(ScriptState* script_state) {
@@ -286,6 +329,7 @@ void NavigateEvent::CommitNow() {
       dispatch_params_->event_type == NavigateEventType::kHistoryApi
           ? FirePopstate::kNo
           : FirePopstate::kYes,
+      dispatch_params_->should_skip_screenshot,
       dispatch_params_->is_browser_initiated,
       dispatch_params_->is_synchronously_committed_same_document,
       dispatch_params_->soft_navigation_heuristics_task_id);
@@ -367,13 +411,19 @@ void NavigateEvent::ReactDone(ScriptValue value, bool did_fulfill) {
   }
 }
 
-void NavigateEvent::Abort(ScriptState* script_state, ScriptValue error) {
+void NavigateEvent::Abort(ScriptState* script_state,
+                          ScriptValue error,
+                          CancelNavigationReason reason) {
   if (IsBeingDispatched()) {
     preventDefault();
   }
   CHECK(controller_);
   controller_->abort(script_state, error);
   delayed_load_start_task_handle_.Cancel();
+  if (!defaultPrevented() && intercept_state_ == InterceptState::kIntercepted &&
+      reason != CancelNavigationReason::kNavigateEvent) {
+    DomWindow()->GetFrame()->Client()->DidFailAsyncSameDocumentCommit();
+  }
 }
 
 void NavigateEvent::DelayedLoadStartTimerFired() {

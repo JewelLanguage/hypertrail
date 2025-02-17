@@ -71,13 +71,13 @@ GPU_EXPORT extern const base::FeatureParam<bool>
     kSkiaGraphiteDawnSkipValidation;
 GPU_EXPORT extern const base::FeatureParam<bool>
     kSkiaGraphiteDawnBackendValidation;
+GPU_EXPORT extern const base::FeatureParam<bool>
+    kSkiaGraphiteDawnBackendDebugLabels;
 
 #if BUILDFLAG(IS_WIN)
 GPU_EXPORT BASE_DECLARE_FEATURE(kSkiaGraphiteDawnUseD3D12);
 #endif
 
-GPU_EXPORT BASE_DECLARE_FEATURE(
-    kCameraVideoFrameHandlerAddScanoutUsageOnlyIfSupportedBySharedImage);
 GPU_EXPORT BASE_DECLARE_FEATURE(
     kExoBufferAddScanoutUsageOnlyIfSupportedBySharedImage);
 GPU_EXPORT BASE_DECLARE_FEATURE(
@@ -106,6 +106,7 @@ GPU_EXPORT BASE_DECLARE_FEATURE(kEnableDrDcVulkan);
 GPU_EXPORT BASE_DECLARE_FEATURE(kWebGPUService);
 GPU_EXPORT BASE_DECLARE_FEATURE(kWebGPUBlobCache);
 GPU_EXPORT BASE_DECLARE_FEATURE(kWebGPUUseTintIR);
+GPU_EXPORT BASE_DECLARE_FEATURE(kWebGPUUseVulkanMemoryModel);
 GPU_EXPORT extern const base::FeatureParam<std::string> kWebGPUUnsafeFeatures;
 GPU_EXPORT extern const base::FeatureParam<std::string> kWGSLUnsafeFeatures;
 

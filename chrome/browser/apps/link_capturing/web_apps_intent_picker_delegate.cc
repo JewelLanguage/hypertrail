@@ -15,8 +15,8 @@
 #include "chrome/browser/apps/link_capturing/apps_intent_picker_delegate.h"
 #include "chrome/browser/apps/link_capturing/enable_link_capturing_infobar_delegate.h"
 #include "chrome/browser/apps/link_capturing/intent_picker_info.h"
-#include "chrome/browser/apps/link_capturing/link_capturing_features.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/web_applications/link_capturing_features.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
@@ -73,6 +73,7 @@ bool WebAppsIntentPickerDelegate::ShouldShowIntentPickerWithApps() {
 
 void WebAppsIntentPickerDelegate::FindAllAppsForUrl(
     const GURL& url,
+    int icon_size_in_dep,
     IntentPickerAppsCallback apps_callback) {
   CHECK(ShouldShowIntentPickerWithApps());
   CHECK(provider_);
@@ -88,7 +89,7 @@ void WebAppsIntentPickerDelegate::FindAllAppsForUrl(
   // this.
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::TaskPriority::USER_BLOCKING, base::MayBlock()},
-      base::BindOnce(&FindMacAppForUrl, url),
+      base::BindOnce(&FindMacAppForUrl, url, icon_size_in_dep),
       base::BindOnce(
           &WebAppsIntentPickerDelegate::CacheMacAppInfoAndPostFinalCallback,
           weak_ptr_factory.GetWeakPtr(), std::move(apps_callback),

@@ -3,6 +3,10 @@
 # found in the LICENSE file.
 
 import("cipd/BUILD.gn")
+import("overrides.gni")
 
 define_all_androidx_targets("cipd") {
+}
+
+define_override_androidx_targets("unused") {
 }

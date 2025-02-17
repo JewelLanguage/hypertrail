@@ -70,7 +70,7 @@ TEST(CookieUtilTest, GetCookieDomainWithString_NonASCII) {
   EXPECT_FALSE(cookie_util::GetCookieDomainWithString(
       GURL("http://éxample.com"), "éxample.com", status));
   EXPECT_TRUE(status.HasExactlyExclusionReasonsForTesting(
-      {CookieInclusionStatus::EXCLUDE_DOMAIN_NON_ASCII}));
+      {CookieInclusionStatus::ExclusionReason::EXCLUDE_DOMAIN_NON_ASCII}));
 }
 
 // An empty domain string results in the domain from the URL.
@@ -282,6 +282,14 @@ TEST(CookieUtilTest, GetCookieDomainWithString_UrlHostIP_DomainCookie) {
   EXPECT_EQ(cookie_util::GetCookieDomainWithString(GURL("http://192.0.2.3/"),
                                                    ".192.0.2.3", status),
             "192.0.2.3");  // No dot.
+}
+
+TEST(CookieUtilTest, GetCookieDomainWithString_Invalid_UrlHostIP_SubDomain) {
+  CookieInclusionStatus status;
+  EXPECT_FALSE(cookie_util::GetCookieDomainWithString(GURL("http://192.0.2.3/"),
+                                                      "192", status));
+  EXPECT_FALSE(cookie_util::GetCookieDomainWithString(
+      GURL("http://0.0.16.0/0000000"), "00000000", status));
 }
 
 // A URL containing a TLD that is unknown as a registry is allowed, if it
@@ -1786,7 +1794,8 @@ INSTANTIATE_TEST_SUITE_P(/* no label */,
 TEST(CookieUtilTest, IsCookieAccessResultInclude) {
   EXPECT_FALSE(cookie_util::IsCookieAccessResultInclude(
       CookieAccessResult(CookieInclusionStatus::MakeFromReasonsForTesting(
-          /*exclusions=*/{CookieInclusionStatus::EXCLUDE_UNKNOWN_ERROR}))));
+          /*exclusions=*/{CookieInclusionStatus::ExclusionReason::
+                              EXCLUDE_UNKNOWN_ERROR}))));
 
   EXPECT_TRUE(cookie_util::IsCookieAccessResultInclude(CookieAccessResult()));
 }

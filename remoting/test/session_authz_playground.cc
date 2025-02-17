@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "remoting/test/session_authz_playground.h"
 
 #include <cstdio>
@@ -17,6 +22,7 @@
 #include "base/run_loop.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/single_thread_task_runner.h"
+#include "remoting/base/certificate_helpers.h"
 #include "remoting/base/oauth_token_getter.h"
 #include "remoting/base/oauth_token_getter_impl.h"
 #include "remoting/base/url_request_context_getter.h"
@@ -31,8 +37,7 @@ namespace {
 constexpr char kOAuthScope[] =
     "https://www.googleapis.com/auth/chromoting.me2me.host";
 
-void PrintErrorAndExit(const std::string& api_name,
-                       const ProtobufHttpStatus& status) {
+void PrintErrorAndExit(const std::string& api_name, const HttpStatus& status) {
   fprintf(stderr, "Failed to call API: %s, error code: %d\n", api_name.data(),
           static_cast<int>(status.error_code()));
   fprintf(stderr, "%s\n", status.error_message().data());
@@ -68,6 +73,7 @@ void SessionAuthzPlayground::Start() {
 
   service_client_ = std::make_unique<CorpSessionAuthzServiceClient>(
       url_loader_factory_owner_->GetURLLoaderFactory(),
+      CreateClientCertStoreInstance(),
       CreateOAuthTokenGetter(host_config_file_path),
       /* support_id= */ std::string_view());
 
@@ -80,7 +86,7 @@ void SessionAuthzPlayground::GenerateHostToken() {
   printf("Fetching host token...\n");
   service_client_->GenerateHostToken(
       base::BindOnce(
-          [](const ProtobufHttpStatus& status,
+          [](const HttpStatus& status,
              std::unique_ptr<internal::GenerateHostTokenResponseStruct>
                  response) {
             if (!status.ok()) {
@@ -104,7 +110,7 @@ void SessionAuthzPlayground::VerifySessionToken(const std::string& session_id) {
   service_client_->VerifySessionToken(
       session_token,
       base::BindOnce(
-          [](const std::string& session_id, const ProtobufHttpStatus& status,
+          [](const std::string& session_id, const HttpStatus& status,
              std::unique_ptr<internal::VerifySessionTokenResponseStruct>
                  response) {
             if (!status.ok()) {
@@ -141,7 +147,7 @@ void SessionAuthzPlayground::ReauthorizeHost(const std::string& session_id,
   }
   service_client_->ReauthorizeHost(
       reauth_token, session_id,
-      base::BindOnce([](const ProtobufHttpStatus& status,
+      base::BindOnce([](const HttpStatus& status,
                         std::unique_ptr<internal::ReauthorizeHostResponseStruct>
                             response) {
         if (!status.ok()) {

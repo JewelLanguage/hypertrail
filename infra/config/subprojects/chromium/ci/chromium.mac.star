@@ -27,6 +27,7 @@ ci.defaults.set(
     main_console_view = "main",
     execution_timeout = ci.DEFAULT_EXECUTION_TIMEOUT,
     health_spec = health_spec.DEFAULT,
+    reclient_enabled = False,
     service_account = ci.DEFAULT_SERVICE_ACCOUNT,
     shadow_service_account = ci.DEFAULT_SHADOW_SERVICE_ACCOUNT,
     siso_enabled = True,
@@ -566,7 +567,7 @@ ci.thin_tester(
     ),
     targets = targets.bundle(
         targets = [
-            "chromium_mac_gtests_no_nacl",
+            "chromium_mac_gtests_no_nacl_mac14_arm",
             "chromium_mac_rel_isolated_scripts",
         ],
         mixins = [
@@ -646,12 +647,15 @@ ci.thin_tester(
                     dimensions = {
                         "gpu": None,
                     },
-                    shards = 18,
+                    shards = 6,
                 ),
             ),
             "browser_tests": targets.mixin(
                 ci_only = True,
                 swarming = targets.swarming(
+                    dimensions = {
+                        "cores": "12",
+                    },
                     # crbug.com/1366016
                     shards = 20,
                 ),
@@ -727,7 +731,7 @@ ci.thin_tester(
                     dimensions = {
                         "gpu": None,
                     },
-                    shards = 18,
+                    shards = 6,
                 ),
             ),
             "browser_tests": targets.mixin(
@@ -810,7 +814,7 @@ ci.thin_tester(
                     dimensions = {
                         "gpu": None,
                     },
-                    shards = 18,
+                    shards = 6,
                 ),
             ),
             "browser_tests": targets.mixin(
@@ -897,7 +901,7 @@ ci.thin_tester(
                     "--debug",
                 ],
                 swarming = targets.swarming(
-                    shards = 24,
+                    shards = 8,
                 ),
             ),
             "browser_tests": targets.remove(
@@ -995,7 +999,7 @@ ci.thin_tester(
                     dimensions = {
                         "gpu": None,
                     },
-                    shards = 18,
+                    shards = 6,
                 ),
             ),
             "browser_tests": targets.mixin(

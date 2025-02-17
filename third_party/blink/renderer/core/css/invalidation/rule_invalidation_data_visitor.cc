@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/css/invalidation/rule_invalidation_data_visitor.h"
 
+#include "base/auto_reset.h"
 #include "base/memory/stack_allocated.h"
 #include "third_party/blink/renderer/core/css/css_selector_list.h"
 #include "third_party/blink/renderer/core/css/style_scope.h"
@@ -16,6 +17,7 @@ namespace {
 bool SupportsInvalidation(CSSSelector::MatchType match) {
   switch (match) {
     case CSSSelector::kTag:
+    case CSSSelector::kUniversalTag:
     case CSSSelector::kId:
     case CSSSelector::kClass:
     case CSSSelector::kAttributeExact:
@@ -174,6 +176,7 @@ bool SupportsInvalidation(CSSSelector::PseudoType type) {
     case CSSSelector::kPseudoViewTransitionOld:
     case CSSSelector::kPseudoActiveViewTransition:
     case CSSSelector::kPseudoActiveViewTransitionType:
+    case CSSSelector::kPseudoHasInterest:
     case CSSSelector::kPseudoHasSlotted:
       return true;
     case CSSSelector::kPseudoUnknown:
@@ -647,8 +650,7 @@ void RuleInvalidationDataVisitor<VisitorType>::
   features.has_features_for_rule_set_invalidation |=
       selector.IsIdClassOrAttributeSelector();
 
-  if (selector.Match() == CSSSelector::kTag &&
-      selector.TagQName().LocalName() != CSSSelector::UniversalSelectorAtom()) {
+  if (selector.Match() == CSSSelector::kTag) {
     features.NarrowToTag(selector.TagQName().LocalName());
     return;
   }
@@ -1108,8 +1110,7 @@ bool RuleInvalidationDataVisitor<VisitorType>::
     }
     return true;
   }
-  if (selector.Match() == CSSSelector::kTag &&
-      selector.TagQName().LocalName() != CSSSelector::UniversalSelectorAtom()) {
+  if (selector.Match() == CSSSelector::kTag) {
     if constexpr (is_builder()) {
       rule_invalidation_data_.tag_names_in_has_argument.insert(
           selector.TagQName().LocalName());
@@ -1675,6 +1676,7 @@ RuleInvalidationDataVisitor<VisitorType>::InvalidationSetForSimpleSelector(
       case CSSSelector::kPseudoSelectorFragmentAnchor:
       case CSSSelector::kPseudoActiveViewTransition:
       case CSSSelector::kPseudoActiveViewTransitionType:
+      case CSSSelector::kPseudoHasInterest:
       case CSSSelector::kPseudoHasSlotted:
         return EnsurePseudoInvalidationSet(selector.GetPseudoType(), type,
                                            position, in_nth_child);

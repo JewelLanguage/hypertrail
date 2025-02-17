@@ -12,7 +12,6 @@
 #include "base/containers/to_vector.h"
 #include "base/feature_list.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -97,12 +96,6 @@ AddressComponent::~AddressComponent() = default;
 
 FieldType AddressComponent::GetStorageType() const {
   return storage_type_;
-}
-
-FieldType AddressComponent::GetFallbackType(FieldType field_type) const {
-  CHECK(IsSupportedType(field_type));
-  // TODO(crbug.com/40275657): Add logic for i18n fallback types.
-  return field_type;
 }
 
 std::string AddressComponent::GetStorageTypeName() const {
@@ -249,34 +242,31 @@ bool AddressComponent::IsValueReadOnly() const {
   return false;
 }
 
-void AddressComponent::GetSupportedTypes(FieldTypeSet* supported_types) const {
-  return AddressComponent::GetTypes(/*storable_only=*/false, supported_types);
+FieldTypeSet AddressComponent::GetSupportedTypes() const {
+  return AddressComponent::GetTypes(/*storable_only=*/false);
 }
 
-void AddressComponent::GetStorableTypes(FieldTypeSet* supported_types) const {
-  return AddressComponent::GetTypes(/*storable_only=*/true, supported_types);
+FieldTypeSet AddressComponent::GetStorableTypes() const {
+  return AddressComponent::GetTypes(/*storable_only=*/true);
 }
 
-void AddressComponent::GetTypes(bool storable_only,
-                                FieldTypeSet* supported_types) const {
-  // A proper AddressComponent tree contains every type only once.
-  CHECK(supported_types->find(storage_type_) == supported_types->end())
-      << "The AddressComponent already contains a node that supports this "
-         "type: "
-      << storage_type_;
-  supported_types->insert(storage_type_);
+FieldTypeSet AddressComponent::GetTypes(bool storable_only) const {
+  FieldTypeSet types{storage_type_};
+
   if (!storable_only) {
-    supported_types->insert_all(GetAdditionalSupportedFieldTypes());
+    types.insert_all(GetAdditionalSupportedFieldTypes());
     // Include synthesized types in the list of supported (not storable) types.
     for (const AddressComponent* synthesized_node :
          synthesized_subcomponents_) {
-      supported_types->insert(synthesized_node->GetStorageType());
+      types.insert(synthesized_node->GetStorageType());
     }
   }
 
   for (AddressComponent* subcomponent : subcomponents_) {
-    subcomponent->GetTypes(storable_only, supported_types);
+    types.insert_all(subcomponent->GetTypes(storable_only));
   }
+
+  return types;
 }
 
 std::optional<FieldType> AddressComponent::GetStorableTypeOf(
@@ -460,12 +450,6 @@ VerificationStatus AddressComponent::GetVerificationStatusForType(
   const AddressComponent* node_for_type = GetNodeForType(field_type);
   return node_for_type ? node_for_type->GetVerificationStatus()
                        : VerificationStatus::kNoStatus;
-}
-
-FieldType AddressComponent::GetFallbackTypeForType(FieldType field_type) const {
-  const AddressComponent* node_for_type = GetNodeForType(field_type);
-  return node_for_type ? node_for_type->GetFallbackType(field_type)
-                       : field_type;
 }
 
 bool AddressComponent::UnsetValueForTypeIfSupported(FieldType field_type) {
@@ -1546,10 +1530,6 @@ int AddressComponent::GetStructureVerificationScore() const {
   }
 
   return result;
-}
-
-std::u16string AddressComponent::GetNormalizedValue() const {
-  return NormalizeValue(GetValue());
 }
 
 std::u16string AddressComponent::GetValueForComparison(

@@ -21,6 +21,7 @@
 #include "content/common/content_export.h"
 #include "content/services/auction_worklet/auction_v8_helper.h"
 #include "content/services/auction_worklet/public/mojom/auction_network_events_handler.mojom.h"
+#include "content/services/auction_worklet/public/mojom/seller_worklet.mojom-forward.h"
 #include "net/http/http_response_headers.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-forward.h"
 #include "third_party/blink/public/common/interest_group/ad_display_size.h"
@@ -112,7 +113,8 @@ class CONTENT_EXPORT TrustedSignals {
         AuctionV8Helper* v8_helper,
         v8::Local<v8::Context> context,
         const GURL& render_url,
-        const std::vector<std::string>& ad_component_render_urls) const;
+        const std::vector<mojom::CreativeInfoWithoutOwnerPtr>& ad_components)
+        const;
 
     std::optional<uint32_t> GetDataVersion() const { return data_version_; }
 
@@ -148,7 +150,9 @@ class CONTENT_EXPORT TrustedSignals {
 
   // Info about a creative, either ad or component ad, that's sent to trusted
   // scoring signals server, corresponding to one chosen by a generateBid()
-  // invocation.
+  // invocation. `buyer_and_seller_reporting_id` is only applicable, and only
+  // sent, for ads - not for ad components - as ad components may not provide a
+  // value for `buyer_and_seller_reporting_id` or any other reporting IDs.
   //
   // If operating with `send_creative_scanning_metadata` true, the same URL may
   // need to be repeated, in cases like it occurring in multiple interest groups
@@ -161,7 +165,13 @@ class CONTENT_EXPORT TrustedSignals {
     CreativeInfo();
     CreativeInfo(blink::AdDescriptor ad_descriptor,
                  std::string creative_scanning_metadata,
-                 std::optional<url::Origin> interest_group_owner);
+                 std::optional<url::Origin> interest_group_owner,
+                 std::string buyer_and_seller_reporting_id);
+    CreativeInfo(bool send_creative_scanning_metadata,
+                 const mojom::CreativeInfoWithoutOwner& mojo_creative_info,
+                 const url::Origin& in_interest_group_owner,
+                 const std::optional<std::string>&
+                     browser_signal_buyer_and_seller_reporting_id);
     ~CreativeInfo();
 
     CreativeInfo(CreativeInfo&&);
@@ -180,6 +190,10 @@ class CONTENT_EXPORT TrustedSignals {
 
     // From `InterestGroup::owner`.
     std::optional<url::Origin> interest_group_owner;
+
+    // From `InterestGroup::Ad::buyer_and_seller_reporting_id`, with nullopt
+    // converted to empty string.
+    std::string buyer_and_seller_reporting_id;
   };
 
   using LoadSignalsCallback =

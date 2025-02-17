@@ -8,12 +8,10 @@ import androidx.annotation.NonNull;
 
 import org.chromium.components.collaboration.messaging.ActivityLogItem;
 import org.chromium.components.collaboration.messaging.ActivityLogQueryParams;
-import org.chromium.components.collaboration.messaging.EitherId.EitherGroupId;
-import org.chromium.components.collaboration.messaging.EitherId.EitherTabId;
 import org.chromium.components.collaboration.messaging.MessagingBackendService;
-import org.chromium.components.collaboration.messaging.MessagingBackendService.InstantMessageDelegate;
-import org.chromium.components.collaboration.messaging.MessagingBackendService.PersistentMessageObserver;
 import org.chromium.components.collaboration.messaging.PersistentMessage;
+import org.chromium.components.tab_group_sync.EitherId.EitherGroupId;
+import org.chromium.components.tab_group_sync.EitherId.EitherTabId;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -63,5 +61,9 @@ class TestMessagingBackendService implements MessagingBackendService {
     }
 
     @Override
-    public void clearDirtyTabMessagesForGroup(EitherGroupId groupId) {}
+    public void clearDirtyTabMessagesForGroup(String collaborationId) {}
+
+    @Override
+    public void clearPersistentMessage(
+            String messageId, Optional</* @PersistentNotificationType */ Integer> type) {}
 }

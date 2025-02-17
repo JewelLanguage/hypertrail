@@ -37,7 +37,7 @@
           {
             "builder_id": {
               "bucket": "ci",
-              "builder": "android-desktop-x64-rel-14-tests",
+              "builder": "android-desktop-x64-rel-15-tests",
               "project": "chromium"
             },
             "builder_spec": {
@@ -79,7 +79,7 @@
       "builder_ids_in_scope_for_testing": [
         {
           "bucket": "ci",
-          "builder": "android-desktop-x64-rel-14-tests",
+          "builder": "android-desktop-x64-rel-15-tests",
           "project": "chromium"
         }
       ],

@@ -4,7 +4,9 @@
 
 #include "chrome/browser/ui/ash/quick_insert/quick_insert_client_impl.h"
 
+#include <algorithm>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -30,8 +32,6 @@
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/notimplemented.h"
-#include "base/ranges/algorithm.h"
-#include "base/ranges/functional.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ash/app_list/app_list_controller_delegate.h"
 #include "chrome/browser/ash/app_list/search/chrome_search_result.h"
@@ -65,6 +65,7 @@
 #include "content/public/browser/web_contents.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "ui/aura/window.h"
+#include "ui/base/ime/text_input_client.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/native_widget_types.h"
@@ -173,10 +174,10 @@ std::vector<ash::QuickInsertSearchResult> ConvertSearchResults(
     CHECK(result);
   }
 
-  base::ranges::sort(results, base::ranges::greater(),
-                     [](const std::unique_ptr<ChromeSearchResult>& result) {
-                       return result->relevance();
-                     });
+  std::ranges::sort(results, std::ranges::greater(),
+                    [](const std::unique_ptr<ChromeSearchResult>& result) {
+                      return result->relevance();
+                    });
 
   for (const std::unique_ptr<ChromeSearchResult>& result : results) {
     switch (result->result_type()) {
@@ -367,8 +368,8 @@ QuickInsertClientImpl::CacheEditorContext() {
 }
 
 QuickInsertClientImpl::ShowLobsterCallback
-QuickInsertClientImpl::CacheLobsterContext(bool support_image_insertion,
-                                           const gfx::Rect& caret_bounds) {
+QuickInsertClientImpl::CacheLobsterContext(
+    ui::TextInputClient* text_input_client) {
   if (!ash::features::IsLobsterEnabled()) {
     return base::NullCallback();
   }
@@ -382,9 +383,8 @@ QuickInsertClientImpl::CacheLobsterContext(bool support_image_insertion,
     return base::NullCallback();
   }
 
-  lobster_trigger_ =
-      lobster_controller->CreateTrigger(ash::LobsterEntryPoint::kQuickInsert,
-                                        support_image_insertion, caret_bounds);
+  lobster_trigger_ = lobster_controller->CreateTrigger(
+      ash::LobsterEntryPoint::kQuickInsert, text_input_client);
 
   if (!lobster_trigger_) {
     return base::NullCallback();

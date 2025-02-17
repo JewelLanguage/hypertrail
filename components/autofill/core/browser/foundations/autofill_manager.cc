@@ -4,6 +4,8 @@
 
 #include "components/autofill/core/browser/foundations/autofill_manager.h"
 
+#include <algorithm>
+
 #include "base/check_deref.h"
 #include "base/command_line.h"
 #include "base/containers/adapters.h"
@@ -493,7 +495,7 @@ bool AutofillManager::GetCachedFormAndField(
   }
   *form_structure = cached_form;
   auto field_it =
-      base::ranges::find(*cached_form, field_id, &AutofillField::global_id);
+      std::ranges::find(*cached_form, field_id, &AutofillField::global_id);
   *autofill_field = field_it == cached_form->end() ? nullptr : field_it->get();
   return *autofill_field != nullptr;
 }
@@ -517,6 +519,18 @@ size_t AutofillManager::FindCachedFormsBySignature(
 FormStructure* AutofillManager::FindCachedFormById(FormGlobalId form_id) const {
   auto it = form_structures_.find(form_id);
   return it != form_structures_.end() ? it->second.get() : nullptr;
+}
+
+FormStructure* AutofillManager::FindCachedFormById(
+    FieldGlobalId field_id) const {
+  for (const auto& [form_id, form_structure] : form_structures_) {
+    if (std::ranges::any_of(*form_structure, [&](const auto& field) {
+          return field->global_id() == field_id;
+        })) {
+      return form_structure.get();
+    }
+  }
+  return nullptr;
 }
 
 bool AutofillManager::CanShowAutofillUi() const {
@@ -609,7 +623,7 @@ void AutofillManager::ParseFormsAsync(
   // Remove duplicates by their FormGlobalId. Otherwise, after moving the forms
   // into `form_structures_`, duplicates may be destroyed and we'd end up with
   // dangling pointers.
-  base::ranges::sort(form_structures, {}, &FormStructure::global_id);
+  std::ranges::sort(form_structures, {}, &FormStructure::global_id);
   auto repeated =
       std::ranges::unique(form_structures, {}, &FormStructure::global_id);
   form_structures.erase(repeated.begin(), repeated.end());

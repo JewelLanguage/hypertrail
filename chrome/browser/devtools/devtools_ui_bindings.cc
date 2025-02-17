@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <memory>
 #include <string_view>
 #include <utility>
@@ -24,7 +25,6 @@
 #include "base/metrics/user_metrics.h"
 #include "base/no_destructor.h"
 #include "base/not_fatal_until.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/escape.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -347,7 +347,7 @@ std::string SanitizeEnabledExperiments(const std::string& value) {
     return base::IsAsciiAlpha(ch) || base::IsAsciiDigit(ch) || ch == ';' ||
            ch == '_';
   };
-  return base::ranges::all_of(value, is_legal) ? value : std::string();
+  return std::ranges::all_of(value, is_legal) ? value : std::string();
 }
 
 std::string SanitizeFrontendQueryParam(const std::string& key,
@@ -474,12 +474,13 @@ class DevToolsUIBindings::NetworkResourceLoader
                      URLLoaderFactoryHolder url_loader_factory,
                      DevToolsUIBindings::DispatchCallback callback,
                      base::TimeDelta retry_delay = base::TimeDelta(),
-                     std::string post_body = "") {
+                     std::string post_body = "",
+                     std::optional<base::TimeDelta> timeout = std::nullopt) {
     auto resource_loader =
         std::make_unique<DevToolsUIBindings::NetworkResourceLoader>(
             stream_id, bindings, resource_request, traffic_annotation,
             std::move(url_loader_factory), std::move(callback), retry_delay,
-            post_body);
+            post_body, timeout);
     bindings->loaders_.insert(std::move(resource_loader));
   }
 
@@ -491,7 +492,8 @@ class DevToolsUIBindings::NetworkResourceLoader
       URLLoaderFactoryHolder url_loader_factory,
       DispatchCallback callback,
       base::TimeDelta delay,
-      std::string post_body)
+      std::string post_body,
+      std::optional<base::TimeDelta> timeout)
       : stream_id_(stream_id),
         bindings_(bindings),
         resource_request_(resource_request),
@@ -502,6 +504,9 @@ class DevToolsUIBindings::NetworkResourceLoader
         url_loader_factory_(std::move(url_loader_factory)),
         callback_(std::move(callback)),
         retry_delay_(delay) {
+    if (timeout.has_value()) {
+      loader_->SetTimeoutDuration(timeout.value());
+    }
     if (!post_body.empty()) {
       loader_->AttachStringForUpload(std::move(post_body));
     }
@@ -769,7 +774,7 @@ DevToolsUIBindings::~DevToolsUIBindings() {
   // Remove self from global list.
   DevToolsUIBindingsList& instances =
       DevToolsUIBindings::GetDevToolsUIBindings();
-  auto it = base::ranges::find(instances, this);
+  auto it = std::ranges::find(instances, this);
   CHECK(it != instances.end(), base::NotFatalUntil::M130);
   instances.erase(it);
 }
@@ -953,13 +958,16 @@ void DevToolsUIBindings::OnAidaConversationRequest(
       absl::get<network::ResourceRequest>(resource_request_or_error);
   resource_request.url =
       resource_request.url.Resolve(AidaClient::kDoConversationUrlPath);
+  // Set a maximum timeout value, individual features may send a shorter timeout
+  // in the DevTools repo.
+  base::TimeDelta timeout = base::Seconds(120);
   NetworkResourceLoader::Create(
       stream_id, this, resource_request, kAidaTrafficAnnotation,
       std::move(url_loader_factory),
       base::BindOnce(&DevToolsUIBindings::OnAidaConversationResponse,
                      base::Unretained(this), std::move(callback), stream_id,
                      request, delay, resource_request, base::TimeTicks::Now()),
-      delay, std::move(request));
+      delay, std::move(request), timeout);
 }
 
 void DevToolsUIBindings::OnRegisterAidaClientEventRequest(
@@ -997,7 +1005,7 @@ void DevToolsUIBindings::OnRegisterAidaClientEventRequest(
 void DevToolsUIBindings::OnAidaConversationResponse(
     DevToolsEmbedderMessageDispatcher::Delegate::DispatchCallback callback,
     int stream_id,
-    const std::string& request,
+    const std::string request,
     base::TimeDelta delay,
     absl::variant<network::ResourceRequest, std::string>
         resource_request_or_error,
@@ -1264,6 +1272,39 @@ void DevToolsUIBindings::UpgradeDraggedFileSystemPermissions(
       file_system_url,
       base::BindRepeating(&DevToolsUIBindings::ShowDevToolsInfoBar,
                           weak_factory_.GetWeakPtr()));
+}
+
+void DevToolsUIBindings::ConnectAutomaticFileSystem(
+    DispatchCallback callback,
+    const std::string& file_system_path,
+    const std::string& file_system_uuid,
+    bool add_if_missing) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  CHECK(IsValidFrontendURL(web_contents_->GetLastCommittedURL()) &&
+        frontend_host_);
+  file_helper_->ConnectAutomaticFileSystem(
+      file_system_path, file_system_uuid, add_if_missing,
+      BindRepeating(&DevToolsUIBindings::ShowDevToolsInfoBar,
+                    weak_factory_.GetWeakPtr()),
+      BindOnce(&DevToolsUIBindings::ConnectAutomaticFileSystemDone,
+               weak_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void DevToolsUIBindings::ConnectAutomaticFileSystemDone(
+    DispatchCallback callback,
+    bool success) {
+  base::Value::Dict result_dict;
+  result_dict.Set("success", success);
+  base::Value result(std::move(result_dict));
+  std::move(callback).Run(&result);
+}
+
+void DevToolsUIBindings::DisconnectAutomaticFileSystem(
+    const std::string& file_system_path) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  CHECK(IsValidFrontendURL(web_contents_->GetLastCommittedURL()) &&
+        frontend_host_);
+  file_helper_->DisconnectAutomaticFileSystem(file_system_path);
 }
 
 void DevToolsUIBindings::IndexPath(
@@ -1599,6 +1640,12 @@ void DevToolsUIBindings::GetHostConfig(DispatchCallback callback) {
     freestyler_dict.Set("executionMode",
                         features::kDevToolsFreestylerExecutionMode.GetName(
                             features::kDevToolsFreestylerExecutionMode.Get()));
+    freestyler_dict.Set("patching",
+                        features::kDevToolsFreestylerPatching.Get());
+    freestyler_dict.Set("multimodal",
+                        features::kDevToolsFreestylerMultimodal.Get());
+    freestyler_dict.Set("functionCalling",
+                        features::kDevToolsFreestylerFunctionCalling.Get());
     response_dict.Set("devToolsFreestyler", std::move(freestyler_dict));
   }
 
@@ -1637,6 +1684,9 @@ void DevToolsUIBindings::GetHostConfig(DispatchCallback callback) {
         "userTier",
         features::kDevToolsAiAssistancePerformanceAgentUserTier.GetName(
             features::kDevToolsAiAssistancePerformanceAgentUserTier.Get()));
+    ai_assistance_performance_agent_dict.Set(
+        "insightsEnabled",
+        features::kDevToolsAiAssistancePerformanceAgentInsightsEnabled.Get());
     response_dict.Set("devToolsAiAssistancePerformanceAgent",
                       std::move(ai_assistance_performance_agent_dict));
   }
@@ -1659,6 +1709,25 @@ void DevToolsUIBindings::GetHostConfig(DispatchCallback callback) {
     response_dict.Set("devToolsAiAssistanceFileAgent",
                       std::move(ai_assistance_file_agent_dict));
   }
+
+  base::Value::Dict devtools_automatic_file_systems_dict;
+  devtools_automatic_file_systems_dict.Set(
+      "enabled",
+      base::FeatureList::IsEnabled(::features::kDevToolsAutomaticFileSystems));
+  response_dict.Set("devToolsAutomaticFileSystems",
+                    std::move(devtools_automatic_file_systems_dict));
+
+  base::Value::Dict devtools_improved_workspaces_dict;
+  devtools_improved_workspaces_dict.Set(
+      "enabled",
+      base::FeatureList::IsEnabled(::features::kDevToolsImprovedWorkspaces));
+  response_dict.Set("devToolsImprovedWorkspaces",
+                    std::move(devtools_improved_workspaces_dict));
+
+  base::Value::Dict devtools_well_known_dict;
+  devtools_well_known_dict.Set(
+      "enabled", base::FeatureList::IsEnabled(::features::kDevToolsWellKnown));
+  response_dict.Set("devToolsWellKnown", std::move(devtools_well_known_dict));
 
   base::Value::Dict ve_logging_dict;
   ve_logging_dict.Set(

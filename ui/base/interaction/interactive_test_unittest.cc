@@ -1736,6 +1736,30 @@ TEST_F(InteractiveTestTest, StopObservingState) {
       Check([this]() { return state_observers().empty(); }));
 }
 
+TEST_F(InteractiveTestTest, CheckStateSucceeds) {
+  TestObservable<std::string> observable("foo");
+  static const char* const kBar = "bar";
+  QueueActions([&]() { observable.SetValue(kBar); });
+  RunTestSequenceInContext(
+      kTestContext1, ObserveState(kStringTestState, &observable),
+      WaitForState(kStringTestState, kBar), CheckState(kStringTestState, kBar),
+      CheckState(kStringTestState, testing::Ne("foo")));
+}
+
+TEST_F(InteractiveTestTest, CheckStateFails) {
+  UNCALLED_MOCK_CALLBACK(InteractionSequence::AbortedCallback, aborted);
+  private_test_impl().set_aborted_callback_for_testing(aborted.Get());
+
+  TestObservable<std::string> observable("foo");
+  static const char* const kBar = "bar";
+
+  EXPECT_CALL_IN_SCOPE(
+      aborted, Run,
+      RunTestSequenceInContext(kTestContext1,
+                               ObserveState(kStringTestState, &observable),
+                               CheckState(kStringTestState, kBar)));
+}
+
 DEFINE_LOCAL_STATE_IDENTIFIER_VALUE(PollingStateObserver<int>,
                                     kPollingTestState);
 
@@ -1792,6 +1816,157 @@ TEST_F(InteractiveTestTest, SubsequenceHidesElement) {
   RunTestSequenceInContext(
       kTestContext1, WaitForShow(el1.identifier()),
       InParallel(Do([&el1]() { el1.Hide(); }), WaitForShow(el2.identifier())));
+}
+
+namespace {
+static constexpr char kAdditionalContext1[] = "context1";
+static constexpr char kAdditionalContext2[] = "context2";
+}  // namespace
+
+TEST_F(InteractiveTestTest, SetAndClearAdditionalContext) {
+  AdditionalContext context = private_test_impl().CreateAdditionalContext();
+  RunTestSequenceInContext(
+      kTestContext1,
+
+      // Verify the context is empty.
+      Check([this]() {
+        return private_test_impl().GetAdditionalContext().empty();
+      }),
+      CheckResult([context]() { return context.Get(); }, ""),
+
+      // Set context and verify value across steps.
+      CheckResult(
+          [this, context]() mutable {
+            context.Set(kAdditionalContext1);
+            return private_test_impl().GetAdditionalContext();
+          },
+          testing::Contains(kAdditionalContext1)),
+      CheckResult([context]() { return context.Get(); }, kAdditionalContext1),
+      CheckResult(
+          [this]() { return private_test_impl().GetAdditionalContext(); },
+          testing::Contains(kAdditionalContext1)),
+
+      // Clear context and verify value across steps.
+      Check([this, context]() mutable {
+        context.Clear();
+        return private_test_impl().GetAdditionalContext().empty();
+      }),
+      Check([this]() {
+        return private_test_impl().GetAdditionalContext().empty();
+      }),
+      CheckResult([context]() { return context.Get(); }, ""),
+
+      // Set value again and verify value across steps.
+      CheckResult(
+          [this, context]() mutable {
+            context.Set(kAdditionalContext1);
+            return private_test_impl().GetAdditionalContext();
+          },
+          testing::Contains(kAdditionalContext1)),
+      CheckResult(
+          [this]() { return private_test_impl().GetAdditionalContext(); },
+          testing::Contains(kAdditionalContext1)),
+      CheckResult([context]() { return context.Get(); }, kAdditionalContext1));
+}
+
+TEST_F(InteractiveTestTest, AdditionalContextNotCleared) {
+  AdditionalContext context = private_test_impl().CreateAdditionalContext();
+  RunTestSequenceInContext(
+      kTestContext1,
+
+      // Set context.
+      Do([context]() mutable { context.Set(kAdditionalContext1); }));
+
+  EXPECT_EQ(kAdditionalContext1, context.Get());
+  EXPECT_THAT(private_test_impl().GetAdditionalContext(),
+              testing::ElementsAre(kAdditionalContext1));
+}
+
+TEST_F(InteractiveTestTest, DestructAdditionalContext) {
+  // Create a custom verb that has a local context.
+  auto custom_verb = [this]() {
+    AdditionalContext context = private_test_impl().CreateAdditionalContext();
+    return Steps(
+        CheckResult(
+            [this, context]() mutable {
+              context.Set(kAdditionalContext1);
+              return private_test_impl().GetAdditionalContext();
+            },
+            testing::Contains(kAdditionalContext1)),
+        CheckResult(
+            [this, context]() {
+              return private_test_impl().GetAdditionalContext();
+            },
+            testing::Contains(kAdditionalContext1)),
+        CheckResult([context]() { return context.Get(); }, kAdditionalContext1),
+        Do([context]() mutable { context.Clear(); }));
+  };
+
+  RunTestSequenceInContext(
+      kTestContext1,
+
+      // Run the custom verb.
+      custom_verb(),
+
+      // After the verb has completed, there are no more references to the
+      // context.
+      Check([this]() {
+        return private_test_impl().GetAdditionalContext().empty();
+      }));
+}
+
+TEST_F(InteractiveTestTest, TwoAdditionalContexts) {
+  // Create a custom verb that has a local context. This will be called from
+  // inside `custom_verb()` below.
+  auto custom_verb2 = [this]() {
+    AdditionalContext context = private_test_impl().CreateAdditionalContext();
+
+    // The context for both this and the outer verb will be active.
+    auto expected =
+        testing::ElementsAre(kAdditionalContext1, kAdditionalContext2);
+    return Steps(CheckResult(
+                     [this, context]() mutable {
+                       context.Set(kAdditionalContext2);
+                       return private_test_impl().GetAdditionalContext();
+                     },
+                     expected),
+                 CheckResult(
+                     [this, context]() {
+                       return private_test_impl().GetAdditionalContext();
+                     },
+                     expected),
+                 Do([context]() mutable { context.Clear(); }));
+  };
+
+  // Create a custom verb that has a local context and calls another verb with a
+  // local context.
+  auto custom_verb = [this, &custom_verb2]() {
+    AdditionalContext context = private_test_impl().CreateAdditionalContext();
+
+    return Steps(Do([context]() mutable { context.Set(kAdditionalContext1); }),
+
+                 custom_verb2(),
+
+                 // Outside of custom_verb(), only our context exists.
+                 CheckResult(
+                     [this, context]() {
+                       return private_test_impl().GetAdditionalContext();
+                     },
+                     testing::Contains(kAdditionalContext1)),
+                 Do([context]() mutable { context.Clear(); }));
+  };
+
+  RunTestSequenceInContext(
+      kTestContext1,
+
+      // Run the custom verb.
+      custom_verb(),
+
+      // After the verb has completed, there are no more references to the
+      // context.
+      Check([this]() {
+        return private_test_impl().GetAdditionalContext().empty();
+      }));
 }
 
 }  // namespace ui::test

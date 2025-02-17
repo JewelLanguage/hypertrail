@@ -5,14 +5,17 @@
 #ifndef COMPONENTS_IP_PROTECTION_COMMON_IP_PROTECTION_CORE_IMPL_H_
 #define COMPONENTS_IP_PROTECTION_COMMON_IP_PROTECTION_CORE_IMPL_H_
 
+#include <cstddef>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
+#include <vector>
 
-#include "base/component_export.h"
-#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "components/ip_protection/common/ip_protection_core.h"
+#include "components/ip_protection/common/ip_protection_data_types.h"
 #include "net/base/network_change_notifier.h"
 
 namespace net {
@@ -42,7 +45,8 @@ class IpProtectionCoreImpl
           ip_protection_proxy_config_manager,
       std::map<ProxyLayer, std::unique_ptr<IpProtectionTokenManager>>
           ip_protection_token_managers,
-      bool is_ip_protection_enabled);
+      bool is_ip_protection_enabled,
+      bool use_regular_mdl = false);
   ~IpProtectionCoreImpl() override;
 
   // IpProtectionCore implementation.
@@ -90,6 +94,8 @@ class IpProtectionCoreImpl
       ipp_token_managers_;
 
   bool is_ip_protection_enabled_;
+
+  MdlType mdl_type_;
 
   // If true, this class will try to connect to IP Protection proxies via QUIC.
   // Once this value becomes false, it stays false until a network change or

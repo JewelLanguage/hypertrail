@@ -22,7 +22,7 @@
 #include "ui/gl/gl_angle_util_vulkan.h"
 #include "ui/gl/gl_switches.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include <sys/sysmacros.h>
 #endif
 
@@ -432,7 +432,7 @@ bool VulkanInstance::CollectDeviceInfo(VkPhysicalDevice physical_device) {
     static_assert(kVulkanRequiredApiVersion >= VK_API_VERSION_1_1, "");
     if (info.properties.apiVersion >= kVulkanRequiredApiVersion) {
       bool has_drm_extension =
-          base::ranges::any_of(info.extensions, [](const auto& ext) {
+          std::ranges::any_of(info.extensions, [](const auto& ext) {
             return strcmp(ext.extensionName,
                           VK_EXT_PHYSICAL_DEVICE_DRM_EXTENSION_NAME) == 0;
           });
@@ -453,7 +453,7 @@ bool VulkanInstance::CollectDeviceInfo(VkPhysicalDevice physical_device) {
       };
       vkGetPhysicalDeviceProperties2(device, &properties2);
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
       if (has_drm_extension &&
           (drm_properties.hasRender || drm_properties.hasPrimary)) {
         static_assert(sizeof(dev_t) <= sizeof(info.drm_device_id),

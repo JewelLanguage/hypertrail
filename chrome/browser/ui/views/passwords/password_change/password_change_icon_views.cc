@@ -26,6 +26,22 @@
 #include "ui/views/vector_icons.h"
 #include "ui/views/view_class_properties.h"
 
+using State = PasswordChangeDelegate::State;
+
+namespace {
+std::u16string GetLabelText(PasswordChangeDelegate::State state) {
+  if (state == PasswordChangeDelegate::State::kWaitingForChangePasswordForm) {
+    return l10n_util::GetStringUTF16(
+        IDS_PASSWORD_MANAGER_UI_PASSWORD_CHANGE_OMNIBOX_SIGN_IN_CHECK);
+  }
+  if (state == PasswordChangeDelegate::State::kChangingPassword) {
+    return l10n_util::GetStringUTF16(
+        IDS_PASSWORD_MANAGER_UI_PASSWORD_CHANGE_OMNIBOX_CHANGING_PASSWORD);
+  }
+  return std::u16string();
+}
+}  // namespace
+
 PasswordChangeIconViews::PasswordChangeIconViews(
     CommandUpdater* updater,
     IconLabelBubbleView::Delegate* icon_label_bubble_delegate,
@@ -47,8 +63,8 @@ PasswordChangeIconViews::PasswordChangeIconViews(
   image_container_view()->SetFlipCanvasOnPaintForRTLUI(false);
   SetProperty(views::kElementIdentifierKey, kPasswordsOmniboxKeyIconElementId);
 
-  std::u16string tooltip =
-      l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_TOOLTIP_MANAGE);
+  std::u16string tooltip = l10n_util::GetStringUTF16(
+      IDS_PASSWORD_MANAGER_UI_PASSWORD_CHANGE_ICON_TOOLTIP);
   SetAccessibleName(tooltip);
   UpdateTooltipText();
   SetTooltipForToolbarPinningEnabled(tooltip);
@@ -100,6 +116,7 @@ bool PasswordChangeIconViews::OnMousePressed(const ui::MouseEvent& event) {
 
 const gfx::VectorIcon& PasswordChangeIconViews::GetVectorIcon() const {
   switch (controller_.GetCurrentState()) {
+    case PasswordChangeDelegate::State::kOfferingPasswordChange:
     case PasswordChangeDelegate::State::kWaitingForAgreement:
     case PasswordChangeDelegate::State::kPasswordSuccessfullyChanged:
     case PasswordChangeDelegate::State::kPasswordChangeFailed:
@@ -137,26 +154,20 @@ void PasswordChangeIconViews::UpdateIconAndLabel() {
   ui::ColorId background_color_id = GetUseTonalColorsWhenExpanded()
                                         ? kColorOmniboxIconBackgroundTonal
                                         : kColorOmniboxIconBackground;
-  switch (controller_.GetCurrentState()) {
-    case PasswordChangeDelegate::State::kWaitingForAgreement:
-    case PasswordChangeDelegate::State::kPasswordSuccessfullyChanged:
-    case PasswordChangeDelegate::State::kPasswordChangeFailed:
-    case PasswordChangeDelegate::State::kChangePasswordFormNotFound:
-      SetText(u"");
-      break;
-    case PasswordChangeDelegate::State::kWaitingForChangePasswordForm:
-      icon_color = GetColorProvider()->GetColor(ui::kColorSysOnTonalContainer);
-      background_color_id = ui::kColorSysTonalContainer;
-      SetText(l10n_util::GetStringUTF16(
-          IDS_PASSWORD_MANAGER_UI_PASSWORD_CHANGE_OMNIBOX_SIGN_IN_CHECK));
-      break;
-    case PasswordChangeDelegate::State::kChangingPassword:
-      icon_color = GetColorProvider()->GetColor(ui::kColorSysOnTonalContainer);
-      background_color_id = ui::kColorSysTonalContainer;
-      SetText(l10n_util::GetStringUTF16(
-          IDS_PASSWORD_MANAGER_UI_PASSWORD_CHANGE_OMNIBOX_CHANGING_PASSWORD));
-      break;
+
+  State flow_state = controller_.GetCurrentState();
+  if (flow_state == State::kWaitingForChangePasswordForm ||
+      flow_state == State::kChangingPassword) {
+    icon_color = GetColorProvider()->GetColor(ui::kColorSysOnTonalContainer);
+    background_color_id = ui::kColorSysTonalContainer;
   }
+  std::u16string label_text = GetLabelText(controller_.GetCurrentState());
+  SetLabel(label_text,
+           /*accessible_name=*/label_text.empty()
+               ? l10n_util::GetStringUTF16(
+                     IDS_PASSWORD_MANAGER_UI_PASSWORD_CHANGE_ICON_TOOLTIP)
+               : label_text);
+  label()->SetVisible(label_text.empty() ? false : true);
   SetIconColor(icon_color);
   SetEnabledTextColors(icon_color);
   SetCustomBackgroundColorId(background_color_id);

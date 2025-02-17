@@ -11,7 +11,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/engagement/site_engagement_service_factory.h"
 #include "chrome/browser/file_system_access/chrome_file_system_access_permission_context.h"
@@ -26,6 +25,7 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -88,6 +88,10 @@ constexpr ContentSettingsType kContentTypeTrackingProtection =
 
 class SiteSettingsHelperTest : public testing::Test {
  public:
+  void SetUp() override {
+    TestingBrowserProcess::GetGlobal()->CreateGlobalFeaturesForTesting();
+  }
+
   void VerifySetting(const base::Value::List& exceptions,
                      int index,
                      const std::string& pattern,
@@ -1198,7 +1202,10 @@ class SiteSettingsHelperChooserExceptionTest : public testing::Test {
 
   Profile* profile() { return &profile_; }
 
-  void SetUp() override { SetUpUsbChooserContext(); }
+  void SetUp() override {
+    TestingBrowserProcess::GetGlobal()->CreateGlobalFeaturesForTesting();
+    SetUpUsbChooserContext();
+  }
 
   // Sets up the UsbChooserContext with two devices and permissions for these
   // devices. It also adds three policy defined permissions. The two devices
@@ -1437,6 +1444,7 @@ class SiteSettingsHelperExtensionTest
             std::make_unique<content::BrowserTaskEnvironment>()) {}
 
   void SetUp() override {
+    TestingBrowserProcess::GetGlobal()->CreateGlobalFeaturesForTesting();
     extensions::ExtensionServiceTestBase::SetUp();
     // The test profile is initialized in InitializeEmptyExtensionService().
     InitializeEmptyExtensionService();
@@ -1561,6 +1569,7 @@ TEST_F(SiteSettingsHelperExtensionTest,
 class SiteSettingsHelperIsolatedWebAppTest : public testing::Test {
  protected:
   void SetUp() override {
+    TestingBrowserProcess::GetGlobal()->CreateGlobalFeaturesForTesting();
     web_app::test::AwaitStartWebAppProviderAndSubsystems(&testing_profile_);
   }
 
@@ -1637,7 +1646,7 @@ TEST_F(SiteSettingsHelperIsolatedWebAppTest, AutomaticFullscreenVisibility) {
   EXPECT_EQ(CONTENT_SETTING_BLOCK, content_setting);
   const auto types = GetVisiblePermissionCategories(
       app_url_info.origin().GetURL().spec(), profile());
-  EXPECT_TRUE(base::ranges::any_of(types, [](auto& t) { return t == type; }));
+  EXPECT_TRUE(std::ranges::any_of(types, [](auto& t) { return t == type; }));
 }
 
 }  // namespace site_settings

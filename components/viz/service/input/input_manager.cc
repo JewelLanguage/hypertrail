@@ -28,6 +28,9 @@
 #include "gpu/ipc/common/gpu_surface_lookup.h"
 #include "ui/gfx/android/android_surface_control_compat.h"
 #include "ui/gl/android/scoped_a_native_window.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "components/viz/service/service_jni_headers/InputTransferHandlerViz_jni.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
 namespace viz {
@@ -354,9 +357,11 @@ InputManager::GetEmbeddedRenderInputRouters(const FrameSinkId& id) {
 void InputManager::NotifyObserversOfInputEvent(
     const FrameSinkId& frame_sink_id,
     const base::UnguessableToken& grouping_id,
-    std::unique_ptr<blink::WebCoalescedInputEvent> event) {
+    std::unique_ptr<blink::WebCoalescedInputEvent> event,
+    bool dispatched_to_renderer) {
   rir_delegate_remote_map_.at(grouping_id)
-      ->NotifyObserversOfInputEvent(frame_sink_id, std::move(event));
+      ->NotifyObserversOfInputEvent(frame_sink_id, std::move(event),
+                                    dispatched_to_renderer);
 }
 
 void InputManager::NotifyObserversOfInputEventAcks(
@@ -459,6 +464,33 @@ input::RenderInputRouter* InputManager::GetRenderInputRouterFromFrameSinkId(
   return rir_map_[id].get();
 }
 
+bool InputManager::ReturnInputBackToBrowser() {
+#if BUILDFLAG(IS_ANDROID)
+  if (!receiver_data_) {
+    return false;
+  }
+  JNIEnv* env = base::android::AttachCurrentThread();
+  base::android::ScopedJavaGlobalRef<jobject> viz_input_token_java(
+      env,
+      base::AndroidInputReceiverCompat::GetInstance()
+          .AInputTransferToken_toJavaFn(
+              env, receiver_data_->viz_input_token().a_input_transfer_token()));
+  base::android::ScopedJavaGlobalRef<jobject> browser_input_token_java(
+      env,
+      base::AndroidInputReceiverCompat::GetInstance()
+          .AInputTransferToken_toJavaFn(
+              env,
+              receiver_data_->browser_input_token().a_input_transfer_token()));
+
+  return static_cast<bool>(Java_InputTransferHandlerViz_transferInput(
+      env, viz_input_token_java, browser_input_token_java));
+#endif  // BUILDFLAG(IS_ANDROID)
+
+  // `ReturnInputBackToBrowser` is only being called from Android specific
+  // usecases currently with InputVizard.
+  NOTREACHED();
+}
+
 std::unique_ptr<RenderInputRouterSupportBase>
 InputManager::MakeRenderInputRouterSupport(input::RenderInputRouter* rir,
                                            const FrameSinkId& frame_sink_id) {
@@ -467,8 +499,8 @@ InputManager::MakeRenderInputRouterSupport(input::RenderInputRouter* rir,
       frame_sink_manager_->GetOldestParentByChildFrameId(frame_sink_id);
   if (frame_sink_manager_->IsFrameSinkIdInRootSinkMap(parent_id)) {
 #if BUILDFLAG(IS_ANDROID)
-    return std::make_unique<RenderInputRouterSupportAndroid>(rir, this,
-                                                             frame_sink_id);
+    return std::make_unique<RenderInputRouterSupportAndroid>(
+        rir, this, frame_sink_id, GetGpuService());
 #else
     // InputVizard only supports Android currently.
     NOTREACHED();

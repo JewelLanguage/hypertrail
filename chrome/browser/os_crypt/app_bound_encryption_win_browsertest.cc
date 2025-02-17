@@ -26,6 +26,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/types/expected.h"
 #include "chrome/browser/browser_features.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/os_crypt/app_bound_encryption_provider_win.h"
@@ -35,6 +36,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/elevation_service/elevator.h"
 #include "chrome/install_static/test/scoped_install_details.h"
+#include "chrome/installer/util/install_service_work_item.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/windows_services/service_program/test_support/scoped_log_grabber.h"
 #include "components/os_crypt/async/browser/os_crypt_async.h"
@@ -102,6 +104,29 @@ class AppBoundEncryptionWinTest : public InProcessBrowserTest {
     maybe_uninstall_service_ = InstallService(log_grabber_);
     EXPECT_TRUE(maybe_uninstall_service_.has_value());
     InProcessBrowserTest::SetUp();
+  }
+
+  void TearDown() override { maybe_uninstall_service_.reset(); }
+
+  // Used by multi-stage tests to persist data between each part of the test.
+  void StoreData(base::span<const uint8_t> data) {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    const auto data_path =
+        browser()->profile()->GetPath().Append(FILE_PATH_LITERAL("TestData"));
+    ASSERT_FALSE(base::PathExists(data_path));
+    EXPECT_TRUE(base::WriteFile(data_path, data));
+  }
+
+  std::optional<std::vector<uint8_t>> RetrieveData() {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    return base::ReadFileToBytes(
+        browser()->profile()->GetPath().Append(FILE_PATH_LITERAL("TestData")));
+  }
+
+  static bool IsPreTest() {
+    const std::string_view test_name(
+        ::testing::UnitTest::GetInstance()->current_test_info()->name());
+    return test_name.find("PRE_") != std::string_view::npos;
   }
 
   base::HistogramTester histogram_tester_;
@@ -211,8 +236,7 @@ IN_PROC_BROWSER_TEST_F(AppBoundEncryptionWinTest, MANUAL_Uninstall) {}
 
 using AppBoundEncryptionWinTestNoService = InProcessBrowserTest;
 
-// TODO(https://crbug.com/328398409): Flakily fails
-IN_PROC_BROWSER_TEST_F(AppBoundEncryptionWinTestNoService, DISABLED_NoService) {
+IN_PROC_BROWSER_TEST_F(AppBoundEncryptionWinTestNoService, NoService) {
   const std::string plaintext("plaintext");
   std::string ciphertext;
   DWORD last_error;
@@ -275,45 +299,71 @@ IN_PROC_BROWSER_TEST_P(AppBoundEncryptionWinTestWithPolicy,
                                        : SupportLevel::kDisabledByPolicy);
 }
 
+class AppBoundEncryptionWinDecryptionNotAvailableTest
+    : public AppBoundEncryptionWinTest {
+  void SetUp() override {
+    if (base::GetCurrentProcessIntegrityLevel() != base::HIGH_INTEGRITY) {
+      GTEST_SKIP() << "Elevation is required for this test.";
+    }
+
+    // Install the service only for the pre-test part.
+    if (IsPreTest()) {
+      maybe_uninstall_service_ = InstallService(log_grabber_);
+      EXPECT_TRUE(maybe_uninstall_service_.has_value());
+    }
+    // Note: intentionally do not call AppBoundEncryptionWinTest::SetUp here.
+    InProcessBrowserTest::SetUp();
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(AppBoundEncryptionWinDecryptionNotAvailableTest,
+                       PRE_DecryptionTemporaryFailure) {
+  EXPECT_EQ(GetAppBoundEncryptionSupportLevel(g_browser_process->local_state()),
+            SupportLevel::kSupported);
+  auto encryptor = GetInstanceSync(*g_browser_process->os_crypt_async());
+
+  const auto app_bound_data = encryptor.EncryptString("app-bound secret");
+  ASSERT_TRUE(app_bound_data);
+  ASSERT_GT(app_bound_data->size(), 3u);
+  // kAppBoundDataPrefix for App-Bound.
+  constexpr uint8_t kV20Header[] = {'v', '2', '0'};
+  EXPECT_THAT(base::span(*app_bound_data).first<3>(),
+              ::testing::ElementsAreArray(kV20Header));
+
+  ASSERT_NO_FATAL_FAILURE(StoreData(*app_bound_data));
+}
+
+IN_PROC_BROWSER_TEST_F(AppBoundEncryptionWinDecryptionNotAvailableTest,
+                       DecryptionTemporaryFailure) {
+  // Supported, but the service is not present. Decryptions should fail.
+  EXPECT_EQ(GetAppBoundEncryptionSupportLevel(g_browser_process->local_state()),
+            SupportLevel::kSupported);
+  auto encryptor = GetInstanceSync(*g_browser_process->os_crypt_async());
+
+  {
+    const auto previous_data = RetrieveData();
+    ASSERT_TRUE(previous_data);
+
+    os_crypt_async::Encryptor::DecryptFlags flags;
+    const auto plaintext = encryptor.DecryptData(*previous_data, &flags);
+    EXPECT_FALSE(plaintext);
+    // Decryption is temporarily unavailable, as the service is not present.
+    EXPECT_TRUE(flags.temporarily_unavailable);
+  }
+
+  {
+    os_crypt_async::Encryptor::DecryptFlags flags;
+    auto plaintext =
+        encryptor.DecryptData(base::as_byte_span("invalid_data"), &flags);
+    EXPECT_FALSE(plaintext);
+    // Invalid data is permanently unavailable.
+    EXPECT_FALSE(flags.temporarily_unavailable);
+  }
+}
+
 class AppBoundEncryptionWinTestWithVariablePolicy
     : public AppBoundEncryptionWinTestWithPolicyBase {
- protected:
-  void StoreData(base::span<const uint8_t> data) {
-    base::ScopedAllowBlockingForTesting allow_blocking;
-    const auto data_path =
-        browser()->profile()->GetPath().Append(FILE_PATH_LITERAL("TestData"));
-    ASSERT_FALSE(base::PathExists(data_path));
-    EXPECT_TRUE(base::WriteFile(data_path, data));
-  }
-
-  std::optional<std::vector<uint8_t>> RetrieveData() {
-    base::ScopedAllowBlockingForTesting allow_blocking;
-    return base::ReadFileToBytes(
-        browser()->profile()->GetPath().Append(FILE_PATH_LITERAL("TestData")));
-  }
-
-  static std::vector<uint8_t> GetEncryptedData(
-      base::span<const uint8_t> expected) {
-    base::RunLoop run_loop;
-    std::vector<uint8_t> result;
-    auto sub = g_browser_process->os_crypt_async()->GetInstance(
-        base::BindLambdaForTesting(
-            [&](os_crypt_async::Encryptor encryptor, bool success) {
-              ASSERT_TRUE(success);
-              result = encryptor.EncryptString("secret").value();
-              run_loop.Quit();
-            }));
-    run_loop.Run();
-    return result;
-  }
-
  private:
-  static bool IsPreTest() {
-    const std::string_view test_name(
-        ::testing::UnitTest::GetInstance()->current_test_info()->name());
-    return test_name.find("PRE_") != std::string_view::npos;
-  }
-
   void SetUp() override {
     if (!IsPreTest()) {
       // Disable App-Bound in the second part of the test.
@@ -482,15 +532,16 @@ IN_PROC_BROWSER_TEST_P(AppBoundEncryptionWinReencryptTest, KeyProviderTest) {
   std::optional<os_crypt_async::Encryptor::Key> encryption_key;
   std::string encrypted_key;
   {
-    os_crypt_async::AppBoundEncryptionProviderWin provider(
-        &prefs, /*use_for_encryption=*/true);
-    base::test::TestFuture<const std::string&,
-                           std::optional<os_crypt_async::Encryptor::Key>>
+    os_crypt_async::AppBoundEncryptionProviderWin provider(&prefs);
+    base::test::TestFuture<
+        const std::string&,
+        base::expected<os_crypt_async::Encryptor::Key,
+                       os_crypt_async::KeyProvider::KeyError>>
         future;
     provider.GetKey(future.GetCallback());
     auto [tag, key] = future.Take();
     EXPECT_EQ(tag, "v20");
-    ASSERT_TRUE(key);
+    ASSERT_TRUE(key.has_value());
     encryption_key.emplace(std::move(*key));
     encrypted_key = prefs.GetString(kPrefName);
     EXPECT_FALSE(encrypted_key.empty());
@@ -504,14 +555,15 @@ IN_PROC_BROWSER_TEST_P(AppBoundEncryptionWinReencryptTest, KeyProviderTest) {
   EXPECT_CALL(observer, OnPreferenceChanged(_))
       .Times(ExpectReencrypt() ? 1 : 0);
   {
-    os_crypt_async::AppBoundEncryptionProviderWin provider(
-        &prefs, /*use_for_encryption=*/true);
-    base::test::TestFuture<const std::string&,
-                           std::optional<os_crypt_async::Encryptor::Key>>
+    os_crypt_async::AppBoundEncryptionProviderWin provider(&prefs);
+    base::test::TestFuture<
+        const std::string&,
+        base::expected<os_crypt_async::Encryptor::Key,
+                       os_crypt_async::KeyProvider::KeyError>>
         future;
     provider.GetKey(future.GetCallback());
     const auto& [_, key] = future.Get();
-    ASSERT_TRUE(key);
+    ASSERT_TRUE(key.has_value());
     // The key returned should be the same as it's been decrypted from the
     // store, regardless of whether it's been re-encrypted or not.
     EXPECT_EQ(*key, *encryption_key);
@@ -536,42 +588,6 @@ INSTANTIATE_TEST_SUITE_P(
            std::get<1>(info.param) ? "FeatureOn" : "FeatureOff"});
     });
 
-class AppBoundEncryptionWinTestFeatureMaybeDisabled
-    : public AppBoundEncryptionWinTest,
-      public ::testing::WithParamInterface</*feature enabled*/ bool> {
- public:
-  AppBoundEncryptionWinTestFeatureMaybeDisabled() {
-    feature_list_.InitWithFeatureState(
-        ::features::kUseAppBoundEncryptionProviderForEncryption, GetParam());
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-IN_PROC_BROWSER_TEST_P(AppBoundEncryptionWinTestFeatureMaybeDisabled,
-                       ReEncrypt) {
-  std::string ciphertext;
-  ASSERT_TRUE(OSCrypt::EncryptString("secrets", &ciphertext));
-
-  auto encryptor = GetInstanceSync(*g_browser_process->os_crypt_async());
-
-  os_crypt_async::Encryptor::DecryptFlags flags;
-  std::string plaintext;
-  ASSERT_TRUE(encryptor.DecryptString(ciphertext, &plaintext, &flags));
-  // With App-Bound enabled, a decryption of an OSCrypt Sync secret should
-  // result in a request to re-encrypt to get full protection, otherwise no
-  // re-encryption should be requested.
-  EXPECT_EQ(flags.should_reencrypt, GetParam());
-}
-
-INSTANTIATE_TEST_SUITE_P(,
-                         AppBoundEncryptionWinTestFeatureMaybeDisabled,
-                         ::testing::Bool(),
-                         [](auto& info) {
-                           return info.param ? "Enabled" : "Disabled";
-                         });
-
 // These tests do not function correctly in component builds because they rely
 // on being able to run a standalone executable child process in various
 // different directories, and a component build has too many dynamic DLL
@@ -590,8 +606,8 @@ class AppBoundEncryptionWinTestMultiProcess : public AppBoundEncryptionWinTest {
   }
 
   void EncryptOrDecryptInTestProcess(
-      base::FilePath::StringPieceType filename,
-      std::optional<base::FilePath::StringPieceType> sub_dir,
+      base::FilePath::StringViewType filename,
+      std::optional<base::FilePath::StringViewType> sub_dir,
       const std::string& input_data,
       std::string& output_data,
       Operation op,
@@ -711,5 +727,137 @@ IN_PROC_BROWSER_TEST_F(AppBoundEncryptionWinTestMultiProcess,
   }
 }
 #endif  // !defined(COMPONENT_BUILD)
+
+struct AppBoundTestCase {
+  // Test case name.
+  std::string name;
+  // If true, then the temporary dir used by tests for --user-data-dir is
+  // considered a 'default user data dir' by the PRE part of the test.
+  bool allow_non_standard_udd_in_pre;
+  // If true, then the temporary dir used by tests for --user-data-dir is
+  // considered a 'default user data dir' by the main part of the test.
+  bool allow_non_standard_udd_in_main;
+  // Whether or not the data will start with the 'v20' app-bound header,
+  // indicating that it's secured with App-Bound encryption.
+  bool expect_encrypt_with_app_bound;
+  // Whether or not the Decrypt operation succeeds. If false, then the
+  // `temporarily_unavailable` is also expected to be true.
+  bool expect_decrypt_works;
+  // If decrypt works, whether or not OSCrypt indicates that the data should be
+  // re-encrypted.
+  bool should_reencrypt = false;
+  // Support level for the PRE part of the test.
+  SupportLevel expected_support_level_in_pre;
+  // Support level for the main part of the test.
+  SupportLevel expected_support_level_in_main;
+};
+
+class AppBoundEncryptionWinTestWithUserDataDir
+    : public AppBoundEncryptionWinTest,
+      public testing::WithParamInterface<AppBoundTestCase> {
+ public:
+  void SetUp() override {
+    if (IsPreTest()) {
+      os_crypt::SetNonStandardUserDataDirSupportedForTesting(
+          /*supported=*/GetParam().allow_non_standard_udd_in_pre);
+    } else {
+      os_crypt::SetNonStandardUserDataDirSupportedForTesting(
+          /*supported=*/GetParam().allow_non_standard_udd_in_main);
+    }
+    AppBoundEncryptionWinTest::SetUp();
+  }
+};
+
+IN_PROC_BROWSER_TEST_P(AppBoundEncryptionWinTestWithUserDataDir,
+                       PRE_EncryptionDecryption) {
+  EXPECT_EQ(GetAppBoundEncryptionSupportLevel(g_browser_process->local_state()),
+            GetParam().expected_support_level_in_pre);
+
+  auto encryptor = GetInstanceSync(*g_browser_process->os_crypt_async());
+
+  const auto encrypted_data = encryptor.EncryptString("super secret");
+  ASSERT_TRUE(encrypted_data);
+  if (GetParam().expect_encrypt_with_app_bound) {
+    ASSERT_GT(encrypted_data->size(), 3u);
+    // kAppBoundDataPrefix for App-Bound.
+    constexpr uint8_t kV20Header[] = {'v', '2', '0'};
+    EXPECT_THAT(base::span(*encrypted_data).first<3>(),
+                ::testing::ElementsAreArray(kV20Header));
+  }
+  ASSERT_NO_FATAL_FAILURE(StoreData(*encrypted_data));
+}
+
+IN_PROC_BROWSER_TEST_P(AppBoundEncryptionWinTestWithUserDataDir,
+                       EncryptionDecryption) {
+  EXPECT_EQ(GetAppBoundEncryptionSupportLevel(g_browser_process->local_state()),
+            GetParam().expected_support_level_in_main);
+
+  auto encryptor = GetInstanceSync(*g_browser_process->os_crypt_async());
+
+  const auto previous_data = RetrieveData();
+  ASSERT_TRUE(previous_data);
+
+  os_crypt_async::Encryptor::DecryptFlags flags;
+  const auto plaintext = encryptor.DecryptData(*previous_data, &flags);
+  if (GetParam().expect_decrypt_works) {
+    ASSERT_TRUE(plaintext);
+    EXPECT_EQ("super secret", *plaintext);
+    EXPECT_EQ(flags.should_reencrypt, GetParam().should_reencrypt);
+  } else {
+    EXPECT_FALSE(plaintext);
+    EXPECT_TRUE(flags.temporarily_unavailable);
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    /* no prefix */,
+    AppBoundEncryptionWinTestWithUserDataDir,
+    testing::ValuesIn<AppBoundTestCase>({
+        {.name = "standard_udd",
+         .allow_non_standard_udd_in_pre = true,
+         .allow_non_standard_udd_in_main = true,
+         .expect_encrypt_with_app_bound = true,
+         .expect_decrypt_works = true,
+         .should_reencrypt = false,
+         .expected_support_level_in_pre = SupportLevel::kSupported,
+         .expected_support_level_in_main = SupportLevel::kSupported},
+        {.name = "non_standard_udd",
+         .allow_non_standard_udd_in_pre = false,
+         .allow_non_standard_udd_in_main = false,
+         .expect_encrypt_with_app_bound = false,
+         .expect_decrypt_works = true,
+         .should_reencrypt = false,
+         .expected_support_level_in_pre =
+             SupportLevel::kNotUsingDefaultUserDataDir,
+         .expected_support_level_in_main =
+             SupportLevel::kNotUsingDefaultUserDataDir},
+        // Switch from a standard UDD to a non-standard UDD. The encrypt that
+        // took place in the first stage was app-bound and should not be
+        // decryptable by the second stage.
+        {.name = "was_standard_udd_now_non_standard_udd",
+         .allow_non_standard_udd_in_pre = true,
+         .allow_non_standard_udd_in_main = false,
+         .expect_encrypt_with_app_bound = true,
+         // This is the only configuration where decryption should fail.
+         .expect_decrypt_works = false,
+         .expected_support_level_in_pre = SupportLevel::kSupported,
+         .expected_support_level_in_main =
+             SupportLevel::kNotUsingDefaultUserDataDir},
+        // Switch from a non-standard UDD to a standard UDD. The encrypt that
+        // took place in the first stage would have been using non-app-bound
+        // since it did not provide a key, but should still be decryptable with
+        // the other Key Provider(s) (e.g. DPAPI). Because DPAPI is weaker than
+        // App-Bound, OSCrypt indicates `should_reencrypt` as true.
+        {.name = "was_non_standard_udd_now_standard_udd",
+         .allow_non_standard_udd_in_pre = false,
+         .allow_non_standard_udd_in_main = true,
+         .expect_encrypt_with_app_bound = false,
+         .expect_decrypt_works = true,
+         .should_reencrypt = true,
+         .expected_support_level_in_pre =
+             SupportLevel::kNotUsingDefaultUserDataDir,
+         .expected_support_level_in_main = SupportLevel::kSupported},
+    }),
+    [](const auto& info) { return info.param.name; });
 
 }  // namespace os_crypt

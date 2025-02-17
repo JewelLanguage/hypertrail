@@ -14,7 +14,6 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/ranges/algorithm.h"
 #include "base/system/sys_info.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
@@ -29,7 +28,6 @@
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/quads/compositor_frame_metadata.h"
 #include "components/viz/common/quads/compositor_render_pass.h"
-#include "components/viz/common/resources/bitmap_allocation.h"
 #include "components/viz/common/surfaces/surface_info.h"
 #include "components/viz/common/surfaces/video_capture_target.h"
 #include "components/viz/common/viz_utils.h"
@@ -627,7 +625,7 @@ void CompositorFrameSinkSupport::SetThreads(
   }
   base::flat_set<base::PlatformThreadId> thread_ids;
   for (const auto& thread : unverified_threads) {
-    thread_ids.insert(thread.id);
+    thread_ids.insert(base::PlatformThreadId(thread.id));
   }
   frame_sink_manager_->VerifySandboxedThreadIds(
       thread_ids,
@@ -1171,13 +1169,29 @@ void CompositorFrameSinkSupport::OnBeginFrame(const BeginFrameArgs& args) {
   int64_t trace_id = base::trace_event::GetNextGlobalTraceId();
   TRACE_EVENT(
       "viz,benchmark,graphics.pipeline", "Graphics.Pipeline",
-      perfetto::Flow::Global(trace_id), [trace_id](perfetto::EventContext ctx) {
+      perfetto::Flow::Global(trace_id),
+      [trace_id, &args](perfetto::EventContext ctx) {
         base::TaskAnnotator::EmitTaskTimingDetails(ctx);
         auto* event = ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
         auto* data = event->set_chrome_graphics_pipeline();
         data->set_step(perfetto::protos::pbzero::ChromeGraphicsPipeline::
                            StepName::STEP_ISSUE_BEGIN_FRAME);
         data->set_surface_frame_trace_id(trace_id);
+        auto* possible_deadlines = data->set_possible_deadlines();
+        possible_deadlines->set_frame_time_us(
+            args.frame_time.since_origin().InMicroseconds());
+        if (args.possible_deadlines.has_value()) {
+          for (const PossibleDeadline& deadline :
+               args.possible_deadlines->deadlines) {
+            auto* timeline = possible_deadlines->add_frame_timeline();
+            timeline->set_vsync_id(deadline.vsync_id);
+            timeline->set_latch_delta_us(deadline.latch_delta.InMicroseconds());
+            timeline->set_present_delta_us(
+                deadline.present_delta.InMicroseconds());
+          }
+          possible_deadlines->set_preferred_frame_timeline_index(
+              args.possible_deadlines->preferred_index);
+        }
       });
 
   if (compositor_frame_callback_) {
@@ -1370,7 +1384,7 @@ void CompositorFrameSinkSupport::AttachCaptureClient(
 
 void CompositorFrameSinkSupport::DetachCaptureClient(
     CapturableFrameSink::Client* client) {
-  const auto it = base::ranges::find(capture_clients_, client);
+  const auto it = std::ranges::find(capture_clients_, client);
   if (it != capture_clients_.end())
     capture_clients_.erase(it);
   if (client->IsVideoCaptureStarted())
@@ -1663,6 +1677,9 @@ void CompositorFrameSinkSupport::ProcessCompositorFrameTransitionDirective(
               base::BindOnce(&CompositorFrameSinkSupport::
                                  OnSaveTransitionDirectiveProcessed,
                              base::Unretained(this)));
+      if (surface_animation_manager_callback_) {
+        std::move(surface_animation_manager_callback_).Run();
+      }
       break;
     case CompositorFrameTransitionDirective::Type::kAnimateRenderer: {
       if (directive.maybe_cross_frame_sink()) {
@@ -1786,6 +1803,16 @@ void CompositorFrameSinkSupport::SetLayerContextWantsBeginFrames(
     bool wants_begin_frames) {
   layer_context_wants_begin_frames_ = wants_begin_frames;
   UpdateNeedsBeginFramesInternal();
+}
+
+void CompositorFrameSinkSupport::RegisterSurfaceAnimationManagerNotification(
+    base::OnceCallback<void()> callback) {
+  if (!view_transition_token_to_animation_manager_.empty()) {
+    std::move(callback).Run();
+  } else {
+    CHECK(!surface_animation_manager_callback_);
+    surface_animation_manager_callback_ = std::move(callback);
+  }
 }
 
 void CompositorFrameSinkSupport::DestroySelf() {

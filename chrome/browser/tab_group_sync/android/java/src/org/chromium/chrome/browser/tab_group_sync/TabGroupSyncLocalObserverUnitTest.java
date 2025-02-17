@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.tab_group_sync;
 
 import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -176,7 +177,8 @@ public class TabGroupSyncLocalObserverUnitTest {
         mTabModelObserverCaptor
                 .getValue()
                 .didSelectTab(mTab2, TabSelectionType.FROM_USER, Tab.INVALID_TAB_ID);
-        verify(mTabGroupSyncService).onTabSelected(eq(LOCAL_TAB_GROUP_ID_1), eq(TAB_ID_2));
+        verify(mTabGroupSyncService)
+                .onTabSelected(eq(LOCAL_TAB_GROUP_ID_1), eq(TAB_ID_2), eq(TAB_TITLE_1));
         for (String action : actions) {
             assertEquals(
                     "Expected one action for " + action, 1, mActionTester.getActionCount(action));
@@ -201,14 +203,15 @@ public class TabGroupSyncLocalObserverUnitTest {
                 .getValue()
                 .didSelectTab(mTab2, TabSelectionType.FROM_USER, Tab.INVALID_TAB_ID);
         assertEquals(1, mActionTester.getActionCount(action));
-        verify(mTabGroupSyncService).onTabSelected(eq(LOCAL_TAB_GROUP_ID_1), eq(TAB_ID_2));
+        verify(mTabGroupSyncService)
+                .onTabSelected(eq(LOCAL_TAB_GROUP_ID_1), eq(TAB_ID_2), eq(TAB_TITLE_1));
 
         // Select a non-grouped tab.
         mTabModelObserverCaptor
                 .getValue()
                 .didSelectTab(mTab3, TabSelectionType.FROM_USER, Tab.INVALID_TAB_ID);
         assertEquals(1, mActionTester.getActionCount(action));
-        verify(mTabGroupSyncService).onTabSelected(eq(null), eq(TAB_ID_3));
+        verify(mTabGroupSyncService).onTabSelected(eq(null), eq(TAB_ID_3), eq(TAB_TITLE_1));
     }
 
     @Test
@@ -280,7 +283,7 @@ public class TabGroupSyncLocalObserverUnitTest {
     public void testCloseMultipleTabs_HidingTabGroup() {
         List<Tab> tabs = new ArrayList<>();
         tabs.add(mTab1);
-        when(mTabGroupModelFilter.getLazyAllTabGroupIdsInComprehensiveModel(any()))
+        when(mTabGroupModelFilter.getLazyAllTabGroupIds(any(), anyBoolean()))
                 .thenReturn(LazyOneshotSupplier.fromValue(new HashSet<Token>()));
         when(mTabGroupModelFilter.isTabGroupHiding(TOKEN_1)).thenReturn(true);
         mTabModelObserverCaptor
@@ -294,7 +297,7 @@ public class TabGroupSyncLocalObserverUnitTest {
     public void testCloseMultipleTabs_HidingTabGroup_NotLastTabInGroup() {
         List<Tab> tabs = new ArrayList<>();
         tabs.add(mTab1);
-        when(mTabGroupModelFilter.getLazyAllTabGroupIdsInComprehensiveModel(any()))
+        when(mTabGroupModelFilter.getLazyAllTabGroupIds(any(), anyBoolean()))
                 .thenReturn(LazyOneshotSupplier.fromValue(Set.of(TOKEN_1)));
         when(mTabGroupModelFilter.isTabGroupHiding(TOKEN_1)).thenReturn(true);
         mTabModelObserverCaptor

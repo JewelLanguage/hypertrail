@@ -10,7 +10,9 @@
 #include <optional>
 #include <vector>
 
+#include "base/auto_reset.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/passwords/manage_passwords_state.h"
 #include "chrome/browser/ui/passwords/passwords_client_ui_delegate.h"
@@ -190,7 +192,6 @@ class ManagePasswordsUIController
       password_manager::metrics_util::MoveToAccountStoreTrigger trigger)
       override;
   void BlockMovingPasswordToAccountStore() override;
-  void PromptSaveBubbleAfterDefaultStoreChanged() override;
   void ChooseCredential(
       const password_manager::PasswordForm& form,
       password_manager::CredentialType credential_type) override;
@@ -199,13 +200,12 @@ class ManagePasswordsUIController
   void NavigateToPasswordDetailsPageInPasswordManager(
       const std::string& password_domain_name,
       password_manager::ManagePasswordsReferrer referrer) override;
-  void NavigateToPasswordManagerSettingsAccountStoreToggle(
-      password_manager::ManagePasswordsReferrer referrer) override;
   void OnDialogHidden() override;
   void AuthenticateUserWithMessage(const std::u16string& message,
                                    AvailabilityCallback callback) override;
   void MaybeShowIOSPasswordPromo() override;
   void RelaunchChrome() override;
+  void NavigateToPasswordChangeSettings() override;
   // Skips user os level authentication during the life time of the returned
   // object. To be used in tests of flows that require user authentication.
   [[nodiscard]] std::unique_ptr<base::AutoReset<bool>>
@@ -217,8 +217,9 @@ class ManagePasswordsUIController
   }
 #endif  // defined(UNIT_TEST)
 
-  // Hides the bubble if opened. Mocked in the tests.
+  // Hides/Shows the bubble if opened. Mocked in the tests.
   virtual void HidePasswordBubble();
+  virtual void ShowChangePasswordBubble();
 
   bool IsShowingBubble() const {
     return bubble_status_ == BubbleStatus::SHOWN ||
@@ -265,6 +266,8 @@ class ManagePasswordsUIController
 
   PasswordChangeDelegate* GetPasswordChangeDelegate() const override;
 
+  PasswordsLeakDialogDelegate* GetPasswordsLeakDialogDelegate() override;
+
  private:
   friend class content::WebContentsUserData<ManagePasswordsUIController>;
 
@@ -274,9 +277,6 @@ class ManagePasswordsUIController
   void NavigateToPasswordCheckup(
       password_manager::PasswordCheckReferrer referrer) override;
   void OnLeakDialogHidden() override;
-  void ChangePassword(const GURL& url,
-                      const std::u16string& username,
-                      const std::u16string& password) override;
 
   enum class BubbleStatus {
     NOT_SHOWN,
@@ -365,7 +365,7 @@ class ManagePasswordsUIController
   // Used to bypass user authentication in integration tests.
   bool bypass_user_auth_for_testing_ = false;
 
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
   bool was_biometric_authentication_for_filling_promo_shown_ = false;
 #endif
 

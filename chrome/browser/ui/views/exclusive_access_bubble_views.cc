@@ -11,7 +11,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
@@ -64,7 +63,7 @@ ExclusiveAccessBubbleViews::ExclusiveAccessBubbleViews(
   view_->SetProperty(views::kElementIdentifierKey,
                      kExclusiveAccessBubbleViewElementId);
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // Technically the exit fullscreen key on ChromeOS is F11 and the
   // "Fullscreen" key on the keyboard is just translated to F11 or F4 (which
   // is also a toggle-fullscreen command on ChromeOS). However most Chromebooks
@@ -286,7 +285,8 @@ void ExclusiveAccessBubbleViews::AnimationProgressed(
 void ExclusiveAccessBubbleViews::AnimationEnded(
     const gfx::Animation* animation) {
   if (animation_->IsShowing()) {
-    GetView()->NotifyAccessibilityEvent(ax::mojom::Event::kAlert, true);
+    GetView()->NotifyAccessibilityEventDeprecated(ax::mojom::Event::kAlert,
+                                                  true);
   }
   AnimationProgressed(animation);
 }

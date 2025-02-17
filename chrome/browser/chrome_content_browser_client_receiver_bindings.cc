@@ -10,11 +10,11 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_browser_interface_binders.h"
+#include "chrome/browser/chrome_browser_interface_binders_webui.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/chrome_content_browser_client_parts.h"
 #include "chrome/browser/content_settings/content_settings_manager_delegate.h"
 #include "chrome/browser/headless/headless_mode_util.h"
-#include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/net/net_error_tab_helper.h"
 #include "chrome/browser/net_benchmarking.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
@@ -49,6 +49,7 @@
 #include "media/mojo/buildflags.h"
 #include "mojo/public/cpp/bindings/binder_map.h"
 #include "pdf/buildflags.h"
+#include "ppapi/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/widevine/cdm/buildflags.h"
@@ -92,7 +93,6 @@
 #endif
 
 #if BUILDFLAG(ENABLE_SPELLCHECK)
-#include "chrome/browser/spellchecker/spell_check_host_chrome_impl.h"
 #include "chrome/browser/spellchecker/spell_check_initialization_host_impl.h"
 #include "components/spellcheck/common/spellcheck.mojom.h"
 #if BUILDFLAG(HAS_SPELLCHECK_PANEL)
@@ -121,6 +121,10 @@
 #if BUILDFLAG(ENABLE_PLUGINS)
 #include "chrome/browser/guest_view/web_view/chrome_web_view_permission_helper_delegate.h"
 #include "chrome/browser/plugins/plugin_observer.h"
+#endif
+
+#if BUILDFLAG(ENABLE_PPAPI)
+#include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #endif
 
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
@@ -332,15 +336,6 @@ void ChromeContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
     mojo::BinderMapWithContext<content::RenderFrameHost*>* map) {
   chrome::internal::PopulateChromeFrameBinders(map, render_frame_host);
   chrome::internal::PopulateChromeWebUIFrameBinders(map, render_frame_host);
-
-#if BUILDFLAG(ENABLE_SPELLCHECK)
-  map->Add<spellcheck::mojom::SpellCheckHost>(base::BindRepeating(
-      [](content::RenderFrameHost* frame_host,
-         mojo::PendingReceiver<spellcheck::mojom::SpellCheckHost> receiver) {
-        SpellCheckHostChromeImpl::Create(
-            frame_host->GetProcess()->GetDeprecatedID(), std::move(receiver));
-      }));
-#endif  // BUILDFLAG(ENABLE_SPELLCHECK)
 
 #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
   const GURL& site = render_frame_host->GetSiteInstance()->GetSiteURL();
@@ -607,8 +602,12 @@ void ChromeContentBrowserClient::
             BindReceiver(std::move(receiver), render_frame_host);
       },
       &render_frame_host));
+
+  Profile* profile =
+      Profile::FromBrowserContext(render_frame_host.GetBrowserContext());
   if (fingerprinting_protection_filter::features::
-          IsFingerprintingProtectionFeatureEnabled()) {
+          IsFingerprintingProtectionEnabledForIncognitoState(
+              profile ? profile->IsIncognitoProfile() : false)) {
     associated_registry.AddInterface<
         fingerprinting_protection_filter::mojom::FingerprintingProtectionHost>(
         base::BindRepeating(
@@ -692,10 +691,10 @@ void ChromeContentBrowserClient::BindHostReceiverForRenderer(
 #endif  // BUILDFLAG(HAS_SPELLCHECK_PANEL)
 #endif  // BUILDFLAG(ENABLE_SPELLCHECK)
 
-#if BUILDFLAG(ENABLE_PLUGINS)
-  if (auto host_receiver = receiver.As<chrome::mojom::MetricsService>()) {
-    ChromeMetricsServiceAccessor::BindMetricsServiceReceiver(
+#if BUILDFLAG(ENABLE_PPAPI)
+  if (auto host_receiver = receiver.As<chrome::mojom::PpapiMetricsService>()) {
+    ChromeMetricsServiceAccessor::BindPpapiMetricsServiceReceiver(
         std::move(host_receiver));
   }
-#endif  // BUILDFLAG(ENABLE_PLUGINS)
+#endif  // BUILDFLAG(ENABLE_PPAPI)
 }

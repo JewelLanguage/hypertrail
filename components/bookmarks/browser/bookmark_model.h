@@ -163,6 +163,9 @@ class BookmarkModel : public BookmarkUndoProvider,
     return node && (node == root_ || node->parent() == root_);
   }
 
+  // Returns true if the given `node` should be visible in UI surfaces.
+  bool IsNodeVisible(const BookmarkNode& node) const;
+
   // Returns true if `node` represents a bookmark that is stored on the local
   // profile but not saved to the user's server-side account. The opposite case,
   // returning null, can happen because the user turned sync-the-feature on,
@@ -176,6 +179,8 @@ class BookmarkModel : public BookmarkUndoProvider,
   // Notifies the observers that an extensive set of changes is about to happen,
   // such as during import or sync, so they can delay any expensive UI updates
   // until it's finished.
+  //
+  // Undo tracking is suspended during extensive changes.
   void BeginExtensiveChanges();
   void EndExtensiveChanges();
 
@@ -430,6 +435,12 @@ class BookmarkModel : public BookmarkUndoProvider,
   // bookmarks in account storage, including permanent folders. Must be invoked
   // by sync code only. Must only be invoked after BookmarkModel is loaded.
   void RemoveAccountPermanentFolders();
+
+  // Returns the total number of bookmark nodes (URLs and folders) in the model.
+  // This is equivalent to iterating the entire tree starting with root_node(),
+  // root node included.
+  // On Android this does *not* include partner bookmarks.
+  size_t GetTotalNumberOfUrlsAndFoldersIncludingManagedNodes() const;
 
   base::WeakPtr<BookmarkModel> AsWeakPtr() {
     return weak_factory_.GetWeakPtr();

@@ -156,7 +156,6 @@
 #include "third_party/blink/renderer/core/resize_observer/resize_observer_controller.h"
 #include "third_party/blink/renderer/core/scroll/scroll_alignment.h"
 #include "third_party/blink/renderer/core/scroll/scroll_animator_base.h"
-#include "third_party/blink/renderer/core/scroll/smooth_scroll_sequencer.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style/position_try_fallbacks.h"
 #include "third_party/blink/renderer/core/svg/svg_document_extensions.h"
@@ -289,6 +288,10 @@ LocalFrameView::LocalFrameView(LocalFrame& frame, gfx::Rect frame_rect)
       target_state_(DocumentLifecycle::kUninitialized),
       suppress_adjust_view_size_(false),
       intersection_observation_state_(kNotNeeded),
+      delayed_intersection_timer_(
+          frame.GetTaskRunner(TaskType::kInternalDefault),
+          this,
+          &LocalFrameView::DelayedIntersectionTimerFired),
       main_thread_scrolling_reasons_(0),
       forced_layout_stack_depth_(0),
       paint_frame_count_(0),
@@ -333,6 +336,7 @@ void LocalFrameView::Trace(Visitor* visitor) const {
   visitor->Trace(viewport_scrollable_area_);
   visitor->Trace(anchoring_adjustment_queue_);
   visitor->Trace(scroll_event_queue_);
+  visitor->Trace(delayed_intersection_timer_);
   visitor->Trace(paint_controller_persistent_data_);
   visitor->Trace(paint_artifact_compositor_);
   visitor->Trace(layout_shift_tracker_);
@@ -647,11 +651,10 @@ bool LocalFrameView::LayoutFromRootObject(LayoutObject& root) {
     return false;
   }
 
-  if (scroll_anchoring_scrollable_areas_) {
-    for (auto& scrollable_area : *scroll_anchoring_scrollable_areas_) {
-      if (scrollable_area->GetScrollAnchor() &&
-          scrollable_area->ShouldPerformScrollAnchoring())
-        scrollable_area->GetScrollAnchor()->NotifyBeforeLayout();
+  for (auto& scrollable_area : scroll_anchoring_scrollable_areas_) {
+    if (scrollable_area->GetScrollAnchor() &&
+        scrollable_area->ShouldPerformScrollAnchoring()) {
+      scrollable_area->GetScrollAnchor()->NotifyBeforeLayout();
     }
   }
 
@@ -980,6 +983,12 @@ void LocalFrameView::RunPostLifecycleSteps() {
   ForAllRemoteFrameViews([](RemoteFrameView& frame_view) {
     frame_view.UpdateCompositingScaleFactor();
   });
+
+  ForAllNonThrottledLocalFrameViews([](LocalFrameView& frame_view) {
+    auto lifecycle_observers = frame_view.lifecycle_observers_;
+    for (auto& observer : lifecycle_observers)
+      observer->DidFinishPostLifecycleSteps(frame_view);
+  });
 }
 
 void LocalFrameView::RunIntersectionObserverSteps() {
@@ -1050,17 +1059,11 @@ LayoutSVGRoot* LocalFrameView::EmbeddedReplacedContent() const {
   return DynamicTo<LayoutSVGRoot>(first_child);
 }
 
-bool LocalFrameView::GetIntrinsicSizingInfo(
-    NaturalSizingInfo& intrinsic_sizing_info) const {
+std::optional<NaturalSizingInfo> LocalFrameView::GetNaturalDimensions() const {
   if (LayoutSVGRoot* content_layout_object = EmbeddedReplacedContent()) {
-    content_layout_object->UnscaledIntrinsicSizingInfo(intrinsic_sizing_info);
-    return true;
+    return content_layout_object->UnscaledNaturalSizingInfo();
   }
-  return false;
-}
-
-bool LocalFrameView::HasIntrinsicSizingInfo() const {
-  return EmbeddedReplacedContent();
+  return std::nullopt;
 }
 
 void LocalFrameView::UpdateGeometry() {
@@ -2054,24 +2057,14 @@ bool LocalFrameView::NotifyResizeObservers() {
     if (resize_controller->SkippedObservations() &&
         !resize_controller->IsLoopLimitErrorDispatched()) {
       resize_controller->ClearObservations();
-
-      if (auto* script_state = ToScriptStateForMainWorld(frame_->DomWindow())) {
-        ScriptState::Scope scope(script_state);
-        const String message =
-            "ResizeObserver loop completed with undelivered notifications.";
-        ScriptValue value(script_state->GetIsolate(),
-                          V8String(script_state->GetIsolate(), message));
-        // TODO(pdr): We could report the source location of one of the
-        // observers which had skipped observations.
-        ErrorEvent* error = ErrorEvent::Create(message, CaptureSourceLocation(),
-                                               value, &script_state->World());
-        // We're using |SanitizeScriptErrors::kDoNotSanitize| as the error is
-        // made by blink itself.
-        // TODO(yhirano): Reconsider this.
-        frame_->DomWindow()->DispatchErrorEvent(
-            error, SanitizeScriptErrors::kDoNotSanitize);
-      }
-
+      ErrorEvent* error = ErrorEvent::Create(
+          "ResizeObserver loop completed with undelivered notifications.",
+          CaptureSourceLocation(frame_->DomWindow()), nullptr);
+      // We're using |SanitizeScriptErrors::kDoNotSanitize| as the error is made
+      // by blink itself.
+      // TODO(yhirano): Reconsider this.
+      frame_->DomWindow()->DispatchErrorEvent(
+          error, SanitizeScriptErrors::kDoNotSanitize);
       // Ensure notifications will get delivered in next cycle.
       ScheduleAnimation();
       resize_controller->SetLoopLimitErrorDispatched(true);
@@ -2715,12 +2708,12 @@ void LocalFrameView::RunPaintLifecyclePhase(PaintBenchmarkMode benchmark_mode) {
   ForAllNonThrottledLocalFrameViews(
       [this, needed_full_update,
        &total_animations_count](LocalFrameView& frame_view) {
-        if (auto* scrollable_area = frame_view.GetScrollableArea())
+        if (auto* scrollable_area = frame_view.GetScrollableArea()) {
           scrollable_area->UpdateCompositorScrollAnimations();
-        if (const auto* animating_scrollable_areas =
-                frame_view.AnimatingScrollableAreas()) {
-          for (PaintLayerScrollableArea* area : *animating_scrollable_areas)
-            area->UpdateCompositorScrollAnimations();
+        }
+        for (PaintLayerScrollableArea* area :
+             frame_view.animating_scrollable_areas_) {
+          area->UpdateCompositorScrollAnimations();
         }
         frame_view.GetPage()->GetLinkHighlight().UpdateAfterPaint(
             paint_artifact_compositor_.Get());
@@ -3555,17 +3548,14 @@ void LocalFrameView::ServiceScrollAnimations(base::TimeTicks start_time) {
       scrollable_area->ServiceScrollAnimations(
           start_time.since_origin().InSecondsF());
     }
-    if (const ScrollableAreaSet* animating_scrollable_areas =
-            AnimatingScrollableAreas()) {
-      // Iterate over a copy, since ScrollableAreas may deregister
-      // themselves during the iteration.
-      HeapVector<Member<PaintLayerScrollableArea>>
-          animating_scrollable_areas_copy(*animating_scrollable_areas);
-      for (PaintLayerScrollableArea* scrollable_area :
-           animating_scrollable_areas_copy) {
-        scrollable_area->ServiceScrollAnimations(
-            start_time.since_origin().InSecondsF());
-      }
+    // Iterate over a copy, since ScrollableAreas may deregister
+    // themselves during the iteration.
+    HeapVector<Member<PaintLayerScrollableArea>>
+        animating_scrollable_areas_copy(animating_scrollable_areas_);
+    for (PaintLayerScrollableArea* scrollable_area :
+         animating_scrollable_areas_copy) {
+      scrollable_area->ServiceScrollAnimations(
+          start_time.since_origin().InSecondsF());
     }
     // After scroll updates, snapshot scroll state once at top of animation
     // frame.
@@ -3597,32 +3587,23 @@ void LocalFrameView::OnCommitRequested() {
 void LocalFrameView::AddScrollAnchoringScrollableArea(
     PaintLayerScrollableArea* scrollable_area) {
   DCHECK(scrollable_area);
-  if (!scroll_anchoring_scrollable_areas_) {
-    scroll_anchoring_scrollable_areas_ =
-        MakeGarbageCollected<ScrollableAreaSet>();
-  }
-  scroll_anchoring_scrollable_areas_->insert(scrollable_area);
+  scroll_anchoring_scrollable_areas_.insert(scrollable_area);
 }
 
 void LocalFrameView::RemoveScrollAnchoringScrollableArea(
     PaintLayerScrollableArea* scrollable_area) {
-  if (scroll_anchoring_scrollable_areas_)
-    scroll_anchoring_scrollable_areas_->erase(scrollable_area);
+  scroll_anchoring_scrollable_areas_.erase(scrollable_area);
 }
 
 void LocalFrameView::AddAnimatingScrollableArea(
     PaintLayerScrollableArea* scrollable_area) {
   DCHECK(scrollable_area);
-  if (!animating_scrollable_areas_)
-    animating_scrollable_areas_ = MakeGarbageCollected<ScrollableAreaSet>();
-  animating_scrollable_areas_->insert(scrollable_area);
+  animating_scrollable_areas_.insert(scrollable_area);
 }
 
 void LocalFrameView::RemoveAnimatingScrollableArea(
     PaintLayerScrollableArea* scrollable_area) {
-  if (!animating_scrollable_areas_)
-    return;
-  animating_scrollable_areas_->erase(scrollable_area);
+  animating_scrollable_areas_.erase(scrollable_area);
 }
 
 void LocalFrameView::AddScrollableArea(
@@ -4291,8 +4272,12 @@ bool LocalFrameView::UpdateViewportIntersectionsForSubtree(
   }
 
   unsigned flags = GetIntersectionObservationFlags(parent_flags);
-  if (!NeedsLayout() || IsDisplayLocked()) {
-    // Notify javascript IntersectionObservers
+  // Update anyway, even if the frame is display locked or throttled. If the
+  // frame is display locked or the layout is dirty, this will create a
+  // degenerate "not intersecting" notification or schedule a delayed update
+  // if needed.
+  if (RuntimeEnabledFeatures::ForceDelayedIntersectionUpdateEnabled() ||
+      !NeedsLayout() || IsDisplayLocked()) {
     if (controller) {
       needs_occlusion_tracking = controller->ComputeIntersections(
           flags, *this,
@@ -4340,6 +4325,25 @@ void LocalFrameView::DeliverSynchronousIntersectionObservations() {
   ForAllChildLocalFrameViews([](LocalFrameView& frame_view) {
     frame_view.DeliverSynchronousIntersectionObservations();
   });
+}
+
+void LocalFrameView::ScheduleDelayedIntersection(base::TimeDelta delay) {
+  if (RuntimeEnabledFeatures::ForceDelayedIntersectionUpdateEnabled()) {
+    if (!delayed_intersection_timer_.IsActive() ||
+        delayed_intersection_timer_.NextFireInterval() > delay) {
+      delayed_intersection_timer_.Stop();
+      delayed_intersection_timer_.StartOneShot(delay, FROM_HERE);
+    }
+  } else {
+    ScheduleAnimation(delay);
+  }
+}
+
+void LocalFrameView::DelayedIntersectionTimerFired(TimerBase*) {
+  CHECK(RuntimeEnabledFeatures::ForceDelayedIntersectionUpdateEnabled());
+  // Force an intersection update even if the frame is throttled.
+  SetIntersectionObservationState(LocalFrameView::kRequired);
+  ScheduleAnimation();
 }
 
 void LocalFrameView::CrossOriginToNearestMainFrameChanged() {

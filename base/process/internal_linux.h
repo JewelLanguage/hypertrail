@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 // This file contains internal routines that are called by other files in
 // base/process/.
 
@@ -153,10 +158,11 @@ void ForEachProcessTask(base::ProcessHandle process, Lambda&& lambda) {
       continue;
     }
 
-    PlatformThreadId tid;
-    if (!StringToInt(tid_str, &tid)) {
+    PlatformThreadId::UnderlyingType tid_value;
+    if (!StringToInt(tid_str, &tid_value)) {
       continue;
     }
+    PlatformThreadId tid(tid_value);
 
     FilePath task_path = fd_path.Append(tid_str);
     lambda(tid, task_path);

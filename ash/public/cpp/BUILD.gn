@@ -208,11 +208,14 @@ component("cpp") {
     "lobster/lobster_feedback_preview.cc",
     "lobster/lobster_feedback_preview.h",
     "lobster/lobster_image_candidate.h",
+    "lobster/lobster_image_download_response.h",
     "lobster/lobster_metrics_state_enums.h",
     "lobster/lobster_result.h",
     "lobster/lobster_session.h",
     "lobster/lobster_system_state.cc",
     "lobster/lobster_system_state.h",
+    "lobster/lobster_text_input_context.cc",
+    "lobster/lobster_text_input_context.h",
     "locale_update_controller.cc",
     "locale_update_controller.h",
     "lock_screen_widget_factory.cc",
@@ -391,6 +394,7 @@ component("cpp") {
     "tablet_mode.cc",
     "tablet_mode.h",
     "tablet_mode_observer.h",
+    "token_handle_store.h",
     "update_types.h",
     "views_text_services_context_menu_ash.cc",
     "views_text_services_context_menu_ash.h",
@@ -426,9 +430,9 @@ component("cpp") {
   defines = [ "ASH_PUBLIC_IMPLEMENTATION" ]
 
   assert_no_deps = [
-    "//ash/components/arc",
-    "//ash/public/cpp/external_arc",
+    "//chromeos/ash/experiences/arc",
     "//chromeos/ash/experiences/arc/intent_helper",
+    "//chromeos/ash/experiences/arc/message_center",
     "//components/exo",
     "//components/soda",
   ]
@@ -492,7 +496,6 @@ component("cpp") {
   ]
 
   public_deps = [
-    "//ash/components/arc/mojom:notifications",
     "//ash/public/mojom",
     "//ash/webui/common/mojom:sea_pen",
     "//ash/webui/personalization_app/mojom:mojom_shared_cpp_sources",
@@ -500,6 +503,7 @@ component("cpp") {
     "//base",
     "//chromeos/ash/components/audio/public/mojom",
     "//chromeos/ash/components/login/auth",
+    "//chromeos/ash/experiences/arc/mojom:notifications",
     "//chromeos/ash/services/assistant/public/mojom",
     "//chromeos/ash/services/bluetooth_config/public/mojom",
     "//chromeos/ash/services/cellular_setup/public/mojom",

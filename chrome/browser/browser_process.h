@@ -30,6 +30,7 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/common/buildflags.h"
+#include "components/safe_browsing/buildflags.h"
 #include "media/media_buildflags.h"
 
 class BackgroundModeManager;
@@ -66,9 +67,11 @@ class NetworkQualityTracker;
 class SharedURLLoaderFactory;
 }
 
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
 namespace safe_browsing {
 class SafeBrowsingService;
 }
+#endif
 
 namespace signin {
 class ActivePrimaryAccountsMetricsRecorder;
@@ -233,8 +236,10 @@ class BrowserProcess {
   // on this platform (or this is a unit test).
   virtual StatusTray* status_tray() = 0;
 
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   // Returns the SafeBrowsing service.
   virtual safe_browsing::SafeBrowsingService* safe_browsing_service() = 0;
+#endif
 
   // Returns the service providing versioned storage for rules used by the Safe
   // Browsing subresource filter.
@@ -284,11 +289,11 @@ class BrowserProcess {
   virtual resource_coordinator::ResourceCoordinatorParts*
   resource_coordinator_parts() = 0;
 
-#if !BUILDFLAG(IS_ANDROID)
   // Returns the object which keeps track of serial port permissions configured
   // through the policy engine.
   virtual SerialPolicyAllowedPorts* serial_policy_allowed_ports() = 0;
 
+#if !BUILDFLAG(IS_ANDROID)
   // Returns the object which maintains Human Interface Device (HID) system tray
   // icon.
   virtual HidSystemTrayIcon* hid_system_tray_icon() = 0;
@@ -311,6 +316,10 @@ class BrowserProcess {
   virtual BuildState* GetBuildState() = 0;
   // Returns the feature controllers scoped to this browser process.
   virtual GlobalFeatures* GetFeatures() = 0;
+
+  // Create GlobalFeatures scoped to this browser process. Should only be used
+  // in unit tests to create GlobalFeatures after modifying feature flags.
+  virtual void CreateGlobalFeaturesForTesting() = 0;
 
   // Do not add new members to this class. Instead use GlobalFeatures. See file
   // level comment for details.

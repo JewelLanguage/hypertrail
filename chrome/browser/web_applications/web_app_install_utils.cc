@@ -4,6 +4,7 @@
 
 #include "chrome/browser/web_applications/web_app_install_utils.h"
 
+#include <algorithm>
 #include <array>
 #include <iterator>
 #include <map>
@@ -31,7 +32,6 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/not_fatal_until.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -72,6 +72,7 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
 #include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
+#include "third_party/blink/public/common/permissions_policy/permissions_policy_declaration.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom-shared.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom.h"
@@ -82,7 +83,7 @@
 #include "url/origin.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_data.h"
+#include "chromeos/ash/experiences/system_web_apps/types/system_web_app_data.h"
 #endif
 
 namespace web_app {
@@ -174,7 +175,7 @@ void PopulateWebAppShortcutsMenuItemInfos(
 
         // Filter out non-square or too large icons.
         auto valid_size_it =
-            base::ranges::find_if(icon.sizes, [](const gfx::Size& size) {
+            std::ranges::find_if(icon.sizes, [](const gfx::Size& size) {
               return size.width() == size.height() &&
                      size.width() <= kMaxIconSize;
             });
@@ -609,7 +610,7 @@ void UpdateWebAppInstallInfoIconsFromManifestIfNeeded(
 
         // Filter out non-square or too large icons.
         auto valid_size =
-            base::ranges::find_if(icon.sizes, [](const gfx::Size& size) {
+            std::ranges::find_if(icon.sizes, [](const gfx::Size& size) {
               return size.width() == size.height() &&
                      size.width() <= kMaxIconSize;
             });
@@ -684,7 +685,7 @@ void PopulateHomeTabIconsFromHomeTabManifestParams(
       }
       // Filter out non-square or too large icons.
       auto valid_size =
-          base::ranges::find_if(icon.sizes, [](const gfx::Size& size) {
+          std::ranges::find_if(icon.sizes, [](const gfx::Size& size) {
             return size.width() == size.height() &&
                    size.width() <= kMaxIconSize;
           });

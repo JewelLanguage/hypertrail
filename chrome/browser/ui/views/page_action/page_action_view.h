@@ -17,6 +17,7 @@ namespace page_actions {
 
 class PageActionController;
 class PageActionModelInterface;
+struct PageActionViewParams;
 
 // PageActionView is the view displaying the page action. There is one per
 // browser, per page action.
@@ -25,7 +26,7 @@ class PageActionView : public IconLabelBubbleView,
   METADATA_HEADER(PageActionView, IconLabelBubbleView)
  public:
   PageActionView(actions::ActionItem* action_item,
-                 IconLabelBubbleView::Delegate* parent_delegate);
+                 const PageActionViewParams& params);
   PageActionView(const PageActionView&) = delete;
   PageActionView& operator=(const PageActionView&) = delete;
   ~PageActionView() override;
@@ -38,32 +39,35 @@ class PageActionView : public IconLabelBubbleView,
   // TODO(crbug.com/388524315): Merge OnNewActiveController and this method.
   void SetModel(PageActionModelInterface* model);
 
-  // PageActionModelObserver
-  void OnPageActionModelChanged(PageActionModelInterface* model) override;
-  void OnPageActionModelWillBeDeleted(PageActionModelInterface* model) override;
+  // PageActionModelObserver:
+  void OnPageActionModelChanged(const PageActionModelInterface& model) override;
+  void OnPageActionModelWillBeDeleted(
+      const PageActionModelInterface& model) override;
 
-  // IconLabelBubbleView
+  // IconLabelBubbleView:
   void ViewHierarchyChanged(
       const views::ViewHierarchyChangedDetails& details) override;
   void OnThemeChanged() override;
   void OnTouchUiChanged() override;
-  bool ShouldShowLabel() const override;
   void UpdateBorder() override;
   bool ShouldShowSeparator() const override;
   bool ShouldUpdateInkDropOnClickCanceled() const override;
   void NotifyClick(const ui::Event& event) override;
+  gfx::Size GetMinimumSize() const override;
 
   actions::ActionId GetActionId() const;
 
-  void SetShouldShowLabelForTesting(bool should_show_label);
+  views::View* GetLabelForTesting();
 
+ private:
   // The image associated with the `action_item_` size may be different from the
   // size needed for the location bar page action icon. Therefore, we should to
   // update the image size if needed.
   void UpdateIconImage();
 
- private:
-  bool should_show_label_ = false;
+  // The page action can be in icon mode and suggestion chip mode. This helper
+  // ensures that the correct styling is applied based on the current mode.
+  void UpdateStyle(bool is_suggestion_chip);
 
   base::WeakPtr<actions::ActionItem> action_item_ = nullptr;
   base::ScopedObservation<PageActionModelInterface, PageActionModelObserver>
@@ -73,6 +77,9 @@ class PageActionView : public IconLabelBubbleView,
   // ActionItem updates. This ensures that updates aren't unnecessarily
   // propagated to every tab's controller.
   base::CallbackListSubscription action_item_controller_subscription_;
+
+  const int icon_size_;
+  const gfx::Insets icon_insets_;
 };
 
 }  // namespace page_actions

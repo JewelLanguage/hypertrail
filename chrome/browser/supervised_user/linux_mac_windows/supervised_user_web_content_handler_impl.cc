@@ -4,9 +4,10 @@
 
 #include "chrome/browser/supervised_user/linux_mac_windows/supervised_user_web_content_handler_impl.h"
 
+#include "base/functional/bind.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_key.h"
-#include "chrome/browser/supervised_user/linux_mac_windows/parent_access_dialog_web_contents_observer.h"
+#include "chrome/browser/supervised_user/linux_mac_windows/parent_access_dialog_result_observer.h"
 #include "chrome/browser/supervised_user/linux_mac_windows/parent_access_view.h"
 #include "chrome/browser/supervised_user/supervised_user_settings_service_factory.h"
 #include "components/supervised_user/core/common/features.h"
@@ -29,6 +30,7 @@ void SupervisedUserWebContentHandlerImpl::RequestLocalApproval(
     const GURL& url,
     const std::u16string& child_display_name,
     const supervised_user::UrlFormatter& url_formatter,
+    const supervised_user::FilteringBehaviorReason& filtering_reason,
     ApprovalRequestInitiatedCallback callback) {
   CHECK(base::FeatureList::IsEnabled(supervised_user::kLocalWebApprovals));
   CHECK(web_contents_);
@@ -39,13 +41,27 @@ void SupervisedUserWebContentHandlerImpl::RequestLocalApproval(
       &SupervisedUserWebContentHandlerImpl::CreateObserverFromContents,
       weak_ptr_factory_.GetWeakPtr(), /*start_time=*/base::TimeTicks::Now(),
       target_url);
+  auto abort_dialog_callback = base::BindOnce(
+      &SupervisedUserWebContentHandlerImpl::AbortUrlApprovalDialog,
+      weak_ptr_factory_.GetWeakPtr());
 
   weak_parent_access_view_ = ParentAccessView::ShowParentAccessDialog(
-      web_contents_, target_url, std::move(create_observer_callback));
+      web_contents_, target_url, filtering_reason,
+      std::move(create_observer_callback), std::move(abort_dialog_callback));
 
   // Runs the `callback` to inform the caller that the flow initiation was
   // successful.
   std::move(callback).Run(true);
+}
+
+void SupervisedUserWebContentHandlerImpl::MaybeCloseLocalApproval() {
+  // There is no local web approval instance open, do nothing.
+  if (!dialog_web_contents_observer_) {
+    return;
+  }
+  supervised_user::WebContentHandler::RecordLocalWebApprovalResultMetric(
+      supervised_user::LocalApprovalResult::kCanceled);
+  CloseDialog();
 }
 
 void SupervisedUserWebContentHandlerImpl::CreateObserverFromContents(
@@ -56,7 +72,7 @@ void SupervisedUserWebContentHandlerImpl::CreateObserverFromContents(
   // The parent approval dialog and its new contents have been created. We start
   // observing them.
   dialog_web_contents_observer_ =
-      std::make_unique<ParentAccessDialogWebContentsObserver>(
+      std::make_unique<ParentAccessDialogResultObserver>(
           contents,
           /*url_approval_result_callback=*/
           base::BindOnce(&SupervisedUserWebContentHandlerImpl::
@@ -78,12 +94,23 @@ void SupervisedUserWebContentHandlerImpl::CompleteUrlApprovalAndCloseDialog(
   supervised_user::WebContentHandler::OnLocalApprovalRequestCompleted(
       *settings_service, target_url, start_time, result);
 
-  CHECK(dialog_web_contents_observer_);
-  dialog_web_contents_observer_->StopObserving();
+  CloseDialog();
+}
+
+void SupervisedUserWebContentHandlerImpl::CloseDialog() {
+  if (dialog_web_contents_observer_) {
+    dialog_web_contents_observer_->StopObserving();
+  }
   // The `weak_parent_access_view_` might have been invalidated through an
   // accelerator.
   if (weak_parent_access_view_) {
     weak_parent_access_view_->CloseView();
     weak_parent_access_view_ = nullptr;
   }
+}
+
+void SupervisedUserWebContentHandlerImpl::AbortUrlApprovalDialog() {
+  supervised_user::WebContentHandler::RecordLocalWebApprovalResultMetric(
+      supervised_user::LocalApprovalResult::kError);
+  CloseDialog();
 }

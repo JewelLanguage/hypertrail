@@ -8,31 +8,61 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_sanitizer_config.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_sanitizer_element_namespace.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_sanitizer_element_namespace_with_attributes.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_sanitizer_presets.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_sanitizerattributenamespace_string.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_union_sanitizerconfig_sanitizerpresets.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_sanitizerelementnamespace_string.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_sanitizerelementnamespacewithattributes_string.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/dom/node_traversal.h"
+#include "third_party/blink/renderer/core/html/html_template_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/sanitizer/sanitizer_builtins.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 
 namespace blink {
 
+Sanitizer* Sanitizer::Create(
+    const V8UnionSanitizerConfigOrSanitizerPresets* config_or_preset,
+    ExceptionState& exception_state) {
+  if (!config_or_preset) {
+    return Create(nullptr, /*safe*/ false, exception_state);
+  } else if (config_or_preset->IsSanitizerConfig()) {
+    return Create(config_or_preset->GetAsSanitizerConfig(), /*safe*/ false,
+                  exception_state);
+  } else if (config_or_preset->IsSanitizerPresets()) {
+    return Create(config_or_preset->GetAsSanitizerPresets().AsEnum(),
+                  exception_state);
+  } else {
+    NOTREACHED();
+  }
+}
+
 Sanitizer* Sanitizer::Create(const SanitizerConfig* sanitizer_config,
+                             bool safe,
                              ExceptionState& exception_state) {
   Sanitizer* sanitizer = MakeGarbageCollected<Sanitizer>();
   if (!sanitizer_config) {
-    NOTREACHED();  // Default handling not yet implemented.
-  }
-  if (!sanitizer->setFrom(sanitizer_config)) {
+    // Default case: Set from builtin Sanitizer.
+    sanitizer->setFrom(*(safe ? SanitizerBuiltins::GetDefaultSafe()
+                              : SanitizerBuiltins::GetDefaultUnsafe()));
+  } else {
+    bool success = sanitizer->setFrom(sanitizer_config, safe);
     // As currently implemented, all inputs will lead to successful creation
     // of a Sanitizer instance. But the current spec discussion aims to
     // introduce invalid configurations. Once we implement that, this will be
     // replaced with `exception_state.ThrowTypeError(...); return nullptr;`.
-    NOTREACHED();
+    CHECK(success);
   }
+  return sanitizer;
+}
+
+Sanitizer* Sanitizer::Create(const V8SanitizerPresets::Enum preset,
+                             ExceptionState&) {
+  CHECK_EQ(preset, V8SanitizerPresets::Enum::kDefault);
+  Sanitizer* sanitizer = MakeGarbageCollected<Sanitizer>();
+  sanitizer->setFrom(*SanitizerBuiltins::GetDefaultSafe());
   return sanitizer;
 }
 
@@ -288,16 +318,26 @@ void Sanitizer::SanitizeElement(Element* element) const {
       keep = true;
     } else if (remove_per_element && remove_per_element->Contains(name)) {
       keep = false;
+    } else if (name.NamespaceURI().IsNull() &&
+               name.LocalName().StartsWith("data-")) {
+      keep = allow_data_attrs_;
     } else {
       keep = allow_attrs_.empty() &&
              (!allow_per_element || allow_per_element->empty());
-      if (!keep && allow_data_attrs_ && name.NamespaceURI().IsNull() &&
-          name.LocalName().StartsWith("data-")) {
-        keep = true;
-      }
     }
     if (!keep) {
       element->removeAttribute(name);
+    }
+  }
+
+  // Recurse into template and (later) shadow root content.
+  // TODO(vogelheim): Also implement shadow root support, once that's settled
+  // down.
+  // TODO(vogelheim): Merge this code with the case in SanitizeUnsafe.
+  if (IsA<HTMLTemplateElement>(element)) {
+    Node* content = To<HTMLTemplateElement>(element)->content();
+    if (content) {
+      SanitizeUnsafe(content);
     }
   }
 }
@@ -313,8 +353,17 @@ void Sanitizer::SanitizeSafe(Node* root) const {
 }
 
 void Sanitizer::SanitizeUnsafe(Node* root) const {
-  enum { kKeep, kKeepElement, kDrop, kReplaceWithChildren } action = kKeep;
+  // Recurse into template and (later) shadow root content.
+  // TODO(vogelheim): Also implement shadow root support, once that's settled
+  // down.
+  if (IsA<HTMLTemplateElement>(root)) {
+    Node* content = To<HTMLTemplateElement>(root)->content();
+    if (content) {
+      SanitizeUnsafe(content);
+    }
+  }
 
+  enum { kKeep, kKeepElement, kDrop, kReplaceWithChildren } action = kKeep;
   Node* node = NodeTraversal::Next(*root);
   while (node) {
     switch (node->getNodeType()) {
@@ -379,7 +428,7 @@ void Sanitizer::SanitizeUnsafe(Node* root) const {
   }
 }
 
-bool Sanitizer::setFrom(const SanitizerConfig* config) {
+bool Sanitizer::setFrom(const SanitizerConfig* config, bool safe) {
   // This method assumes a newly constructed instance.
   CHECK(allow_elements_.empty());
   CHECK(remove_elements_.empty());
@@ -414,12 +463,8 @@ bool Sanitizer::setFrom(const SanitizerConfig* config) {
       removeAttribute(attribute);
     }
   }
-  if (config->hasComments()) {
-    setComments(config->comments());
-  }
-  if (config->hasDataAttributes()) {
-    setDataAttributes(config->dataAttributes());
-  }
+  setComments(config->getCommentsOr(!safe));
+  setDataAttributes(config->getDataAttributesOr(!safe));
   return true;
 }
 

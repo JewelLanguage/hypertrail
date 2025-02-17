@@ -2,10 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "chrome/browser/browser_switcher/browser_switcher_sitelist.h"
 
 #include <string.h>
 
+#include <algorithm>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -15,7 +21,6 @@
 
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
@@ -497,7 +502,7 @@ void BrowserSwitcherSitelistImpl::StoreRules(RuleSet& dst,
 void BrowserSwitcherSitelistImpl::OnPrefsChanged(
     BrowserSwitcherPrefs* prefs,
     const std::vector<std::string>& changed_prefs) {
-  auto it = base::ranges::find(changed_prefs, prefs::kParsingMode);
+  auto it = std::ranges::find(changed_prefs, prefs::kParsingMode);
   if (it != changed_prefs.end()) {
     // ParsingMode changed, re-canonicalize rules.
     StoreRules(ieem_sitelist_, original_ieem_sitelist_);

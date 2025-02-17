@@ -72,8 +72,8 @@ import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgeManager;
 import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgePadAdjuster;
 import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgeStateProvider;
 import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgeSupplier;
-import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
+import org.chromium.content_public.browser.test.mock.MockWebContents;
 import org.chromium.ui.InsetObserver;
 import org.chromium.ui.InsetObserver.WindowInsetsConsumer;
 import org.chromium.ui.InsetObserver.WindowInsetsConsumer.InsetConsumerSource;
@@ -147,7 +147,7 @@ public class EdgeToEdgeControllerTest {
     @Mock private Tab mTab;
     @Mock private NativePage mKeyNativePage;
 
-    @Mock private WebContents mWebContents;
+    @Mock private MockWebContents mWebContents;
 
     @Mock private EdgeToEdgeOSWrapper mOsWrapper;
     @Mock private EdgeToEdgeStateProvider mEdgeToEdgeStateProvider;
@@ -177,6 +177,15 @@ public class EdgeToEdgeControllerTest {
     public void setUp() {
         when(mWindowAndroid.getInsetObserver()).thenReturn(mInsetObserver);
         when(mInsetObserver.getLastRawWindowInsets()).thenReturn(SYSTEM_BARS_WINDOW_INSETS);
+        doAnswer(
+                        (inv) -> {
+                            mWindowInsetsListenerCaptor
+                                    .getValue()
+                                    .onApplyWindowInsets(mViewMock, SYSTEM_BARS_WINDOW_INSETS);
+                            return null;
+                        })
+                .when(mInsetObserver)
+                .retriggerOnApplyWindowInsets();
 
         mActivity = Mockito.spy(Robolectric.buildActivity(AppCompatActivity.class).setup().get());
         mLayoutManagerSupplier.set(mLayoutManager);
@@ -217,13 +226,15 @@ public class EdgeToEdgeControllerTest {
                         mFullscreenManager);
         verify(mEdgeToEdgeStateProvider, times(1)).acquireSetDecorFitsSystemWindowToken();
 
-        verify(mOsWrapper, times(1))
-                .setPadding(
-                        any(),
-                        eq(0),
-                        intThat(Matchers.greaterThan(0)),
-                        eq(0),
-                        intThat(Matchers.greaterThan(0)));
+        if (!EdgeToEdgeUtils.isEdgeToEdgeEverywhereEnabled()) {
+            verify(mOsWrapper, times(1))
+                    .setPadding(
+                            any(),
+                            eq(0),
+                            intThat(Matchers.greaterThan(0)),
+                            eq(0),
+                            intThat(Matchers.greaterThan(0)));
+        }
         verify(mInsetObserver, times(1))
                 .addInsetsConsumer(any(), eq(InsetConsumerSource.EDGE_TO_EDGE_CONTROLLER_IMPL));
         EdgeToEdgeControllerFactory.setHas3ButtonNavBar(false);
@@ -524,7 +535,7 @@ public class EdgeToEdgeControllerTest {
     @Test
     @DisableFeatures(ChromeFeatureList.DYNAMIC_SAFE_AREA_INSETS)
     public void bottomInsetForSafeArea_noTab() {
-        mEdgeToEdgeControllerImpl.setIsOptedIntoEdgeToEdgeForTesting(true);
+        mEdgeToEdgeControllerImpl.drawToEdge(true, /* changedWindowState= */ false);
         assertToEdgeExpectations();
         assertBottomInsetForSafeArea(0);
     }
@@ -535,7 +546,7 @@ public class EdgeToEdgeControllerTest {
         doReturn(false).when(mTab).isNativePage();
         mTabProvider.set(mTab);
         verifyInteractions(mTab);
-        mEdgeToEdgeControllerImpl.setIsOptedIntoEdgeToEdgeForTesting(true);
+        mEdgeToEdgeControllerImpl.drawToEdge(true, /* changedWindowState= */ false);
 
         assertToEdgeExpectations();
         mEdgeToEdgeControllerImpl.onBottomControlsHeightChanged(0, 0);
@@ -548,7 +559,7 @@ public class EdgeToEdgeControllerTest {
         doReturn(false).when(mTab).isNativePage();
         mTabProvider.set(mTab);
         verifyInteractions(mTab);
-        mEdgeToEdgeControllerImpl.setIsOptedIntoEdgeToEdgeForTesting(true);
+        mEdgeToEdgeControllerImpl.drawToEdge(true, /* changedWindowState= */ false);
         assertToEdgeExpectations();
 
         mEdgeToEdgeControllerImpl.onBottomControlsHeightChanged(1, 0);
@@ -627,9 +638,6 @@ public class EdgeToEdgeControllerTest {
 
     @Test
     public void testSwitchLayout() {
-        mEdgeToEdgeControllerImpl.setIsOptedIntoEdgeToEdgeForTesting(false);
-        mEdgeToEdgeControllerImpl.setIsDrawingToEdgeForTesting(true);
-        mEdgeToEdgeControllerImpl.setSystemInsetsForTesting(SYSTEM_INSETS);
         Mockito.clearInvocations(mEdgeToEdgeManager);
 
         doReturn(LayoutType.TAB_SWITCHER).when(mLayoutManager).getActiveLayoutType();
@@ -645,10 +653,6 @@ public class EdgeToEdgeControllerTest {
 
     @Test
     public void testLayoutManagerChanged() {
-        mEdgeToEdgeControllerImpl.setIsOptedIntoEdgeToEdgeForTesting(false);
-        mEdgeToEdgeControllerImpl.setIsDrawingToEdgeForTesting(true);
-        mEdgeToEdgeControllerImpl.setSystemInsetsForTesting(SYSTEM_INSETS);
-
         doReturn(LayoutType.BROWSING).when(mLayoutManager).getActiveLayoutType();
         mEdgeToEdgeControllerImpl.onStartedShowing(LayoutType.BROWSING);
         assertToEdgeExpectations();
@@ -819,26 +823,45 @@ public class EdgeToEdgeControllerTest {
     }
 
     @Test
+    @EnableFeatures(ChromeFeatureList.EDGE_TO_EDGE_SAFE_AREA_CONSTRAINT)
     public void safeAreaConstraint() {
         when(mLayoutManager.getActiveLayoutType()).thenReturn(LayoutType.BROWSING);
         when(mTab.isNativePage()).thenReturn(false);
         mTabProvider.set(mTab);
         verifyInteractions(mTab);
         assertFalse(
-                "Safe area constrain should default to false.",
+                "Safe area constraint should default to false.",
                 mEdgeToEdgeControllerImpl.getHasSafeAreaConstraintForTesting());
 
         mEdgeToEdgeControllerImpl.getWebContentsObserver().safeAreaConstraintChanged(true);
         assertTrue(
-                "Safe area constrain should be set by observer.",
+                "Safe area constraint should be set by observer.",
                 mEdgeToEdgeControllerImpl.getHasSafeAreaConstraintForTesting());
         verify(mChangeObserver).onSafeAreaConstraintChanged(true);
 
         mEdgeToEdgeControllerImpl.getWebContentsObserver().safeAreaConstraintChanged(false);
         assertFalse(
-                "Safe area constrain should be removed by observer.",
+                "Safe area constraint should be removed by observer.",
                 mEdgeToEdgeControllerImpl.getHasSafeAreaConstraintForTesting());
         verify(mChangeObserver).onSafeAreaConstraintChanged(false);
+    }
+
+    @Test
+    @DisableFeatures(ChromeFeatureList.EDGE_TO_EDGE_SAFE_AREA_CONSTRAINT)
+    public void safeAreaConstraint_disabled() {
+        when(mLayoutManager.getActiveLayoutType()).thenReturn(LayoutType.BROWSING);
+        when(mTab.isNativePage()).thenReturn(false);
+        mTabProvider.set(mTab);
+        verifyInteractions(mTab);
+        assertFalse(
+                "Safe area constraint should default to false.",
+                mEdgeToEdgeControllerImpl.getHasSafeAreaConstraintForTesting());
+
+        mEdgeToEdgeControllerImpl.getWebContentsObserver().safeAreaConstraintChanged(true);
+        assertFalse(
+                "Safe area constraint disabled.",
+                mEdgeToEdgeControllerImpl.getHasSafeAreaConstraintForTesting());
+        verify(mChangeObserver, times(0)).onSafeAreaConstraintChanged(true);
     }
 
     @Test
@@ -971,11 +994,26 @@ public class EdgeToEdgeControllerTest {
         mEdgeToEdgeControllerImpl.unregisterAdjuster(mockPadAdjuster);
     }
 
+    @Test
+    @EnableFeatures(ChromeFeatureList.EDGE_TO_EDGE_EVERYWHERE)
+    public void drawToEdge_EdgeToEdgeEverywhereEnabled() {
+        Mockito.clearInvocations(mEdgeToEdgeManager);
+        mEdgeToEdgeControllerImpl.drawToEdge(
+                /* pageOptedIntoEdgeToEdge= */ false, /* changedWindowState= */ true);
+        verify(mEdgeToEdgeManager, never()).setContentFitsWindowInsets(anyBoolean());
+    }
+
+    @Test
+    @DisableFeatures(ChromeFeatureList.EDGE_TO_EDGE_EVERYWHERE)
+    public void drawToEdge_EdgeToEdgeEverywhereDisabled() {
+        Mockito.clearInvocations(mEdgeToEdgeManager);
+        mEdgeToEdgeControllerImpl.drawToEdge(
+                /* pageOptedIntoEdgeToEdge= */ false, /* changedWindowState= */ true);
+        // #setContentFitsWindowInsets should be called once when EdgeToEdgeEverywhere is disabled.
+        verify(mEdgeToEdgeManager, times(1)).setContentFitsWindowInsets(anyBoolean());
+    }
+
     void assertToEdgeExpectations() {
-        assertNotNull(mWindowInsetsListenerCaptor.getValue());
-        mWindowInsetsListenerCaptor
-                .getValue()
-                .onApplyWindowInsets(mViewMock, SYSTEM_BARS_WINDOW_INSETS);
         // Pad the top only, bottom is ToEdge.
         verify(mOsWrapper, atLeastOnce())
                 .setPadding(any(), eq(0), intThat(Matchers.greaterThan(0)), eq(0), eq(0));

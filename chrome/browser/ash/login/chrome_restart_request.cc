@@ -51,6 +51,7 @@
 #include "media/base/media_switches.h"
 #include "media/capture/capture_switches.h"
 #include "media/media_buildflags.h"
+#include "mojo/core/embedder/features.h"
 #include "sandbox/policy/switches.h"
 #include "third_party/blink/public/common/switches.h"
 #include "third_party/cros_system_api/switches/chrome_switches.h"
@@ -135,7 +136,6 @@ void DeriveCommandLine(const GURL& start_url,
       ::switches::kRemoteDebuggingPort,
       ::switches::kRendererStartupDialog,
       ::switches::kSchedulerBoostUrgent,
-      ::switches::kSchedulerConfigurationDefault,
       ::switches::kTouchDevices,
       ::switches::kTouchEventFeatureDetection,
       ::switches::kTopChromeTouchUi,
@@ -157,6 +157,7 @@ void DeriveCommandLine(const GURL& start_url,
       ::switches::kEnableUnsafeWebGPU,
       ::switches::kEnableWebGPUDeveloperFeatures,
       ::switches::kOzonePlatform,
+      ::switches::kRenderNodeOverride,
       switches::kAshClearFastInkBuffer,
       switches::kAshConstrainPointerToRoot,
       switches::kAshDebugShortcuts,
@@ -168,6 +169,7 @@ void DeriveCommandLine(const GURL& start_url,
       switches::kAshTouchHud,
       switches::kAuraLegacyPowerButton,
       switches::kEnableDimShelf,
+      switches::kSchedulerConfigurationDefault,
       switches::kSupportsClamshellAutoRotation,
       switches::kShowTaps,
       blink::switches::kBlinkSettings,
@@ -254,6 +256,7 @@ void DeriveFeatures(base::CommandLine* out_command_line) {
 #if BUILDFLAG(ENABLE_PLATFORM_HEVC)
       &media::kPlatformHEVCDecoderSupport,
 #endif
+      &mojo::core::kMojoIpcz,
   };
   std::vector<std::string> enabled_features;
   std::vector<std::string> disabled_features;

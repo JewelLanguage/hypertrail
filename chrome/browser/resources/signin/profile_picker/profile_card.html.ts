@@ -39,9 +39,11 @@ export function getHtml(this: ProfileCardElement) {
         auto-validate spellcheck="false"
         @pointerenter="${this.onNameInputPointerEnter_}"
         @pointerleave="${this.onNameInputPointerLeave_}"
-        ?disabled="${isGlicVersion()}" required>
+        ?disabled="${
+      isGlicVersion() || this.profileState.hasEnterpriseLabel}" required>
     </cr-input>
-    <div id="hoverUnderline"></div>
+    <div id="hoverUnderline" ?hidden="${
+      isGlicVersion() || this.profileState.hasEnterpriseLabel}"></div>
   </div>
   <profile-card-menu .profileState="${this.profileState}"
       ?hidden="${isGlicVersion()}">
@@ -53,7 +55,7 @@ export function getHtml(this: ProfileCardElement) {
 </cr-tooltip>
 <cr-tooltip id="tooltip" for="nameInput" manual-mode offset="-10"
     aria-hidden="true">
-  ${this.profileState.localProfileName}
+  ${this.getNameInputTooltipText()}
 </cr-tooltip>
 <!--_html_template_end_-->`;
 }

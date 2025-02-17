@@ -189,17 +189,6 @@ inline constexpr char kLocalPasswordHashDataList[] =
     "local.password_hash_data_list";
 
 #if BUILDFLAG(IS_ANDROID)
-// The timestamp at which the last UPM local passwords migration warning was
-// shown to the user in microseconds since Windows epoch. This is needed to
-// ensure that the UI is prompted only once per given time interval (currently
-// one month).
-inline constexpr char kLocalPasswordsMigrationWarningShownTimestamp[] =
-    "local_passwords_migration_warning_shown_timestamp";
-
-// Whether the local password migration warning was already shown at startup.
-inline constexpr char kLocalPasswordMigrationWarningShownAtStartup[] =
-    "local_passwords_migration_warning_shown_at_startup";
-
 // The version of the password migration warning prefs.
 inline constexpr char kLocalPasswordMigrationWarningPrefsVersion[] =
     "local_passwords_migration_warning_reset_count";
@@ -209,7 +198,7 @@ inline constexpr char kLocalPasswordMigrationWarningPrefsVersion[] =
 inline constexpr char kPasswordGenerationBottomSheetDismissCount[] =
     "password_generation_bottom_sheet_dismiss_count";
 
-// Whether the post password migration sheet ahould be shown at startup.
+// Whether the post password migration sheet should be shown at startup.
 inline constexpr char kShouldShowPostPasswordMigrationSheetAtStartup[] =
     "should_show_post_password_migration_sheet_at_startup";
 
@@ -254,10 +243,11 @@ inline constexpr char kWereOldGoogleLoginsRemoved[] =
     "profile.were_old_google_logins_removed";
 
 #if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
+// Deprecated 01/2025.
 // A dictionary of account-storage-related settings that exist per Gaia account
 // (e.g. whether that user has opted in). It maps from hash of Gaia ID to
 // dictionary of key-value pairs.
-inline constexpr char kAccountStoragePerAccountSettings[] =
+inline constexpr char kObsoleteAccountStoragePerAccountSettings[] =
     "profile.password_account_storage_settings";
 #endif  // !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
 

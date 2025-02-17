@@ -538,8 +538,9 @@ LayoutBoxModelObject::ComputeStickyPositionConstraints() const {
   const PhysicalOffset scroll_container_border_offset(
       scroll_container->BorderLeft(), scroll_container->BorderTop());
 
-  MapCoordinatesFlags flags =
-      kIgnoreTransforms | kIgnoreScrollOffset | kIgnoreStickyOffset;
+  MapCoordinatesFlags flags = kIgnoreTransforms | kIgnoreScrollOffset |
+                              kIgnoreStickyOffset |
+                              kIgnoreScrollOriginAndOffset;
 
   // Compute the sticky-container rect.
   {
@@ -678,6 +679,17 @@ PhysicalOffset LayoutBoxModelObject::StickyPositionOffset() const {
   // present, but there are callsites within Layout for it.
   auto* constraints = StickyConstraints();
   return constraints ? constraints->StickyOffset() : PhysicalOffset();
+}
+
+PhysicalOffset LayoutBoxModelObject::OffsetFromContainerInternal(
+    const LayoutObject* container,
+    MapCoordinatesFlags mode) const {
+  NOT_DESTROYED();
+  PhysicalOffset offset;
+  if (IsStickyPositioned() && !(mode & kIgnoreStickyOffset)) {
+    offset += StickyPositionOffset();
+  }
+  return offset + LayoutObject::OffsetFromContainerInternal(container, mode);
 }
 
 PhysicalOffset LayoutBoxModelObject::AdjustedPositionRelativeTo(
@@ -842,8 +854,8 @@ LogicalRect LayoutBoxModelObject::LocalCaretRectForEmptyElement(
   }
   x = std::min(x, (max_x - caret_width).ClampNegativeToZero());
 
-  const Font& font = StyleRef().GetFont();
-  const SimpleFontData* font_data = font.PrimaryFont();
+  const Font* font = StyleRef().GetFont();
+  const SimpleFontData* font_data = font->PrimaryFont();
   LayoutUnit height;
   // crbug.com/595692 This check should not be needed but sometimes
   // primaryFont is null.

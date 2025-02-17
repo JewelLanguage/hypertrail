@@ -384,10 +384,19 @@ NET_EXPORT BASE_DECLARE_FEATURE(kEnableIpProtectionProxy);
 // Sets the name of the IP protection auth token server.
 NET_EXPORT extern const base::FeatureParam<std::string> kIpPrivacyTokenServer;
 
+NET_EXPORT extern const base::FeatureParam<std::string>
+    kIpPrivacyIssuerTokenServer;
+
 // Sets the path component of the IP protection auth token server URL used for
 // getting initial token signing data.
 NET_EXPORT extern const base::FeatureParam<std::string>
     kIpPrivacyTokenServerGetInitialDataPath;
+
+NET_EXPORT extern const base::FeatureParam<std::string>
+    kIpPrivacyIssuerTokenServerPath;
+
+// If true, the issuer tokens will be stored to disk.
+NET_EXPORT extern const base::FeatureParam<bool> kIpPrivacyStoreIssuerTokens;
 
 // Sets the path component of the IP protection auth token server URL used for
 // getting blind-signed tokens.
@@ -485,15 +494,6 @@ NET_EXPORT extern const base::FeatureParam<bool> kIpPrivacyUseQuicProxies;
 // functionality.
 NET_EXPORT extern const base::FeatureParam<bool> kIpPrivacyUseQuicProxiesOnly;
 
-// Truncate IP protection proxy chains to a single proxy. This is intended for
-// development of the QUIC functionality.
-NET_EXPORT extern const base::FeatureParam<bool> kIpPrivacyUseSingleProxy;
-
-// Send all traffic to this host via IP Protection proxies, regardless of MDL,
-// 1P/3P, or token availability. This is intended for development of the QUIC
-// functionality.
-NET_EXPORT extern const base::FeatureParam<std::string> kIpPrivacyAlwaysProxy;
-
 // Fallback to direct when connections to IP protection proxies fail. This
 // defaults to true and is intended for development of the QUIC functionality.
 NET_EXPORT extern const base::FeatureParam<bool> kIpPrivacyFallbackToDirect;
@@ -518,9 +518,11 @@ NET_EXPORT extern const base::FeatureParam<bool> kIpPrivacyCacheTokensByGeo;
 // protection.
 NET_EXPORT extern const base::FeatureParam<bool> kIpPrivacyAlwaysCreateCore;
 
-// Enables IP protection incognito mode. The default value of this feature is
-// false which maintains existing behavior by default. When set to true, the
-// main profile Network Context won't proxy traffic using IP Protection.
+// Enables IP protection in incognito mode only. The default value of this
+// feature is false, which maintains the existing behavior when
+// `kEnableIpProtectionProxy` is enabled, IPP is enabled in both regular and
+// incognito browsing sessions. When set to true, the main profile Network
+// Context won't proxy traffic using IP Protection.
 NET_EXPORT extern const base::FeatureParam<bool> kIpPrivacyOnlyInIncognito;
 
 // Whether QuicParams::migrate_sessions_on_network_change_v2 defaults to true or
@@ -700,6 +702,16 @@ NET_EXPORT BASE_DECLARE_FEATURE(kHttpCacheNoVarySearch);
 
 NET_EXPORT BASE_DECLARE_FEATURE_PARAM(size_t,
                                       kHttpCacheNoVarySearchCacheMaxEntries);
+
+// Enables sending the CORS Origin header on the POST request for Reporting API
+// report uploads.
+NET_EXPORT BASE_DECLARE_FEATURE(kReportingApiCorsOriginHeader);
+
+#if BUILDFLAG(IS_ANDROID)
+// If enabled, Android OS's certificate verification (CertVerifyProcAndroid) is
+// done using the certificate transparency aware API.
+NET_EXPORT BASE_DECLARE_FEATURE(kUseCertTransparencyAwareApiForOsCertVerify);
+#endif  // BUILDFLAG(IS_ANDROID)
 
 }  // namespace net::features
 

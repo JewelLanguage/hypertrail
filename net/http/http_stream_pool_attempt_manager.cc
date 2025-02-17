@@ -4,6 +4,7 @@
 
 #include "net/http/http_stream_pool_attempt_manager.h"
 
+#include <algorithm>
 #include <map>
 #include <memory>
 #include <utility>
@@ -12,6 +13,7 @@
 #include "base/containers/enum_set.h"
 #include "base/debug/alias.h"
 #include "base/functional/bind.h"
+#include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/task/sequenced_task_runner.h"
@@ -72,6 +74,27 @@ std::string_view GetResultHistogramSuffix(std::optional<int> result) {
   return "Canceled";
 }
 
+std::string_view GetHistogramSuffixForStreamAttemptCancel(
+    StreamSocketCloseReason reason) {
+  switch (reason) {
+    case StreamSocketCloseReason::kSpdySessionCreated:
+      return "NewSpdySession";
+    case StreamSocketCloseReason::kQuicSessionCreated:
+      return "NewQuicSession";
+    case StreamSocketCloseReason::kUsingExistingSpdySession:
+      return "ExistingSpdySession";
+    case StreamSocketCloseReason::kUsingExistingQuicSession:
+      return "ExistingQuicSession";
+    case StreamSocketCloseReason::kUnspecified:
+    case StreamSocketCloseReason::kCloseAllConnections:
+    case StreamSocketCloseReason::kIpAddressChanged:
+    case StreamSocketCloseReason::kSslConfigChanged:
+    case StreamSocketCloseReason::kCannotUseTcpBasedProtocols:
+    case StreamSocketCloseReason::kAbort:
+      return "Other";
+  }
+}
+
 bool GetSupportsSpdy(HttpNetworkSession* session,
                      const HttpStreamKey& stream_key) {
   HttpServerProperties* properties = session->http_server_properties();
@@ -80,6 +103,18 @@ bool GetSupportsSpdy(HttpNetworkSession* session,
                                        stream_key.network_anonymization_key());
   }
   return false;
+}
+
+base::Value::Dict GetServiceEndpointRequestAsValue(
+    HostResolver::ServiceEndpointRequest* request) {
+  base::Value::Dict dict;
+  base::Value::List endpoints;
+  for (const auto& endpoint : request->GetEndpointResults()) {
+    endpoints.Append(endpoint.ToValue());
+  }
+  dict.Set("endpoints", std::move(endpoints));
+  dict.Set("endpoints_crypto_ready", request->EndpointsCryptoReady());
+  return dict;
 }
 
 }  // namespace
@@ -94,27 +129,58 @@ class HttpStreamPool::AttemptManager::InFlightAttempt
   InFlightAttempt& operator=(const InFlightAttempt&) = delete;
 
   ~InFlightAttempt() override {
+    base::TimeDelta elapsed = base::TimeTicks::Now() - start_time_;
     base::UmaHistogramTimes(
         base::StrCat({"Net.HttpStreamPool.StreamAttemptTime.",
                       GetResultHistogramSuffix(result_)}),
-        base::TimeTicks::Now() - start_time_);
+        elapsed);
 
     if (cancel_reason_.has_value()) {
       base::UmaHistogramEnumeration(
           "Net.HttpStreamPool.StreamAttemptCancelReason", *cancel_reason_);
+
+      std::string_view suffix =
+          GetHistogramSuffixForStreamAttemptCancel(*cancel_reason_);
+      CHECK(manager_->initial_attempt_state_.has_value());
+      base::UmaHistogramEnumeration(
+          base::StrCat(
+              {"Net.HttpStreamPool.StreamAttemptCanceledInitialAttemptState.",
+               suffix}),
+          *manager_->initial_attempt_state_);
+      base::UmaHistogramTimes(
+          base::StrCat(
+              {"Net.HttpStreamPool.StreamAttemptCanceledTime.", suffix}),
+          elapsed);
     }
   }
 
-  int Start(std::unique_ptr<StreamAttempt> attempt) {
+  void Start(std::unique_ptr<StreamAttempt> attempt,
+             TlsStreamAttempt* tls_attempt_ptr) {
     CHECK(!attempt_);
     attempt_ = std::move(attempt);
     start_time_ = base::TimeTicks::Now();
-    // SAFETY: Callback is only invoked when Start() returns ERR_IO_PENDING.
-    // In that case `manager_` outlives the callback since `manager_` owns
-    // `this`.
-    return attempt_->Start(
-        base::BindOnce(&AttemptManager::OnInFlightAttemptComplete,
-                       base::Unretained(manager_), this));
+    int rv = attempt_->Start(
+        base::BindOnce(&InFlightAttempt::OnInFlightAttemptComplete,
+                       weak_ptr_factory_.GetWeakPtr()));
+    if (rv == ERR_IO_PENDING) {
+      // SAFETY: Unretained `manager_` is fine since `manager_` owns this and
+      // `this` owns `slow_timer_`.
+      slow_timer_.Start(FROM_HERE, HttpStreamPool::GetConnectionAttemptDelay(),
+                        base::BindOnce(&AttemptManager::OnInFlightAttemptSlow,
+                                       base::Unretained(manager_), this));
+      if (tls_attempt_ptr && !tls_attempt_ptr->IsTcpHandshakeCompleted()) {
+        // SAFETY: Unretained `manager_` is fine since the passed callback runs
+        // is invoked synchronously (without PostTask) when the TCP handshake
+        // completes. See TlsStreamAttempt::DoTcpAttemptComplete.
+        tls_attempt_ptr->SetTcpHandshakeCompletionCallback(base::BindOnce(
+            &AttemptManager::OnInFlightAttemptTcpHandshakeComplete,
+            base::Unretained(manager_), this));
+      }
+    } else {
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE, base::BindOnce(&InFlightAttempt::OnInFlightAttemptComplete,
+                                    weak_ptr_factory_.GetWeakPtr(), rv));
+    }
   }
 
   void SetResult(int rv) {
@@ -149,6 +215,12 @@ class HttpStreamPool::AttemptManager::InFlightAttempt
   int WaitForSSLConfigReady(CompletionOnceCallback callback) override {
     int rv = manager_->WaitForSSLConfigReady();
     if (rv == ERR_IO_PENDING) {
+      // TODO(crbug.com/383220402): Remove the timer when the cause of the bug
+      // is fixed.
+      ssl_config_waiting_timeout_timer_.Start(
+          FROM_HERE, base::Seconds(6),
+          base::BindOnce(&InFlightAttempt::OnWaitingSSLConfigTimedout,
+                         base::Unretained(this)));
       ssl_config_waiting_callback_ = std::move(callback);
     }
     return rv;
@@ -164,6 +236,7 @@ class HttpStreamPool::AttemptManager::InFlightAttempt
   }
 
   CompletionOnceCallback TakeSSLConfigWaitingCallback() {
+    ssl_config_waiting_timeout_timer_.Stop();
     return std::move(ssl_config_waiting_callback_);
   }
 
@@ -194,6 +267,16 @@ class HttpStreamPool::AttemptManager::InFlightAttempt
   }
 
  private:
+  void OnWaitingSSLConfigTimedout() {
+    std::string manager_info = manager_->GetInfoAsValue().DebugString();
+    DEBUG_ALIAS_FOR_CSTR(aliased_info, manager_info.c_str(), 512);
+    CHECK(false) << manager_info;
+  }
+
+  void OnInFlightAttemptComplete(int rv) {
+    manager_->OnInFlightAttemptComplete(this, rv);
+  }
+
   const raw_ptr<AttemptManager> manager_;
   std::unique_ptr<StreamAttempt> attempt_;
   base::TimeTicks start_time_;
@@ -208,6 +291,11 @@ class HttpStreamPool::AttemptManager::InFlightAttempt
   // handle ECH failure.
   bool is_aborted_ = false;
   CompletionOnceCallback ssl_config_waiting_callback_;
+
+  // TODO(crbug.com/383220402): Remove this when the cause of the bug is fixed.
+  base::OneShotTimer ssl_config_waiting_timeout_timer_;
+
+  base::WeakPtrFactory<InFlightAttempt> weak_ptr_factory_{this};
 };
 
 // Represents a preconnect request.
@@ -283,6 +371,11 @@ HttpStreamPool::AttemptManager::AttemptManager(Group* group, NetLog* net_log)
       stream_attempt_delay_(GetStreamAttemptDelay()),
       should_block_stream_attempt_(!stream_attempt_delay_.is_zero()) {
   CHECK(group_);
+
+  if (group_->force_quic()) {
+    allowed_alpns_.RemoveAll(kTcpBasedProtocols);
+  }
+
   net_log_.BeginEvent(
       NetLogEventType::HTTP_STREAM_POOL_ATTEMPT_MANAGER_ALIVE, [&] {
         base::Value::Dict dict;
@@ -359,10 +452,7 @@ void HttpStreamPool::AttemptManager::StartJob(
   // HttpStreamPool should check the existing QUIC/SPDY sessions before calling
   // this method.
   DCHECK(!CanUseExistingQuicSession());
-  CHECK(!spdy_session_);
-  DCHECK(!spdy_session_pool()->FindAvailableSession(
-      spdy_session_key(), IsIpBasedPoolingEnabled(),
-      /*is_websocket=*/false, request_net_log));
+  DCHECK(!HasAvailableSpdySession());
 
   jobs_.Insert(job, priority);
 
@@ -415,10 +505,8 @@ int HttpStreamPool::AttemptManager::Preconnect(
 
   // HttpStreamPool should check the existing QUIC/SPDY sessions before calling
   // this method.
-  CHECK(!CanUseExistingQuicSession());
-  CHECK(!spdy_session_);
-  CHECK(!spdy_session_pool()->HasAvailableSession(spdy_session_key(),
-                                                  /*is_websocket=*/false));
+  DCHECK(!CanUseExistingQuicSession());
+  DCHECK(!HasAvailableSpdySession());
   CHECK(group_->ActiveStreamSocketCount() < num_streams);
 
   auto entry =
@@ -432,12 +520,14 @@ int HttpStreamPool::AttemptManager::Preconnect(
 }
 
 void HttpStreamPool::AttemptManager::OnServiceEndpointsUpdated() {
-  // For plain HTTP request, we need to wait for HTTPS RR because we could
-  // trigger HTTP -> HTTPS upgrade when HTTPS RR is received during the endpoint
-  // resolution.
-  if (UsingTls() || service_endpoint_request_->EndpointsCryptoReady()) {
-    ProcessServiceEndpointChanges();
-  }
+  net_log().AddEvent(
+      NetLogEventType::HTTP_STREAM_POOL_ATTEMPT_MANAGER_DNS_RESOLUTION_UPDATED,
+      [&] {
+        return GetServiceEndpointRequestAsValue(
+            service_endpoint_request_.get());
+      });
+
+  ProcessServiceEndpointChanges();
 }
 
 void HttpStreamPool::AttemptManager::OnServiceEndpointRequestFinished(int rv) {
@@ -451,7 +541,8 @@ void HttpStreamPool::AttemptManager::OnServiceEndpointRequestFinished(int rv) {
   net_log().AddEvent(
       NetLogEventType::HTTP_STREAM_POOL_ATTEMPT_MANAGER_DNS_RESOLUTION_FINISHED,
       [&] {
-        base::Value::Dict dict;
+        base::Value::Dict dict =
+            GetServiceEndpointRequestAsValue(service_endpoint_request_.get());
         dict.Set("result", ErrorToString(rv));
         dict.Set("resolve_error", resolve_error_info_.error);
         return dict;
@@ -481,6 +572,50 @@ bool HttpStreamPool::AttemptManager::IsSvcbOptional() {
   base::span<const ServiceEndpoint> endpoints =
       service_endpoint_request_->GetEndpointResults();
   return !HostResolver::AllProtocolEndpointsHaveEch(endpoints);
+}
+
+HttpStreamPool::AttemptManager::InitialAttemptState
+HttpStreamPool::AttemptManager::CalculateInitialAttemptState() {
+  using enum InitialAttemptState;
+  if (CanUseQuic()) {
+    if (quic_version_.IsKnown()) {
+      if (supports_spdy_) {
+        return kCanUseQuicWithKnownVersionAndSupportsSpdy;
+      } else {
+        return kCanUseQuicWithKnownVersion;
+      }
+    } else {
+      if (supports_spdy_) {
+        return kCanUseQuicWithUnknownVersionAndSupportsSpdy;
+      } else {
+        return kCanUseQuicWithUnknownVersion;
+      }
+    }
+  } else {
+    if (quic_version_.IsKnown()) {
+      if (supports_spdy_) {
+        return kCannotUseQuicWithKnownVersionAndSupportsSpdy;
+      } else {
+        return kCannotUseQuicWithKnownVersion;
+      }
+    } else {
+      if (supports_spdy_) {
+        return kCannotUseQuicWithUnknownVersionAndSupportsSpdy;
+      } else {
+        return kCannotUseQuicWithUnknownVersion;
+      }
+    }
+  }
+}
+
+void HttpStreamPool::AttemptManager::MaybeSetInitialAttemptState() {
+  if (initial_attempt_state_.has_value()) {
+    return;
+  }
+
+  initial_attempt_state_ = CalculateInitialAttemptState();
+  base::UmaHistogramEnumeration("Net.HttpStreamPool.InitialAttemptState",
+                                *initial_attempt_state_);
 }
 
 int HttpStreamPool::AttemptManager::WaitForSSLConfigReady() {
@@ -543,7 +678,7 @@ void HttpStreamPool::AttemptManager::ProcessPendingJob() {
   }
 
   CHECK(!CanUseExistingQuicSession());
-  CHECK(!spdy_session_);
+  DCHECK(!HasAvailableSpdySession());
 
   MaybeAttemptConnection(/*exclude_ip_endpoint=*/std::nullopt,
                          /*max_attempts=*/1);
@@ -640,15 +775,16 @@ HttpStreamPool::AttemptManager::quic_session_alias_key() const {
   return group_->quic_session_alias_key();
 }
 
-HttpNetworkSession* HttpStreamPool::AttemptManager::http_network_session() {
+HttpNetworkSession* HttpStreamPool::AttemptManager::http_network_session()
+    const {
   return group_->http_network_session();
 }
 
-SpdySessionPool* HttpStreamPool::AttemptManager::spdy_session_pool() {
+SpdySessionPool* HttpStreamPool::AttemptManager::spdy_session_pool() const {
   return http_network_session()->spdy_session_pool();
 }
 
-QuicSessionPool* HttpStreamPool::AttemptManager::quic_session_pool() {
+QuicSessionPool* HttpStreamPool::AttemptManager::quic_session_pool() const {
   return http_network_session()->quic_session_pool();
 }
 
@@ -728,7 +864,7 @@ bool HttpStreamPool::AttemptManager::IsStalledByPoolLimit() {
     return false;
   }
 
-  if (CanUseExistingQuicSession() || spdy_session_) {
+  if (CanUseExistingQuicSession() || HasAvailableSpdySession()) {
     CHECK_EQ(PendingPreconnectCount(), 0u);
     return false;
   }
@@ -746,10 +882,7 @@ bool HttpStreamPool::AttemptManager::IsStalledByPoolLimit() {
 }
 
 void HttpStreamPool::AttemptManager::OnRequiredHttp11() {
-  if (spdy_session_) {
-    spdy_session_.reset();
-    HandleFinalError(ERR_HTTP_1_1_REQUIRED);
-  }
+  HandleFinalError(ERR_HTTP_1_1_REQUIRED);
 }
 
 void HttpStreamPool::AttemptManager::OnQuicTaskComplete(
@@ -793,28 +926,24 @@ void HttpStreamPool::AttemptManager::OnQuicTaskComplete(
 
   MaybeMarkQuicBroken();
 
-  // TODO(crbug.com/384759483): Tidy up the following logic. See the review
-  // comment at
-  // https://chromium-review.googlesource.com/c/chromium/src/+/6169787/comment/d1311bc2_045cddda/
-
-  const bool has_jobs = !jobs_.empty() || !notified_jobs_.empty();
-
   if (rv == OK) {
     HandleQuicSessionReady(StreamSocketCloseReason::kQuicSessionCreated);
-    if (has_jobs) {
+    if (!jobs_.empty()) {
       CreateQuicStreamAndNotify();
-      return;
+    } else {
+      MaybeCompleteLater();
     }
+    return;
   }
 
-  if (rv != OK &&
-      (tcp_based_attempt_state_ == TcpBasedAttemptState::kAllEndpointsFailed ||
-       group_->force_quic() || !CanUseTcpBasedProtocols())) {
+  if (tcp_based_attempt_state_ == TcpBasedAttemptState::kAllEndpointsFailed ||
+      !CanUseTcpBasedProtocols()) {
+    CancelStreamAttemptDelayTimer();
     HandleFinalError(rv);
     return;
   }
 
-  if (has_jobs && (rv != OK || should_block_stream_attempt_)) {
+  if (should_block_stream_attempt_) {
     CancelStreamAttemptDelayTimer();
     MaybeAttemptConnection();
   } else {
@@ -900,6 +1029,7 @@ HttpStreamPool::AttemptManager::CalculateMultiplexedSessionCreationInitiator() {
 }
 
 void HttpStreamPool::AttemptManager::StartInternal(RequestPriority priority) {
+  MaybeSetInitialAttemptState();
   UpdateStreamAttemptState();
 
   if (service_endpoint_request_ || service_endpoint_request_finished_) {
@@ -954,12 +1084,41 @@ void HttpStreamPool::AttemptManager::
 }
 
 void HttpStreamPool::AttemptManager::ProcessServiceEndpointChanges() {
-  if (CanUseExistingSessionAfterEndpointChanges()) {
-    // TODO(crbug.com/383220402): Remove GetInfoAsValue() once we found the root
-    // cause of the associated bug.
-    std::string info = GetInfoAsValue().DebugString();
-    DEBUG_ALIAS_FOR_CSTR(aliased_info, info.c_str(), 512);
-    CHECK(in_flight_attempts_.empty()) << info;
+  // The order of the following checks is important, see the following comments.
+  // TODO(crbug.com/383606724): Figure out a better design and algorithms to
+  // handle attempts and existing sessions.
+
+  // For plain HTTP request, we need to wait for HTTPS RR because we could
+  // trigger HTTP -> HTTPS upgrade when HTTPS RR is received during the endpoint
+  // resolution.
+  if (!UsingTls() && !service_endpoint_request_->EndpointsCryptoReady() &&
+      !service_endpoint_request_finished_) {
+    return;
+  }
+
+  // Try to calculate SSLConfig before checking existing SPDY/QUIC sessions,
+  // since `this` may make TCP attempts even after using an existing session
+  // as the session could become inactive later.
+  MaybeCalculateSSLConfig();
+
+  if (CanUseExistingQuicSessionAfterEndpointChanges()) {
+    CHECK(in_flight_attempts_.empty());
+    return;
+  }
+
+  // If `this` already created a QuicTask, call `quic_task_->MaybeAttempt()`
+  // before checking existing SPDY session to make sure that the QuicTask makes
+  // progress. Otherwise, the QuicTask would stall until next job/preconnect
+  // comes. Call `quic_task_->MaybeAttempt()` after checking existing SPDY
+  // session to avoid creating QuicTask unnecessary.
+  bool quic_attempted = false;
+  if (quic_task_) {
+    quic_task_->MaybeAttempt();
+    quic_attempted = true;
+  }
+
+  if (CanUseExistingSpdySessionAfterEndpointChanges()) {
+    CHECK(in_flight_attempts_.empty());
     return;
   }
 
@@ -967,75 +1126,94 @@ void HttpStreamPool::AttemptManager::ProcessServiceEndpointChanges() {
       StreamAttemptDelayBehavior::kStartTimerOnFirstEndpointUpdate) {
     MaybeRunStreamAttemptDelayTimer();
   }
-  MaybeCalculateSSLConfig();
-  MaybeAttemptQuic();
+
+  MaybeNotifySSLConfigReady();
+  if (!quic_attempted) {
+    MaybeAttemptQuic();
+  }
   MaybeAttemptConnection();
 }
 
 bool HttpStreamPool::AttemptManager::
-    CanUseExistingSessionAfterEndpointChanges() {
-  CHECK(service_endpoint_request_);
-
-  if (!UsingTls()) {
+    CanUseExistingQuicSessionAfterEndpointChanges() {
+  if (!CanUseQuic()) {
     return false;
   }
 
   if (CanUseExistingQuicSession()) {
+    CancelQuicTask(OK);
     return true;
-  }
-
-  if (CanUseQuic()) {
-    for (const auto& endpoint :
-         service_endpoint_request_->GetEndpointResults()) {
-      if (quic_session_pool()->HasMatchingIpSessionForServiceEndpoint(
-              quic_session_alias_key(), endpoint,
-              service_endpoint_request_->GetDnsAliasResults(), true)) {
-        if (quic_task_) {
-          quic_task_result_ = OK;
-          quic_task_.reset();
-        }
-        base::UmaHistogramTimes(
-            "Net.HttpStreamPool.ExistingQuicSessionFoundTime",
-            base::TimeTicks::Now() - dns_resolution_start_time_);
-        HandleQuicSessionReady(
-            StreamSocketCloseReason::kUsingExistingQuicSession);
-        // Use PostTask() because we could reach here from RequestStream()
-        // synchronously when the DNS resolution finishes immediately.
-        base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-            FROM_HERE,
-            base::BindOnce(&AttemptManager::CreateQuicStreamAndNotify,
-                           weak_ptr_factory_.GetWeakPtr()));
-        return true;
-      }
-    }
-  }
-
-  if (spdy_session_) {
-    return true;
-  }
-
-  if (!IsIpBasedPoolingEnabled()) {
-    return false;
   }
 
   for (const auto& endpoint : service_endpoint_request_->GetEndpointResults()) {
-    spdy_session_ =
+    if (!quic_session_pool()->HasMatchingIpSessionForServiceEndpoint(
+            quic_session_alias_key(), endpoint,
+            service_endpoint_request_->GetDnsAliasResults(), true)) {
+      continue;
+    }
+
+    CancelQuicTask(OK);
+
+    net_log_.AddEvent(
+        NetLogEventType::
+            HTTP_STREAM_POOL_ATTEMPT_MANAGER_EXISTING_QUIC_SESSION_MATCHED,
+        [&] {
+          base::Value::Dict dict;
+          QuicChromiumClientSession* quic_session =
+              quic_session_pool()->FindExistingSession(
+                  quic_session_alias_key().session_key(),
+                  quic_session_alias_key().destination());
+          CHECK(quic_session);
+          quic_session->net_log().source().AddToEventParameters(dict);
+          return dict;
+        });
+    base::UmaHistogramTimes(
+        "Net.HttpStreamPool.ExistingQuicSessionFoundTime",
+        base::TimeTicks::Now() - dns_resolution_start_time_);
+
+    HandleQuicSessionReady(StreamSocketCloseReason::kUsingExistingQuicSession);
+    CreateQuicStreamAndNotify();
+    return true;
+  }
+
+  return false;
+}
+
+bool HttpStreamPool::AttemptManager::
+    CanUseExistingSpdySessionAfterEndpointChanges() {
+  if (!IsIpBasedPoolingEnabled() || !UsingTls()) {
+    return false;
+  }
+
+  if (HasAvailableSpdySession()) {
+    return true;
+  }
+
+  for (const auto& endpoint : service_endpoint_request_->GetEndpointResults()) {
+    base::WeakPtr<SpdySession> spdy_session =
         spdy_session_pool()->FindMatchingIpSessionForServiceEndpoint(
             spdy_session_key(), endpoint,
             service_endpoint_request_->GetDnsAliasResults());
-    if (spdy_session_) {
-      base::UmaHistogramTimes(
-          "Net.HttpStreamPool.ExistingSpdySessionFoundTime",
-          base::TimeTicks::Now() - dns_resolution_start_time_);
-      HandleSpdySessionReady(
-          StreamSocketCloseReason::kUsingExistingSpdySession);
-      // Use PostTask() because we could reach here from RequestStream()
-      // synchronously when the DNS resolution finishes immediately.
-      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-          FROM_HERE, base::BindOnce(&AttemptManager::CreateSpdyStreamAndNotify,
-                                    weak_ptr_factory_.GetWeakPtr()));
-      return true;
+    if (!spdy_session) {
+      continue;
     }
+    CHECK(spdy_session->IsAvailable());
+
+    net_log_.AddEvent(
+        NetLogEventType::
+            HTTP_STREAM_POOL_ATTEMPT_MANAGER_EXISTING_SPDY_SESSION_MATCHED,
+        [&] {
+          base::Value::Dict dict;
+          spdy_session->net_log().source().AddToEventParameters(dict);
+          return dict;
+        });
+    base::UmaHistogramTimes(
+        "Net.HttpStreamPool.ExistingSpdySessionFoundTime",
+        base::TimeTicks::Now() - dns_resolution_start_time_);
+
+    HandleSpdySessionReady(spdy_session,
+                           StreamSocketCloseReason::kUsingExistingSpdySession);
+    return true;
   }
 
   return false;
@@ -1048,9 +1226,7 @@ void HttpStreamPool::AttemptManager::MaybeCalculateSSLConfig() {
 
   CHECK(service_endpoint_request_);
   if (!service_endpoint_request_->EndpointsCryptoReady()) {
-    // TODO(crbug.com/383220402): Remove GetInfoAsValue() once we found the root
-    // cause of the associated bug.
-    CHECK(!service_endpoint_request_finished_) << GetInfoAsValue();
+    CHECK(!service_endpoint_request_finished_);
     return;
   }
 
@@ -1076,6 +1252,24 @@ void HttpStreamPool::AttemptManager::MaybeCalculateSSLConfig() {
       stream_key().network_anonymization_key();
 
   ssl_config_.emplace(std::move(ssl_config));
+}
+
+void HttpStreamPool::AttemptManager::MaybeNotifySSLConfigReady() {
+  if (!ssl_config_.has_value()) {
+    return;
+  }
+
+  if (ssl_config_ready_notified_) {
+    // Ensure that there is no in-flight stream attempts that are waiting for
+    // SSLConfig.
+    // TODO(crbug.com/383220402): Put this check behind DCHECK_ALWAYS_ON or
+    // remove this check once we have stabilized the implementation.
+    for (const auto& in_flight_attempt : in_flight_attempts_) {
+      CHECK(!in_flight_attempt->IsWaitingSSLConfig());
+    }
+    return;
+  }
+  ssl_config_ready_notified_ = true;
 
   // Restart slow timer for in-flight attempts that have already completed
   // TCP handshakes. Also collect callbacks from in-flight attempts to invoke
@@ -1126,10 +1320,6 @@ void HttpStreamPool::AttemptManager::MaybeAttemptConnection(
     return;
   }
 
-  if (group_->force_quic()) {
-    return;
-  }
-
   if (!CanUseTcpBasedProtocols()) {
     return;
   }
@@ -1139,15 +1329,14 @@ void HttpStreamPool::AttemptManager::MaybeAttemptConnection(
     return;
   }
 
-  if (spdy_session_) {
-    return;
-  }
-
   // There might be multiple pending jobs. Make attempts as much as needed
   // and allowed.
   size_t num_attempts = 0;
   const bool using_tls = UsingTls();
   while (IsConnectionAttemptReady()) {
+    // TODO(crbug.com/346835898): Change to DCHECK once we stabilize the
+    // implementation.
+    CHECK(!HasAvailableSpdySession());
     std::optional<IPEndPoint> ip_endpoint =
         GetIPEndPointToAttempt(exclude_ip_endpoint);
     if (!ip_endpoint.has_value()) {
@@ -1196,28 +1385,11 @@ void HttpStreamPool::AttemptManager::MaybeAttemptConnection(
           return dict;
         });
 
-    int rv = raw_attempt->Start(std::move(attempt));
+    raw_attempt->Start(std::move(attempt), tls_attempt_ptr);
     // Add NetLog dependency after Start() so that the first event of the
     // attempt can have meaningful description in the NetLog viewer.
     raw_attempt->attempt()->net_log().AddEventReferencingSource(
         NetLogEventType::STREAM_ATTEMPT_BOUND_TO_POOL, net_log().source());
-    if (rv != ERR_IO_PENDING) {
-      // SAFETY: `this` may be deleted before the attempt completes.
-      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-          FROM_HERE,
-          base::BindOnce(&AttemptManager::OnInFlightAttemptComplete,
-                         weak_ptr_factory_.GetWeakPtr(), raw_attempt, rv));
-    } else {
-      raw_attempt->slow_timer().Start(
-          FROM_HERE, HttpStreamPool::GetConnectionAttemptDelay(),
-          base::BindOnce(&AttemptManager::OnInFlightAttemptSlow,
-                         base::Unretained(this), raw_attempt));
-      if (tls_attempt_ptr && !tls_attempt_ptr->IsTcpHandshakeCompleted()) {
-        tls_attempt_ptr->SetTcpHandshakeCompletionCallback(base::BindOnce(
-            &AttemptManager::OnInFlightAttemptTcpHandshakeComplete,
-            base::Unretained(this), raw_attempt));
-      }
-    }
 
     ++num_attempts;
     if (max_attempts.has_value() && num_attempts >= *max_attempts) {
@@ -1322,7 +1494,7 @@ bool HttpStreamPool::AttemptManager::ShouldThrottleAttemptForSpdy() const {
     return false;
   }
 
-  CHECK(!spdy_session_);
+  DCHECK(!HasAvailableSpdySession());
   return true;
 }
 
@@ -1599,61 +1771,65 @@ void HttpStreamPool::AttemptManager::CreateTextBasedStreamAndNotify(
   // `this` may be deleted.
 }
 
-void HttpStreamPool::AttemptManager::CreateSpdyStreamAndNotify() {
+bool HttpStreamPool::AttemptManager::HasAvailableSpdySession() const {
+  return spdy_session_pool()->HasAvailableSession(spdy_session_key(),
+                                                  /*is_websocket=*/false);
+}
+
+void HttpStreamPool::AttemptManager::CreateSpdyStreamAndNotify(
+    base::WeakPtr<SpdySession> spdy_session) {
   CHECK(!is_canceling_jobs_);
   CHECK(!is_failing_);
-
-  if (!spdy_session_ || !spdy_session_->IsAvailable()) {
-    // There was an available SPDY session but the session has gone while
-    // notifying to jobs. Do another attempt.
-
-    spdy_session_.reset();
-    // We may not have calculated SSLConfig yet. Try to calculate it before
-    // attempting connections.
-    MaybeCalculateSSLConfig();
-    MaybeAttemptConnection();
-    return;
-  }
-
-  // If there are more than one remaining job, post a task to create
-  // HttpStreams for these jobs.
-  if (jobs_.size() > 1) {
-    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(&AttemptManager::CreateSpdyStreamAndNotify,
-                                  weak_ptr_factory_.GetWeakPtr()));
-  }
+  CHECK(spdy_session);
+  CHECK(spdy_session->IsAvailable());
 
   std::set<std::string> dns_aliases =
       http_network_session()->spdy_session_pool()->GetDnsAliasesForSessionKey(
           spdy_session_key());
-  auto http_stream = std::make_unique<SpdyHttpStream>(
-      spdy_session_, net_log().source(), std::move(dns_aliases));
-  NotifyStreamReady(std::move(http_stream), NextProto::kProtoHTTP2);
-  // `this` may be deleted.
+
+  std::vector<std::unique_ptr<SpdyHttpStream>> streams(jobs_.size());
+  std::ranges::generate(streams, [&] {
+    return std::make_unique<SpdyHttpStream>(spdy_session, net_log().source(),
+                                            dns_aliases);
+  });
+
+  base::WeakPtr<AttemptManager> weak_this = weak_ptr_factory_.GetWeakPtr();
+  while (weak_this && !streams.empty()) {
+    std::unique_ptr<SpdyHttpStream> stream = std::move(streams.back());
+    streams.pop_back();
+    NotifyStreamReady(std::move(stream), NextProto::kProtoHTTP2);
+    // `this` may be deleted.
+  }
+  CHECK(!weak_this || jobs_.empty());
 }
 
 void HttpStreamPool::AttemptManager::CreateQuicStreamAndNotify() {
+  CHECK(!is_canceling_jobs_);
+  CHECK(!is_failing_);
+
   QuicChromiumClientSession* quic_session =
       quic_session_pool()->FindExistingSession(
           quic_session_alias_key().session_key(),
           quic_session_alias_key().destination());
   CHECK(quic_session);
 
-  // If there are more than one remaining job, post a task to create
-  // HttpStreams for these jobs.
-  if (jobs_.size() > 1) {
-    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(&AttemptManager::CreateQuicStreamAndNotify,
-                                  weak_ptr_factory_.GetWeakPtr()));
-  }
-
   std::set<std::string> dns_aliases = quic_session->GetDnsAliasesForSessionKey(
       quic_session_alias_key().session_key());
-  auto http_stream = std::make_unique<QuicHttpStream>(
-      quic_session->CreateHandle(stream_key().destination()),
-      std::move(dns_aliases));
-  NotifyStreamReady(std::move(http_stream), NextProto::kProtoQUIC);
-  // `this` may be deleted.
+
+  std::vector<std::unique_ptr<QuicHttpStream>> streams(jobs_.size());
+  std::ranges::generate(streams, [&] {
+    return std::make_unique<QuicHttpStream>(
+        quic_session->CreateHandle(stream_key().destination()), dns_aliases);
+  });
+
+  base::WeakPtr<AttemptManager> weak_this = weak_ptr_factory_.GetWeakPtr();
+  while (weak_this && !streams.empty()) {
+    std::unique_ptr<QuicHttpStream> stream = std::move(streams.back());
+    streams.pop_back();
+    NotifyStreamReady(std::move(stream), NextProto::kProtoQUIC);
+    // `this` may be deleted.
+  }
+  CHECK(!weak_this || jobs_.empty());
 }
 
 void HttpStreamPool::AttemptManager::NotifyStreamReady(
@@ -1669,13 +1845,16 @@ void HttpStreamPool::AttemptManager::NotifyStreamReady(
 }
 
 void HttpStreamPool::AttemptManager::HandleSpdySessionReady(
+    base::WeakPtr<SpdySession> spdy_session,
     StreamSocketCloseReason refresh_group_reason) {
   CHECK(!group_->force_quic());
   CHECK(!is_failing_);
-  CHECK(spdy_session_);
+  CHECK(spdy_session);
+  CHECK(spdy_session->IsAvailable());
 
   group_->Refresh(kSwitchingToHttp2, refresh_group_reason);
   NotifyPreconnectsComplete(OK);
+  CreateSpdyStreamAndNotify(spdy_session);
 }
 
 void HttpStreamPool::AttemptManager::HandleQuicSessionReady(
@@ -1797,15 +1976,14 @@ void HttpStreamPool::AttemptManager::OnInFlightAttemptComplete(
 
   const auto reuse_type = StreamSocketHandle::SocketReuseType::kUnused;
   if (stream_socket->GetNegotiatedProtocol() == NextProto::kProtoHTTP2) {
-    CHECK(!spdy_session_pool()->FindAvailableSession(
-        group_->spdy_session_key(), IsIpBasedPoolingEnabled(),
-        /*is_websocket=*/false, net_log()));
+    CHECK(!HasAvailableSpdySession());
     std::unique_ptr<HttpStreamPoolHandle> handle = group_->CreateHandle(
         std::move(stream_socket), reuse_type, std::move(connect_timing));
+    base::WeakPtr<SpdySession> spdy_session;
     int create_result =
         spdy_session_pool()->CreateAvailableSessionFromSocketHandle(
             spdy_session_key(), std::move(handle), net_log(),
-            MultiplexedSessionCreationInitiator::kUnknown, &spdy_session_);
+            MultiplexedSessionCreationInitiator::kUnknown, &spdy_session);
     if (create_result != OK) {
       HandleAttemptFailure(std::move(in_flight_attempt), create_result);
       return;
@@ -1824,8 +2002,8 @@ void HttpStreamPool::AttemptManager::OnInFlightAttemptComplete(
         "Net.HttpStreamPool.NewSpdySessionEstablishTime",
         base::TimeTicks::Now() - in_flight_attempt->start_time());
 
-    HandleSpdySessionReady(StreamSocketCloseReason::kSpdySessionCreated);
-    CreateSpdyStreamAndNotify();
+    HandleSpdySessionReady(spdy_session,
+                           StreamSocketCloseReason::kSpdySessionCreated);
     return;
   }
 
@@ -1944,7 +2122,7 @@ void HttpStreamPool::AttemptManager::UpdateStreamAttemptState() {
 
 void HttpStreamPool::AttemptManager::MaybeRunStreamAttemptDelayTimer() {
   if (!should_block_stream_attempt_ ||
-      stream_attempt_delay_timer_.IsRunning()) {
+      stream_attempt_delay_timer_.IsRunning() || !CanUseTcpBasedProtocols()) {
     return;
   }
   CHECK(!stream_attempt_delay_.is_zero());
@@ -1955,8 +2133,8 @@ void HttpStreamPool::AttemptManager::MaybeRunStreamAttemptDelayTimer() {
 }
 
 void HttpStreamPool::AttemptManager::CancelStreamAttemptDelayTimer() {
-  stream_attempt_delay_timer_.Stop();
   should_block_stream_attempt_ = false;
+  stream_attempt_delay_timer_.Stop();
 }
 
 void HttpStreamPool::AttemptManager::OnStreamAttemptDelayPassed() {

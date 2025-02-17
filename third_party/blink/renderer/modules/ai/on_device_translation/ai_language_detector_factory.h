@@ -39,7 +39,7 @@ class AILanguageDetectorFactory final : public ScriptWrappable,
 
   HeapMojoRemote<
       language_detection::mojom::blink::ContentLanguageDetectionDriver>&
-  GetLangaugeDetectionDriverRemote();
+  GetLanguageDetectionDriverRemote();
 
  private:
   class AILanguageDetectorCreateTask
@@ -47,7 +47,7 @@ class AILanguageDetectorFactory final : public ScriptWrappable,
    public:
     AILanguageDetectorCreateTask(
         ExecutionContext* execution_context,
-        scoped_refptr<base::SequencedTaskRunner> task_runner,
+        scoped_refptr<base::SequencedTaskRunner>& task_runner,
         ScriptPromiseResolver<AILanguageDetector>* resolver,
         LanguageDetectionModel* model,
         const AILanguageDetectorCreateOptions* options);
@@ -59,6 +59,8 @@ class AILanguageDetectorFactory final : public ScriptWrappable,
    private:
     void OnModelLoaded(base::expected<LanguageDetectionModel*,
                                       DetectLanguageError> maybe_model);
+
+    scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
     Member<AICreateMonitor> monitor_;
     Member<ScriptPromiseResolver<AILanguageDetector>> resolver_;

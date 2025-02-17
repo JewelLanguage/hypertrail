@@ -4,17 +4,19 @@
 
 #include "third_party/blink/renderer/modules/xr/xr_system.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
 #include "base/containers/contains.h"
-#include "base/ranges/algorithm.h"
+#include "base/feature_list.h"
 #include "base/trace_event/trace_id_helper.h"
 #include "base/trace_event/typed_macros.h"
 #include "build/build_config.h"
 #include "device/vr/public/mojom/vr_service.mojom-blink.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_xr_depth_state_init.h"
@@ -136,7 +138,7 @@ Vector<device::mojom::XRDepthUsage> ParseDepthUsages(
     const Vector<V8XRDepthUsage>& usages) {
   Vector<device::mojom::XRDepthUsage> result;
 
-  base::ranges::transform(usages, std::back_inserter(result), ParseDepthUsage);
+  std::ranges::transform(usages, std::back_inserter(result), ParseDepthUsage);
 
   return result;
 }
@@ -157,8 +159,7 @@ Vector<device::mojom::XRDepthDataFormat> ParseDepthFormats(
     const Vector<V8XRDepthDataFormat>& formats) {
   Vector<device::mojom::XRDepthDataFormat> result;
 
-  base::ranges::transform(formats, std::back_inserter(result),
-                          ParseDepthFormat);
+  std::ranges::transform(formats, std::back_inserter(result), ParseDepthFormat);
 
   return result;
 }
@@ -247,14 +248,14 @@ bool HasRequiredPermissionsPolicy(ExecutionContext* context,
     case device::mojom::XRSessionFeature::FRONT_FACING:
     case device::mojom::XRSessionFeature::WEBGPU:
       return context->IsFeatureEnabled(
-          mojom::blink::PermissionsPolicyFeature::kWebXr,
+          network::mojom::PermissionsPolicyFeature::kWebXr,
           ReportOptions::kReportOnFailure);
     case device::mojom::XRSessionFeature::CAMERA_ACCESS:
       return context->IsFeatureEnabled(
-                 mojom::blink::PermissionsPolicyFeature::kWebXr,
+                 network::mojom::PermissionsPolicyFeature::kWebXr,
                  ReportOptions::kReportOnFailure) &&
              context->IsFeatureEnabled(
-                 mojom::blink::PermissionsPolicyFeature::kCamera,
+                 network::mojom::PermissionsPolicyFeature::kCamera,
                  ReportOptions::kReportOnFailure);
   }
 }
@@ -326,6 +327,13 @@ bool IsImmersiveArAllowedBySettings(LocalDOMWindow* window) {
 
   return window->GetFrame()->GetSettings()->GetWebXRImmersiveArAllowed();
 }
+
+// When enabled, accessing the navigator.xr attribute does not prevent the
+// frame from entering the back forward cache.
+// Kill switch for https://crbug.com/392087591
+BASE_FEATURE(kWebXrAttributeAllowsBackForwardCache,
+             "WebXrAttributeAllowsBackForwardCache",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace
 
@@ -793,13 +801,11 @@ XRSystem::XRSystem(Navigator& navigator)
                             ->Loader()
                             ->GetTiming()
                             .NavigationStart()),
-      feature_handle_for_scheduler_(
-          navigator.DomWindow()
-              ->GetFrame()
-              ->GetFrameScheduler()
-              ->RegisterFeature(SchedulingPolicy::Feature::kWebXR,
-                                {SchedulingPolicy::DisableBackForwardCache()})),
-      webxr_internals_renderer_listener_(GetExecutionContext()) {}
+      webxr_internals_renderer_listener_(GetExecutionContext()) {
+  if (!base::FeatureList::IsEnabled(kWebXrAttributeAllowsBackForwardCache)) {
+    DisableBackForwardCache();
+  }
+}
 
 void XRSystem::FocusedFrameChanged() {
   // Tell all sessions that focus changed.
@@ -853,31 +859,28 @@ void XRSystem::AddEnvironmentProviderErrorHandler(
 void XRSystem::ExitPresent(base::OnceClosure on_exited) {
   DVLOG(1) << __func__;
 
-  // If the document was potentially being shown in a DOM overlay via
-  // fullscreened elements, make sure to clear any fullscreen states on exiting
-  // the session. This avoids a race condition:
+  // Make sure to clear any fullscreen states on exiting the session. This is
+  // necessary not only in case the device side did not clean up the fullscreen
+  // state properly, but also avoids a race condition:
   // - browser side ends session and exits fullscreen (i.e. back button)
   // - renderer processes WebViewImpl::ExitFullscreen via ChromeClient
-  // - JS application sets a new element to fullscreen, this is allowed
+  // - JS application sets a new element to fullscreen, this may be allowed
   //   because doc->IsXrOverlay() is still true at this point
   // - renderer processes XR session shutdown (this method)
-  // - browser re-enters fullscreen unexpectedly
+  // - browser re-enters fullscreen unexpectedly.
   if (LocalDOMWindow* window = DomWindow()) {
     Document* doc = window->document();
-    DVLOG(3) << __func__ << ": doc->IsXrOverlay()=" << doc->IsXrOverlay();
-    if (doc->IsXrOverlay()) {
-      Element* fullscreen_element = Fullscreen::FullscreenElementFrom(*doc);
-      DVLOG(3) << __func__ << ": fullscreen_element=" << fullscreen_element;
-      if (fullscreen_element) {
-        fullscreen_exit_observer_ =
-            MakeGarbageCollected<XrExitFullscreenObserver>();
-        // Once we exit fullscreen, we'll need to come back here to finish
-        // shutting down the session.
-        fullscreen_exit_observer_->ExitFullscreen(
-            doc, WTF::BindOnce(&XRSystem::ExitPresent, WrapWeakPersistent(this),
-                               std::move(on_exited)));
-        return;
-      }
+    Element* fullscreen_element = Fullscreen::FullscreenElementFrom(*doc);
+    DVLOG(3) << __func__ << ": fullscreen_element=" << fullscreen_element;
+    if (fullscreen_element) {
+      fullscreen_exit_observer_ =
+          MakeGarbageCollected<XrExitFullscreenObserver>();
+      // Once we exit fullscreen, we'll need to come back here to finish
+      // shutting down the session.
+      fullscreen_exit_observer_->ExitFullscreen(
+          doc, WTF::BindOnce(&XRSystem::ExitPresent, WrapWeakPersistent(this),
+                             std::move(on_exited)));
+      return;
     }
   }
 
@@ -959,6 +962,8 @@ void XRSystem::InternalIsSessionSupported(ScriptPromiseResolverBase* resolver,
     return;  // Promise will be rejected by generated bindings
   }
 
+  DisableBackForwardCache();
+
   device::mojom::blink::XRSessionMode session_mode =
       V8EnumToSessionMode(mode.AsEnum());
   PendingSupportsSessionQuery* query =
@@ -981,7 +986,7 @@ void XRSystem::InternalIsSessionSupported(ScriptPromiseResolverBase* resolver,
   }
 
   if (!GetExecutionContext()->IsFeatureEnabled(
-          mojom::blink::PermissionsPolicyFeature::kWebXr,
+          network::mojom::PermissionsPolicyFeature::kWebXr,
           ReportOptions::kReportOnFailure)) {
     // Only allow the call to be made if the appropriate permissions policy is
     // in place.
@@ -1238,6 +1243,8 @@ ScriptPromise<XRSession> XRSystem::requestSession(
                             // bindings
   }
 
+  DisableBackForwardCache();
+
   device::mojom::blink::XRSessionMode session_mode =
       V8EnumToSessionMode(mode.AsEnum());
 
@@ -1384,7 +1391,7 @@ ScriptPromise<XRSession> XRSystem::requestSession(
 void XRSystem::MakeXrCompatibleAsync(
     device::mojom::blink::VRService::MakeXrCompatibleCallback callback) {
   if (!GetExecutionContext()->IsFeatureEnabled(
-          mojom::blink::PermissionsPolicyFeature::kWebXr)) {
+          network::mojom::PermissionsPolicyFeature::kWebXr)) {
     std::move(callback).Run(
         device::mojom::XrCompatibleResult::kWebXrFeaturePolicyBlocked);
     return;
@@ -1402,7 +1409,7 @@ void XRSystem::MakeXrCompatibleAsync(
 void XRSystem::MakeXrCompatibleSync(
     device::mojom::XrCompatibleResult* xr_compatible_result) {
   if (!GetExecutionContext()->IsFeatureEnabled(
-          mojom::blink::PermissionsPolicyFeature::kWebXr)) {
+          network::mojom::PermissionsPolicyFeature::kWebXr)) {
     *xr_compatible_result =
         device::mojom::XrCompatibleResult::kWebXrFeaturePolicyBlocked;
     return;
@@ -1426,7 +1433,7 @@ void XRSystem::OnSessionEnded(XRSession* session) {
 void XRSystem::OnDeviceChanged() {
   ExecutionContext* context = GetExecutionContext();
   if (context && context->IsFeatureEnabled(
-                     mojom::blink::PermissionsPolicyFeature::kWebXr)) {
+                     network::mojom::PermissionsPolicyFeature::kWebXr)) {
     DispatchEvent(*blink::Event::Create(event_type_names::kDevicechange));
   }
 }
@@ -1462,12 +1469,11 @@ void XRSystem::OnRequestSessionReturned(
   // null if the feature was not enabled).
   bool setup_for_dom_overlay = !!fullscreen_element;
 
-// On Android, due to the way the device renderer is configured, we always need
-// to enter fullscreen if we're starting an AR session, so if we aren't supposed
-// to enter DOMOverlay, we simply fullscreen the document body.
+// On Android, due to the way the device renderer is configured, we may need
+// to enter fullscreen, so if we aren't supposed to enter DOMOverlay, we simply
+// fullscreen the document body.
 #if BUILDFLAG(IS_ANDROID)
-  if (!fullscreen_element &&
-      query->mode() == device::mojom::blink::XRSessionMode::kImmersiveAr) {
+  if (!fullscreen_element && result->get_success()->session->wants_fullscreen) {
     fullscreen_element = DomWindow()->document()->body();
   }
 #endif
@@ -1754,6 +1760,16 @@ bool XRSystem::IsImmersiveArAllowed() {
   DVLOG(2) << __func__ << ": ar_allowed_in_settings=" << ar_allowed_in_settings;
 
   return ar_allowed_in_settings;
+}
+
+void XRSystem::DisableBackForwardCache() {
+  if (feature_handle_for_scheduler_) {
+    return;
+  }
+  feature_handle_for_scheduler_ =
+      DomWindow()->GetFrame()->GetFrameScheduler()->RegisterFeature(
+          SchedulingPolicy::Feature::kWebXR,
+          SchedulingPolicy{SchedulingPolicy::DisableBackForwardCache()});
 }
 
 void XRSystem::Trace(Visitor* visitor) const {

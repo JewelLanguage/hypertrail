@@ -5,7 +5,6 @@
 #include "chrome/browser/signin/signin_promo.h"
 
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/chrome_signin_client_test_util.h"
@@ -38,20 +37,19 @@
 
 namespace signin {
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 TEST(SigninPromoTest, TestPromoURL) {
   GURL::Replacements replace_query;
   replace_query.SetQueryStr("access_point=0&reason=0&auto_close=1");
   EXPECT_EQ(
       GURL(chrome::kChromeUIChromeSigninURL).ReplaceComponents(replace_query),
-      GetEmbeddedPromoURL(signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE,
+      GetEmbeddedPromoURL(signin_metrics::AccessPoint::kStartPage,
                           signin_metrics::Reason::kSigninPrimaryAccount, true));
   replace_query.SetQueryStr("access_point=15&reason=1");
   EXPECT_EQ(
       GURL(chrome::kChromeUIChromeSigninURL).ReplaceComponents(replace_query),
-      GetEmbeddedPromoURL(
-          signin_metrics::AccessPoint::ACCESS_POINT_SIGNIN_PROMO,
-          signin_metrics::Reason::kAddSecondaryAccount, false));
+      GetEmbeddedPromoURL(signin_metrics::AccessPoint::kSigninPromo,
+                          signin_metrics::Reason::kAddSecondaryAccount, false));
 }
 
 TEST(SigninPromoTest, TestReauthURL) {
@@ -62,11 +60,11 @@ TEST(SigninPromoTest, TestReauthURL) {
       "&readOnlyEmail=1");
   EXPECT_EQ(
       GURL(chrome::kChromeUIChromeSigninURL).ReplaceComponents(replace_query),
-      GetEmbeddedReauthURLWithEmail(
-          signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE,
-          signin_metrics::Reason::kFetchLstOnly, "example@domain.com"));
+      GetEmbeddedReauthURLWithEmail(signin_metrics::AccessPoint::kStartPage,
+                                    signin_metrics::Reason::kFetchLstOnly,
+                                    "example@domain.com"));
 }
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 TEST(SigninPromoTest, SigninURLForDice) {
   EXPECT_EQ(
@@ -125,22 +123,11 @@ class ShowPromoTest : public testing::Test {
       identity_test_env_adaptor_;
 };
 
-TEST_F(ShowPromoTest, DoNotShowSignInPromoWithoutExplicitBrowserSignin) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures(
-      /*enabled_features=*/{},
-      /*disabled_features=*/{switches::kExplicitBrowserSigninUIOnDesktop,
-                             switches::kImprovedSigninUIOnDesktop});
-
-  EXPECT_FALSE(ShouldShowPasswordSignInPromo(*profile()));
-  EXPECT_FALSE(ShouldShowAddressSignInPromo(*profile(),
-                                            autofill::test::StandardProfile()));
-}
 
 TEST_F(ShowPromoTest, DoNotShowAddressSignInPromoWithoutImprovedBrowserSignin) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
-      /*enabled_features=*/{switches::kExplicitBrowserSigninUIOnDesktop},
+      /*enabled_features=*/{},
       /*disabled_features=*/{switches::kImprovedSigninUIOnDesktop});
 
   EXPECT_FALSE(ShouldShowAddressSignInPromo(*profile(),
@@ -165,7 +152,7 @@ TEST_F(ShowSyncPromoTest, ShouldShowSyncPromoSyncDisabled) {
 // Verifies that ShouldShowSyncPromo returns true if all conditions to
 // show the promo are met.
 TEST_F(ShowSyncPromoTest, ShouldShowSyncPromoSyncEnabled) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // No sync promo on Ash.
   EXPECT_FALSE(ShouldShowSyncPromo(*profile()));
 #else
@@ -174,7 +161,7 @@ TEST_F(ShowSyncPromoTest, ShouldShowSyncPromoSyncEnabled) {
 }
 #endif  // !BUILDFLAG(IS_ANDROID)
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 TEST_F(ShowSyncPromoTest, ShowPromoWithSignedInAccount) {
   MakePrimaryAccountAvailable(identity_manager(), "test@email.com",
                               ConsentLevel::kSignin);
@@ -186,7 +173,7 @@ TEST_F(ShowSyncPromoTest, DoNotShowPromoWithSyncingAccount) {
                               ConsentLevel::kSync);
   EXPECT_FALSE(ShouldShowSyncPromo(*profile()));
 }
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
 class ShowSigninPromoTestExplicitBrowserSignin : public ShowPromoTest {
@@ -194,8 +181,7 @@ class ShowSigninPromoTestExplicitBrowserSignin : public ShowPromoTest {
   void SetUp() override {
     ShowPromoTest::SetUp();
     feature_list.InitWithFeatures(
-        /*enabled_features=*/{switches::kExplicitBrowserSigninUIOnDesktop,
-                              switches::kImprovedSigninUIOnDesktop},
+        /*enabled_features=*/{switches::kImprovedSigninUIOnDesktop},
         /*disabled_features=*/{});
     ON_CALL(*sync_service(), GetDataTypesForTransportOnlyMode())
         .WillByDefault(testing::Return(syncer::DataTypeSet::All()));
@@ -370,10 +356,10 @@ TEST_F(ShowSigninPromoTestExplicitBrowserSignin,
   AccountInfo account =
       MakeAccountAvailable(identity_manager(), "test@email.com");
 
-  RecordSignInPromoShown(
-      signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE, profile());
-  RecordSignInPromoShown(
-      signin_metrics::AccessPoint::ACCESS_POINT_ADDRESS_BUBBLE, profile());
+  RecordSignInPromoShown(signin_metrics::AccessPoint::kPasswordBubble,
+                         profile());
+  RecordSignInPromoShown(signin_metrics::AccessPoint::kAddressBubble,
+                         profile());
 
   EXPECT_EQ(1, profile()->GetPrefs()->GetInteger(
                    prefs::kPasswordSignInPromoShownCountPerProfile));
@@ -410,14 +396,14 @@ TEST_F(ShowSigninPromoTestExplicitBrowserSignin,
   // Add an account with cookies, which will record the per-account prefs.
   AccountInfo account = identity_test_env->MakeAccountAvailable(
       identity_test_env->CreateAccountAvailabilityOptionsBuilder()
-          .WithAccessPoint(signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN)
+          .WithAccessPoint(signin_metrics::AccessPoint::kUnknown)
           .WithCookie(true)
           .Build("test@email.com"));
 
-  RecordSignInPromoShown(
-      signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE, profile.get());
-  RecordSignInPromoShown(
-      signin_metrics::AccessPoint::ACCESS_POINT_ADDRESS_BUBBLE, profile.get());
+  RecordSignInPromoShown(signin_metrics::AccessPoint::kPasswordBubble,
+                         profile.get());
+  RecordSignInPromoShown(signin_metrics::AccessPoint::kAddressBubble,
+                         profile.get());
 
   EXPECT_EQ(0, profile.get()->GetPrefs()->GetInteger(
                    prefs::kPasswordSignInPromoShownCountPerProfile));

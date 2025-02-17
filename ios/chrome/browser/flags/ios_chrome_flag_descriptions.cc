@@ -11,6 +11,11 @@
 
 namespace flag_descriptions {
 
+const char kAddAddressManuallyName[] =
+    "Enable adding an address manually from Address Settings";
+const char kAddAddressManuallyDescription[] =
+    "When enabled, allows users to manually enter and save an address.";
+
 const char kAppBackgroundRefreshName[] = "Enable app background refresh";
 const char kAppBackgroundRefreshDescription[] =
     "Schedules app background refresh after some minimum period of time has "
@@ -40,6 +45,12 @@ const char kAutofillDisableSilentProfileUpdatesName[] =
 const char kAutofillDisableSilentProfileUpdatesDescription[] =
     "When enabled, Autofill will not apply silent updates to address profiles. "
     "For testing purposes.";
+
+const char kAutofillEnableAllowlistForBmoCardCategoryBenefitsName[] =
+    "Enable allowlist for showing category benefits for BMO cards";
+const char kAutofillEnableAllowlistForBmoCardCategoryBenefitsDescription[] =
+    "When enabled, card category benefits offered by BMO will be shown in "
+    "Autofill suggestions on the allowlisted merchant websites.";
 
 const char kAutofillEnableCardBenefitsForAmericanExpressName[] =
     "Enable showing American Express card benefits";
@@ -133,12 +144,6 @@ const char kAutofillIsolatedWorldForJavascriptIOSDescription[] =
     "Use the isolated content world instead of the page content world "
     "for the Autofill JS feature scripts.";
 
-const char kAutofillParseVcnCardOnFileStandaloneCvcFieldsName[] =
-    "Parse standalone CVC fields for VCN card on file in forms";
-const char kAutofillParseVcnCardOnFileStandaloneCvcFieldsDescription[] =
-    "When enabled, Autofill will attempt to find standalone CVC fields for VCN "
-    "card on file when parsing forms.";
-
 const char kAutofillPaymentsSheetV2Name[] =
     "Enable the payments suggestion bottom sheet V2";
 const char kAutofillPaymentsSheetV2Description[] =
@@ -205,6 +210,12 @@ const char kAutofillVcnEnrollRequestTimeoutDescription[] =
     "VCN enrollment request. Upon timeout, the client will terminate the VCN "
     "enrollment UI, but the request may still succeed server-side.";
 
+const char kBlueDotOnToolsMenuButtonName[] =
+    "Show blue dot promo on tools menu button";
+const char kBlueDotOnToolsMenuButtonDescription[] =
+    "When enabled, blue dot promo on tools menu button will be displayed to "
+    "user";
+
 const char kBottomOmniboxDefaultSettingName[] =
     "Bottom Omnibox Default Setting";
 const char kBottomOmniboxDefaultSettingDescription[] =
@@ -260,6 +271,11 @@ extern const char kContextualPanelForceShowEntrypointDescription[] =
 const char kContextualPanelName[] = "Contextual Panel";
 const char kContextualPanelDescription[] =
     "Enables the contextual panel feature.";
+
+const char kCredentialProviderAutomaticPasskeyUpgradeName[] =
+    "Credential Provider Automatic Passkey Upgrade";
+const char kCredentialProviderAutomaticPasskeyUpgradeDescription[] =
+    "Enables automatic passkey upgrade in the Credential Provider Extension.";
 
 const char kCredentialProviderPasskeyPRFName[] =
     "Credential Provider PRF support";
@@ -358,16 +374,22 @@ const char kDefaultBrowserTriggerCriteriaExperimentDescription[] =
     "When enabled, default browser promo will be displayed to user without "
     "matching all the trigger criteria.";
 
-const char kBlueDotOnToolsMenuButtonName[] =
-    "Show blue dot promo on tools menu button";
-const char kBlueDotOnToolsMenuButtonDescription[] =
-    "When enabled, blue dot promo on tools menu button will be displayed to "
-    "user";
+const char kDeprecateFeedHeaderExperimentName[] =
+    "Deprecate feed header toggle experiment";
+const char kDeprecateFeedHeaderExperimentDescription[] =
+    "When enabled, the feed header toggle would be removed, and users will use "
+    "other ways to access the following feed. New tab page elements will also "
+    "be repositioned according to the variation chosen.";
 
 const char kDetectMainThreadFreezeName[] = "Detect freeze in the main thread.";
 const char kDetectMainThreadFreezeDescription[] =
     "A crash report will be uploaded if the main thread is frozen more than "
     "the time specified by this flag.";
+
+extern const char kDownloadAutoDeletionName[] = "Enable Download Auto Deletion";
+extern const char kDownloadAutoDeletionDescription[] =
+    "When enabled, files downloaded on the device can be scheduled to be "
+    "deleted automatically after 30 days.";
 
 const char kDownloadedPDFOpeningName[] = "Enables downloaded PDF opening";
 const char kDownloadedPDFOpeningDescription[] =
@@ -479,6 +501,11 @@ const char kForceStartupSigninPromoDescription[] =
     "When enabled, the startup sign-in promo is always displayed when starting "
     "Chrome.";
 
+const char kAnimatedDefaultBrowserPromoInFREName[] =
+    "Enable the animated Default Browser Promo in the FRE";
+const char kAnimatedDefaultBrowserPromoInFREDescription[] =
+    "When enabled, the Default Browser Promo in the FRE will be animated.";
+
 const char kFullscreenImprovementName[] = "Improve fullscreen";
 const char kFullscreenImprovementDescription[] =
     "When enabled, fullscreen should have a better stability.";
@@ -488,6 +515,11 @@ const char kFullscreenPromosManagerSkipInternalLimitsName[] =
 const char kFullscreenPromosManagerSkipInternalLimitsDescription[] =
     "When enabled, the internal Impression Limits of the Promos Manager will "
     "be ignored; this is useful for local development.";
+
+const char kFullscreenTransitionName[] = "Fullscreen Transition Tweaks";
+const char kFullscreenTransitionDescription[] =
+    "When enabled, the transition of fullscreen is either delayed or the speed "
+    "of the transition is increased-decreased.";
 
 const char kFullscreenSmoothScrollingName[] = "Fullscreen Smooth Scrolling";
 const char kFullscreenSmoothScrollingDescription[] =
@@ -566,14 +598,6 @@ const char kIOSDockingPromoDescription[] =
     "When enabled, the user will be presented an animated, instructional "
     "promo showing how to move Chrome to their native iOS dock.";
 
-const char kIOSNewFollowingFeedEntryPointsName[] =
-    "New Following Feed Entry Points [iOS only]";
-const char kIOSNewFollowingFeedEntryPointsDescription[] =
-    "When enabled, users eligible for query follow enter the following feed "
-    "through Homestack/query picker/first following cluster, instead of the "
-    "existing toggle on the top of the feeds. No changes for users ineligible "
-    "for query follow.";
-
 extern const char kIOSEnableDeleteAllSavedCredentialsName[] =
     "Enable delete all saved credentials in PWM";
 extern const char kIOSEnableDeleteAllSavedCredentialsDescription[] =
@@ -583,6 +607,12 @@ const char kIOSKeyboardAccessoryUpgradeName[] =
     "Enable the keyboard accessory upgrade on iOS";
 const char kIOSKeyboardAccessoryUpgradeDescription[] =
     "When enabled, the upgraded keyboard accessory UI will be presented.";
+
+const char kIOSKeyboardAccessoryUpgradeForIPadName[] =
+    "Enable the keyboard accessory upgrade on iOS for iPads";
+const char kIOSKeyboardAccessoryUpgradeForIPadDescription[] =
+    "When enabled, the upgraded keyboard accessory UI will be presented on "
+    "iPads.";
 
 const char kIOSKeyboardAccessoryUpgradeShortManualFillMenuName[] =
     "Enable the keyboard accessory upgrade on iOS with a shorter manual fill "
@@ -624,6 +654,10 @@ const char kNewFeedPositioningExperimentName[] =
     "New Personalized Feed Positioning for iOS";
 const char kNewFeedPositioningExperimentDescription[] =
     "Positions the most visited tiles based on user frequency.";
+
+const char kNewShareExtensionName[] = "New Share Extension for iOS";
+const char kNewShareExtensionDescription[] =
+    "Update the share extension UI and add new share entries";
 
 const char kNewTabPageFieldTrialName[] =
     "New tab page features that target new users";
@@ -686,6 +720,16 @@ const char kLensFiltersAblationModeEnabledName[] =
 const char kLensFiltersAblationModeEnabledDescription[] =
     "Enables the filters ablation mode.";
 
+const char kLensGestureTextSelectionDisabledName[] =
+    "Disable Lens gesture text selection";
+const char kLensGestureTextSelectionDisabledDescription[] =
+    "When disabled, turns off gesture text selection.";
+
+const char kLensInkMultiSampleModeDisabledName[] =
+    "Disable Lens Ink multi-sample mode";
+const char kLensInkMultiSampleModeDisabledDescription[] =
+    "When disabled, turns off multi-sample mode and uses less memory.";
+
 extern const char kLensOverlayAlternativeOnboardingName[] =
     "Lens Overlay Onboarding";
 extern const char kLensOverlayAlternativeOnboardingDescription[] =
@@ -709,6 +753,16 @@ extern const char kLensOverlayEnableIPadCompatibilityName[] =
     "Allow Lens overlay to also run on iPad devices if the feature is enabled";
 extern const char kLensOverlayEnableIPadCompatibilityDescription[] =
     "When enabled, it allows Lens Overlay to run on iPad devices";
+
+extern const char kLensOverlayEnableLandscapeCompatibilityName[] =
+    "Allow Lens overlay to also run in landscape if the feature is enabled";
+extern const char kLensOverlayEnableLandscapeCompatibilityDescription[] =
+    "When enabled, it allows Lens Overlay to run in landscape orientation";
+
+extern const char kLensOverlayEnableLVFEscapeHatchName[] =
+    "Escape hatch to LVF in the overflow menu in Lens Overlay";
+extern const char kLensOverlayEnableLVFEscapeHatchDescription[] =
+    "When enabled, the escape hatch to LVF is presented in the overflow menu";
 
 extern const char kLensOverlayEnableLocationBarEntrypointName[] =
     "Enable Lens overlay location bar entrypoint.";
@@ -750,10 +804,19 @@ const char kLensUnaryApisWithHttpTransportEnabledName[] =
 const char kLensUnaryApisWithHttpTransportEnabledDescription[] =
     "Enables the unary APIs with HTTP transport.";
 
+const char kLensUnaryClientDataHeaderEnabledName[] =
+    "Lens unary client data header enabled";
+const char kLensUnaryClientDataHeaderEnabledDescription[] =
+    "Enables the client data header for unary request.";
+
 const char kLensUnaryHttpTransportEnabledName[] =
     "Lens unary HTTP transport enabled";
 const char kLensUnaryHttpTransportEnabledDescription[] =
     "Enables the HTTP transport for unary requests.";
+
+const char kLensVsintParamEnabledName[] = "Lens vsint param enabled";
+const char kLensVsintParamEnabledDescription[] =
+    "Enables the vsint param for requests.";
 
 const char kLensWebPageLoadOptimizationEnabledName[] =
     "Lens web page load optimization";
@@ -788,10 +851,6 @@ const char kNativeFindInPageDescription[] =
     "When enabled, the JavaScript implementation of the Find in Page feature "
     "is replaced with a native implementation which also enables searching "
     "text in PDF files. Available for iOS 16 or later.";
-
-const char kNewSyncOptInIllustrationName[] = "New sync opt-in illustration";
-const char kNewSyncOptInIllustrationDescription[] =
-    "Uses the new illustration in the sync opt-in promotion view.";
 
 const char kNTPViewHierarchyRepairName[] = "NTP View Hierarchy Repair";
 const char kNTPViewHierarchyRepairDescription[] =
@@ -969,6 +1028,11 @@ const char kPageVisibilityPageContentAnnotationsDescription[] =
     "Enables annotating the page visibility model for each page load "
     "on-device.";
 
+const char kPasswordFormClientsideClassifierName[] =
+    "Clientside password form classifier.";
+const char kPasswordFormClientsideClassifierDescription[] =
+    "Enable usage of new password form classifier on the client.";
+
 const char kPasswordReuseDetectionName[] =
     "PhishGuard password reuse detection";
 const char kPasswordReuseDetectionDescription[] =
@@ -1012,15 +1076,14 @@ const char kNotificationSettingsMenuItemDescription[] =
     "Displays the menu item for the notification controls inside the chrome "
     "settings UI.";
 
+const char kRefactorToolbarUIName[] = "Refactor toolbar UI";
+const char kRefactorToolbarUIDescription[] =
+    "When enabled, the toolbar ui does not use broadcaster but observers.";
+
 const char kRemoveExcessNTPsExperimentName[] = "Remove extra New Tab Pages";
 const char kRemoveExcessNTPsExperimentDescription[] =
     "When enabled, extra tabs with the New Tab Page open and no navigation "
     "history will be removed.";
-
-const char kRichBubbleWithoutImageName[] = "Remove image from rich IPH bubble";
-const char kRichBubbleWithoutImageDescription[] =
-    "When enabled, the rich bubble IPH type will not feature an image, instead "
-    "will only have a title and body text.";
 
 const char kSafeBrowsingAsyncRealTimeCheckName[] =
     "Safe Browsing Async Real Time Check";
@@ -1107,7 +1170,7 @@ const char kSeparateProfilesForManagedAccountsName[] =
     "Put each managed account into its own profile";
 const char kSeparateProfilesForManagedAccountsDescription[] =
     "If enabled, each managed account will be assigned to its own separate "
-    "profile.";
+    "profile. Requires #use-account-list-from-identity-manager";
 
 const char kSharedHighlightingIOSName[] = "Enable Shared Highlighting features";
 const char kSharedHighlightingIOSDescription[] =
@@ -1130,6 +1193,10 @@ const char kSetUpListWithoutSignInItemDescription[] =
 const char kShareInWebContextMenuIOSName[] = "Share in web context menu";
 const char kShareInWebContextMenuIOSDescription[] =
     "Enables the Share button in the web context menu in iOS 16.0 and above.";
+
+const char kShopCardName[] = "Enables ShopCard";
+const char kShopCardDescription[] =
+    "Enables being able to show ShopCard in the Magic Stack";
 
 const char kShowAutofillTypePredictionsName[] = "Show Autofill predictions";
 const char kShowAutofillTypePredictionsDescription[] =
@@ -1156,8 +1223,8 @@ const char kTabGroupIndicatorDescription[] =
 
 const char kTabGroupSyncName[] = "Enable Tab Group Sync";
 const char kTabGroupSyncDescription[] =
-    "When enabled, if tab-groups-in-grid is enabled, tab groups are synced "
-    "between syncing devices.";
+    "When enabled, tab groups are synced between syncing devices. Requires "
+    "#tab-groups-on-ipad and #modern-tab-strip to also be enabled on iPad.";
 
 const char kStartSurfaceName[] = "Start Surface";
 const char kStartSurfaceDescription[] =
@@ -1205,8 +1272,8 @@ const char kTabGridNewTransitionsDescription[] =
 
 const char kTabGroupsIPadName[] = "Enable Tab Groups on iPad";
 const char kTabGroupsIPadDescription[] =
-    "When enabled, if tab-groups-in-grid is enabled, tab group can be created "
-    "on iPad.";
+    "When enabled, tab groups can be created and edited on iPad. Requires "
+    "#modern-tab-strip to also be enabled on iPad.";
 
 const char kInactiveTabsIPadName[] = "Enable inactive tabs";
 const char kInactiveTabsIPadDescription[] =
@@ -1241,6 +1308,12 @@ const char kUpdatedFRESequenceName[] =
 const char kUpdatedFRESequenceDescription[] =
     "Updates the sequence of the FRE screens to show the DB promo first, "
     "remove the Sin-In & Sync screens, or both.";
+
+const char kUseAccountListFromIdentityManagerName[] =
+    "Get the list of accounts from IdentityManager";
+const char kUseAccountListFromIdentityManagerDescription[] =
+    "If enabled, UIs query the list of accounts from IdentityManager instead "
+    "of from ChromeAccountManagerService.";
 
 const char kWaitThresholdMillisecondsForCapabilitiesApiName[] =
     "Maximum wait time (in seconds) for a response from the Account "

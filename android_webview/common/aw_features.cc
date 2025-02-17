@@ -30,6 +30,12 @@ BASE_FEATURE(kWebViewDigitalAssetLinksLoadIncludes,
              "WebViewDigitalAssetLinksLoadIncludes",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Disables partitioned cookies by default on WebView. This can still be
+// overridden by our `setPartitionedCookiesEnabled` Android X API.
+BASE_FEATURE(kWebViewDisableCHIPS,
+             "WebViewDisableCHIPS",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Disables MSAA and default sharpening when rendering scaled elements. This is
 // often preferable when rendering images/video but can have adverse effects for
 // text on some displays.
@@ -60,7 +66,7 @@ const base::FeatureParam<int> kWebViewIpProtectionExclusionCriteria{
 // Fetch Hand Writing icon lazily.
 BASE_FEATURE(kWebViewLazyFetchHandWritingIcon,
              "WebViewLazyFetchHandWritingIcon",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enable the WebView Media Integrity API as a Blink extension.
 // This feature requires `kWebViewMediaIntegrityApi` to be disabled.
@@ -83,6 +89,13 @@ BASE_FEATURE(kWebViewMuteAudio,
              "WebViewMuteAudio",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// When enabled, WebView records if a site with partitioned cookies has any
+// cookies excluded due to a different cookie partition key than the current
+// site's.
+BASE_FEATURE(kWebViewPartitionedCookiesExcluded,
+             "WebViewPartitionedCookiesExcluded",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Only allow extra headers added via loadUrl() to be sent to the original
 // origin; strip them from the request if a cross-origin redirect occurs.
 BASE_FEATURE(kWebViewExtraHeadersSameOriginOnly,
@@ -99,12 +112,6 @@ BASE_FEATURE(kWebViewRecordAppDataDirectorySize,
 // happens via Digital Asset Links.
 BASE_FEATURE(kWebViewRestrictSensitiveContent,
              "WebViewRestrictSensitiveContent",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Enable detection of loading mature sites (according to Google SafeSearch)
-// on WebViews running on supervised user accounts.
-BASE_FEATURE(kWebViewSupervisedUserSiteDetection,
-             "WebViewSupervisedUserSiteDetection",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enable blocking the loading of mature sites (according to Google SafeSearch)
@@ -172,7 +179,7 @@ BASE_FEATURE(kWebViewInvokeZoomPickerOnGSU,
 // Whether to use WebView's own Context for resource related lookups.
 BASE_FEATURE(kWebViewSeparateResourceContext,
              "WebViewSeparateResourceContext",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Whether to use initial network state during initialization to speed up
 // startup.
@@ -194,6 +201,11 @@ BASE_FEATURE(kWebViewEnableCrash,
 BASE_FEATURE(kWebViewPreloadClasses,
              "WebViewPreloadClasses",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Prefetches the native WebView code to memory during startup.
+BASE_FEATURE(kWebViewPrefetchNativeLibrary,
+             "WebViewPrefetchNativeLibrary",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // If enabled TYPE_SCROLLED accessibility events are sent every 100ms when user
 // is scrolling irrespective of GestureScrollUpdate being consumed or not.

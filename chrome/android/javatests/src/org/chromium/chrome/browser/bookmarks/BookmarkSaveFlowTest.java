@@ -35,6 +35,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
@@ -225,7 +226,7 @@ public class BookmarkSaveFlowTest {
                     mBookmarkModel.setPowerBookmarkMeta(id, meta.build());
                     mBookmarkSaveFlowCoordinator.show(
                             id,
-                            /* fromHeuristicEntryPoint= */ false,
+                            /* fromExplicitTrackUi= */ false,
                             /* wasBookmarkMoved= */ false,
                             /* isNewBookmark= */ true,
                             meta.build());
@@ -262,7 +263,7 @@ public class BookmarkSaveFlowTest {
 
                     mBookmarkSaveFlowCoordinator.show(
                             id,
-                            /* fromHeuristicEntryPoint= */ true,
+                            /* fromExplicitTrackUi= */ true,
                             /* wasBookmarkMoved= */ false,
                             /* isNewBookmark= */ false,
                             meta.build());
@@ -286,6 +287,7 @@ public class BookmarkSaveFlowTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
+    @DisabledTest(message = "crbug.com/393436289")
     public void testBookmarkSaveFlow_WithShoppingListItem_fromHeuristicEntryPoint_saveFailed()
             throws IOException {
         ThreadUtils.runOnUiThreadBlocking(
@@ -308,7 +310,7 @@ public class BookmarkSaveFlowTest {
 
                     mBookmarkSaveFlowCoordinator.show(
                             id,
-                            /* fromHeuristicEntryPoint= */ false,
+                            /* fromExplicitTrackUi= */ false,
                             /* wasBookmarkMoved= */ false,
                             /* isNewBookmark= */ false,
                             meta.build());
@@ -354,7 +356,7 @@ public class BookmarkSaveFlowTest {
                     BookmarkId id = addBookmark("Test bookmark", new GURL("http://a.com"));
                     mBookmarkSaveFlowCoordinator.show(
                             id,
-                            /* fromHeuristicEntryPoint= */ false,
+                            /* fromExplicitTrackUi= */ false,
                             /* wasBookmarkMoved= */ false,
                             /* isNewBookmark= */ true);
                     return null;

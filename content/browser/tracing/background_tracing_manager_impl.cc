@@ -111,8 +111,8 @@ void AddTraceOnDatabaseTaskRunner(
     return;
   }
   base::Time since = base::Time::Now() - kMinTimeUntilNextUpload;
-  auto upload_count =
-      database->UploadCountSince(base_report.scenario_name, since);
+  auto upload_count = database->UploadCountSince(
+      base_report.scenario_name, base_report.upload_rule_name, since);
   if (base_report.skip_reason == SkipUploadReason::kNoSkip && !force_upload &&
       upload_count && *upload_count > 0) {
     base_report.skip_reason = SkipUploadReason::kScenarioQuotaExceeded;
@@ -124,9 +124,6 @@ void AddTraceOnDatabaseTaskRunner(
   std::string compressed_trace;
   bool success = compression::GzipCompress(serialized_trace, &compressed_trace);
   if (success) {
-    UMA_HISTOGRAM_COUNTS_100000("Tracing.Background.CompressedTraceSizeInKB",
-                                compressed_trace.size() / 1024);
-
     NewTraceReport trace_report = base_report;
     trace_report.trace_content = std::move(compressed_trace);
     trace_report.system_profile = std::move(serialized_system_profile);
@@ -192,7 +189,7 @@ class BackgroundMetadataDataSource
   static void Register() {
     perfetto::DataSourceDescriptor desc;
     desc.set_name("org.chromium.background_scenario_metadata");
-    perfetto::DataSource<BackgroundMetadataDataSource>::Register(desc);
+    CHECK(perfetto::DataSource<BackgroundMetadataDataSource>::Register(desc));
   }
 
   static void EmitMetadata(TracingScenario* scenario) {
@@ -267,6 +264,9 @@ BackgroundTracingManagerImpl::BackgroundTracingManagerImpl()
   NamedTriggerManager::SetInstance(this);
   g_background_tracing_manager_impl = this;
   preferences_ = std::make_unique<PreferenceManagerImpl>();
+  if (perfetto::Tracing::IsInitialized()) {
+    AddMetadataGeneratorFunction();
+  }
 }
 
 BackgroundTracingManagerImpl::~BackgroundTracingManagerImpl() {
@@ -564,8 +564,8 @@ std::vector<std::string> BackgroundTracingManagerImpl::AddPresetScenarios(
     if (!scenario) {
       continue;
     }
-    added_scenarios.push_back(scenario->config_hash());
-    preset_scenarios_.emplace(scenario->config_hash(), std::move(scenario));
+    added_scenarios.push_back(scenario->scenario_name());
+    preset_scenarios_.emplace(scenario->scenario_name(), std::move(scenario));
   }
   return added_scenarios;
 }
@@ -575,7 +575,6 @@ BackgroundTracingManagerImpl::GetAllFieldScenarios() const {
   std::vector<trace_report::mojom::ScenarioPtr> result;
   for (const auto& scenario : field_scenarios_) {
     auto new_scenario = trace_report::mojom::Scenario::New();
-    new_scenario->hash = scenario->config_hash();
     new_scenario->scenario_name = scenario->scenario_name();
     result.push_back(std::move(new_scenario));
   }
@@ -587,7 +586,6 @@ BackgroundTracingManagerImpl::GetAllPresetScenarios() const {
   std::vector<trace_report::mojom::ScenarioPtr> result;
   for (const auto& scenario : preset_scenarios_) {
     auto new_scenario = trace_report::mojom::Scenario::New();
-    new_scenario->hash = scenario.first;
     new_scenario->scenario_name = scenario.second->scenario_name();
     result.push_back(std::move(new_scenario));
   }
@@ -628,7 +626,7 @@ std::vector<std::string> BackgroundTracingManagerImpl::GetEnabledScenarios()
     const {
   std::vector<std::string> scenario_hashes;
   for (auto scenario : enabled_scenarios_) {
-    scenario_hashes.push_back(scenario->config_hash());
+    scenario_hashes.push_back(scenario->scenario_name());
   }
   return scenario_hashes;
 }
@@ -700,6 +698,14 @@ bool BackgroundTracingManagerImpl::OnScenarioIdle(
          delegate_->IsRecordingAllowed(idle_scenario->privacy_filter_enabled());
 }
 
+void BackgroundTracingManagerImpl::OnScenarioError(
+    TracingScenario* scenario,
+    perfetto::TracingError error) {
+  base::UmaHistogramSparse("Tracing.Background.Scenario.Error",
+                           variations::HashName(scenario->scenario_name()));
+  DLOG(ERROR) << "Background tracing error: " << error.message;
+}
+
 bool BackgroundTracingManagerImpl::OnScenarioCloned(
     TracingScenario* cloned_scenario) {
   DCHECK_EQ(active_scenario_, cloned_scenario);
@@ -724,15 +730,11 @@ void BackgroundTracingManagerImpl::SaveTrace(
     base::Token trace_uuid,
     const BackgroundTracingRule* triggered_rule,
     std::string&& trace_data) {
-  std::string rule_name = triggered_rule->rule_name();
-  if (triggered_rule->triggered_value()) {
-    rule_name.append(
-        base::StringPrintf(" value: %d", *triggered_rule->triggered_value()));
-  }
-  OnProtoDataComplete(std::move(trace_data), scenario->scenario_name(),
-                      rule_name, scenario->privacy_filter_enabled(),
-                      scenario->is_local_scenario(),
-                      /*force_upload=*/force_uploads_, trace_uuid);
+  OnProtoDataComplete(
+      std::move(trace_data), scenario->scenario_name(),
+      triggered_rule->rule_name(), triggered_rule->triggered_value(),
+      scenario->privacy_filter_enabled(), scenario->is_local_scenario(),
+      /*force_upload=*/force_uploads_, trace_uuid);
 }
 
 bool BackgroundTracingManagerImpl::HasActiveScenario() {
@@ -865,6 +867,7 @@ void BackgroundTracingManagerImpl::SaveTraceForTesting(
     const base::Token& uuid) {
   InitializeTraceReportDatabase(true);
   OnProtoDataComplete(std::move(serialized_trace), scenario_name, rule_name,
+                      /*rule_value=*/std::nullopt,
                       /*privacy_filter_enabled*/ true,
                       /*is_local_scenario=*/false,
                       /*force_upload=*/force_uploads_, uuid);
@@ -895,6 +898,7 @@ void BackgroundTracingManagerImpl::OnProtoDataComplete(
     std::string&& serialized_trace,
     const std::string& scenario_name,
     const std::string& rule_name,
+    std::optional<int32_t> rule_value,
     bool privacy_filter_enabled,
     bool is_local_scenario,
     bool force_upload,
@@ -930,6 +934,7 @@ void BackgroundTracingManagerImpl::OnProtoDataComplete(
     base_report.creation_time = base::Time::Now();
     base_report.scenario_name = scenario_name;
     base_report.upload_rule_name = rule_name;
+    base_report.upload_rule_value = rule_value;
     base_report.total_size = serialized_trace.size();
     base_report.skip_reason = skip_reason;
 
@@ -976,7 +981,8 @@ void BackgroundTracingManagerImpl::RemoveNamedTriggerObserver(
 
 bool BackgroundTracingManagerImpl::DoEmitNamedTrigger(
     const std::string& trigger_name,
-    std::optional<int32_t> value) {
+    std::optional<int32_t> value,
+    uint64_t flow_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   auto it = named_trigger_observers_.find(trigger_name);
@@ -984,9 +990,9 @@ bool BackgroundTracingManagerImpl::DoEmitNamedTrigger(
     return false;
   }
   for (BackgroundTracingRule& obs : it->second) {
-    if (obs.OnRuleTriggered(value)) {
-      TRACE_EVENT_INSTANT("toplevel", "NamedTrigger",
-                          base::trace_event::TriggerFlow(trigger_name, value));
+    if (obs.OnRuleTriggered(value, flow_id)) {
+      TRACE_EVENT_INSTANT("toplevel,latency", "NamedTrigger",
+                          perfetto::Flow::Global(flow_id));
       return true;
     }
   }

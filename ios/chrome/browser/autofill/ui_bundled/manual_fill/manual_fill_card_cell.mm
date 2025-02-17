@@ -320,7 +320,7 @@ CGFloat GPayIconTopAnchorOffset() {
   // Create the UIViews, add them to the contentView.
   self.cardLabel = CreateLabel();
   self.cardIcon = [self createCardIcon];
-  self.overflowMenuButton = CreateOverflowMenuButton();
+  self.overflowMenuButton = CreateOverflowMenuButton(_cellIndex);
   self.headerView =
       CreateHeaderView(self.cardIcon, self.cardLabel, self.overflowMenuButton);
   [self.contentView addSubview:self.headerView];
@@ -659,7 +659,7 @@ CGFloat GPayIconTopAnchorOffset() {
       base::UserMetricsAction("ManualFallback_CreditCard_SuggestionAccepted"));
 
   autofill::SuggestionType type =
-              [self.card recordType] == kVirtualCard
+      [self.card recordType] == kVirtualCard
           ? autofill::SuggestionType::kVirtualCreditCardEntry
           : autofill::SuggestionType::kCreditCardEntry;
   FormSuggestion* suggestion = [FormSuggestion

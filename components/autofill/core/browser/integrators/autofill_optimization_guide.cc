@@ -4,8 +4,10 @@
 
 #include "components/autofill/core/browser/integrators/autofill_optimization_guide.h"
 
+#include <algorithm>
+
+#include "base/containers/contains.h"
 #include "base/containers/flat_set.h"
-#include "base/ranges/algorithm.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
@@ -62,6 +64,32 @@ GetCardBenefitsOptimizationTypesForCard(const CreditCard& card) {
     optimization_types.push_back(
         optimization_guide::proto::
             AMERICAN_EXPRESS_CREDIT_CARD_SUBSCRIPTION_BENEFITS);
+  } else if (card.issuer_id() == kBmoCardIssuerId &&
+             base::FeatureList::IsEnabled(
+                 features::
+                     kAutofillEnableAllowlistForBmoCardCategoryBenefits)) {
+    optimization_types.push_back(
+        optimization_guide::proto::BMO_CREDIT_CARD_AIR_MILES_PARTNER_BENEFITS);
+    optimization_types.push_back(
+        optimization_guide::proto::BMO_CREDIT_CARD_ALCOHOL_STORE_BENEFITS);
+    optimization_types.push_back(
+        optimization_guide::proto::BMO_CREDIT_CARD_DINING_BENEFITS);
+    optimization_types.push_back(
+        optimization_guide::proto::BMO_CREDIT_CARD_DRUGSTORE_BENEFITS);
+    optimization_types.push_back(
+        optimization_guide::proto::BMO_CREDIT_CARD_ENTERTAINMENT_BENEFITS);
+    optimization_types.push_back(
+        optimization_guide::proto::BMO_CREDIT_CARD_GROCERY_BENEFITS);
+    optimization_types.push_back(
+        optimization_guide::proto::BMO_CREDIT_CARD_OFFICE_SUPPLY_BENEFITS);
+    optimization_types.push_back(
+        optimization_guide::proto::BMO_CREDIT_CARD_RECURRING_BILL_BENEFITS);
+    optimization_types.push_back(
+        optimization_guide::proto::BMO_CREDIT_CARD_TRANSIT_BENEFITS);
+    optimization_types.push_back(
+        optimization_guide::proto::BMO_CREDIT_CARD_TRAVEL_BENEFITS);
+    optimization_types.push_back(
+        optimization_guide::proto::BMO_CREDIT_CARD_WHOLESALE_CLUB_BENEFITS);
   } else if (card.issuer_id() == kCapitalOneCardIssuerId) {
     optimization_types.push_back(
         optimization_guide::proto::CAPITAL_ONE_CREDIT_CARD_DINING_BENEFITS);
@@ -185,11 +213,20 @@ void AutofillOptimizationGuide::OnDidParseForm(
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS)
-  if (!server_cards.empty() &&
-      base::FeatureList::IsEnabled(
-          features::kAutofillEnableAmountExtractionDesktop)) {
+  auto bnpl_issuer_allowlist_can_be_loaded =
+      [&payments_data_manager](std::string_view issuer_id) {
+        return base::Contains(payments_data_manager.GetBnplIssuers(), issuer_id,
+                              &BnplIssuer::issuer_id) &&
+               base::FeatureList::IsEnabled(
+                   features::kAutofillEnableAmountExtractionAllowlistDesktop);
+      };
+
+  if (bnpl_issuer_allowlist_can_be_loaded(kBnplAffirmIssuerId)) {
     optimization_types.insert(
         optimization_guide::proto::BUY_NOW_PAY_LATER_ALLOWLIST_AFFIRM);
+  }
+
+  if (bnpl_issuer_allowlist_can_be_loaded(kBnplZipIssuerId)) {
     optimization_types.insert(
         optimization_guide::proto::BUY_NOW_PAY_LATER_ALLOWLIST_ZIP);
   }
@@ -338,17 +375,20 @@ bool AutofillOptimizationGuide::ShouldBlockBenefitSuggestionLabelsForCardAndUrl(
   return false;
 }
 
-bool AutofillOptimizationGuide::IsEligibleForBuyNowPayLater(
+bool AutofillOptimizationGuide::IsUrlEligibleForCheckoutAmountSearchForIssuerId(
     std::string_view issuer_id,
     const GURL& url) const {
-  // TODO(b/367815526): For the BNPL project, create issuer id constants.
-  if (issuer_id == "affirm") {
+  if (issuer_id == kBnplAffirmIssuerId &&
+      base::FeatureList::IsEnabled(
+          features::kAutofillEnableAmountExtractionAllowlistDesktop)) {
     return decider_->CanApplyOptimization(
                url,
                optimization_guide::proto::BUY_NOW_PAY_LATER_ALLOWLIST_AFFIRM,
                /*optimization_metadata=*/nullptr) ==
            optimization_guide::OptimizationGuideDecision::kTrue;
-  } else if (issuer_id == "zip") {
+  } else if (issuer_id == kBnplZipIssuerId &&
+             base::FeatureList::IsEnabled(
+                 features::kAutofillEnableAmountExtractionAllowlistDesktop)) {
     return decider_->CanApplyOptimization(
                url, optimization_guide::proto::BUY_NOW_PAY_LATER_ALLOWLIST_ZIP,
                /*optimization_metadata=*/nullptr) ==

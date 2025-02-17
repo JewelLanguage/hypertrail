@@ -8,9 +8,9 @@
 #include <string>
 #include <vector>
 
-#include "ash/components/arc/mojom/intent_helper.mojom-shared.h"
 #include "base/containers/span.h"
 #include "chromeos/ash/experiences/arc/intent_helper/intent_filter.h"
+#include "chromeos/ash/experiences/arc/mojom/intent_helper.mojom-shared.h"
 
 namespace mojo {
 
@@ -77,6 +77,13 @@ struct StructTraits<arc::mojom::AuthorityEntryDataView,
 };
 
 template <>
+struct EnumTraits<arc::mojom::PatternType, arc::PatternType> {
+  static arc::mojom::PatternType ToMojom(arc::PatternType input);
+  static bool FromMojom(arc::mojom::PatternType input,
+                        arc::PatternType* output);
+};
+
+template <>
 struct StructTraits<arc::mojom::PatternMatcherDataView,
                     arc::IntentFilter::PatternMatcher> {
   static const std::string& pattern(
@@ -85,7 +92,8 @@ struct StructTraits<arc::mojom::PatternMatcherDataView,
   }
   static arc::mojom::PatternType type(
       const arc::IntentFilter::PatternMatcher& r) {
-    return r.match_type();
+    return EnumTraits<arc::mojom::PatternType, arc::PatternType>::ToMojom(
+        r.match_type());
   }
 
   static bool Read(arc::mojom::PatternMatcherDataView data,

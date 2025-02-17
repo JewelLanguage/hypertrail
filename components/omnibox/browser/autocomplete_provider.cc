@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "components/omnibox/browser/autocomplete_provider.h"
 
 #include <algorithm>
@@ -316,9 +321,9 @@ void AutocompleteProvider::ResizeMatches(size_t max_matches,
   // The provider should pass all match candidates to the controller if ML
   // scoring is enabled. Mark any matches over `max_matches` with zero relevance
   // and `culled_by_provider` set to true to simulate the resizing.
-  base::ranges::for_each(std::next(matches_.begin(), max_matches),
-                         matches_.end(), [&](auto& match) {
-                           match.relevance = 0;
-                           match.culled_by_provider = true;
-                         });
+  std::ranges::for_each(std::next(matches_.begin(), max_matches),
+                        matches_.end(), [&](auto& match) {
+                          match.relevance = 0;
+                          match.culled_by_provider = true;
+                        });
 }

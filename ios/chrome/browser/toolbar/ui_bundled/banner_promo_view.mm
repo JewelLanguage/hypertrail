@@ -41,8 +41,8 @@ NSString* const kCloseButtonAccessibilityIdentifier = @"PromoCloseButtonAXID";
 // Creates the image to go in the close button.
 UIImage* CloseButtonImage(BOOL highlighted) {
   NSArray<UIColor*>* palette = @[
-    [UIColor colorNamed:kBlueColor],
-    [UIColor colorNamed:kBlue100Color],
+    [UIColor colorNamed:@"banner_promo_close_button_x_color"],
+    [UIColor colorNamed:@"banner_promo_close_button_background_color"],
   ];
 
   if (highlighted) {
@@ -117,7 +117,7 @@ UIButton* CloseButton(void (^handler)(UIAction*)) {
     // The promo's height is fixed, so cap the number of lines of text at 2.
     _text.numberOfLines = 2;
     _text.font = [self textFont];
-    _text.textColor = [UIColor colorNamed:kBlueColor];
+    _text.textColor = [UIColor colorNamed:@"banner_promo_text_color"];
     [_text
         setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
                                         forAxis:
@@ -150,8 +150,9 @@ UIButton* CloseButton(void (^handler)(UIAction*)) {
           constraintEqualToAnchor:_logoView.centerYAnchor],
     ]];
 
-    _closeButton = CloseButton(^(UIAction*){
-        // Empty for now.
+    __weak __typeof(self) weakSelf = self;
+    _closeButton = CloseButton(^(UIAction*) {
+      [weakSelf.delegate bannerPromoCloseButtonWasTapped:weakSelf];
     });
 
     _contentsStackView = [[UIStackView alloc]
@@ -177,7 +178,6 @@ UIButton* CloseButton(void (^handler)(UIAction*)) {
     ]];
 
     if (@available(iOS 17, *)) {
-      __weak __typeof(self) weakSelf = self;
       UITraitChangeHandler traitChangeHandler =
           ^(id<UITraitEnvironment> traitEnvironment,
             UITraitCollection* previousCollection) {
@@ -187,6 +187,11 @@ UIButton* CloseButton(void (^handler)(UIAction*)) {
           registerForTraitChanges:@[ UITraitPreferredContentSizeCategory.class ]
                       withHandler:traitChangeHandler];
     }
+
+    UITapGestureRecognizer* tap = [[UITapGestureRecognizer alloc]
+        initWithTarget:self
+                action:@selector(handleViewTap:)];
+    [self addGestureRecognizer:tap];
   }
   return self;
 }
@@ -235,6 +240,10 @@ UIButton* CloseButton(void (^handler)(UIAction*)) {
              compatibleWithTraitCollection:traitCollection]
       fontDescriptorWithSymbolicTraits:UIFontDescriptorTraitBold];
   return [UIFont fontWithDescriptor:boldDescriptor size:0.0];
+}
+
+- (void)handleViewTap:(UITapGestureRecognizer*)recognizer {
+  [self.delegate bannerPromoWasTapped:self];
 }
 
 @end

@@ -100,7 +100,7 @@ export class TabSearchAppElement extends CrLitElement {
       // in some cases on ChromeOS and Linux.
       const activeWindow = profileData.windows.find((t) => t.active);
       this.availableHeight_ =
-          activeWindow ? activeWindow!.height : profileData.windows[0]!.height;
+          activeWindow ? activeWindow.height : profileData.windows[0]!.height;
     });
   }
 
@@ -108,7 +108,7 @@ export class TabSearchAppElement extends CrLitElement {
     this.selectedTabSection_ = section;
     if (section === TabSearchSection.kOrganize) {
       const organizationSelector =
-          this.shadowRoot!.querySelector('tab-organization-selector');
+          this.shadowRoot.querySelector('tab-organization-selector');
       if (organizationSelector) {
         organizationSelector.maybeLogFeatureShow();
       }
@@ -150,7 +150,7 @@ export class TabSearchAppElement extends CrLitElement {
     if (this.selectedTabSection_ === TabSearchSection.kOrganize &&
         !this.declutterEnabled_) {
       const autoTabGroupsPage =
-          this.shadowRoot!.querySelector('auto-tab-groups-page')!;
+          this.shadowRoot.querySelector('auto-tab-groups-page')!;
       autoTabGroupsPage.classList.toggle('changed-state', false);
     }
   }

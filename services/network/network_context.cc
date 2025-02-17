@@ -29,7 +29,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/not_fatal_until.h"
-#include "base/ranges/algorithm.h"
 #include "base/sequence_checker.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -110,6 +109,7 @@
 #include "services/network/http_server_properties_pref_delegate.h"
 #include "services/network/ignore_errors_cert_verifier.h"
 #include "services/network/is_browser_initiated.h"
+#include "services/network/known_legacy_scope_domains_delegate.h"
 #include "services/network/net_log_exporter.h"
 #include "services/network/network_service.h"
 #include "services/network/network_service_network_delegate.h"
@@ -594,7 +594,10 @@ enum class HSTSRedirectUpgradeReason {
 // LINT.ThenChange(//tools/metrics/histograms/metadata/net/enums.xml:HSTSRedirectUpgradeReason)
 
 void RecordHSTSPreconnectUpgradeReason(HSTSRedirectUpgradeReason reason) {
-  base::UmaHistogramEnumeration("Net.PreconnectHSTSUpgradesUrl", reason);
+  if (!base::FeatureList::IsEnabled(
+          net::features::kHstsTopLevelNavigationsOnly)) {
+    base::UmaHistogramEnumeration("Net.PreconnectHSTSUpgradesUrl", reason);
+  }
 }
 
 }  // namespace
@@ -1038,12 +1041,14 @@ void NetworkContext::GetRestrictedCookieManager(
     const url::Origin& origin,
     const net::IsolationInfo& isolation_info,
     const net::CookieSettingOverrides& cookie_setting_overrides,
+    const net::CookieSettingOverrides& devtools_cookie_setting_overrides,
     mojo::PendingRemote<mojom::CookieAccessObserver> cookie_observer) {
   RestrictedCookieManager::ComputeFirstPartySetMetadata(
       origin, url_request_context_->cookie_store(), isolation_info,
       base::BindOnce(&NetworkContext::OnComputedFirstPartySetMetadata,
                      weak_factory_.GetWeakPtr(), std::move(receiver), role,
                      origin, isolation_info, cookie_setting_overrides,
+                     devtools_cookie_setting_overrides,
                      std::move(cookie_observer)));
 }
 
@@ -1061,6 +1066,7 @@ void NetworkContext::OnComputedFirstPartySetMetadata(
     const url::Origin& origin,
     const net::IsolationInfo& isolation_info,
     const net::CookieSettingOverrides& cookie_setting_overrides,
+    const net::CookieSettingOverrides& devtools_cookie_setting_overrides,
     mojo::PendingRemote<mojom::CookieAccessObserver> cookie_observer,
     net::FirstPartySetMetadata first_party_set_metadata) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -1069,8 +1075,8 @@ void NetworkContext::OnComputedFirstPartySetMetadata(
       std::make_unique<RestrictedCookieManager>(
           role, url_request_context_->cookie_store(),
           cookie_manager_->cookie_settings(), origin, isolation_info,
-          cookie_setting_overrides, std::move(cookie_observer),
-          std::move(first_party_set_metadata),
+          cookie_setting_overrides, devtools_cookie_setting_overrides,
+          std::move(cookie_observer), std::move(first_party_set_metadata),
           network_service_->metrics_updater());
 
   auto callback = base::BindOnce(&NetworkContext::OnRCMDisconnect,
@@ -1513,6 +1519,13 @@ void NetworkContext::QueueReportInternal(
       request_context->reporting_service();
   // TODO(paulmeyer): Remove this once the network service ships everywhere.
   if (!reporting_service) {
+    return;
+  }
+
+  // Reporting is disallowed if network access is disabled for the nonce.
+  if (network_anonymization_key.GetNonce().has_value() &&
+      !IsNetworkForNonceAndUrlAllowed(
+          network_anonymization_key.GetNonce().value(), url)) {
     return;
   }
 
@@ -2082,6 +2095,7 @@ void NetworkContext::AddHSTS(const std::string& host,
 }
 
 void NetworkContext::IsHSTSActiveForHost(const std::string& host,
+                                         bool is_top_level_nav,
                                          IsHSTSActiveForHostCallback callback) {
   net::TransportSecurityState* security_state =
       url_request_context_->transport_security_state();
@@ -2091,7 +2105,8 @@ void NetworkContext::IsHSTSActiveForHost(const std::string& host,
     return;
   }
 
-  std::move(callback).Run(security_state->ShouldUpgradeToSSL(host));
+  std::move(callback).Run(
+      security_state->ShouldUpgradeToSSL(host, is_top_level_nav));
 }
 
 void NetworkContext::GetHSTSState(const std::string& domain,
@@ -2462,7 +2477,7 @@ const net::HttpAuthPreferences* NetworkContext::GetHttpAuthPreferences() const {
 }
 
 size_t NetworkContext::NumOpenWebTransports() const {
-  return base::ranges::count(web_transports_, false, &WebTransport::torn_down);
+  return std::ranges::count(web_transports_, false, &WebTransport::torn_down);
 }
 
 bool NetworkContext::AllURLLoaderFactoriesAreBoundToNetworkForTesting(
@@ -2629,18 +2644,6 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext(
     builder.set_network_quality_estimator(
         network_service_->network_quality_estimator());
   }
-
-  if (session_cleanup_cookie_store) {
-    std::unique_ptr<net::CookieMonster> cookie_store =
-        std::make_unique<net::CookieMonster>(session_cleanup_cookie_store.get(),
-                                             net_log);
-    if (params_->persist_session_cookies) {
-      cookie_store->SetPersistSessionCookies(true);
-    }
-
-    builder.SetCookieStore(std::move(cookie_store));
-  }
-
   trust_token_store_ = std::make_unique<PendingTrustTokenStore>();
 
   base::FilePath trust_token_path;
@@ -2761,6 +2764,7 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext(
     scoped_refptr<PrefRegistrySimple> pref_registry(new PrefRegistrySimple());
     HttpServerPropertiesPrefDelegate::RegisterPrefs(pref_registry.get());
     NetworkQualitiesPrefDelegate::RegisterPrefs(pref_registry.get());
+    KnownLegacyScopeDomainsPrefDelegate::RegisterPrefs(pref_registry.get());
     pref_service = pref_service_factory.Create(pref_registry.get());
 
     builder.SetHttpServerProperties(std::make_unique<net::HttpServerProperties>(
@@ -2770,6 +2774,23 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext(
     network_qualities_pref_delegate_ =
         std::make_unique<NetworkQualitiesPrefDelegate>(
             pref_service.get(), network_service_->network_quality_estimator());
+  }
+
+  if (session_cleanup_cookie_store) {
+    // If the pref service was registered and initialized use it.
+    // If not, use nullptr to indicate prefs aren't available.
+    std::unique_ptr<net::CookieMonster> cookie_store =
+        std::make_unique<net::CookieMonster>(
+            session_cleanup_cookie_store.get(), net_log,
+            pref_service
+                ? std::make_unique<KnownLegacyScopeDomainsPrefDelegate>(
+                      pref_service.get())
+                : nullptr);
+    if (params_->persist_session_cookies) {
+      cookie_store->SetPersistSessionCookies(true);
+    }
+
+    builder.SetCookieStore(std::move(cookie_store));
   }
 
   base::FilePath transport_security_persister_file_name;
@@ -3001,12 +3022,11 @@ NetworkContext::MakeSessionCleanupCookieStore() const {
 
 #if BUILDFLAG(IS_WIN)
   const bool enable_exclusive_access =
-      params_->enable_locking_cookie_database.value_or(
-          base::FeatureList::IsEnabled(
-              features::kEnableLockCookieDatabaseByDefault));
+      network_service()->exclusive_cookie_database_locking();
 #else
   const bool enable_exclusive_access = false;
 #endif  // BUILDFLAG(IS_WIN)
+
   scoped_refptr<net::SQLitePersistentCookieStore> sqlite_store(
       new net::SQLitePersistentCookieStore(
           cookie_path, client_task_runner, background_task_runner,
@@ -3069,8 +3089,17 @@ GURL NetworkContext::GetHSTSRedirectForPreconnect(const GURL& original_url) {
     return original_url;
   }
 
+  // TODO(crbug.com/40725781); This currently doesn't allow for preconnect
+  // upgrades when kHstsTopLevelNavigationsOnly is enabled. Revisit this
+  // decision after analyzing Net.PreconnectHSTSUpgradesUrl metric.
+  //
+  // When kHstsTopLevelNavigationsOnly is enabled only top-level navigations
+  // will be eligable for HSTS upgrades (not sub-resource requests).
+  // Unfortunately we don't know at this point if this request is for a
+  // top-level navigation so we need to disallow HSTS upgrades for every
+  // preconnect.
   if (!url_request_context_->transport_security_state()->ShouldUpgradeToSSL(
-          original_url.host())) {
+          original_url.host(), /*is_top_level_nav=*/false)) {
     RecordHSTSPreconnectUpgradeReason(
         HSTSRedirectUpgradeReason::kNotUpgradedNoHSTSPin);
     return original_url;

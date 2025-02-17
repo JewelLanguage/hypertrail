@@ -56,6 +56,12 @@ animation-range-end: normal
 animation-range-start: normal
 animation-timeline: auto
 animation-timing-function: ease
+animation-trigger-exit-range-end: normal
+animation-trigger-exit-range-start: normal
+animation-trigger-range-end: normal
+animation-trigger-range-start: normal
+animation-trigger-timeline: auto
+animation-trigger-type: once
 app-region: none
 appearance: none
 backdrop-filter: none
@@ -147,6 +153,14 @@ contain-intrinsic-width: none
 container-name: none
 container-type: normal
 content: normal
+corner-bottom-left-shape: round
+corner-bottom-right-shape: round
+corner-end-end-shape: round
+corner-end-start-shape: round
+corner-start-end-shape: round
+corner-start-start-shape: round
+corner-top-left-shape: round
+corner-top-right-shape: round
 cursor: auto
 cx: 0px
 cy: 0px
@@ -211,6 +225,8 @@ inset-block-start: auto
 inset-inline-end: auto
 inset-inline-start: auto
 interactivity: auto
+interest-target-hide-delay: 0.5s
+interest-target-show-delay: 0.5s
 interpolate-size: numeric-only
 isolation: auto
 justify-content: normal
@@ -302,8 +318,6 @@ paint-order: normal
 perspective: none
 perspective-origin: 0px 0px
 pointer-events: auto
-popover-hide-delay: infinity * 1s
-popover-show-delay: 0.5s
 position: static
 position-anchor: auto
 position-area: none
@@ -312,6 +326,7 @@ position-try-order: normal
 position-visibility: always
 r: 0px
 reading-flow: normal
+reading-order: 0
 resize: none
 right: auto
 rotate: none

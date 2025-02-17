@@ -46,8 +46,24 @@ BASE_FEATURE(kLensClearcutBackgroundUploadEnabled,
 
 BASE_FEATURE(kLensClearcutLoggerFastQosEnabled,
              "LensClearcutLoggerFastQosEnabled",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kLensSingleTapTextSelectionDisabled,
              "LensSingleTapTextSelectionDisabled",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kLensInkMultiSampleModeDisabled,
+             "LensInkMultiSampleModeDisabled",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kLensGestureTextSelectionDisabled,
+             "LensGestureTextSelectionDisabled",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kLensVsintParamEnabled,
+             "LensVsintParamEnabled",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kLensUnaryClientDataHeaderEnabled,
+             "LensUnaryClientDataHeaderEnabled",
              base::FEATURE_DISABLED_BY_DEFAULT);

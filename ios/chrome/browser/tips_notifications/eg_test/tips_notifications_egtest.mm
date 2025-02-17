@@ -46,9 +46,11 @@ void TapText(NSString* text) {
 // Taps "Allow" on notification permissions popup or Camera popup, if
 // either appears.
 void MaybeTapAllowOnPopup() {
+  [ChromeEarlGreyUI waitForAppToIdle];
   XCUIApplication* springboardApplication = [[XCUIApplication alloc]
       initWithBundleIdentifier:@"com.apple.springboard"];
-  auto button = springboardApplication.buttons[@"Allow"];
+  // Wait for allow or ok button to appear.
+  auto button = [springboardApplication.buttons elementBoundByIndex:1];
   if ([button waitForExistenceWithTimeout:1]) {
     // Wait for the magic stack to settle behind the alert.
     // Otherwise the test flakes when a snackbar is presented right after the

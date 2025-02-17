@@ -907,7 +907,7 @@
     // TODO(crbug.com/1511354): "base-select" is a temporary name for customizable
     // <select>. It should be renamed when a standardized name is chosen.
     "base-select",
-    "-internal-appearance-auto-base-select",
+    "-internal-auto-base",
 
     //
     // background-clip/background-origin
@@ -1204,6 +1204,15 @@
     // column-fill
     "balance",
 
+    // corner-shape
+    // "bevel",
+    "notch",
+    // "round",
+    "scoop",
+    "squircle",
+    "straight",
+    "superellipse",
+
     // -webkit-app-region
     "drag",
     "no-drag",
@@ -1278,6 +1287,16 @@
     "ideographic",
     "hanging",
     "mathematical",
+
+    // column-rule-break
+    // none
+    "intersection",
+    "spanning-item",
+
+    // row-rule-break
+    // none
+    // intersection
+    // spanning-item
 
     // dominant-baseline
     // auto
@@ -1968,5 +1987,15 @@
 
     // @function
     "returns",
+
+    // animation-trigger-type
+    // repeat
+    // alternate
+    "once",
+    "state",
+
+    // inline conditional
+    "if",
+    "else",
   ],
 }

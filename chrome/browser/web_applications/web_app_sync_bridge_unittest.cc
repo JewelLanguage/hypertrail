@@ -214,7 +214,8 @@ void ConvertAppToEntityChange(const WebApp& app,
           app.app_id(), std::move(*CreateSyncEntityData(app)));
       break;
     case syncer::EntityChange::ACTION_DELETE:
-      entity_change = syncer::EntityChange::CreateDelete(app.app_id());
+      entity_change = syncer::EntityChange::CreateDelete(app.app_id(),
+                                                         syncer::EntityData());
       break;
   }
 
@@ -1147,6 +1148,7 @@ TEST_F(WebAppSyncBridgeTest,
         entity_data_app->AddSource(WebAppManagement::kPolicy);
         entity_data_app->SetName("Name");
         entity_data_app->SetDisplayMode(blink::mojom::DisplayMode::kStandalone);
+        entity_data_app->SetScope(GURL("https://example.com/"));
         entity_data_app->SetInstallState(
             proto::InstallState::INSTALLED_WITHOUT_OS_INTEGRATION);
 

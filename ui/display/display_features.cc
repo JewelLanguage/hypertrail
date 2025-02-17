@@ -116,5 +116,32 @@ bool IsExcludeDisplayInMirrorModeEnabled() {
   return base::FeatureList::IsEnabled(kExcludeDisplayInMirrorMode);
 }
 
+BASE_FEATURE(kFastDrmMasterDrop,
+             "FastDrmMasterDrop",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool IsFastDrmMasterDropEnabled() {
+  return base::FeatureList::IsEnabled(kFastDrmMasterDrop);
+}
+
+// TODO(crbug.com/392021508): Remove the flag once the feature is launched.
+BASE_FEATURE(kFormFactorControlsSubpixelRendering,
+             "FormFactorControlsSubpixelRendering",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+bool DoesFormFactorControlSubpixelRendering() {
+  return base::FeatureList::IsEnabled(kFormFactorControlsSubpixelRendering);
+}
+
+// Open Pluggable Specification (OPS) is a special industry standard with
+// slot-in computing modules.
+BASE_FEATURE(kOpsDisplayScaleFactor,
+             "OpsDisplayScaleFactor",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool IsOpsDisplayScaleFactorEnabled() {
+  return base::FeatureList::IsEnabled(kOpsDisplayScaleFactor);
+}
+
 }  // namespace features
 }  // namespace display

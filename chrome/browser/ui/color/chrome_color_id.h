@@ -147,7 +147,6 @@
   E_CPONLY(kColorExtensionMenuPinButtonIcon) \
   E_CPONLY(kColorExtensionMenuPinButtonIconDisabled) \
   E_CPONLY(kColorExtensionsMenuContainerBackground) \
-  E_CPONLY(kColorExtensionsToolbarControlsBackground) \
   E_CPONLY(kColorExtensionsMenuText) \
   E_CPONLY(kColorExtensionsMenuSecondaryText) \
   /* Feature Promo bubble colors. */ \
@@ -181,7 +180,6 @@
   E_CPONLY(kColorHistoryEmbeddingsImageBackground) \
   E_CPONLY(kColorHistoryEmbeddingsImageBackgroundGradientEnd) \
   E_CPONLY(kColorHistoryEmbeddingsImageBackgroundGradientStart) \
-  E_CPONLY(kColorHistoryEmbeddingsWithAnswersBackground) \
   /* InfoBar colors. */ \
   E_CPONLY(kColorInfoBarBackground) \
   E_CPONLY(kColorInfoBarButtonIcon) \
@@ -467,7 +465,6 @@
   E_CPONLY(kColorPwaMenuButtonIcon) \
   E_CPONLY(kColorPwaSecurityChipForeground) \
   E_CPONLY(kColorPwaSecurityChipForegroundDangerous) \
-  E_CPONLY(kColorPwaSecurityChipForegroundPolicyCert) \
   E_CPONLY(kColorPwaSecurityChipForegroundSecure) \
   E_CPONLY(kColorPwaTabBarBottomSeparator) \
   E_CPONLY(kColorPwaTabBarTopSeparator) \
@@ -592,6 +589,7 @@
   E_CPONLY(kColorShareThisTabSourceViewBorder) \
   /* The color used in the Tab Group Sharing Recent Activity dialog */ \
   E_CPONLY(kColorSharingRecentActivityDialogFaviconContainer) \
+  E_CPONLY(kColorSharingRecentActivityDialogActivityContainer) \
   /* Side panel colors. */ \
   E_CPONLY(kColorSidePanelBackground) \
   E_CPONLY(kColorSidePanelBadgeBackground) \
@@ -681,6 +679,7 @@
   E_CPONLY(kColorHoverCardTabAlertMediaRecordingIcon) \
   E_CPONLY(kColorHoverCardTabAlertPipPlayingIcon) \
   E_CPONLY(kColorHoverCardTabAlertAudioPlayingIcon) \
+  E_CPONLY(kColorHoverCardTabAlertUserAvatarFallbackIcon) \
   /* Tab colors. */ \
   E_CPONLY(kColorTabBackgroundActiveFrameActive) \
   E_CPONLY(kColorTabBackgroundActiveFrameInactive) \
@@ -789,8 +788,12 @@
   E_CPONLY(kColorTabSearchScrollbarThumb) \
   /* Task Manager colors. */ \
   E_CPONLY(kColorTaskManagerBackground) \
+  E_CPONLY(kColorTaskManagerTableBackground) \
+  E_CPONLY(kColorTaskManagerTableBackgroundAlternate) \
+  E_CPONLY(kColorTaskManagerTableBackgroundSelectedFocused) \
+  E_CPONLY(kColorTaskManagerTableBackgroundSelectedUnfocused) \
+  E_CPONLY(kColorTaskManagerTableHeaderBackground) \
   E_CPONLY(kColorTaskManagerSearchBarBackground) \
-  E_CPONLY(kColorTaskManagerSearchBarHoverOn) \
   E_CPONLY(kColorTaskManagerSearchBarTransparent) \
   E_CPONLY(kColorTaskManagerSearchBarPlaceholderText) \
   /* Thumbnail tab colors. */ \

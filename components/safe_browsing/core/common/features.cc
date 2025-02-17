@@ -33,6 +33,10 @@ BASE_FEATURE(kAdSamplerTriggerFeature,
 #if BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kAddReferringAppInfoToProtegoPings,
              "AddReferringAppInfoToProtegoPings",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kAddReferringWebApkToProtegoPings,
+             "AddReferringWebApkToProtegoPings",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
@@ -96,13 +100,9 @@ BASE_FEATURE(kCreateWarningShownClientSafeBrowsingReports,
              "CreateWarningShownClientSafeBrowsingReports",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kDangerousDownloadInterstitial,
-             "DangerousDownloadInterstitial",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kDeepScanningCriteria,
              "SafeBrowsingDeepScanningCriteria",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kDelayedWarnings,
              "SafeBrowsingDelayedWarnings",
@@ -138,6 +138,10 @@ constexpr base::FeatureParam<int> kDownloadWarningSurveyType{
 constexpr base::FeatureParam<int> kDownloadWarningSurveyIgnoreDelaySeconds{
     &kDownloadWarningSurvey, "ignore_delay_seconds", 300};
 
+BASE_FEATURE(kEnhancedFieldsForSecOps,
+             "EnhancedFieldsForSecOps",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kEnhancedSafeBrowsingPromo,
              "EnhancedSafeBrowsingPromo",
 #if BUILDFLAG(IS_IOS)
@@ -157,12 +161,7 @@ BASE_FEATURE(kEnterpriseRealTimeUrlCheckOnAndroid,
 
 BASE_FEATURE(kEsbAiStringUpdate,
              "EsbAiStringUpdate",
-#if BUILDFLAG(IS_IOS) || BUILDFLAG(IS_ANDROID)
-             base::FEATURE_DISABLED_BY_DEFAULT
-#else
-             base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEsbAsASyncedSetting,
              "EsbAsASyncedSetting",
@@ -293,7 +292,7 @@ BASE_FEATURE(kSafetyHubAbusiveNotificationRevocation,
 
 BASE_FEATURE(kSavePasswordHashFromProfilePicker,
              "SavePasswordHashFromProfilePicker",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kShowWarningsForSuspiciousNotifications,
              "ShowWarningsForSuspiciousNotifications",
@@ -304,6 +303,12 @@ constexpr base::FeatureParam<int>
         &kShowWarningsForSuspiciousNotifications,
         "ShowWarningsForSuspiciousNotificationsScoreThreshold",
         /*default_value=*/100};
+
+constexpr base::FeatureParam<bool>
+    kShowWarningsForSuspiciousNotificationsShouldSwapButtons{
+        &kShowWarningsForSuspiciousNotifications,
+        "ShowWarningsForSuspiciousNotificationsShouldSwapButtons",
+        /*default_value=*/false};
 
 BASE_FEATURE(kSuspiciousSiteTriggerQuotaFeature,
              "SafeBrowsingSuspiciousSiteTriggerQuota",
@@ -337,6 +342,7 @@ base::Value::List GetFeatureStatusList() {
       &kDelayedWarnings,
       &kDlpRegionalizedEndpoints,
       &kDownloadTailoredWarnings,
+      &kEnhancedFieldsForSecOps,
       &kEnhancedSafeBrowsingPromo,
       &kEnterprisePasswordReuseUiRefresh,
       &kEnterpriseRealTimeUrlCheckOnAndroid,

@@ -236,7 +236,7 @@ class CONTENT_EXPORT InterestGroupAuction
     std::optional<mojo::ReceiverId> generate_bid_client_receiver_id;
 
     // Trusted signals cache handle for the bidder signals.
-    scoped_refptr<TrustedSignalsCacheImpl::Handle> bidding_signals_handle;
+    std::unique_ptr<TrustedSignalsCacheImpl::Handle> bidding_signals_handle;
 
     // Mojo pipe to use to fill in potentially promise-provided arguments.
     // Only populated in between BeginGenerateBid and FinishGenerateBid().
@@ -397,6 +397,12 @@ class CONTENT_EXPORT InterestGroupAuction
 
     // Get a vector of ad component urls.
     std::vector<GURL> GetAdComponentUrls() const;
+
+    // Gets information on ad components selected with this bid in form suitable
+    // for sending over mojo; this has all the info needed for worklet process
+    // to both pass in things to JS and request trusted scoring signals.
+    std::vector<auction_worklet::mojom::CreativeInfoWithoutOwnerPtr>
+    GetAdComponentCreativeInfo() const;
 
     // These getters are necessary for handling the replacements within the
     // interest group auction.
@@ -920,7 +926,7 @@ class CONTENT_EXPORT InterestGroupAuction
   struct ScoreAdClientData {
     ScoreAdClientData(
         std::unique_ptr<Bid> bid,
-        scoped_refptr<TrustedSignalsCacheImpl::Handle> cache_handle);
+        std::unique_ptr<TrustedSignalsCacheImpl::Handle> cache_handle);
     ScoreAdClientData(ScoreAdClientData&&);
     ~ScoreAdClientData();
 
@@ -931,7 +937,7 @@ class CONTENT_EXPORT InterestGroupAuction
     // The cache Handle for keeping the TrustedSignalsCacheImpl request alive,
     // if there is one. Associating it directly with the ScoreAdClient receiver
     // means closing the pipe conveniently releases the cache entry as well.
-    scoped_refptr<TrustedSignalsCacheImpl::Handle> cache_handle;
+    std::unique_ptr<TrustedSignalsCacheImpl::Handle> cache_handle;
   };
 
   // ---------------------------------

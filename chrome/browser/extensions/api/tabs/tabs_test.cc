@@ -36,10 +36,10 @@
 #include "chrome/browser/extensions/browser_extension_window_controller.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
+#include "chrome/browser/extensions/profile_util.h"
 #include "chrome/browser/extensions/window_controller.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_source.h"
 #include "chrome/browser/resource_coordinator/tab_manager.h"
@@ -1175,6 +1175,7 @@ class ExtensionWindowCreateIwaTest
   }
 
   void SetUpDefaultCommandLine(base::CommandLine* command_line) override {
+    InProcessBrowserTest::SetUpDefaultCommandLine(command_line);
     // Suppress "Welcome to Google Chrome" window
     command_line->AppendSwitch(switches::kNoFirstRun);
     command_line->AppendSwitch(switches::kNoStartupWindow);
@@ -1193,41 +1194,15 @@ class ExtensionWindowCreateIwaTest
   Profile* profile() {
     // We cannot use `browser()->profile()` here, because `browser()` is
     // `nullptr` due to the command line switches above.
-    return ProfileManager::GetLastUsedProfile();
+    return profile_util::GetLastUsedProfile();
   }
 
  protected:
-  void InstallAndTrustBundle() {
-    auto bundle = web_app::TestSignedWebBundleBuilder::BuildDefault(
-        web_app::TestSignedWebBundleBuilder::BuildOptions()
-            .AddKeyPair(web_app::test::GetDefaultEd25519KeyPair())
-            .SetIndexHTMLContent("Hello Extensions!"));
-
-    base::FilePath bundle_path =
-        scoped_temp_dir_.GetPath().AppendASCII("bundle.swbn");
-    {
-      base::ScopedAllowBlockingForTesting allow_blocking;
-      ASSERT_TRUE(base::WriteFile(bundle_path, bundle.data));
-    }
-
-    web_app::SetTrustedWebBundleIdsForTesting({bundle.id});
-
-    base::test::TestFuture<
-        base::expected<web_app::InstallIsolatedWebAppCommandSuccess,
-                       web_app::InstallIsolatedWebAppCommandError>>
-        future;
-    web_app::WebAppProvider::GetForTest(profile())
-        ->scheduler()
-        .InstallIsolatedWebApp(
-            web_app::IsolatedWebAppUrlInfo::CreateFromSignedWebBundleId(
-                bundle.id),
-            web_app::IsolatedWebAppInstallSource::FromGraphicalInstaller(
-                web_app::IwaSourceBundleProdModeWithFileOp(
-                    bundle_path, web_app::IwaSourceBundleProdFileOp::kCopy)),
-            /*expected_version=*/std::nullopt,
-            /*optional_keep_alive=*/nullptr,
-            /*optional_profile_keep_alive=*/nullptr, future.GetCallback());
-    EXPECT_THAT(future.Take(), base::test::HasValue());
+  web_app::IsolatedWebAppUrlInfo InstallAndTrustBundle() {
+    auto bundle = web_app::IsolatedWebAppBuilder(web_app::ManifestBuilder())
+                      .AddHtml("/", "Hello extensions!")
+                      .BuildBundle(web_app::test::GetDefaultEd25519KeyPair());
+    return bundle->InstallChecked(profile());
   }
 
  private:
@@ -1237,7 +1212,7 @@ class ExtensionWindowCreateIwaTest
 };
 
 IN_PROC_BROWSER_TEST_P(ExtensionWindowCreateIwaTest, CreateWindowForIwa) {
-  EXPECT_NO_FATAL_FAILURE(InstallAndTrustBundle());
+  auto url_info = InstallAndTrustBundle();
 
   EXPECT_EQ(BrowserList::GetInstance()->size(), 0ul);
 
@@ -1256,9 +1231,7 @@ IN_PROC_BROWSER_TEST_P(ExtensionWindowCreateIwaTest, CreateWindowForIwa) {
     Browser* iwa_browser = *BrowserList::GetInstance()->begin();
     ASSERT_EQ(iwa_browser->tab_strip_model()->count(), 1);
     EXPECT_EQ(iwa_browser->tab_strip_model()->GetWebContentsAt(0)->GetURL(),
-              GURL("isolated-app://"
-                   "4tkrnsmftl4ggvvdkfth3piainqragus2qbhf7rlz2a3wo3rh4wqaaic/"
-                   "index.html"));
+              url_info.origin().GetURL().Resolve("/index.html"));
   } else {
     EXPECT_FALSE(result);
     // No browser should have opened.

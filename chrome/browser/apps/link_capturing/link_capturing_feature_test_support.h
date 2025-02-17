@@ -31,8 +31,6 @@ enum class LinkCapturingFeatureVersion {
   kV1DefaultOff,
   kV2DefaultOff,
 #if !BUILDFLAG(IS_CHROMEOS)
-  // TODO(https://crbug.com/377522792): Remove this.
-  kV1DefaultOn,
   kV2DefaultOn,
 #endif
 };
@@ -46,8 +44,6 @@ std::string LinkCapturingVersionToString(
 // account per platform behavior.
 std::vector<base::test::FeatureRefAndParams> GetFeaturesToEnableLinkCapturingUX(
     LinkCapturingFeatureVersion version);
-
-std::vector<base::test::FeatureRef> GetFeaturesToDisableLinkCapturingUX();
 
 // Enables link capturing as if the user did it from the app settings page.
 // Returns the error description if there was an error.

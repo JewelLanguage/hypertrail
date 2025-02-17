@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.h"
 
 #include <memory>
@@ -3512,8 +3517,6 @@ void WebGL2RenderingContextBase::clearBufferfi(GLenum buffer,
 }
 
 WebGLQuery* WebGL2RenderingContextBase::createQuery() {
-  if (isContextLost())
-    return nullptr;
   return MakeGarbageCollected<WebGLQuery>(this);
 }
 
@@ -3740,8 +3743,6 @@ ScriptValue WebGL2RenderingContextBase::getQueryParameter(
 }
 
 WebGLSampler* WebGL2RenderingContextBase::createSampler() {
-  if (isContextLost())
-    return nullptr;
   return MakeGarbageCollected<WebGLSampler>(this);
 }
 
@@ -3955,9 +3956,6 @@ ScriptValue WebGL2RenderingContextBase::getSamplerParameter(
 
 WebGLSync* WebGL2RenderingContextBase::fenceSync(GLenum condition,
                                                  GLbitfield flags) {
-  if (isContextLost())
-    return nullptr;
-
   if (condition != GL_SYNC_GPU_COMMANDS_COMPLETE) {
     SynthesizeGLError(GL_INVALID_ENUM, "fenceSync",
                       "condition must be SYNC_GPU_COMMANDS_COMPLETE");
@@ -4059,8 +4057,6 @@ ScriptValue WebGL2RenderingContextBase::getSyncParameter(
 }
 
 WebGLTransformFeedback* WebGL2RenderingContextBase::createTransformFeedback() {
-  if (isContextLost())
-    return nullptr;
   return MakeGarbageCollected<WebGLTransformFeedback>(
       this, WebGLTransformFeedback::TFType::kUser);
 }
@@ -4446,10 +4442,14 @@ ScriptValue WebGL2RenderingContextBase::getIndexedParameter(
                           "invalid parameter name");
         return ScriptValue::CreateNull(script_state->GetIsolate());
       }
-      Vector<bool> values(4);
-      ContextGL()->GetBooleani_v(target, index,
-                                 reinterpret_cast<GLboolean*>(values.data()));
-      return WebGLAny(script_state, values);
+      constexpr size_t result_size = 4;
+      Vector<GLint> values(result_size);
+      ContextGL()->GetIntegeri_v(target, index, values.data());
+      Vector<bool> bool_values(result_size);
+      for (size_t i = 0; i < result_size; i++) {
+        bool_values[i] = (values[i] != GL_FALSE);
+      }
+      return WebGLAny(script_state, bool_values);
     }
     default:
       SynthesizeGLError(GL_INVALID_ENUM, "getIndexedParameter",
@@ -4684,9 +4684,6 @@ void WebGL2RenderingContextBase::uniformBlockBinding(
 }
 
 WebGLVertexArrayObject* WebGL2RenderingContextBase::createVertexArray() {
-  if (isContextLost())
-    return nullptr;
-
   return MakeGarbageCollected<WebGLVertexArrayObject>(
       this, WebGLVertexArrayObjectBase::kVaoTypeUser);
 }

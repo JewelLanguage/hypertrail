@@ -7,7 +7,6 @@
 #include <optional>
 #include <string_view>
 
-#include "base/auto_reset.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/profiler/thread_group_profiler.h"
 #include "base/sequence_token.h"
@@ -130,7 +129,7 @@ class ThreadGroupImpl::WorkerDelegate : public WorkerThread::Delegate,
   template <typename Worker>
   bool ContainsWorker(const std::vector<scoped_refptr<Worker>>& workers,
                       const WorkerThread* worker) {
-    auto it = ranges::find_if(
+    auto it = std::ranges::find_if(
         workers,
         [worker](const scoped_refptr<Worker>& i) { return i.get() == worker; });
     return it != workers.end();
@@ -210,6 +209,7 @@ class ThreadGroupImpl::WorkerDelegate : public WorkerThread::Delegate,
 ThreadGroupImpl::ThreadGroupImpl(std::string_view histogram_label,
                                  std::string_view thread_group_label,
                                  ThreadType thread_type_hint,
+                                 int64_t thread_group_type,
                                  TrackedRef<TaskTracker> task_tracker,
                                  TrackedRef<Delegate> delegate)
     : ThreadGroup(histogram_label,
@@ -217,6 +217,7 @@ ThreadGroupImpl::ThreadGroupImpl(std::string_view histogram_label,
                   thread_type_hint,
                   std::move(task_tracker),
                   std::move(delegate)),
+      thread_group_type_(thread_group_type),
       tracked_ref_factory_(this) {
   DCHECK(!thread_group_label_.empty());
 }
@@ -239,7 +240,7 @@ void ThreadGroupImpl::Start(
   // start but before worker threads are created.
   if (ThreadGroupProfiler::IsProfilingEnabled()) {
     thread_group_profiler_.emplace(service_thread_task_runner,
-                                   thread_group_label_);
+                                   thread_group_type_);
   }
 
   ScopedCommandsExecutor executor(this);
@@ -607,7 +608,7 @@ void ThreadGroupImpl::WorkerDelegate::CleanupLockRequired(
   }
 
   // Remove the worker from |workers_|.
-  auto worker_iter = ranges::find(outer_->workers_, worker);
+  auto worker_iter = std::ranges::find(outer_->workers_, worker);
   CHECK(worker_iter != outer_->workers_.end(), base::NotFatalUntil::M125);
   outer_->workers_.erase(worker_iter);
 }

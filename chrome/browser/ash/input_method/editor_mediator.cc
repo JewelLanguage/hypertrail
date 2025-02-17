@@ -12,8 +12,6 @@
 #include "base/check_op.h"
 #include "base/containers/contains.h"
 #include "base/containers/fixed_flat_set.h"
-#include "chrome/browser/ash/crosapi/crosapi_ash.h"
-#include "chrome/browser/ash/crosapi/crosapi_manager.h"
 #include "chrome/browser/ash/input_method/editor_consent_enums.h"
 #include "chrome/browser/ash/input_method/editor_geolocation_provider.h"
 #include "chrome/browser/ash/input_method/editor_metrics_enums.h"
@@ -26,6 +24,7 @@
 #include "chrome/browser/ash/magic_boost/magic_boost_controller_ash.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ui/webui/ash/mako/mako_bubble_coordinator.h"
+#include "chromeos/ash/components/editor_menu/public/cpp/editor_consent_status.h"
 #include "chromeos/ash/components/editor_menu/public/cpp/editor_helpers.h"
 #include "chromeos/ash/components/editor_menu/public/cpp/editor_mode.h"
 #include "chromeos/ash/components/editor_menu/public/cpp/editor_text_selection_mode.h"
@@ -258,16 +257,11 @@ void EditorMediator::HandleTrigger(
 void EditorMediator::ShowNotice(
     EditorNoticeTransitionAction transition_action) {
   if (chromeos::MagicBoostState::Get()->IsMagicBoostAvailable()) {
-    crosapi::CrosapiManager::Get()
-        ->crosapi_ash()
-        ->magic_boost_controller_ash()
-        ->ShowDisclaimerUi(
-            /*display_id=*/display::Screen::GetScreen()
-                ->GetPrimaryDisplay()
-                .id(),
-            /*action=*/
-            ConvertToMagicBoostTransitionAction(transition_action),
-            /*opt_in_features=*/OptInFeatures::kOrcaAndHmr);
+    ash::MagicBoostControllerAsh::Get()->ShowDisclaimerUi(
+        /*display_id=*/display::Screen::GetScreen()->GetPrimaryDisplay().id(),
+        /*action=*/
+        ConvertToMagicBoostTransitionAction(transition_action),
+        /*opt_in_features=*/OptInFeatures::kOrcaAndHmr);
     return;
   }
 
@@ -380,7 +374,8 @@ EditorMediator::GetEditorTextSelectionMode() const {
   return editor_switch_->GetEditorTextSelectionMode();
 }
 
-ConsentStatus EditorMediator::GetConsentStatus() const {
+chromeos::editor_menu::EditorConsentStatus EditorMediator::GetConsentStatus()
+    const {
   return consent_store_->GetConsentStatus();
 }
 

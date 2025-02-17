@@ -227,6 +227,14 @@ class CORE_EXPORT HTMLSelectElement final
   void CloneNonAttributePropertiesFrom(const Element&,
                                        NodeCloningData&) override;
 
+  // These are all utilities that check the relevant runtime flag, *plus* check
+  // that the SelectParserRelaxationOptOut origin trial is not enabled.
+  static bool SelectParserRelaxationEnabled(const Document* document);
+  static bool SelectParserRelaxationEnabled(const Node* node);
+  static bool CustomizableSelectEnabled(const Document* document);
+  static bool CustomizableSelectEnabled(const Node* node);
+  static bool CustomizableSelectEnabledNoDocument();
+
   // InnerElement and PopupRootAXObject should be called only if UsesMenuList().
   // InnerElement is the in-page <div> element in the UA shadowroot for MenuList
   // rendering. It is excluded from the layout tree if the author sets
@@ -248,6 +256,9 @@ class CORE_EXPORT HTMLSelectElement final
   // called during style calculation to compute internal pseudo-classes, the
   // value of the appearance property is not checked.
   HTMLButtonElement* SlottedButton() const;
+
+  // Returns true if the provided node is some select element's SlottedButton.
+  static bool IsSlottedButton(const Node*);
 
   // This method returns the UA popover element which is used for
   // appearance:base-select. If this select is rendering in a mode which doesn't
@@ -282,13 +293,6 @@ class CORE_EXPORT HTMLSelectElement final
       HTMLSelectedContentElement* selectedcontent);
   void SelectedContentElementRemoved(
       HTMLSelectedContentElement* selectedcontent);
-
-  void SetMouseupShouldClosePicker(bool new_value) {
-    option_mouseup_should_close_picker_ = new_value;
-  }
-  bool MouseupShouldClosePicker() const {
-    return option_mouseup_should_close_picker_;
-  }
 
   // This will only return an element if IsAppearanceBaseButton(). The element
   // is a popover inside the UA shadowroot which is used to show the user a
@@ -410,7 +414,6 @@ class CORE_EXPORT HTMLSelectElement final
   bool uses_menu_list_ = true;
   bool is_multiple_;
   mutable bool should_recalc_list_items_;
-  bool option_mouseup_should_close_picker_ = false;
 
   Member<SelectType> select_type_;
   int index_to_select_on_cancel_;

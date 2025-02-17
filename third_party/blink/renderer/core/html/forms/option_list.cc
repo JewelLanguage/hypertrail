@@ -20,7 +20,18 @@ void OptionListIterator::Advance(HTMLOptionElement* previous) {
 
   Element* current;
   if (previous) {
-    DCHECK_EQ(previous->OwnerSelectElement(), select_);
+    if (HTMLSelectElement::SelectParserRelaxationEnabled(&select_) &&
+        !previous->OwnerSelectElement(/*skip_check=*/true)) {
+      // In some cases, an OptionList is created and used for a select element
+      // before its descendant option elements had InsertedInto called on
+      // them, such as constructing fragments in Element::setInnerHTML. When
+      // these options aren't notified like this, they won't have the correct
+      // value for OwnerSelectElement yet. We can update it to the correct
+      // value here.
+      previous->SetOwnerSelectElement(const_cast<HTMLSelectElement*>(&select_));
+    } else {
+      DCHECK_EQ(previous->OwnerSelectElement(), select_);
+    }
     current = ElementTraversal::NextSkippingChildren(*previous, &select_);
   } else {
     current = ElementTraversal::FirstChild(select_);
@@ -30,14 +41,14 @@ void OptionListIterator::Advance(HTMLOptionElement* previous) {
       current_ = option;
       return;
     }
-    if (RuntimeEnabledFeatures::SelectParserRelaxationEnabled()) {
+    if (HTMLSelectElement::SelectParserRelaxationEnabled(&select_)) {
       if (IsA<HTMLSelectElement>(current)) {
         current = ElementTraversal::NextSkippingChildren(*current, &select_);
       } else {
         current = ElementTraversal::Next(*current, &select_);
       }
     } else {
-      DCHECK(!RuntimeEnabledFeatures::CustomizableSelectEnabled());
+      DCHECK(!HTMLSelectElement::CustomizableSelectEnabled(&select_));
       if (IsA<HTMLOptGroupElement>(current) &&
           current->parentNode() == &select_) {
         if ((current_ = Traversal<HTMLOptionElement>::FirstChild(*current))) {
@@ -70,14 +81,16 @@ void OptionListIterator::Retreat(HTMLOptionElement* next) {
       return;
     }
 
-    if (RuntimeEnabledFeatures::SelectParserRelaxationEnabled()) {
-      if (IsA<HTMLSelectElement>(current)) {
+    if (HTMLSelectElement::SelectParserRelaxationEnabled(&select_)) {
+      if (current == select_) {
+        current = nullptr;
+      } else if (IsA<HTMLSelectElement>(current)) {
         current = ElementTraversal::PreviousAbsoluteSibling(*next, &select_);
       } else {
         current = ElementTraversal::Previous(*current, &select_);
       }
     } else {
-      DCHECK(!RuntimeEnabledFeatures::CustomizableSelectEnabled());
+      DCHECK(!HTMLSelectElement::CustomizableSelectEnabled(&select_));
       if (IsA<HTMLOptGroupElement>(current) &&
           current->parentNode() == &select_) {
         if ((current_ = Traversal<HTMLOptionElement>::LastChild(*current))) {

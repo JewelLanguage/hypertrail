@@ -1464,9 +1464,9 @@ void HTMLInputElement::DefaultEventHandler(Event& evt) {
       return;
   }
 
-  auto* keyboad_event = DynamicTo<KeyboardEvent>(evt);
-  if (keyboad_event && evt.type() == event_type_names::kKeydown) {
-    input_type_view_->HandleKeydownEvent(*keyboad_event);
+  auto* keyboard_event = DynamicTo<KeyboardEvent>(evt);
+  if (keyboard_event && evt.type() == event_type_names::kKeydown) {
+    input_type_view_->HandleKeydownEvent(*keyboard_event);
     if (evt.DefaultHandled())
       return;
   }
@@ -1497,14 +1497,14 @@ void HTMLInputElement::DefaultEventHandler(Event& evt) {
 
   // Use key press event here since sending simulated mouse events
   // on key down blocks the proper sending of the key press event.
-  if (keyboad_event && evt.type() == event_type_names::kKeypress) {
-    input_type_view_->HandleKeypressEvent(*keyboad_event);
+  if (keyboard_event && evt.type() == event_type_names::kKeypress) {
+    input_type_view_->HandleKeypressEvent(*keyboard_event);
     if (evt.DefaultHandled())
       return;
   }
 
-  if (keyboad_event && evt.type() == event_type_names::kKeyup) {
-    input_type_view_->HandleKeyupEvent(*keyboad_event);
+  if (keyboard_event && evt.type() == event_type_names::kKeyup) {
+    input_type_view_->HandleKeyupEvent(*keyboard_event);
     if (evt.DefaultHandled())
       return;
   }
@@ -2271,6 +2271,9 @@ void HTMLInputElement::AdjustStyle(ComputedStyleBuilder& builder) {
 
 void HTMLInputElement::DidNotifySubtreeInsertionsToDocument() {
   input_type_view_->ListAttributeTargetChanged();
+  if (!RuntimeEnabledFeatures::DOMInsertionFasterEnabled()) {
+    PseudoStateChanged(CSSSelector::kPseudoHasDatalist);
+  }
 }
 
 AXObject* HTMLInputElement::PopupRootAXObject() {
@@ -2365,7 +2368,7 @@ bool HTMLInputElement::IsPickerVisible() const {
 bool HTMLInputElement::IsValidBuiltinCommand(HTMLElement& invoker,
                                              CommandEventType command) {
   bool parent_is_valid = HTMLElement::IsValidBuiltinCommand(invoker, command);
-  if (!RuntimeEnabledFeatures::HTMLInvokeActionsV2Enabled() ||
+  if (!RuntimeEnabledFeatures::HTMLCommandActionsV2Enabled() ||
       parent_is_valid) {
     return parent_is_valid;
   }

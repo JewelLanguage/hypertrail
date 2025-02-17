@@ -22,23 +22,6 @@
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/flex_layout.h"
 
-namespace {
-
-std::unique_ptr<views::View> CreateFooterView() {
-  // TODO(crbug.com/381054978): Add proper closure.
-  base::RepeatingClosure open_password_manager_closure =
-      base::BindRepeating([]() {});
-  // TODO(crbug.com/381054978): Use proper strings.
-  return CreateGooglePasswordManagerLabel(
-      /*text_message_id=*/
-      IDS_PASSWORD_BUBBLES_FOOTER_SAVING_ON_DEVICE,
-      /*link_message_id=*/
-      IDS_PASSWORD_BUBBLES_PASSWORD_MANAGER_LINK_TEXT_SAVING_ON_DEVICE,
-      open_password_manager_closure);
-}
-
-}  // namespace
-
 FailedPasswordChangeView::FailedPasswordChangeView(
     content::WebContents* web_contents,
     views::View* anchor_view)
@@ -78,6 +61,18 @@ FailedPasswordChangeView::FailedPasswordChangeView(
 
 FailedPasswordChangeView::~FailedPasswordChangeView() = default;
 
+std::unique_ptr<views::View> FailedPasswordChangeView::CreateFooterView() {
+  base::RepeatingClosure navigate_to_settings = base::BindRepeating(
+      &FailedPasswordChangeBubbleController::NavigateToPasswordChangeSettings,
+      base::Unretained(controller_.get()));
+  return CreateGooglePasswordManagerLabel(
+      /*text_message_id=*/
+      IDS_PASSWORD_MANAGER_UI_PASSWORD_CHANGE_FOOTER,
+      /*link_message_id=*/
+      IDS_PASSWORD_MANAGER_UI_PASSWORD_CHANGE_SETTINGS_LINK,
+      navigate_to_settings);
+}
+
 PasswordBubbleControllerBase* FailedPasswordChangeView::GetController() {
   return controller_.get();
 }
@@ -98,7 +93,8 @@ void FailedPasswordChangeView::OnWidgetInitialized() {
 }
 
 void FailedPasswordChangeView::AddedToWidget() {
-  SetBubbleHeader(IDR_SAVE_PASSWORD, IDR_SAVE_PASSWORD_DARK);
+  SetBubbleHeader(IDR_PASSWORD_CHANGE_WARNING,
+                  IDR_PASSWORD_CHANGE_WARNING_DARK);
 }
 
 BEGIN_METADATA(FailedPasswordChangeView)

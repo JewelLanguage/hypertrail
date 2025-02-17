@@ -4,10 +4,11 @@
 
 #include "third_party/blink/renderer/modules/compute_pressure/pressure_observer.h"
 
-#include "base/ranges/algorithm.h"
+#include <algorithm>
+
 #include "base/task/sequenced_task_runner.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
 #include "third_party/blink/public/common/features.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_pressure_observer_options.h"
@@ -63,7 +64,7 @@ ScriptPromise<IDLUndefined> PressureObserver::observe(
   // Checks whether the document is allowed by Permissions Policy to call
   // Compute Pressure API.
   if (!execution_context->IsFeatureEnabled(
-          mojom::blink::PermissionsPolicyFeature::kComputePressure,
+          network::mojom::PermissionsPolicyFeature::kComputePressure,
           ReportOptions::kReportOnFailure)) {
     exception_state.ThrowDOMException(DOMExceptionCode::kNotAllowedError,
                                       kFeaturePolicyBlocked);

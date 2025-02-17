@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/layout/anchor_evaluator_impl.h"
 
+#include "base/auto_reset.h"
 #include "third_party/blink/renderer/core/css/anchor_query.h"
 #include "third_party/blink/renderer/core/dom/layout_tree_builder_traversal.h"
 #include "third_party/blink/renderer/core/layout/anchor_query_map.h"
@@ -106,8 +107,17 @@ namespace {
 
 bool IsScopedByElement(const ScopedCSSName* lookup_name,
                        const Element& element) {
-  const StyleAnchorScope& anchor_scope =
-      element.ComputedStyleRef().AnchorScope();
+  const ComputedStyle* style = element.GetComputedStyle();
+  if (!style) {
+    // TODO(crbug.com/384523570): We should not be here without a style,
+    // but apparently that can happen [1]. This is likely related to poking
+    // into a dirty layout tree during scroll snapshotting,
+    // since ValidateSnapshot() is on the stack [1].
+    //
+    // [1] crbug.com/393395576
+    return false;
+  }
+  const StyleAnchorScope& anchor_scope = style->AnchorScope();
   if (anchor_scope.IsNone()) {
     return false;
   }

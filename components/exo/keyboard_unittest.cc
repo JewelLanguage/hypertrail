@@ -11,7 +11,6 @@
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/keyboard/keyboard_controller_impl.h"
-#include "ash/public/cpp/external_arc/overlay/arc_overlay_manager.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_helper.h"
 #include "ash/test/test_widget_builder.h"
@@ -21,7 +20,7 @@
 #include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
-#include "base/test/scoped_feature_list.h"
+#include "chromeos/ash/experiences/arc/overlay/arc_overlay_manager.h"
 #include "chromeos/ui/base/app_types.h"
 #include "chromeos/ui/base/window_properties.h"
 #include "components/exo/buffer.h"
@@ -928,15 +927,15 @@ TEST_F(KeyboardTest, FocusWithArcOverlay) {
   EXPECT_EQ(keyboard.focused_surface_for_testing(), surface.get());
 
   constexpr char kFocusedViewClassName[] = "OverlayNativeViewHost";
-  EXPECT_STREQ(kFocusedViewClassName,
-               widget1->GetFocusManager()->GetFocusedView()->GetClassName());
+  EXPECT_EQ(kFocusedViewClassName,
+            widget1->GetFocusManager()->GetFocusedView()->GetClassName());
 
   // Tabbing should not move the focus away from the overlay.
   ui::test::EventGenerator generator(ash::Shell::GetPrimaryRootWindow());
   generator.PressKey(ui::VKEY_TAB, 0);
 
-  EXPECT_STREQ(kFocusedViewClassName,
-               widget1->GetFocusManager()->GetFocusedView()->GetClassName());
+  EXPECT_EQ(kFocusedViewClassName,
+            widget1->GetFocusManager()->GetFocusedView()->GetClassName());
   EXPECT_EQ(keyboard.focused_surface_for_testing(), surface.get());
 
   hold.RunAndReset();

@@ -5,10 +5,14 @@
 #ifndef CHROME_BROWSER_AUTOFILL_AI_CHROME_AUTOFILL_AI_CLIENT_H_
 #define CHROME_BROWSER_AUTOFILL_AI_CHROME_AUTOFILL_AI_CLIENT_H_
 
+#include <memory>
+#include <utility>
+
 #include "components/autofill/content/browser/content_autofill_client.h"
 #include "components/autofill/core/browser/data_manager/entities/entity_data_manager.h"
 #include "components/autofill_ai/core/browser/autofill_ai_client.h"
 #include "components/autofill_ai/core/browser/autofill_ai_manager.h"
+#include "components/autofill_ai/core/browser/suggestion/autofill_ai_model_executor.h"
 #include "components/prefs/pref_service.h"
 
 class Profile;
@@ -37,27 +41,14 @@ class ChromeAutofillAiClient : public autofill_ai::AutofillAiClient {
   void GetAXTree(AXTreeCallback callback) override;
   autofill_ai::AutofillAiManager& GetManager() override;
   autofill_ai::AutofillAiModelExecutor* GetModelExecutor() override;
-  const GURL& GetLastCommittedURL() override;
-  const url::Origin& GetLastCommittedOrigin() override;
-  std::string GetTitle() override;
-  user_annotations::UserAnnotationsService* GetUserAnnotationsService()
-      override;
   autofill::EntityDataManager* GetEntityDataManager() override;
   bool IsAutofillAiEnabledPref() const override;
-  void TryToOpenFeedbackPage(const std::string& feedback_id) override;
-  void OpenAutofillAiSettings() override;
   bool IsUserEligible() override;
   autofill::FormStructure* GetCachedFormStructure(
-      const autofill::FormData& form_data) override;
-  std::u16string GetAutofillNameFillingValue(
-      const std::string& autofill_profile_guid,
-      autofill::FieldType field_type,
-      const autofill::FormFieldData& field) override;
+      const autofill::FormGlobalId& form_id) override;
   void ShowSaveAutofillAiBubble(
-      std::unique_ptr<user_annotations::FormAnnotationResponse>
-          form_annotation_response,
-      user_annotations::PromptAcceptanceCallback prompt_acceptance_callback)
-      override;
+      autofill::EntityInstance entity,
+      SavePromptAcceptanceCallback save_prompt_acceptance_callback) override;
 
   void SetModelExecutorForTesting(
       std::unique_ptr<autofill_ai::AutofillAiModelExecutor> model_executor) {

@@ -11,25 +11,25 @@
 
 #include <sys/sysinfo.h>
 
+#include <algorithm>
 #include <string>
 #include <utility>
 
-#include "ash/components/arc/arc_features.h"
-#include "ash/components/arc/arc_prefs.h"
-#include "ash/components/arc/arc_util.h"
 #include "ash/public/cpp/app_types_util.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
 #include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
+#include "chromeos/ash/experiences/arc/arc_features.h"
+#include "chromeos/ash/experiences/arc/arc_prefs.h"
+#include "chromeos/ash/experiences/arc/arc_util.h"
 #include "chromeos/ash/experiences/arc/metrics/arc_metrics_anr.h"
 #include "chromeos/ash/experiences/arc/metrics/arc_wm_metrics.h"
 #include "chromeos/ash/experiences/arc/metrics/stability_metrics_manager.h"
@@ -943,7 +943,7 @@ void ArcMetricsService::OnTaskCreated(int32_t task_id,
 }
 
 void ArcMetricsService::OnTaskDestroyed(int32_t task_id) {
-  auto it = base::ranges::find(task_ids_, task_id);
+  auto it = std::ranges::find(task_ids_, task_id);
   if (it == task_ids_.end()) {
     LOG(WARNING) << "unknown task_id, background time might be undermeasured";
     return;

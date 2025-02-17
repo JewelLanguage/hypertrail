@@ -48,6 +48,7 @@
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/permission_controller.h"
+#include "content/public/browser/prefetch_service_delegate.h"
 #include "content/public/browser/preloading_trigger_type.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/site_instance.h"
@@ -71,6 +72,7 @@
 namespace content {
 
 class PrefetchService;
+class PrefetchServiceDelegate;
 
 namespace {
 
@@ -189,12 +191,14 @@ StoragePartition* BrowserContext::GetDefaultStoragePartition() {
   return GetStoragePartition(StoragePartitionConfig::CreateDefault(this));
 }
 
-void BrowserContext::StartBrowserPrefetchRequest(
+std::unique_ptr<content::PrefetchHandle>
+BrowserContext::StartBrowserPrefetchRequest(
     const GURL& url,
     bool javascript_enabled,
     std::optional<net::HttpNoVarySearchData> no_vary_search_hint,
     const net::HttpRequestHeaders& additional_headers,
-    std::unique_ptr<PrefetchRequestStatusListener> request_status_listener) {
+    std::unique_ptr<PrefetchRequestStatusListener> request_status_listener,
+    base::TimeDelta ttl_in_sec) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   TRACE_EVENT0("loading", "BrowserContext::StartBrowserPrefetchRequest");
 
@@ -204,7 +208,7 @@ void BrowserContext::StartBrowserPrefetchRequest(
     if (request_status_listener) {
       request_status_listener->OnPrefetchStartFailed();
     }
-    return;
+    return nullptr;
   }
 
   PrefetchType prefetch_type(PreloadingTriggerType::kEmbedder,
@@ -213,8 +217,19 @@ void BrowserContext::StartBrowserPrefetchRequest(
       this, url, prefetch_type, blink::mojom::Referrer(), javascript_enabled,
       /*referring_origin=*/std::nullopt, std::move(no_vary_search_hint),
       /*attempt=*/nullptr, additional_headers,
-      std::move(request_status_listener));
-  prefetch_service->AddPrefetchContainer(std::move(container));
+      std::move(request_status_listener), ttl_in_sec);
+  return prefetch_service->AddPrefetchContainerWithHandle(std::move(container));
+}
+
+void BrowserContext::UpdatePrefetchServiceDelegateAcceptLanguageHeader(
+    std::string accept_language_header) {
+  PrefetchService* prefetch_service =
+      BrowserContextImpl::From(this)->GetPrefetchService();
+  if (!prefetch_service) {
+    return;
+  }
+  prefetch_service->GetPrefetchServiceDelegate()->SetAcceptLanguageHeader(
+      accept_language_header);
 }
 
 void BrowserContext::CreateMemoryBackedBlob(base::span<const uint8_t> data,

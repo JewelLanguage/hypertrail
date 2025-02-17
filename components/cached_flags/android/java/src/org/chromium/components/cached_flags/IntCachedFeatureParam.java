@@ -12,10 +12,13 @@ import org.chromium.base.FeatureMap;
 import org.chromium.base.FeatureOverrides;
 import org.chromium.base.cached_flags.ValuesReturned;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 
 /** An int-type {@link CachedFeatureParam}. */
+@NullMarked
 public class IntCachedFeatureParam extends CachedFeatureParam<Integer> {
-    private Supplier<Integer> mValueSupplier;
+    private @Nullable Supplier<Integer> mValueSupplier;
 
     public IntCachedFeatureParam(
             FeatureMap featureMap, String featureName, String variationName, int defaultValue) {
@@ -68,6 +71,12 @@ public class IntCachedFeatureParam extends CachedFeatureParam<Integer> {
                 mFeatureMap.getFieldTrialParamByFeatureAsInt(
                         getFeatureName(), getName(), getDefaultValue());
         editor.putInt(getSharedPreferenceKey(), value);
+    }
+
+    @Override
+    void writeCacheValueToEditor(final SharedPreferences.Editor editor, String value) {
+        final int intValue = Integer.valueOf(value);
+        editor.putInt(getSharedPreferenceKey(), intValue);
     }
 
     /**

@@ -34,7 +34,6 @@
 #include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
-#include "base/ranges/algorithm.h"
 #include "base/scoped_observation.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/common/trace_event_common.h"
@@ -155,9 +154,6 @@ ScopedChildrenLock::ScopedChildrenLock(const View* view)
     : reset_(&view->iterating_, true) {}
 
 ScopedChildrenLock::~ScopedChildrenLock() = default;
-#else
-ScopedChildrenLock::ScopedChildrenLock(const View* view) {}
-ScopedChildrenLock::~ScopedChildrenLock() {}
 #endif
 
 }  // namespace internal
@@ -325,7 +321,7 @@ Widget* View::GetWidget() {
 
 void View::ReorderChildView(View* view, size_t index) {
   DCHECK_EQ(view->parent_, this);
-  const auto i = base::ranges::find(children_, view);
+  const auto i = std::ranges::find(children_, view);
   DCHECK(i != children_.end());
 
   // If |view| is already at the desired position, there's nothing to do.
@@ -385,7 +381,7 @@ bool View::Contains(const View* view) const {
 }
 
 View::Views::const_iterator View::FindChild(const View* view) const {
-  return base::ranges::find(children_, view);
+  return std::ranges::find(children_, view);
 }
 
 std::optional<size_t> View::GetIndexOf(const View* view) const {
@@ -646,8 +642,8 @@ void View::SetVisible(bool visible) {
     visible_ = visible;
     // The visible state of a view can affect both its own focusability and that
     // of its descendants.
-    GetViewAccessibility().UpdateFocusableStateRecursive();
-    GetViewAccessibility().UpdateInvisibleState();
+    GetViewAccessibility().UpdateInvisibleByInheritanceRecursive(this,
+                                                                 !visible);
 
     AdvanceFocusIfNecessary();
 
@@ -655,8 +651,8 @@ void View::SetVisible(bool visible) {
     if (parent_) {
       parent_->ChildVisibilityChanged(this);
       if (!view_accessibility_ || !view_accessibility_->GetIsIgnored()) {
-        parent_->NotifyAccessibilityEvent(ax::mojom::Event::kChildrenChanged,
-                                          true);
+        parent_->NotifyAccessibilityEventDeprecated(
+            ax::mojom::Event::kChildrenChanged, true);
       }
     }
 
@@ -816,7 +812,7 @@ void View::RemoveLayerFromRegionsKeepInLayerTree(ui::Layer* old_layer) {
   auto remove_layer =
       [old_layer, this](
           std::vector<raw_ptr<ui::Layer, VectorExperimental>>& layer_vector) {
-        auto layer_pos = base::ranges::find(layer_vector, old_layer);
+        auto layer_pos = std::ranges::find(layer_vector, old_layer);
         if (layer_pos == layer_vector.end()) {
           return false;
         }
@@ -1088,7 +1084,7 @@ View* View::GetSelectedViewForGroup(int group) {
 }
 
 std::string View::GetObjectName() const {
-  return GetClassName();
+  return std::string(GetClassName());
 }
 
 // Coordinate conversion -------------------------------------------------------
@@ -1681,7 +1677,7 @@ void View::OnMouseEvent(ui::MouseEvent* event) {
 
     case ui::EventType::kMouseEntered:
       if (event->flags() & ui::EF_TOUCH_ACCESSIBILITY) {
-        NotifyAccessibilityEvent(ax::mojom::Event::kHover, true);
+        NotifyAccessibilityEventDeprecated(ax::mojom::Event::kHover, true);
       }
       OnMouseEntered(*event);
       break;
@@ -1787,7 +1783,7 @@ void View::AddAccelerator(const ui::Accelerator& accelerator) {
 void View::RemoveAccelerator(const ui::Accelerator& accelerator) {
   CHECK(accelerators_) << "Removing non-existent accelerator";
 
-  auto i(base::ranges::find(*accelerators_, accelerator));
+  auto i(std::ranges::find(*accelerators_, accelerator));
   CHECK(i != accelerators_->end()) << "Removing non-existent accelerator";
 
   auto index = static_cast<size_t>(i - accelerators_->begin());
@@ -1963,6 +1959,11 @@ void View::SetFocusBehavior(FocusBehavior focus_behavior) {
   // example, a container view may have a focus behavior of NEVER, but its
   // children may still be focusable.
   GetViewAccessibility().UpdateFocusableState();
+  // Even though the focusable state is not propagated down the hierarchy, the
+  // ignored state of the descendants does depend on the focusable state of the
+  // ancestor if it is set to be focusable.
+  GetViewAccessibility().SetHasFocusableAncestorRecursive(focus_behavior_ !=
+                                                          FocusBehavior::NEVER);
   AdvanceFocusIfNecessary();
 
   OnPropertyChanged(&focus_behavior_, kPropertyEffectsNone);
@@ -2009,14 +2010,21 @@ FocusTraversable* View::GetPaneFocusTraversable() {
 
 // Tooltips --------------------------------------------------------------------
 
-void View::SetCachedTooltipText(const std::u16string& text) {
+void View::SetTooltipText(const std::u16string& text) {
   if (cached_tooltip_text_ == text) {
     return;
   }
 
-  GetViewAccessibility().OnTooltipTextChanged(
-      std::exchange(cached_tooltip_text_, text));
+  std::u16string previous_tooltip_text = std::move(cached_tooltip_text_);
+
+  cached_tooltip_text_ = text;
+
+  OnTooltipTextChanged(previous_tooltip_text);
+}
+
+void View::OnTooltipTextChanged(const std::u16string& old_tooltip_text) {
   TooltipTextChanged();
+  GetViewAccessibility().OnTooltipTextChanged(old_tooltip_text);
 }
 
 base::CallbackListSubscription View::AddTooltipTextChangedCallback(
@@ -2024,11 +2032,11 @@ base::CallbackListSubscription View::AddTooltipTextChangedCallback(
   return AddPropertyChangedCallback(&cached_tooltip_text_, std::move(callback));
 }
 
-std::u16string View::GetTooltipText(const gfx::Point& p) const {
-  return GetCachedTooltipText();
+std::u16string View::GetRenderedTooltipText(const gfx::Point& p) const {
+  return GetTooltipText();
 }
 
-const std::u16string& View::GetCachedTooltipText() const {
+const std::u16string& View::GetTooltipText() const {
   return cached_tooltip_text_;
 }
 
@@ -2196,8 +2204,8 @@ gfx::NativeViewAccessible View::GetNativeViewAccessible() {
   return GetViewAccessibility().GetNativeObject();
 }
 
-void View::NotifyAccessibilityEvent(ax::mojom::Event event_type,
-                                    bool send_native_event) {
+void View::NotifyAccessibilityEventDeprecated(ax::mojom::Event event_type,
+                                              bool send_native_event) {
   GetViewAccessibility().NotifyEvent(event_type, send_native_event);
 }
 
@@ -2456,7 +2464,7 @@ void View::OnPaintLayer(const ui::PaintContext& context) {
 
 void View::OnLayerTransformed(const gfx::Transform& old_transform,
                               ui::PropertyChangeReason reason) {
-  NotifyAccessibilityEvent(ax::mojom::Event::kLocationChanged, false);
+  NotifyAccessibilityEventDeprecated(ax::mojom::Event::kLocationChanged, false);
 
   observers_.Notify(&ViewObserver::OnViewLayerTransformed, this);
 }
@@ -2638,9 +2646,9 @@ void View::Focus() {
         view_accessibility_ ? view_accessibility_->FocusedVirtualChild()
                             : nullptr;
     if (focused_virtual_child) {
-      focused_virtual_child->NotifyAccessibilityEvent(ax::mojom::Event::kFocus);
+      focused_virtual_child->NotifyEvent(ax::mojom::Event::kFocus, true);
     } else {
-      NotifyAccessibilityEvent(ax::mojom::Event::kFocus, true);
+      NotifyAccessibilityEventDeprecated(ax::mojom::Event::kFocus, true);
     }
   }
 
@@ -2798,7 +2806,7 @@ void View::SetHeight(int height) {
 }
 
 std::u16string View::GetTooltip() const {
-  return GetTooltipText(gfx::Point());
+  return GetTooltipText();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3009,7 +3017,7 @@ void View::AddChildViewAtImpl(View* view, size_t index) {
   // events from being fired until accessibility is fully initialized, and if we
   // need to update the accessible focusable state before the cache is fully
   // initialized. If so, let's merge these two functions.
-  view->GetViewAccessibility().UpdateStatesForViewAndDescendants();
+  view->GetViewAccessibility().OnViewHasNewAncestor(this);
 
   if (widget) {
     // There are scenarios where we might be reparenting a view from a widget
@@ -3273,7 +3281,7 @@ void View::AddDescendantToNotify(View* view) {
 
 void View::RemoveDescendantToNotify(View* view) {
   DCHECK(view && descendants_to_notify_);
-  auto i = base::ranges::find(*descendants_to_notify_, view);
+  auto i = std::ranges::find(*descendants_to_notify_, view);
   CHECK(i != descendants_to_notify_->end(), base::NotFatalUntil::M130);
   descendants_to_notify_->erase(i);
   if (descendants_to_notify_->empty()) {
@@ -3391,7 +3399,7 @@ void View::CreateLayer(ui::LayerType layer_type) {
 
   SetLayer(std::make_unique<ui::Layer>(layer_type));
   layer()->set_delegate(this);
-  layer()->SetName(GetClassName());
+  layer()->SetName(std::string(GetClassName()));
 
   UpdateParentLayers();
   UpdateLayerVisibility();
@@ -3509,7 +3517,7 @@ void View::LayoutImmediately() {
   TRACE_EVENT("ui", "View::LayoutImmediately", [&](perfetto::EventContext ctx) {
     auto* event = ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
     auto* data = event->set_view_class_name();
-    data->set_name(GetClassName());
+    data->set_name(std::string(GetClassName()));
   });
   invalidates_during_layout_ = 0;
   ++layouts_since_last_paint_;
@@ -3671,7 +3679,7 @@ void View::SetFocusSiblings(View* view, Views::const_iterator pos) {
       // |view| was inserted at the end, but the end of the child list may not
       // be the last focusable element. Try to hook in after the last focusable
       // child.
-      View* const old_last = *base::ranges::find_if_not(
+      View* const old_last = *std::ranges::find_if_not(
           children_.cbegin(), pos, &View::next_focusable_view_);
       DCHECK_NE(old_last, view);
       view->InsertAfterInFocusList(old_last);
@@ -3833,7 +3841,7 @@ void BaseActionViewInterface::ActionItemChangedImpl(
 BEGIN_METADATA_BASE(View)
 ADD_PROPERTY_METADATA(std::unique_ptr<Background>, Background)
 ADD_PROPERTY_METADATA(std::unique_ptr<Border>, Border)
-ADD_READONLY_PROPERTY_METADATA(const char*, ClassName)
+ADD_READONLY_PROPERTY_METADATA(std::string_view, ClassName)
 ADD_PROPERTY_METADATA(bool, Enabled)
 ADD_PROPERTY_METADATA(View::FocusBehavior, FocusBehavior)
 ADD_PROPERTY_METADATA(bool, FlipCanvasOnPaintForRTLUI)
@@ -3853,6 +3861,7 @@ ADD_PROPERTY_METADATA(bool, UseDefaultFillLayout)
 ADD_PROPERTY_METADATA(int, Width)
 ADD_PROPERTY_METADATA(int, X)
 ADD_PROPERTY_METADATA(int, Y)
+ADD_PROPERTY_METADATA(std::u16string, TooltipText)
 ADD_CLASS_PROPERTY_METADATA(gfx::Insets, kMarginsKey)
 ADD_CLASS_PROPERTY_METADATA(gfx::Insets, kInternalPaddingKey)
 ADD_CLASS_PROPERTY_METADATA(LayoutAlignment, kCrossAxisAlignmentKey)

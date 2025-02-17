@@ -5,8 +5,8 @@
 #ifndef IOS_CHROME_BROWSER_AI_PROTOTYPING_MODEL_TAB_ORGANIZATION_SERVICE_IMPL_H_
 #define IOS_CHROME_BROWSER_AI_PROTOTYPING_MODEL_TAB_ORGANIZATION_SERVICE_IMPL_H_
 
-#import "components/optimization_guide/optimization_guide_buildflags.h"
 #import "ios/chrome/browser/optimization_guide/mojom/tab_organization_service.mojom.h"
+#import "mojo/public/cpp/bindings/receiver.h"
 
 class OptimizationGuideService;
 class WebStateList;
@@ -34,7 +34,6 @@ class TabOrganizationServiceImpl : public mojom::TabOrganizationService {
                         ExecuteGroupTabsCallback callback) override;
 
  private:
-#if BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
   // Handles the response for a tab organization query.
   std::string OnGroupTabsResponse(
       optimization_guide::OptimizationGuideModelExecutionResult result);
@@ -42,7 +41,8 @@ class TabOrganizationServiceImpl : public mojom::TabOrganizationService {
   // Service used to execute LLM queries.
   raw_ptr<OptimizationGuideService> service_;
 
-#endif  // BUILDFLAG(BUILD_WITH_INTERNAL_OPTIMIZATION_GUIDE)
+  // Receiver throughout the TabOrganizationServiceImpl lifecycle.
+  mojo::Receiver<mojom::TabOrganizationService> receiver_;
 
   // List of web states used for tab organization.
   raw_ptr<WebStateList> web_state_list_;

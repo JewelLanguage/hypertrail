@@ -124,6 +124,12 @@ constexpr float kDraggedImageOpacity = 0.5f;
 
 namespace {
 
+// `BoundsAnimator` drives the animation and the delegate itself does not.
+// Hence the animation delegate that is used by `BoundsAnimator` to notify
+// animation progress can just be `gfx::AnimationDelegate` and does not need to
+// be a `views::AnimationDelegateViews`.
+using BoundsAnimatorDelegate = gfx::AnimationDelegate;
+
 // The dimensions, in pixels, of the separator between pinned and unpinned
 // items.
 constexpr int kSeparatorSize = 20;
@@ -272,9 +278,9 @@ class ShelfView::FadeInAnimationDelegate
   raw_ptr<ShelfView> shelf_view_ = nullptr;
 };
 
-// AnimationDelegate used when deleting an item. This steadily decreased the
-// opacity of the layer as the animation progress.
-class ShelfView::FadeOutAnimationDelegate : public gfx::AnimationDelegate {
+// FadeOutAnimationDelegate used when deleting an item. This steadily decreased
+// the opacity of the layer as the animation progress.
+class ShelfView::FadeOutAnimationDelegate : public BoundsAnimatorDelegate {
  public:
   FadeOutAnimationDelegate(ShelfView* host, std::unique_ptr<views::View> view)
       : shelf_view_(host), view_(std::move(view)) {}
@@ -284,7 +290,7 @@ class ShelfView::FadeOutAnimationDelegate : public gfx::AnimationDelegate {
 
   ~FadeOutAnimationDelegate() override = default;
 
-  // AnimationDelegate overrides:
+  // BoundsAnimatorDelegate overrides:
   void AnimationProgressed(const Animation* animation) override {
     view_->layer()->SetOpacity(1 - animation->GetCurrentValue());
   }
@@ -304,10 +310,10 @@ class ShelfView::FadeOutAnimationDelegate : public gfx::AnimationDelegate {
   std::unique_ptr<views::View> view_;
 };
 
-// AnimationDelegate used to trigger fading an element in. When an item is
-// inserted this delegate is attached to the animation that expands the size of
-// the item.  When done it kicks off another animation to fade the item in.
-class ShelfView::StartFadeAnimationDelegate : public gfx::AnimationDelegate {
+// StartFadeAnimationDelegate used to trigger fading an element in. When an item
+// is inserted this delegate is attached to the animation that expands the size
+// of the item.  When done it kicks off another animation to fade the item in.
+class ShelfView::StartFadeAnimationDelegate : public BoundsAnimatorDelegate {
  public:
   StartFadeAnimationDelegate(ShelfView* host, views::View* view)
       : shelf_view_(host), view_(view) {}
@@ -318,7 +324,7 @@ class ShelfView::StartFadeAnimationDelegate : public gfx::AnimationDelegate {
 
   ~StartFadeAnimationDelegate() override = default;
 
-  // AnimationDelegate overrides:
+  // BoundsAnimatorDelegate overrides:
   void AnimationEnded(const Animation* animation) override {
     shelf_view_->FadeIn(view_);
   }
@@ -1214,12 +1220,11 @@ void ShelfView::EndDrag(bool cancel) {
   const int item_index = model_->ItemIndexByID(item_id);
   if (item_index >= 0) {
     drag_and_drop_view = view_model_->view_at(item_index);
-    std::unique_ptr<gfx::AnimationDelegate> animation_delegate;
 
     // Resets the dragged view's opacity at the end of drag. Otherwise, if
     // the app is already pinned on shelf before drag starts, the dragged view
     // will be invisible when drag ends.
-    animation_delegate =
+    auto animation_delegate =
         std::make_unique<StartFadeAnimationDelegate>(this, drag_and_drop_view);
 
     if (cancel) {
@@ -1233,7 +1238,6 @@ void ShelfView::EndDrag(bool cancel) {
         bounds_animator_->SetAnimationDelegate(drag_and_drop_view,
                                                std::move(animation_delegate));
       }
-
     } else {
       // Restore drag and drop view size, which was cleared in `StartDrag` to
       // hide the item view.
@@ -1716,8 +1720,8 @@ void ShelfView::MoveDragViewTo(int primary_axis_coordinate) {
     if (target_index == current_item_index &&
         old_relative_position != drag_view_relative_to_ideal_bounds_) {
       AnimateToIdealBounds();
-      NotifyAccessibilityEvent(ax::mojom::Event::kChildrenChanged,
-                               true /* send_native_event */);
+      NotifyAccessibilityEventDeprecated(ax::mojom::Event::kChildrenChanged,
+                                         true /* send_native_event */);
     }
   }
 
@@ -2123,9 +2127,23 @@ gfx::Rect ShelfView::GetBoundsForDragInsertInScreen() {
 }
 
 void ShelfView::CancelDrag() {
+  if (!dragging()) {
+    // Clear any drag state that may have been set before dragging started - for
+    // example, `PointerPressedOnButton()` may set `drag_view_`.
+    if (drag_view_) {
+      ClearDragState();
+    }
+    return;
+  }
+
   FinalizeRipOffDrag(true);
 
   if (drag_view_) {
+    // If the item was pinned for drag and drop, the item view is about to be
+    // removed from shelf view, so there is no point in updating its appearance.
+    if (!drag_and_drop_item_pinned_) {
+      drag_view_->layer()->SetOpacity(1.0f);
+    }
     auto drag_view_index = view_model_->GetIndexOfView(drag_view_);
     drag_view_ = nullptr;
 
@@ -2275,8 +2293,7 @@ void ShelfView::ShelfItemAdded(int model_index) {
   // works better with zero animation duration.
   if (!bounds_animator_->GetAnimationDuration().is_zero()) {
     bounds_animator_->SetAnimationDelegate(
-        view, std::unique_ptr<gfx::AnimationDelegate>(
-                  new StartFadeAnimationDelegate(this, view)));
+        view, std::make_unique<StartFadeAnimationDelegate>(this, view));
   }
 }
 
@@ -2453,8 +2470,8 @@ void ShelfView::ShelfItemMoved(int start_index, int target_index) {
 
   // Reorder the child view to be in the same order as in the |view_model_|.
   ReorderChildView(view_model_->view_at(target_index), target_index);
-  NotifyAccessibilityEvent(ax::mojom::Event::kChildrenChanged,
-                           true /* send_native_event */);
+  NotifyAccessibilityEventDeprecated(ax::mojom::Event::kChildrenChanged,
+                                     true /* send_native_event */);
 
   AnimateToIdealBounds();
 }

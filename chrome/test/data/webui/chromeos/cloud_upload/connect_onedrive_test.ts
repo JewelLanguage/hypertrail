@@ -6,22 +6,23 @@ import 'chrome://cloud-upload/connect_onedrive.js';
 
 import {UserAction} from 'chrome://cloud-upload/cloud_upload.mojom-webui.js';
 import {CloudUploadBrowserProxy} from 'chrome://cloud-upload/cloud_upload_browser_proxy.js';
-import {ConnectOneDriveElement} from 'chrome://cloud-upload/connect_onedrive.js';
+import type {ConnectOneDriveElement} from 'chrome://cloud-upload/connect_onedrive.js';
 import {assert} from 'chrome://resources/js/assert.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 
-import {CloudUploadTestBrowserProxy, ProxyOptions} from './cloud_upload_test_browser_proxy.js';
+import type {ProxyOptions} from './cloud_upload_test_browser_proxy.js';
+import {CloudUploadTestBrowserProxy} from './cloud_upload_test_browser_proxy.js';
 
 suite('<connect-onedrive>', () => {
   /* Holds the <connect-onedrive> app. */
-  let container: HTMLDivElement;
+  let container: HTMLElement;
   /* The <connect-onedrive> app. */
   let connectOneDriveApp: ConnectOneDriveElement;
   /* The BrowserProxy element to make assertions on when mojo methods are
      called. */
   let testProxy: CloudUploadTestBrowserProxy;
 
-  async function setUp(options: ProxyOptions) {
+  function setUp(options: ProxyOptions) {
     testProxy = new CloudUploadTestBrowserProxy(options);
     CloudUploadBrowserProxy.setInstance(testProxy);
 
@@ -52,7 +53,7 @@ suite('<connect-onedrive>', () => {
   });
 
   test('Successful connection leads to finished page', async () => {
-    await setUp({
+    setUp({
       fileNames: [],
       officeWebAppInstalled: true,
       installOfficeWebAppResult: true,
@@ -81,7 +82,7 @@ suite('<connect-onedrive>', () => {
   });
 
   test('Failed connection leads to error page', async () => {
-    await setUp({
+    setUp({
       fileNames: [],
       officeWebAppInstalled: true,
       installOfficeWebAppResult: true,
@@ -113,7 +114,7 @@ suite('<connect-onedrive>', () => {
    * `respondWithUserActionAndClose` mojo request.
    */
   test('Cancel', async () => {
-    await setUp({
+    setUp({
       fileNames: [],
       officeWebAppInstalled: true,
       installOfficeWebAppResult: true,
@@ -138,7 +139,7 @@ suite('<connect-onedrive>', () => {
    * `respondWithUserActionAndClose` mojo request.
    */
   test('Escape', async () => {
-    await setUp({
+    setUp({
       fileNames: [],
       officeWebAppInstalled: true,
       installOfficeWebAppResult: true,

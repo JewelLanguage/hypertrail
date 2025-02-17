@@ -198,13 +198,25 @@ void SharedStorageWorklet::AddModuleHelper(
   const PermissionsPolicy* policy =
       execution_context->GetSecurityContext().GetPermissionsPolicy();
   if (!policy || !policy->IsFeatureEnabledForOrigin(
-                     mojom::blink::PermissionsPolicyFeature::kSharedStorage,
+                     network::mojom::PermissionsPolicyFeature::kSharedStorage,
                      shared_storage_origin)) {
     resolver->Reject(V8ThrowDOMException::CreateOrEmpty(
         script_state->GetIsolate(), DOMExceptionCode::kInvalidAccessError,
         "The \"shared-storage\" Permissions Policy denied the method for the "
         "worklet origin."));
 
+    LogSharedStorageWorkletError(
+        SharedStorageWorkletErrorType::kAddModuleWebVisible);
+    return;
+  }
+
+  // data: url is treated as unexpected request and reported as bad message by
+  // CorsURLLoaderFactory, which will generate dump in official build and crash
+  // in non official build. Explicitly reject the request for data: url here.
+  if (script_source_url.ProtocolIs(url::kDataScheme)) {
+    resolver->Reject(V8ThrowDOMException::CreateOrEmpty(
+        script_state->GetIsolate(), DOMExceptionCode::kOperationError,
+        "data: module script url is not allowed."));
     LogSharedStorageWorkletError(
         SharedStorageWorkletErrorType::kAddModuleWebVisible);
     return;
@@ -340,11 +352,11 @@ ScriptPromise<V8SharedStorageResponse> SharedStorageWorklet::selectURL(
       execution_context->GetSecurityContext().GetPermissionsPolicy();
   CHECK(policy);
   CHECK(policy->IsFeatureEnabledForOrigin(
-      mojom::blink::PermissionsPolicyFeature::kSharedStorage,
+      network::mojom::PermissionsPolicyFeature::kSharedStorage,
       shared_storage_origin_));
 
   if (!policy->IsFeatureEnabledForOrigin(
-          mojom::blink::PermissionsPolicyFeature::kSharedStorageSelectUrl,
+          network::mojom::PermissionsPolicyFeature::kSharedStorageSelectUrl,
           shared_storage_origin_)) {
     resolver->Reject(V8ThrowDOMException::CreateOrEmpty(
         script_state->GetIsolate(), DOMExceptionCode::kInvalidAccessError,
@@ -623,7 +635,7 @@ ScriptPromise<IDLAny> SharedStorageWorklet::run(
       execution_context->GetSecurityContext().GetPermissionsPolicy();
   CHECK(policy);
   CHECK(policy->IsFeatureEnabledForOrigin(
-      mojom::blink::PermissionsPolicyFeature::kSharedStorage,
+      network::mojom::PermissionsPolicyFeature::kSharedStorage,
       shared_storage_origin_));
 
   if (!keep_alive_after_operation_) {

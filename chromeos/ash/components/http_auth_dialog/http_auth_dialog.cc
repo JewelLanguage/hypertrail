@@ -6,6 +6,7 @@
 
 #include <vector>
 
+#include "base/debug/dump_without_crashing.h"
 #include "base/no_destructor.h"
 #include "base/observer_list.h"
 #include "base/task/sequenced_task_runner.h"
@@ -233,11 +234,11 @@ HttpAuthDialog::DialogView::~DialogView() = default;
 
 // Access the data in the username/password text fields.
 std::u16string HttpAuthDialog::DialogView::GetUsername() const {
-  return username_field_->GetText();
+  return std::u16string(username_field_->GetText());
 }
 
 std::u16string HttpAuthDialog::DialogView::GetPassword() const {
-  return password_field_->GetText();
+  return std::u16string(password_field_->GetText());
 }
 
 void HttpAuthDialog::DialogView::SetCredentialsForTest(

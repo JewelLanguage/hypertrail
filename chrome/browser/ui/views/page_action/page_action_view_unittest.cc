@@ -8,12 +8,14 @@
 #include <string>
 
 #include "chrome/browser/ui/layout_constants.h"
+#include "chrome/browser/ui/tabs/test/mock_tab_interface.h"
 #include "chrome/browser/ui/toolbar/pinned_toolbar/pinned_toolbar_actions_model.h"
 #include "chrome/browser/ui/views/location_bar/icon_label_bubble_view.h"
+#include "chrome/browser/ui/views/page_action/mock_page_action_model.h"
 #include "chrome/browser/ui/views/page_action/page_action_controller.h"
-#include "chrome/browser/ui/views/page_action/page_action_model.h"
 #include "chrome/browser/ui/views/page_action/page_action_model_observer.h"
 #include "chrome/browser/ui/views/page_action/page_action_triggers.h"
+#include "chrome/browser/ui/views/page_action/page_action_view_params.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/views/chrome_views_test_base.h"
 #include "components/vector_icons/vector_icons.h"
@@ -45,34 +47,40 @@ class MockIconLabelViewDelegate : public IconLabelBubbleView::Delegate {
               (const, override));
 };
 
-class MockPageActionModel : public PageActionModelInterface {
+class AlwaysActiveTabInterface : public tabs::MockTabInterface {
  public:
-  MOCK_METHOD(bool, GetVisible, (), (const, override));
-  MOCK_METHOD(const std::u16string, GetText, (), (const, override));
-  MOCK_METHOD(const std::u16string, GetTooltipText, (), (const, override));
-  MOCK_METHOD(const ui::ImageModel&, GetImage, (), (const, override));
-  MOCK_METHOD(void,
-              AddObserver,
-              (PageActionModelObserver * observer),
-              (override));
-  MOCK_METHOD(void,
-              RemoveObserver,
-              (PageActionModelObserver * observer),
-              (override));
-  MOCK_METHOD(void,
-              SetActionItemProperties,
-              (base::PassKey<PageActionController>,
-               const actions::ActionItem* action_item),
-              (override));
-  MOCK_METHOD(void,
-              SetShowRequested,
-              (base::PassKey<PageActionController>, bool requested),
-              (override));
-  MOCK_METHOD(void,
-              SetOverrideText,
-              (base::PassKey<PageActionController>,
-               const std::optional<std::u16string>& text),
-              (override));
+  ~AlwaysActiveTabInterface() override = default;
+  bool IsActivated() const override { return true; }
+};
+
+// Some methods in IconLabelBubbleView, from which PageActionView inherits,
+// do not provide getters for certain properties.
+// This class wraps PageActionView to monitor calls to the view for those
+// properties that cannot be retrieved via a getter.
+class TestPageActionView : public PageActionView {
+ public:
+  // Inherit parent constructors.
+  using PageActionView::PageActionView;
+
+  void SetUseTonalColorsWhenExpanded(bool use_tonal_colors) final {
+    use_tonal_colors_ = use_tonal_colors;
+    PageActionView::SetUseTonalColorsWhenExpanded(use_tonal_colors);
+  }
+
+  void SetBackgroundVisibility(
+      BackgroundVisibility background_visibility) final {
+    background_visibility_ = background_visibility;
+    PageActionView::SetBackgroundVisibility(background_visibility);
+  }
+
+  bool is_using_tonal_colors() const { return use_tonal_colors_; }
+  BackgroundVisibility background_visible() const {
+    return background_visibility_;
+  }
+
+ private:
+  bool use_tonal_colors_ = false;
+  BackgroundVisibility background_visibility_ = BackgroundVisibility::kNever;
 };
 
 // Test class that includes a real controller and model. Prefer to use simpler
@@ -89,8 +97,13 @@ class PageActionViewTest : public ChromeViewsTestBase {
         vector_icons::kBackArrowIcon, ui::kColorSysPrimary, kDefaultIconSize);
     action_item_ = actions::ActionManager::Get().AddAction(
         actions::ActionItem::Builder().SetActionId(0).SetImage(image).Build());
-    page_action_view_ = std::make_unique<PageActionView>(
-        action_item_, &icon_label_view_delegate_);
+    test_page_action_view_ = std::make_unique<TestPageActionView>(
+        action_item_,
+        PageActionViewParams{
+            .icon_size = kDefaultIconSize,
+            .icon_label_bubble_delegate = &icon_label_view_delegate_,
+        });
+
     profile_ = std::make_unique<TestingProfile>();
     pinned_actions_model_ =
         std::make_unique<PinnedToolbarActionsModel>(profile_.get());
@@ -105,18 +118,22 @@ class PageActionViewTest : public ChromeViewsTestBase {
     profile_.reset();
   }
 
-  std::unique_ptr<PageActionController> NewPageActionController() const {
+  std::unique_ptr<PageActionController> NewPageActionController(
+      tabs::TabInterface& tab) const {
     auto controller =
         std::make_unique<PageActionController>(pinned_actions_model_.get());
-    controller->Initialize({action_item_->GetActionId().value()});
+    controller->Initialize(tab, {action_item_->GetActionId().value()});
     return controller;
   }
 
-  PageActionView* page_action_view() { return page_action_view_.get(); }
+  TestPageActionView* page_action_view() {
+    return test_page_action_view_.get();
+  }
   actions::ActionItem* action_item() { return action_item_; }
 
  private:
   std::unique_ptr<PageActionView> page_action_view_;
+  std::unique_ptr<TestPageActionView> test_page_action_view_;
   raw_ptr<actions::ActionItem> action_item_;
 
   testing::NiceMock<MockIconLabelViewDelegate> icon_label_view_delegate_;
@@ -137,10 +154,14 @@ class PageActionViewWithMockModelTest : public ChromeViewsTestBase {
     ChromeViewsTestBase::SetUp();
 
     action_item_ = actions::ActionItem::Builder().SetActionId(0).Build();
-    page_action_view_ = std::make_unique<PageActionView>(
-        action_item_.get(), &icon_label_view_delegate_);
+    page_action_view_ = std::make_unique<TestPageActionView>(
+        action_item_.get(),
+        PageActionViewParams{
+            .icon_size = view_icon_size_,
+            .icon_label_bubble_delegate = &icon_label_view_delegate_});
 
     ON_CALL(mock_model_, GetVisible()).WillByDefault(Return(false));
+    ON_CALL(mock_model_, GetShowSuggestionChip()).WillByDefault(Return(false));
     ON_CALL(mock_model_, GetText()).WillByDefault(Return(mock_string_));
     ON_CALL(mock_model_, GetTooltipText()).WillByDefault(Return(mock_string_));
     ON_CALL(mock_model_, GetImage()).WillByDefault(ReturnRef(mock_image_));
@@ -153,12 +174,13 @@ class PageActionViewWithMockModelTest : public ChromeViewsTestBase {
     ChromeViewsTestBase::TearDown();
   }
 
-  PageActionView* page_action_view() { return page_action_view_.get(); }
+  TestPageActionView* page_action_view() { return page_action_view_.get(); }
   MockPageActionModel* model() { return &mock_model_; }
+  int view_icon_size() const { return view_icon_size_; }
 
  private:
   std::unique_ptr<actions::ActionItem> action_item_;
-  std::unique_ptr<PageActionView> page_action_view_;
+  std::unique_ptr<TestPageActionView> page_action_view_;
   testing::NiceMock<MockIconLabelViewDelegate> icon_label_view_delegate_;
 
   // Must exist in order to create PageActionView during the test.
@@ -168,13 +190,17 @@ class PageActionViewWithMockModelTest : public ChromeViewsTestBase {
   testing::NiceMock<MockPageActionModel> mock_model_;
   ui::ImageModel mock_image_;
   std::u16string mock_string_;
+
+  const int view_icon_size_ = kDefaultIconSize;
 };
 
 // Tests that calling Show/Hide on an inactive controller will not affect the
 // view.
 TEST_F(PageActionViewTest, ViewIgnoresInactiveController) {
-  auto controller_a = NewPageActionController();
-  auto controller_b = NewPageActionController();
+  // Use an always-active tab to ensure consistent visibility updates.
+  AlwaysActiveTabInterface tab;
+  auto controller_a = NewPageActionController(tab);
+  auto controller_b = NewPageActionController(tab);
   actions::ActionItem* item = action_item();
   item->SetEnabled(true);
   item->SetVisible(true);
@@ -207,7 +233,9 @@ TEST_F(PageActionViewTest, NoActiveController) {
   PageActionView* view = page_action_view();
   EXPECT_FALSE(view->GetVisible());
 
-  auto controller = NewPageActionController();
+  // Use an always-active tab to ensure consistent visibility updates.
+  AlwaysActiveTabInterface tab;
+  auto controller = NewPageActionController(tab);
   view->OnNewActiveController(controller.get());
   controller->Show(0);
   EXPECT_TRUE(view->GetVisible());
@@ -221,43 +249,76 @@ TEST_F(PageActionViewWithMockModelTest, Visibility) {
   EXPECT_FALSE(page_action_view()->GetVisible());
 
   EXPECT_CALL(*model(), GetVisible()).WillRepeatedly(Return(true));
-  page_action_view()->OnPageActionModelChanged(model());
+  page_action_view()->OnPageActionModelChanged(*model());
   EXPECT_TRUE(page_action_view()->GetVisible());
 
   EXPECT_CALL(*model(), GetVisible()).WillRepeatedly(Return(false));
-  page_action_view()->OnPageActionModelChanged(model());
+  page_action_view()->OnPageActionModelChanged(*model());
   EXPECT_FALSE(page_action_view()->GetVisible());
+}
+
+TEST_F(PageActionViewWithMockModelTest, LabelVisibility) {
+  // Ensure view defaults to invisible.
+  EXPECT_FALSE(page_action_view()->GetVisible());
+
+  EXPECT_CALL(*model(), GetVisible()).WillRepeatedly(Return(true));
+  EXPECT_CALL(*model(), GetShowSuggestionChip()).WillRepeatedly(Return(true));
+  EXPECT_CALL(*model(), GetText()).WillRepeatedly(Return(kTestText));
+  page_action_view()->OnPageActionModelChanged(*model());
+  EXPECT_TRUE(page_action_view()->GetVisible());
+  EXPECT_TRUE(page_action_view()->ShouldShowLabel());
+  EXPECT_TRUE(page_action_view()->GetLabelForTesting()->GetVisible());
+
+  EXPECT_CALL(*model(), GetShowSuggestionChip()).WillRepeatedly(Return(false));
+  page_action_view()->OnPageActionModelChanged(*model());
+  EXPECT_TRUE(page_action_view()->GetVisible());
+  EXPECT_FALSE(page_action_view()->ShouldShowLabel());
+  EXPECT_FALSE(page_action_view()->GetLabelForTesting()->GetVisible());
+}
+
+TEST_F(PageActionViewWithMockModelTest,
+       UpdateStyleSetsTonalColorsAndBackgroundVisibility) {
+  EXPECT_CALL(*model(), GetShowSuggestionChip()).WillRepeatedly(Return(true));
+  page_action_view()->OnPageActionModelChanged(*model());
+
+  EXPECT_TRUE(page_action_view()->is_using_tonal_colors());
+  EXPECT_EQ(page_action_view()->background_visible(),
+            IconLabelBubbleView::BackgroundVisibility::kAlways);
+
+  EXPECT_CALL(*model(), GetShowSuggestionChip()).WillRepeatedly(Return(false));
+  page_action_view()->OnPageActionModelChanged(*model());
+
+  EXPECT_FALSE(page_action_view()->is_using_tonal_colors());
+  EXPECT_EQ(page_action_view()->background_visible(),
+            IconLabelBubbleView::BackgroundVisibility::kNever);
 }
 
 TEST_F(PageActionViewWithMockModelTest, SuggestionText) {
   EXPECT_CALL(*model(), GetText()).WillRepeatedly(Return(kTestText));
-  page_action_view()->OnPageActionModelChanged(model());
+  page_action_view()->OnPageActionModelChanged(*model());
   EXPECT_EQ(page_action_view()->GetText(), kTestText);
 }
 
 TEST_F(PageActionViewWithMockModelTest, TooltipText) {
   EXPECT_CALL(*model(), GetTooltipText()).WillRepeatedly(Return(kTestText));
-  page_action_view()->OnPageActionModelChanged(model());
+  page_action_view()->OnPageActionModelChanged(*model());
   EXPECT_EQ(page_action_view()->GetTooltipText(), kTestText);
 }
 
 // Test that OnThemeChanged updates the icon image correctly.
 TEST_F(PageActionViewWithMockModelTest, OnThemeChangedUpdatesIconImage) {
+  // If the default size is the intended icon size, this test is useless.
+  const int kOriginalIconSize = view_icon_size() + 1;
   auto icon_image = ui::ImageModel::FromVectorIcon(
-      vector_icons::kBackArrowIcon, ui::kColorSysPrimary, kDefaultIconSize);
+      vector_icons::kBackArrowIcon, ui::kColorSysPrimary, kOriginalIconSize);
   EXPECT_CALL(*model(), GetImage()).WillRepeatedly(ReturnRef(icon_image));
 
-  const int required_icon_size =
-      GetLayoutConstant(LOCATION_BAR_TRAILING_ICON_SIZE);
-  // If the default size is the intended icon size, this test is useless.
-  EXPECT_GT(required_icon_size, kDefaultIconSize);
-
-  page_action_view()->OnPageActionModelChanged(model());
+  page_action_view()->OnPageActionModelChanged(*model());
   EXPECT_EQ(page_action_view()
                 ->GetImageModel(views::Button::STATE_NORMAL)
                 ->Size()
                 .width(),
-            required_icon_size);
+            view_icon_size());
 
   // Icon maintains required size on theme change.
   page_action_view()->OnThemeChanged();
@@ -265,34 +326,29 @@ TEST_F(PageActionViewWithMockModelTest, OnThemeChangedUpdatesIconImage) {
                 ->GetImageModel(views::Button::STATE_NORMAL)
                 ->Size()
                 .width(),
-            required_icon_size);
+            view_icon_size());
 }
 
 // Test that UpdateBorder adjusts the insets based on label visibility.
-TEST_F(PageActionViewTest, UpdateBorderAdjustsInsets) {
-  // Test case: Label visibility is true.
-  page_action_view()->SetShouldShowLabelForTesting(true);
-  gfx::Insets initial_insets = page_action_view()->GetInsets();
+TEST_F(PageActionViewWithMockModelTest, UpdateBorderAdjustsInsets) {
+  EXPECT_CALL(*model(), GetShowSuggestionChip()).WillRepeatedly(Return(true));
+  EXPECT_CALL(*model(), GetText()).WillRepeatedly(Return(kTestText));
+  page_action_view()->OnPageActionModelChanged(*model());
+  const gfx::Insets initial_insets = page_action_view()->GetInsets();
 
-  // Simulate UpdateBorder when label is visible.
   page_action_view()->UpdateBorder();
-  gfx::Insets updated_insets_true = page_action_view()->GetInsets();
+  const gfx::Insets insets_with_chip = page_action_view()->GetInsets();
 
-  // Verify that insets are updated when the label is visible.
-  EXPECT_NE(initial_insets, updated_insets_true);
+  EXPECT_EQ(initial_insets, insets_with_chip);
 
-  // Test case: Label visibility is false.
-  page_action_view()->SetShouldShowLabelForTesting(false);
+  EXPECT_CALL(*model(), GetShowSuggestionChip()).WillRepeatedly(Return(false));
+  page_action_view()->OnPageActionModelChanged(*model());
 
-  // Simulate UpdateBorder when label is not visible.
   page_action_view()->UpdateBorder();
-  gfx::Insets updated_insets_false = page_action_view()->GetInsets();
+  const gfx::Insets insets_without_chip = page_action_view()->GetInsets();
 
-  // Verify that insets remain unchanged when the label is not visible.
-  EXPECT_EQ(initial_insets, updated_insets_false);
-
-  // Verify that true and false cases result in different insets.
-  EXPECT_NE(updated_insets_true, updated_insets_false);
+  EXPECT_NE(initial_insets, insets_without_chip);
+  EXPECT_NE(insets_with_chip, insets_without_chip);
 }
 
 class PageActionViewTriggerTest : public PageActionViewTest {

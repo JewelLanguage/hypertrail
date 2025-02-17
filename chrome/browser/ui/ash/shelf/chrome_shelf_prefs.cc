@@ -28,7 +28,6 @@
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/ranges/algorithm.h"
 #include "base/values.h"
 #include "chrome/browser/apps/app_preload_service/app_preload_service.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -38,7 +37,6 @@
 #include "chrome/browser/ash/app_list/app_list_syncable_service.h"
 #include "chrome/browser/ash/app_list/app_list_syncable_service_factory.h"
 #include "chrome/browser/ash/app_list/arc/arc_app_list_prefs.h"
-#include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/ash/file_manager/prefs_migration_uma.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
@@ -588,12 +586,12 @@ std::vector<ash::ShelfID> ChromeShelfPrefs::GetPinnedAppsFromSync(
   }
 
   // Sort pins according their ordinals.
-  base::ranges::sort(pin_infos, syncer::StringOrdinal::LessThanFn(),
-                     &PinInfo::item_ordinal);
+  std::ranges::sort(pin_infos, syncer::StringOrdinal::LessThanFn(),
+                    &PinInfo::item_ordinal);
 
   // Convert to ShelfID array.
   std::vector<ash::ShelfID> pins;
-  base::ranges::transform(
+  std::ranges::transform(
       pin_infos, std::back_inserter(pins),
       [](const auto& pin_info) { return ash::ShelfID(pin_info.app_id); });
 

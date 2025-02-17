@@ -11,11 +11,11 @@ import android.view.View.OnClickListener;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import org.chromium.base.Callback;
 import org.chromium.base.CallbackController;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.chrome.browser.compositor.CompositorViewHolder;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.hub.DelegateButtonData;
 import org.chromium.chrome.browser.hub.FullButtonData;
@@ -37,7 +37,6 @@ import org.chromium.chrome.browser.user_education.UserEducationHelper;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.components.sensitive_content.SensitiveContentFeatures;
 
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.DoubleConsumer;
 
 /** A {@link Pane} representing the incognito tab switcher. */
@@ -51,50 +50,14 @@ public class IncognitoTabSwitcherPane extends TabSwitcherPaneBase {
 
                 @Override
                 public void didBecomeEmpty() {
-                    TabSwitcherPaneCoordinator paneCoordinator = getTabSwitcherPaneCoordinator();
-                    assert paneCoordinator != null;
-
-                    ObservableSupplier<Boolean> isAnimatingSupplier =
-                            paneCoordinator.getIsRecyclerViewAnimatorRunning();
-
-                    AtomicBoolean startedAnimating = new AtomicBoolean(false);
-
-                    // Create Callback object to allow us to pass a reference to said callback
-                    // inside the onResult method.
-                    Callback<Boolean> onAnimationStatusChange =
-                            new Callback<>() {
-                                @Override
-                                public void onResult(Boolean isAnimating) {
-                                    // This ensures that:
-                                    // a) The RecyclerView has started any final
-                                    //        animation prior to changing tab switcher panes.
-                                    // b) The animation only runs when the tab grid dialog is not
-                                    // visible.
-                                    Supplier<Boolean> dialogShowingOrAnimationSupplier =
-                                            paneCoordinator
-                                                    .getTabGridDialogShowingOrAnimationSupplier();
-                                    boolean isTabGridDialogVisible =
-                                            dialogShowingOrAnimationSupplier != null
-                                                    && dialogShowingOrAnimationSupplier.get();
-                                    if (!isTabGridDialogVisible
-                                            && (isAnimating || !startedAnimating.get())) {
-                                        startedAnimating.set(isAnimating);
-                                        return;
-                                    }
-                                    mReferenceButtonDataSupplier.set(null);
-                                    if (isFocused()) {
-                                        @Nullable
-                                        PaneHubController controller = getPaneHubController();
-                                        assert controller != null
-                                                : "isFocused requires a non-null"
-                                                        + " PaneHubController.";
-                                        controller.focusPane(PaneId.TAB_SWITCHER);
-                                    }
-                                    destroyTabSwitcherPaneCoordinator();
-                                    isAnimatingSupplier.removeObserver(this);
-                                }
-                            };
-                    isAnimatingSupplier.addObserver(onAnimationStatusChange);
+                    mReferenceButtonDataSupplier.set(null);
+                    if (isFocused()) {
+                        @Nullable PaneHubController controller = getPaneHubController();
+                        assert controller != null
+                                : "isFocused requires a non-null PaneHubController.";
+                        controller.focusPane(PaneId.TAB_SWITCHER);
+                    }
+                    destroyTabSwitcherPaneCoordinator();
                 }
             };
 
@@ -146,6 +109,7 @@ public class IncognitoTabSwitcherPane extends TabSwitcherPaneBase {
      * @param onToolbarAlphaChange Observer to notify when alpha changes during animations.
      * @param userEducationHelper Used for showing IPHs.
      * @param edgeToEdgeSupplier Supplier to the {@link EdgeToEdgeController} instance.
+     * @param compositorViewHolderSupplier Supplier to the {@link CompositorViewHolder} instance.
      */
     IncognitoTabSwitcherPane(
             @NonNull Context context,
@@ -155,14 +119,16 @@ public class IncognitoTabSwitcherPane extends TabSwitcherPaneBase {
             @Nullable OneshotSupplier<IncognitoReauthController> incognitoReauthControllerSupplier,
             @NonNull DoubleConsumer onToolbarAlphaChange,
             @NonNull UserEducationHelper userEducationHelper,
-            @NonNull ObservableSupplier<EdgeToEdgeController> edgeToEdgeSupplier) {
+            @NonNull ObservableSupplier<EdgeToEdgeController> edgeToEdgeSupplier,
+            @NonNull ObservableSupplier<CompositorViewHolder> compositorViewHolderSupplier) {
         super(
                 context,
                 factory,
                 /* isIncognito= */ true,
                 onToolbarAlphaChange,
                 userEducationHelper,
-                edgeToEdgeSupplier);
+                edgeToEdgeSupplier,
+                compositorViewHolderSupplier);
 
         mIncognitoTabGroupModelFilterSupplier = incognitoTabGroupModelFilterSupplier;
 

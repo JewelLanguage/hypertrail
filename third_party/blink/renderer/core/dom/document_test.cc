@@ -42,7 +42,6 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/permissions_policy/document_policy_features.h"
 #include "third_party/blink/public/common/privacy_budget/identifiable_surface.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
 #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/web/web_print_page_description.h"
 #include "third_party/blink/renderer/bindings/core/v8/isolated_world_csp.h"
@@ -2000,6 +1999,7 @@ TEST_F(DocumentTest, LifecycleState_DirtyStyle_NoBody) {
             DocumentLifecycle::kVisualUpdatePending);
 }
 
+#if BUILDFLAG(IS_ANDROID)
 class TestPaymentLinkHandler
     : public payments::facilitated::mojom::blink::PaymentLinkHandler {
  public:
@@ -2034,7 +2034,6 @@ class TestPaymentLinkHandler
   base::OnceClosure on_link_handled_callback_;
 };
 
-#if BUILDFLAG(IS_ANDROID)
 TEST_F(DocumentTest, PaymentLinkNotHandled_PaymentRel) {
   TestPaymentLinkHandler test_payment_link_handler;
 

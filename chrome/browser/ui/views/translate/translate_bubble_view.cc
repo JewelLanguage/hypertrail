@@ -38,6 +38,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
+#include "components/language_detection/core/constants.h"
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/translate/core/browser/translate_download_manager.h"
@@ -45,7 +46,6 @@
 #include "components/translate/core/browser/translate_metrics_logger.h"
 #include "components/translate/core/browser/translate_prefs.h"
 #include "components/translate/core/browser/translate_ui_delegate.h"
-#include "components/translate/core/common/translate_constants.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/interaction/element_identifier.h"
@@ -101,13 +101,10 @@ std::unique_ptr<views::View> CreateWordmarkView() {
   view->SetLayoutManager(std::make_unique<views::BoxLayout>());
 
   // Translate icon
-  const int translate_icon_id = IDR_TRANSLATE_TAB_WORDMARK;
   std::unique_ptr<views::ImageView> translate_icon =
       std::make_unique<views::ImageView>();
-  gfx::ImageSkia* translate_icon_image =
-      ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-          translate_icon_id);
-  translate_icon->SetImage(*translate_icon_image);
+  translate_icon->SetImage(
+      ui::ImageModel::FromResourceId(IDR_TRANSLATE_TAB_WORDMARK));
   view->AddChildView(std::move(translate_icon));
 
   return view;

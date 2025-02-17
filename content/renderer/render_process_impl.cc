@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "content/renderer/render_process_impl.h"
 
 #include "build/build_config.h"
@@ -152,7 +157,7 @@ RenderProcessImpl::RenderProcessImpl()
     SetV8FlagIfOverridden(features::kWebAssemblyBaseline, "--liftoff",
                           "--no-liftoff");
 
-    // V8's WASM stack switching support is sufficient to enable JavaScript
+    // V8's Wasm stack switching support is sufficient to enable JavaScript
     // Promise Integration.
     SetV8FlagIfOverridden(features::kEnableExperimentalWebAssemblyJSPI,
                           "--experimental-wasm-jspi",
@@ -161,10 +166,6 @@ RenderProcessImpl::RenderProcessImpl()
     SetV8FlagIfOverridden(features::kWebAssemblyLazyCompilation,
                           "--wasm-lazy-compilation",
                           "--no-wasm-lazy-compilation");
-
-    SetV8FlagIfOverridden(features::kWebAssemblyMemory64,
-                          "--experimental-wasm-memory64",
-                          "--no-experimental-wasm-memory64");
 
     SetV8FlagIfOverridden(features::kWebAssemblyTiering, "--wasm-tier-up",
                           "--no-wasm-tier-up");

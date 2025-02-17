@@ -4,6 +4,7 @@
 
 #include "chrome/updater/policy/service.h"
 
+#include <algorithm>
 #include <concepts>
 #include <functional>
 #include <optional>
@@ -20,7 +21,6 @@
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/ranges/algorithm.h"
 #include "base/sequence_checker.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -41,6 +41,7 @@
 #include "chrome/updater/prefs.h"
 #include "chrome/updater/updater_scope.h"
 #include "components/crash/core/common/crash_key.h"
+#include "components/policy/core/common/policy_types.h"
 
 namespace updater {
 
@@ -61,7 +62,7 @@ void PolicyService::PolicyManagers::CreateManagers(
   dm_policy_manager_ =
       CreateDMPolicyManager(external_constants->IsMachineManaged());
   external_constants_policy_manager_ =
-      base::MakeRefCounted<PolicyManager>(external_constants->DictPolicies());
+      CreateDictPolicyManager(external_constants->DictPolicies());
   platform_policy_manager_ =
       CreatePlatformPolicyManager(external_constants->IsMachineManaged());
 }
@@ -101,7 +102,7 @@ void PolicyService::PolicyManagers::InitializeManagersVector() {
 }
 
 void PolicyService::PolicyManagers::SortManagersVector() {
-  base::ranges::stable_sort(
+  std::ranges::stable_sort(
       managers_, [](const scoped_refptr<PolicyManagerInterface>& lhs,
                     const scoped_refptr<PolicyManagerInterface>& rhs) {
         return lhs->HasActiveDevicePolicies() &&
@@ -111,7 +112,7 @@ void PolicyService::PolicyManagers::SortManagersVector() {
 
 bool PolicyService::PolicyManagers::CloudPolicyOverridesPlatformPolicy(
     const std::vector<scoped_refptr<PolicyManagerInterface>>& providers) {
-  auto it = base::ranges::find_if(
+  auto it = std::ranges::find_if(
       providers, [](scoped_refptr<PolicyManagerInterface> p) {
         return p && (p->CloudPolicyOverridesPlatformPolicy()).has_value();
       });
@@ -147,14 +148,16 @@ PolicyService::PolicyService(
 
 PolicyService::~PolicyService() = default;
 
-void PolicyService::FetchPolicies(base::OnceCallback<void(int)> callback) {
+void PolicyService::FetchPolicies(policy::PolicyFetchReason reason,
+                                  base::OnceCallback<void(int)> callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   IsCloudManaged(base::BindOnce(&PolicyService::DoFetchPolicies,
-                                base::WrapRefCounted(this),
+                                base::WrapRefCounted(this), reason,
                                 std::move(callback)));
 }
 
-void PolicyService::DoFetchPolicies(base::OnceCallback<void(int)> callback,
+void PolicyService::DoFetchPolicies(policy::PolicyFetchReason reason,
+                                    base::OnceCallback<void(int)> callback,
                                     bool is_cbcm_managed) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   static crash_reporter::CrashKeyString<6> crash_key_cbcm("cbcm");
@@ -192,7 +195,7 @@ void PolicyService::DoFetchPolicies(base::OnceCallback<void(int)> callback,
         fetcher);
   }
   fetcher->FetchPolicies(
-      base::BindOnce(&PolicyService::FetchPoliciesDone, this, fetcher));
+      reason, base::BindOnce(&PolicyService::FetchPoliciesDone, this, fetcher));
 }
 
 void PolicyService::FetchPoliciesDone(
@@ -351,7 +354,7 @@ std::set<std::string> PolicyService::GetAppsWithPolicy() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   std::set<std::string> apps_with_policy;
 
-  base::ranges::for_each(
+  std::ranges::for_each(
       policy_managers_.managers(),
       [&apps_with_policy](
           const scoped_refptr<PolicyManagerInterface>& manager) {

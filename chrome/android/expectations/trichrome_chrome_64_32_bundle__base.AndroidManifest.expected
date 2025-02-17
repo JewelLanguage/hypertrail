@@ -74,10 +74,10 @@
   <uses-permission-sdk-23 android:name="android.permission.READ_MEDIA_VIDEO"/>
   <uses-permission-sdk-23 android:name="android.permission.REORDER_TASKS"/>
   <uses-permission-sdk-23 android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
-  <uses-permission-sdk-23 android:name="android.permission.SCENE_UNDERSTANDING"/>
+  <uses-permission-sdk-23 android:name="android.permission.SCENE_UNDERSTANDING_FINE"/>
   <uses-permission-sdk-23 android:name="android.permission.USE_BIOMETRIC"/>
   <uses-permission-sdk-23 android:name="android.permission.USE_FINGERPRINT"/>
-  <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="34"/>
+  <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="35"/>
   <application
       android:name="org.chromium.chrome.browser.base.SplitChromeApplication"
       android:allowAudioPlaybackCapture="false"
@@ -558,6 +558,7 @@
         android:permission="$PACKAGE.permission.CHILD_SERVICE"
         android:process=":sandboxed_process9">
     </service>  # DIFF-ANCHOR: e2f3bbbd
+    <uses-native-library android:name="libopenxr.google.so" android:required="false"/>
     <uses-static-library android:name="org.chromium.trichromelibrary" android:certDigest="32a2fc74d731105859e5a85df16d95f102d85b22099b8064c5d8915c61dad1e0" android:version="OFFSET=33"/>
   </application>
 </manifest>

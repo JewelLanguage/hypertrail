@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 
 #include <algorithm>
@@ -27,7 +22,6 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/observer_list.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
@@ -39,6 +33,7 @@
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/account_id/account_id.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -199,7 +194,7 @@ MultiProfileUserType GetMultiProfileUserType(
     return MultiProfileUserType::kSingleProfile;
 
   int active_count =
-      base::ranges::count_if(entries, &ProfileMetrics::IsProfileActive);
+      std::ranges::count_if(entries, &ProfileMetrics::IsProfileActive);
 
   if (active_count <= 1)
     return MultiProfileUserType::kLatentMultiProfile;
@@ -653,18 +648,23 @@ size_t ProfileAttributesStorage::GetNumberOfProfiles() const {
 
 std::u16string ProfileAttributesStorage::ChooseNameForNewProfile() const {
   std::u16string name;
-  for (int name_index = 1;; ++name_index) {
+  for (int name_index = 0;; ++name_index) {
+    // Try using "Your Chrome" if possible, or use the lowest <i> so that
+    // "Person <i>" is available.
     // Using native digits will break IsDefaultProfileName() below because
     // it uses sscanf.
     // TODO(jshin): fix IsDefaultProfileName to handle native digits.
-    name = l10n_util::GetStringFUTF16(IDS_NEW_NUMBERED_PROFILE_NAME,
-                                      base::NumberToString16(name_index));
+    name = name_index == 0
+               ? l10n_util::GetStringUTF16(
+                     IDS_PROFILE_MENU_PLACEHOLDER_PROFILE_NAME)
+               : l10n_util::GetStringFUTF16(IDS_NEW_NUMBERED_PROFILE_NAME,
+                                            base::NumberToString16(name_index));
 
     // Loop through previously named profiles to ensure we're not duplicating.
     std::vector<ProfileAttributesEntry*> entries =
         const_cast<ProfileAttributesStorage*>(this)->GetAllProfilesAttributes();
 
-    if (base::ranges::none_of(entries, [name](ProfileAttributesEntry* entry) {
+    if (std::ranges::none_of(entries, [name](ProfileAttributesEntry* entry) {
           return entry->GetLocalProfileName() == name ||
                  entry->GetName() == name;
         })) {
@@ -676,6 +676,12 @@ std::u16string ProfileAttributesStorage::ChooseNameForNewProfile() const {
 bool ProfileAttributesStorage::IsDefaultProfileName(
     const std::u16string& name,
     bool include_check_for_legacy_profile_name) const {
+  if (name ==
+      l10n_util::GetStringUTF16(IDS_PROFILE_MENU_PLACEHOLDER_PROFILE_NAME)) {
+    // Profile name is "Your Chrome".
+    return true;
+  }
+
   // Check whether it's one of the "Person %d" style names.
   std::u16string default_name_prefix =
       l10n_util::GetStringFUTF16(IDS_NEW_NUMBERED_PROFILE_NAME, u"");

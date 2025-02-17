@@ -90,11 +90,12 @@
 #include "services/network/public/cpp/network_service_buildflags.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-shared.h"
 #include "third_party/blink/public/common/features.h"
-#include "third_party/blink/public/common/permissions_policy/origin_with_possible_wildcards.h"
+#include "third_party/blink/public/common/permissions_policy/permissions_policy_declaration.h"
+#include "third_party/blink/public/common/switches.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-shared.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/ui_base_switches.h"
 #include "url/gurl.h"
@@ -142,6 +143,10 @@
 namespace content {
 
 namespace {
+
+#if BUILDFLAG(IS_IOS)
+inline constexpr char kJITEnabled[] = "settings.javascript.jit";
+#endif
 
 using PerformanceManagerRegistry =
     performance_manager::PerformanceManagerRegistry;
@@ -305,6 +310,10 @@ std::unique_ptr<PrefService> CreateLocalState() {
   metrics::MetricsService::RegisterPrefs(pref_registry.get());
   variations::VariationsService::RegisterPrefs(pref_registry.get());
 
+#if BUILDFLAG(IS_IOS)
+  pref_registry->RegisterBooleanPref(kJITEnabled, true);
+#endif
+
   base::FilePath path;
   CHECK(base::PathService::Get(SHELL_DIR_USER_DATA, &path));
   path = path.AppendASCII("Local State");
@@ -467,7 +476,25 @@ void ShellContentBrowserClient::AppendExtraCommandLineSwitches(
       ::content::AreIsolatedWebAppsEnabled()) {
     command_line->AppendSwitch(switches::kEnableIsolatedWebAppsInRenderer);
   }
+
+#if BUILDFLAG(IS_IOS)
+  if (!IsJITEnabled()) {
+    command_line->AppendSwitchASCII(blink::switches::kJavaScriptFlags,
+                                    "--jitless");
+  }
+#endif
 }
+
+#if BUILDFLAG(IS_IOS)
+bool ShellContentBrowserClient::IsJITEnabled() {
+  return GetSharedState().local_state->GetBoolean(kJITEnabled);
+}
+
+void ShellContentBrowserClient::SetJITEnabled(bool value) {
+  GetSharedState().local_state->SetBoolean(kJITEnabled, value);
+  GetSharedState().local_state->CommitPendingWrite();
+}
+#endif
 
 device::GeolocationSystemPermissionManager*
 ShellContentBrowserClient::GetGeolocationSystemPermissionManager() {
@@ -979,13 +1006,13 @@ ShellContentBrowserClient::GetPermissionsPolicyForIsolatedWebApp(
     WebContents* web_contents,
     const url::Origin& app_origin) {
   blink::ParsedPermissionsPolicyDeclaration coi_decl(
-      blink::mojom::PermissionsPolicyFeature::kCrossOriginIsolated,
+      network::mojom::PermissionsPolicyFeature::kCrossOriginIsolated,
       /*allowed_origins=*/{},
       /*self_if_matches=*/std::nullopt,
       /*matches_all_origins=*/true, /*matches_opaque_src=*/false);
 
   blink::ParsedPermissionsPolicyDeclaration socket_decl(
-      blink::mojom::PermissionsPolicyFeature::kDirectSockets,
+      network::mojom::PermissionsPolicyFeature::kDirectSockets,
       /*allowed_origins=*/{}, app_origin,
       /*matches_all_origins=*/false, /*matches_opaque_src=*/false);
   return {{coi_decl, socket_decl}};

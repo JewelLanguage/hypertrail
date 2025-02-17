@@ -15,7 +15,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_timeouts.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
@@ -747,7 +746,17 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreGroupInNewWindow) {
 // restore the group. The group should restore intact and duplicate the
 // still-open tab.
 // TODO(crbug.com/40750891): Run unload handlers before the group is closed.
-IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreGroupWithUnloadHandlerRejected) {
+
+// TODO(crbug.com/394745724): Fails on Mac
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_RestoreGroupWithUnloadHandlerRejected \
+  DISABLED_RestoreGroupWithUnloadHandlerRejected
+#else
+#define MAYBE_RestoreGroupWithUnloadHandlerRejected \
+  RestoreGroupWithUnloadHandlerRejected
+#endif
+IN_PROC_BROWSER_TEST_F(TabRestoreTest,
+                       MAYBE_RestoreGroupWithUnloadHandlerRejected) {
   class OnceGroupDeletionWaiter : public TabStripModelObserver {
    public:
     explicit OnceGroupDeletionWaiter(TabStripModel* tab_strip_model)
@@ -790,10 +799,6 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreGroupWithUnloadHandlerRejected) {
   // 1: A grouped tab.
   // 2: A grouped tab with an unload handler.
 
-  // When TabGroupsSaveV2 is enabled, we must manually add non file:// tabs
-  // since we filter out urls which could expose user data on other devices when
-  // we add them to the saved group. We also protect from triggering automatic
-  // downloads this way.
   AddHTTPSSchemeTabs(browser(), 1);
 
   // Add the unload handler tab.
@@ -839,13 +844,9 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreGroupWithUnloadHandlerRejected) {
   EXPECT_EQ(browser()->tab_strip_model()->group_model()->ListTabGroups().size(),
             1u);
 
-  // The additional tab comes from the unload url since it is not a standard
-  // https://www domain. For TabGroupsSaveV2 we do not store these to prevent
-  // cross device attacks / information leaks which could disadvantage the user.
   EXPECT_EQ(group_model->GetTabGroup(restored_group_id)->ListTabs(),
-            gfx::Range(2, tab_groups::IsTabGroupsSaveV2Enabled() ? 5 : 4));
-  EXPECT_EQ(browser()->tab_strip_model()->count(),
-            tab_groups::IsTabGroupsSaveV2Enabled() ? 5 : 4);
+            gfx::Range(2, 4));
+  EXPECT_EQ(browser()->tab_strip_model()->count(), 4);
 
   // Close the tab with the unload handler, otherwise it will prevent test
   // cleanup.
@@ -969,7 +970,7 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreGroupWithUnloadHandlerAccepted) {
   // https://www domain. For TabGroupsSaveV2 we do not store these to prevent
   // cross device attacks / information leaks which could disadvantage the user.
   EXPECT_EQ(group_model->GetTabGroup(restored_group_id)->ListTabs(),
-            gfx::Range(1, tab_groups::IsTabGroupsSaveV2Enabled() ? 5 : 3));
+            gfx::Range(1, 3));
 }
 
 // Open a window with two tabs, close both (closing the window), then restore

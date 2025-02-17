@@ -302,7 +302,8 @@ class TestingWidgetDelegateView : public WidgetDelegateView {
   explicit TestingWidgetDelegateView(base::RunLoop* run_loop)
       : run_loop_(run_loop) {}
   ~TestingWidgetDelegateView() override {
-    NotifyAccessibilityEvent(ax::mojom::Event::kChildrenChanged, false);
+    NotifyAccessibilityEventDeprecated(ax::mojom::Event::kChildrenChanged,
+                                       false);
     run_loop_->QuitWhenIdle();
   }
   TestingWidgetDelegateView(const TestingWidgetDelegateView&) = delete;
@@ -373,8 +374,8 @@ TEST_F(AXAuraObjCacheTest, VirtualViews) {
   auto* parent = widget->GetRootView()->AddChildView(std::make_unique<View>());
   auto virtual_label = std::make_unique<AXVirtualView>();
   auto* virtual_label_ptr = virtual_label.get();
-  virtual_label->GetCustomData().role = ax::mojom::Role::kStaticText;
-  virtual_label->GetCustomData().SetNameChecked("Label");
+  virtual_label->SetRole(ax::mojom::Role::kStaticText);
+  virtual_label->SetName("Label");
   parent->GetViewAccessibility().AddVirtualChildView(std::move(virtual_label));
 
   AXVirtualViewWrapper* wrapper = virtual_label_ptr->GetOrCreateWrapper(&cache);

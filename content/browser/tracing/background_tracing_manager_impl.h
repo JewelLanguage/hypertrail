@@ -130,6 +130,8 @@ class BackgroundTracingManagerImpl
   // TracingScenario::Delegate:
   bool OnScenarioActive(TracingScenario* scenario) override;
   bool OnScenarioIdle(TracingScenario* scenario) override;
+  void OnScenarioError(TracingScenario* scenario,
+                       perfetto::TracingError error) override;
   bool OnScenarioCloned(TracingScenario* scenario) override;
   void OnScenarioRecording(TracingScenario* scenario) override;
   void SaveTrace(TracingScenario* scenario,
@@ -189,12 +191,11 @@ class BackgroundTracingManagerImpl
   void AddAgentObserver(AgentObserver* observer);
   void RemoveAgentObserver(AgentObserver* observer);
 
-  void AddMetadataGeneratorFunction();
-
   void OnStartTracingDone();
   void OnProtoDataComplete(std::string&& serialized_trace,
                            const std::string& scenario_name,
                            const std::string& rule_name,
+                           std::optional<int32_t> rule_value,
                            bool privacy_filter_enabled,
                            bool is_local_scenario,
                            bool force_upload,
@@ -218,6 +219,10 @@ class BackgroundTracingManagerImpl
       perfetto::protos::pbzero::ChromeMetadataPacket* metadata,
       bool privacy_filtering_enabled);
 
+  // Returns the embedder's tracing delegate, or null if it does not provide
+  // one.
+  TracingDelegate* tracing_delegate() { return delegate_.get(); }
+
  private:
 #if BUILDFLAG(IS_ANDROID)
   // ~1MB compressed size.
@@ -228,10 +233,12 @@ class BackgroundTracingManagerImpl
 #endif
 
   bool RequestActivateScenario();
+  void AddMetadataGeneratorFunction();
 
   // Named triggers
   bool DoEmitNamedTrigger(const std::string& trigger_name,
-                          std::optional<int32_t>) override;
+                          std::optional<int32_t>,
+                          uint64_t) override;
 
   void OnScenarioAborted();
   static void AddPendingAgent(

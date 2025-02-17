@@ -4,18 +4,19 @@
 
 #include "third_party/blink/renderer/modules/mediastream/media_devices.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/not_fatal_until.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/uuid.h"
 #include "build/build_config.h"
 #include "media/base/media_permission.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/mediastream/media_devices.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
@@ -23,7 +24,6 @@
 #include "third_party/blink/public/common/privacy_budget/identifiable_surface.h"
 #include "third_party/blink/public/mojom/media/capture_handle_config.mojom-blink.h"
 #include "third_party/blink/public/mojom/mediastream/media_devices.mojom-blink.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
 #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
@@ -623,7 +623,7 @@ ScriptPromise<IDLSequence<MediaStream>> MediaDevices::getAllScreensMedia(
   }
 
   const bool capture_allowed_by_permissions_policy = context->IsFeatureEnabled(
-      mojom::blink::PermissionsPolicyFeature::kAllScreensCapture,
+      network::mojom::PermissionsPolicyFeature::kAllScreensCapture,
       ReportOptions::kReportOnFailure);
 
   base::UmaHistogramEnumeration(
@@ -684,7 +684,7 @@ ScriptPromise<MediaStream> MediaDevices::getDisplayMedia(
   }
 
   const bool capture_allowed_by_permissions_policy = window->IsFeatureEnabled(
-      mojom::blink::PermissionsPolicyFeature::kDisplayCapture,
+      network::mojom::PermissionsPolicyFeature::kDisplayCapture,
       ReportOptions::kReportOnFailure);
 
   base::UmaHistogramEnumeration(
@@ -1130,8 +1130,8 @@ void MediaDevices::OnDevicesChanged(
     const Vector<WebMediaDeviceInfo>& device_infos) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(GetExecutionContext());
-  if (base::ranges::equal(current_device_infos_[static_cast<wtf_size_t>(type)],
-                          device_infos, EqualDeviceForDeviceChange)) {
+  if (std::ranges::equal(current_device_infos_[static_cast<wtf_size_t>(type)],
+                         device_infos, EqualDeviceForDeviceChange)) {
     return;
   }
 

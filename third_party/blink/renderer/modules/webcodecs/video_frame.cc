@@ -88,10 +88,11 @@ namespace blink {
 
 namespace {
 
-// Controls if VideoFrame.copyTo() reads GPU frames asynchronously
+// Controls if VideoFrame.copyTo() reads GPU frames asynchronously when it's given a
+// SharedArrayBuffer.
 BASE_FEATURE(kVideoFrameAsyncCopyTo,
              "VideoFrameAsyncCopyTo",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 media::VideoPixelFormat ToMediaPixelFormat(V8VideoPixelFormat::Enum fmt) {
   switch (fmt) {
@@ -366,7 +367,13 @@ class CanvasResourceProviderCache
       delete;
   CanvasResourceProviderCache(const CanvasResourceProviderCache&) = delete;
 
-  CanvasResourceProvider* CreateProvider(const SkImageInfo& info) {
+  CanvasResourceProvider* CreateProvider(gfx::Size size) {
+    // TODO(https://crbug.com/1341235): The choice of color type, alpha type,
+    // and color space is inappropriate in many circumstances.
+    const auto info =
+        SkImageInfo::Make(gfx::SizeToSkISize(size), kN32_SkColorType,
+                          kPremul_SkAlphaType, nullptr);
+
     if (info_to_provider_.empty())
       PostMonitoringTask();
 
@@ -506,8 +513,7 @@ bool CopyTexturablePlanes(media::VideoFrame& src_frame,
   if (!wrapper)
     return false;
 
-  auto& provider = wrapper->ContextProvider();
-  auto* ri = provider.RasterInterface();
+  auto* ri = wrapper->ContextProvider().RasterInterface();
   if (!ri)
     return false;
 
@@ -516,9 +522,9 @@ bool CopyTexturablePlanes(media::VideoFrame& src_frame,
         media::VideoFrame::SampleSize(dest_layout.Format(), i);
     gfx::Rect plane_src_rect = PlaneRect(src_rect, sample_size);
     uint8_t* dest_pixels = dest_buffer.data() + dest_layout.Offset(i);
-    if (!media::ReadbackTexturePlaneToMemorySync(
-            src_frame, i, plane_src_rect, dest_pixels, dest_layout.Stride(i),
-            ri, provider.GetCapabilities())) {
+    if (!media::ReadbackTexturePlaneToMemorySync(src_frame, i, plane_src_rect,
+                                                 dest_pixels,
+                                                 dest_layout.Stride(i), ri)) {
       // It's possible to fail after copying some but not all planes, leaving
       // the output buffer in a corrupt state D:
       return false;
@@ -1455,14 +1461,9 @@ scoped_refptr<Image> VideoFrame::GetSourceImageForCanvas(
       ExecutionContext::From(v8::Isolate::GetCurrent()->GetCurrentContext());
   auto& provider_cache = CanvasResourceProviderCache::From(*execution_context);
 
-  // TODO(https://crbug.com/1341235): The choice of color type, alpha type, and
-  // color space is inappropriate in many circumstances.
   const auto& resource_provider_size = local_handle->frame()->natural_size();
-  const auto resource_provider_info =
-      SkImageInfo::Make(gfx::SizeToSkISize(resource_provider_size),
-                        kN32_SkColorType, kPremul_SkAlphaType, nullptr);
   auto* resource_provider =
-      provider_cache.CreateProvider(resource_provider_info);
+      provider_cache.CreateProvider(resource_provider_size);
 
   const auto dest_rect = gfx::Rect(resource_provider_size);
   auto image = CreateImageFromVideoFrame(local_handle->frame(),
@@ -1488,21 +1489,20 @@ bool VideoFrame::WouldTaintOrigin() const {
 gfx::SizeF VideoFrame::ElementSize(
     const gfx::SizeF& default_object_size,
     const RespectImageOrientationEnum respect_orientation) const {
-  // BitmapSourceSize() will always ignore orientation.
+  auto local_frame = handle_->frame();
+  if (!local_frame) {
+    return gfx::SizeF();
+  }
+  gfx::SizeF size(local_frame->natural_size());
   if (respect_orientation == kRespectImageOrientation) {
-    auto local_frame = handle_->frame();
-    if (!local_frame)
-      return gfx::SizeF();
-
     const auto orientation_enum = VideoTransformationToImageOrientation(
         local_frame->metadata().transformation.value_or(
             media::kNoTransformation));
-    auto orientation_adjusted_size = gfx::SizeF(local_frame->natural_size());
-    if (ImageOrientation(orientation_enum).UsesWidthAsHeight())
-      orientation_adjusted_size.Transpose();
-    return orientation_adjusted_size;
+    if (ImageOrientation(orientation_enum).UsesWidthAsHeight()) {
+      size.Transpose();
+    }
   }
-  return gfx::SizeF(BitmapSourceSize());
+  return size;
 }
 
 bool VideoFrame::IsVideoFrame() const {
@@ -1528,13 +1528,12 @@ void VideoFrame::ResetExternalMemory() {
   external_memory_accounter_.Clear(v8::Isolate::GetCurrent());
 }
 
-gfx::Size VideoFrame::BitmapSourceSize() const {
+ImageBitmapSourceStatus VideoFrame::CheckUsability() const {
   auto local_frame = handle_->frame();
-  if (!local_frame)
-    return gfx::Size();
-
-  // ImageBitmaps should always return the size w/o respecting orientation.
-  return local_frame->natural_size();
+  if (!local_frame) {
+    return base::unexpected(ImageBitmapSourceError::kInvalid);
+  }
+  return base::ok();
 }
 
 ScriptPromise<ImageBitmap> VideoFrame::CreateImageBitmap(
@@ -1568,14 +1567,9 @@ ScriptPromise<ImageBitmap> VideoFrame::CreateImageBitmap(
       ExecutionContext::From(v8::Isolate::GetCurrent()->GetCurrentContext());
   auto& provider_cache = CanvasResourceProviderCache::From(*execution_context);
 
-  // TODO(https://crbug.com/1341235): The choice of color type, alpha type, and
-  // color space is inappropriate in many circumstances.
   const auto& resource_provider_size = local_handle->frame()->natural_size();
-  const auto resource_provider_info =
-      SkImageInfo::Make(gfx::SizeToSkISize(resource_provider_size),
-                        kN32_SkColorType, kPremul_SkAlphaType, nullptr);
   auto* resource_provider =
-      provider_cache.CreateProvider(resource_provider_info);
+      provider_cache.CreateProvider(resource_provider_size);
 
   // We disable zero copy images since the ImageBitmap spec says created bitmaps
   // are copies. Many other paths can avoid doing this w/o issue, but hardware

@@ -13,6 +13,26 @@ namespace switches {
 // All switches in alphabetical order.
 
 #if BUILDFLAG(IS_ANDROID)
+BASE_FEATURE(kCctSignInPrompt,
+             "CctSignInPrompt",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Migrate usages of USM flag to force child account sign-in to use the account
+// capability `IsSubjectToParentalControls`.
+BASE_FEATURE(kForceSupervisedSigninWithCapabilities,
+             "ForceSupervisedSigninWithCapabilities",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Add some history opt-in entry points on Android.
+BASE_FEATURE(kHistoryOptInEntryPoints,
+             "HistoryOptInEntryPoints",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Add history opt-in IPH in settings on Android.
+BASE_FEATURE(kHistoryOptInIph,
+             "HistoryOptInIph",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Feature to bypass double-checking that signin callers have correctly gotten
 // the user to accept account management. This check is slow and not strictly
 // necessary, so disable it while we work on adding caching.
@@ -22,17 +42,7 @@ BASE_FEATURE(kSkipCheckForAccountManagementOnSignin,
              "SkipCheckForAccountManagementOnSignin",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kCctSignInPrompt,
-             "CctSignInPrompt",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kUnoForAuto, "UnoForAuto", base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Migrate usages of USM flag to force child account sign-in to use the account
-// capability `IsSubjectToParentalControls`.
-BASE_FEATURE(kForceSupervisedSigninWithCapabilities,
-             "ForceSupervisedSigninWithCapabilities",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kUnoForAuto, "UnoForAuto", base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kUseHostedDomainForManagementCheckOnSignin,
              "UseHostedDomainForManagementCheckOnSignin",
@@ -88,15 +98,22 @@ BASE_FEATURE(kEnableChromeRefreshTokenBinding,
 
 bool IsChromeRefreshTokenBindingEnabled(const PrefService* profile_prefs) {
   // Enterprise policy takes precedence over the feature value.
-  // Do not allow force-enabling because the feature isn't complete yet.
-  if (profile_prefs->HasPrefPath(prefs::kBoundSessionCredentialsEnabled) &&
-      !profile_prefs->GetBoolean(prefs::kBoundSessionCredentialsEnabled)) {
-    return false;
+  if (profile_prefs->HasPrefPath(prefs::kBoundSessionCredentialsEnabled)) {
+    return profile_prefs->GetBoolean(prefs::kBoundSessionCredentialsEnabled);
   }
 
   return base::FeatureList::IsEnabled(kEnableChromeRefreshTokenBinding);
 }
 #endif
+
+BASE_FEATURE(kEnablePreferencesAccountStorage,
+             "EnablePreferencesAccountStorage",
+#if BUILDFLAG(IS_IOS) || BUILDFLAG(IS_ANDROID)
+             base::FEATURE_ENABLED_BY_DEFAULT
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+);
 
 // This feature disables all extended sync promos.
 BASE_FEATURE(kForceDisableExtendedSyncPromos,
@@ -146,10 +163,22 @@ bool IsImprovedSettingsUIOnDesktopEnabled() {
          base::FeatureList::IsEnabled(kImprovedSettingsUIOnDesktop);
 }
 
+BASE_FEATURE(kEnableSnackbarInSettings,
+             "EnableSnackbarInSettings",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kEnableImprovedGuestProfileMenu,
+             "EnableImprovedGuestProfileMenu",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 #if BUILDFLAG(IS_IOS)
 
 BASE_FEATURE(kEnableIdentityInAuthError,
              "EnableIdentityInAuthError",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kEnableErrorBadgeOnIdentityDisc,
+             "EnableErrorBadgeOnIdentityDisc",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnableASWebAuthenticationSession,
@@ -171,8 +200,10 @@ bool IsBatchUploadDesktopEnabled() {
 #endif
 }
 
-BASE_FEATURE(kProfilePickerGlicTesting,
-             "ProfilePickerGlicTesting",
+// Enables showing the enterprise dialog after every signin into a managed
+// account.
+BASE_FEATURE(kShowEnterpriseDialogForAllManagedAccountsSignin,
+             "ShowEnterpriseDialogForAllManagedAccountsSignin",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace switches

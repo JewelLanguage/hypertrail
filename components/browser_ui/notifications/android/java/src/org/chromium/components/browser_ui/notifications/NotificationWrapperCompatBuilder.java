@@ -19,9 +19,12 @@ import androidx.core.graphics.drawable.IconCompat;
 
 import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.components.browser_ui.notifications.channels.ChannelsInitializer;
 
 /** Wraps a {@link NotificationCompat.Builder} object. */
+@NullMarked
 public class NotificationWrapperCompatBuilder implements NotificationWrapperBuilder {
     private static final String TAG = "NotifCompatBuilder";
     private final NotificationCompat.Builder mBuilder;
@@ -46,14 +49,15 @@ public class NotificationWrapperCompatBuilder implements NotificationWrapperBuil
     }
 
     @Override
-    public NotificationWrapperBuilder setContentIntent(PendingIntent contentIntent) {
+    public NotificationWrapperBuilder setContentIntent(@Nullable PendingIntent contentIntent) {
         mBuilder.setContentIntent(contentIntent);
         return this;
     }
 
     @Override
-    public NotificationWrapperBuilder setContentIntent(PendingIntentProvider contentIntent) {
-        mBuilder.setContentIntent(contentIntent.getPendingIntent());
+    public NotificationWrapperBuilder setContentIntent(
+            @Nullable PendingIntentProvider contentIntent) {
+        mBuilder.setContentIntent(contentIntent != null ? contentIntent.getPendingIntent() : null);
         return this;
     }
 
@@ -335,7 +339,7 @@ public class NotificationWrapperCompatBuilder implements NotificationWrapperBuil
     }
 
     @Override
-    public Notification build() {
+    public @Nullable Notification build() {
         boolean success = false;
         Notification notification = null;
         try {

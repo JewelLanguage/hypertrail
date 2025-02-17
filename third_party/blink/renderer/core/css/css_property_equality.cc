@@ -28,7 +28,7 @@ bool CounterRulesEqual(const CounterDirectiveMap* a_map,
     return false;
   }
 
-  return base::ranges::equal(*a_map, *b_map, [](const auto& a, const auto& b) {
+  return std::ranges::equal(*a_map, *b_map, [](const auto& a, const auto& b) {
     switch (property) {
       case CSSPropertyID::kCounterIncrement:
         if (a.value.IsIncrement() != b.value.IsIncrement()) {
@@ -317,6 +317,14 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
       return a.GetColumnSpan() == b.GetColumnSpan();
     case CSSPropertyID::kContent:
       return base::ValuesEquivalent(a.GetContentData(), b.GetContentData());
+    case CSSPropertyID::kCornerBottomLeftShape:
+      return a.CornerBottomLeftShape() == b.CornerBottomLeftShape();
+    case CSSPropertyID::kCornerBottomRightShape:
+      return a.CornerBottomRightShape() == b.CornerBottomRightShape();
+    case CSSPropertyID::kCornerTopLeftShape:
+      return a.CornerTopLeftShape() == b.CornerTopLeftShape();
+    case CSSPropertyID::kCornerTopRightShape:
+      return a.CornerTopRightShape() == b.CornerTopRightShape();
     case CSSPropertyID::kCounterIncrement:
       return CounterRulesEqual<CSSPropertyID::kCounterIncrement>(
           a.GetCounterDirectives(), b.GetCounterDirectives());
@@ -451,10 +459,10 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
       return a.GridTemplateRows() == b.GridTemplateRows();
     case CSSPropertyID::kHeight:
       return a.Height() == b.Height();
-    case CSSPropertyID::kPopoverShowDelay:
-      return a.PopoverShowDelay() == b.PopoverShowDelay();
-    case CSSPropertyID::kPopoverHideDelay:
-      return a.PopoverHideDelay() == b.PopoverHideDelay();
+    case CSSPropertyID::kInterestTargetShowDelay:
+      return a.InterestTargetShowDelay() == b.InterestTargetShowDelay();
+    case CSSPropertyID::kInterestTargetHideDelay:
+      return a.InterestTargetHideDelay() == b.InterestTargetHideDelay();
     case CSSPropertyID::kHyphenateCharacter:
       return a.HyphenationString() == b.HyphenationString();
     case CSSPropertyID::kHyphenateLimitChars:
@@ -614,6 +622,8 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
       return a.Quotes() == b.Quotes();
     case CSSPropertyID::kReadingFlow:
       return a.ReadingFlow() == b.ReadingFlow();
+    case CSSPropertyID::kReadingOrder:
+      return a.ReadingOrder() == b.ReadingOrder();
     case CSSPropertyID::kResize:
       return a.Resize() == b.Resize();
     case CSSPropertyID::kRight:
@@ -791,6 +801,14 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
       return a.ColumnGap() == b.ColumnGap();
     case CSSPropertyID::kRowGap:
       return a.RowGap() == b.RowGap();
+    case CSSPropertyID::kColumnRuleBreak:
+      return a.ColumnRuleBreak() == b.ColumnRuleBreak();
+    case CSSPropertyID::kRowRuleBreak:
+      return a.RowRuleBreak() == b.RowRuleBreak();
+    case CSSPropertyID::kColumnRuleOutset:
+      return a.ColumnRuleOutset() == b.ColumnRuleOutset();
+    case CSSPropertyID::kRowRuleOutset:
+      return a.RowRuleOutset() == b.RowRuleOutset();
     case CSSPropertyID::kColumnRuleColor:
       return a.ColumnRuleColor() == b.ColumnRuleColor() &&
              a.InternalVisitedColumnRuleColor() ==
@@ -1127,6 +1145,10 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
     case CSSPropertyID::kBorderInlineWidth:
     case CSSPropertyID::kContainIntrinsicBlockSize:
     case CSSPropertyID::kContainIntrinsicInlineSize:
+    case CSSPropertyID::kCornerStartStartShape:
+    case CSSPropertyID::kCornerStartEndShape:
+    case CSSPropertyID::kCornerEndStartShape:
+    case CSSPropertyID::kCornerEndEndShape:
     case CSSPropertyID::kInsetInlineStart:
     case CSSPropertyID::kInsetInlineEnd:
     case CSSPropertyID::kInsetBlockStart:
@@ -1220,7 +1242,9 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
     case CSSPropertyID::kColumns:
     case CSSPropertyID::kContainIntrinsicSize:
     case CSSPropertyID::kContainer:
+    case CSSPropertyID::kCornerShape:
     case CSSPropertyID::kInset:
+    case CSSPropertyID::kInterestTargetDelay:
     case CSSPropertyID::kFlex:
     case CSSPropertyID::kFlexFlow:
     case CSSPropertyID::kFont:
@@ -1283,8 +1307,17 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
     case CSSPropertyID::kAnimationRange:
     case CSSPropertyID::kAnimationRangeEnd:
     case CSSPropertyID::kAnimationRangeStart:
+    case CSSPropertyID::kAnimationTrigger:
+    case CSSPropertyID::kAnimationTriggerRange:
+    case CSSPropertyID::kAnimationTriggerExitRange:
+    case CSSPropertyID::kAnimationTriggerRangeStart:
+    case CSSPropertyID::kAnimationTriggerRangeEnd:
+    case CSSPropertyID::kAnimationTriggerExitRangeStart:
+    case CSSPropertyID::kAnimationTriggerExitRangeEnd:
     case CSSPropertyID::kAnimationTimeline:
     case CSSPropertyID::kAnimationTimingFunction:
+    case CSSPropertyID::kAnimationTriggerType:
+    case CSSPropertyID::kAnimationTriggerTimeline:
     case CSSPropertyID::kContain:
     case CSSPropertyID::kContainerName:
     case CSSPropertyID::kContainerType:

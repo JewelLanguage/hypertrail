@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_INTEREST_GROUP_TRUSTED_SIGNALS_CACHE_IMPL_H_
 #define CONTENT_BROWSER_INTEREST_GROUP_TRUSTED_SIGNALS_CACHE_IMPL_H_
 
+#include <list>
 #include <map>
 #include <memory>
 #include <optional>
@@ -17,6 +18,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "base/types/optional_ref.h"
 #include "base/unguessable_token.h"
 #include "base/values.h"
@@ -77,9 +79,6 @@ struct BiddingAndAuctionServerKey;
 // will not destroy the CompressionGroupData, or the CompressionGroupData's
 // fetch, if it has one.
 //
-// * TODO(https://crbug.com/333445540): A map of ScoringCacheEntries much akin
-// to the map of BiddingCacheEntries.
-//
 // Fetches and CacheEntries have pointers to the corresponding
 // CompressionGroupData, while the CompressionGroupData owns the corresponding
 // values in the other two maps. Deleting a CompressionGroupData removes the
@@ -90,12 +89,6 @@ struct BiddingAndAuctionServerKey;
 //
 // Each handed out Handle object will keep its corresponding
 // CompressionGroupData alive until the handle is destroyed.
-//
-// TODO(https://crbug.com/333445540): Add caching support. Right now, entries
-// are cached only as long as there's something that owns a Handle, but should
-// instead cache for at least a short duration as long as an entry's TTL hasn't
-// expired. Holding onto a CompressionGroupData reference, which is refcounted,
-// is all that's needed to keep an entry alive.
 //
 // TODO(https://crbug.com/333445540): May need some sort of rate limit and size
 // cap. Currently, this class creates an arbitrary number of downloads, and
@@ -154,13 +147,17 @@ class CONTENT_EXPORT TrustedSignalsCacheImpl
   // All outstanding Handles must be destroyed before the underlying
   // CompressionGroupData may be destroyed.
   //
-  // TODO(https://crbug.com/333445540): Remove refcounting, which is only done
-  // for legacy reasons.
-  class CONTENT_EXPORT Handle : public base::RefCounted<Handle> {
+  // Handles must be destroyed before the TrustedSignalsCacheImpl that created
+  // them.
+  class CONTENT_EXPORT Handle {
    public:
     // Takes ownership of a reference to CompressionGroupData.
-    explicit Handle(scoped_refptr<CompressionGroupData> compression_group_data);
+    Handle(TrustedSignalsCacheImpl* trusted_signals_cache,
+           scoped_refptr<CompressionGroupData> compression_group_data);
     Handle(Handle&) = delete;
+
+    ~Handle();
+
     Handle& operator=(Handle&) = delete;
 
     // The token that needs to be passed to GetTrustedSignals() to retrieve the
@@ -181,15 +178,37 @@ class CONTENT_EXPORT TrustedSignalsCacheImpl
     void StartFetch();
 
    protected:
-    friend class base::RefCounted<Handle>;
-
-    virtual ~Handle();
+    const raw_ptr<TrustedSignalsCacheImpl> trusted_signals_cache_;
 
     // The underlying CompressionGroupData. Only released on destruction.
     scoped_refptr<CompressionGroupData> compression_group_data_;
   };
 
+  // The maximum size of the cache, in bytes. There is currently no limit on the
+  // size taken up by entries that are actively in use (i.e., have outstanding
+  // Handles), but entries that are not in used can never drive up the
+  // approximated cache size above this value.
+  static constexpr size_t kMaxCacheSizeBytes = 10 * 1024 * 1024;
+
   static constexpr size_t kNonceCacheSize = 50;
+
+  // If data for a compression group has no outstanding Handle for this amount
+  // of time, it will be removed to save memory. Entries are guaranteed to be
+  // destroyed between `kMinUnusedCleanupTime` and `kMaxUnusedCleanupTime` times
+  // - the logic records when the minimum time is when a compression group is
+  // added to the LruList, but the shared-across-groups cleanup timer is set to
+  // run after the expiration time of the next group to expire plus the
+  // `kCleanupInterval` has passed, and then cleans up all entries that are past
+  // the `kMinUnusedCleanupTime`. This avoids potentially running a bunch of
+  // very short timers when there are a lot of entries that expire at about the
+  // same time. Unclear if the extra complexity is worth it.
+  //
+  // None of this logic currently takes into account when a compression group's
+  // TTL from the server has been reached.
+  static constexpr base::TimeDelta kMinUnusedCleanupTime = base::Minutes(10);
+  static constexpr base::TimeDelta kCleanupInterval = base::Seconds(30);
+  static constexpr base::TimeDelta kMaxUnusedCleanupTime =
+      kMinUnusedCleanupTime + kCleanupInterval;
 
   // If StartFetch() isn't called on any handle for a request that has been
   // around this long, automatically call SetFetchCanStart() for the fetch.
@@ -220,7 +239,7 @@ class CONTENT_EXPORT TrustedSignalsCacheImpl
   //
   // Never starts a network fetch synchronously. Bidder signals are requested
   // over the network after a post task.
-  scoped_refptr<Handle> RequestTrustedBiddingSignals(
+  std::unique_ptr<Handle> RequestTrustedBiddingSignals(
       const url::Origin& main_frame_origin,
       network::mojom::IPAddressSpace ip_address_space,
       const url::Origin& interest_group_owner,
@@ -246,14 +265,7 @@ class CONTENT_EXPORT TrustedSignalsCacheImpl
   //
   // Never starts a network fetch synchronously. Scoring signals are requested
   // over the network after a post task.
-  //
-  // TODO(mmenke): Implement Some way to delay sending the fetch over the wire
-  // for a certain duration, with some way for an auction to flush requests once
-  // it knows all signals it needs have been requested. Probably need to either
-  // add a method to Handle to flush requests, or add an API to flush all
-  // Fetches matching a passed in {seller origin, joining origin, publisher
-  // origin} triplet.
-  scoped_refptr<TrustedSignalsCacheImpl::Handle> RequestTrustedScoringSignals(
+  std::unique_ptr<TrustedSignalsCacheImpl::Handle> RequestTrustedScoringSignals(
       const url::Origin& main_frame_origin,
       network::mojom::IPAddressSpace ip_address_space,
       const url::Origin& seller,
@@ -272,7 +284,31 @@ class CONTENT_EXPORT TrustedSignalsCacheImpl
       mojo::PendingRemote<auction_worklet::mojom::TrustedSignalsCacheClient>
           client) override;
 
+  // Returns the estimated size of all CompressionGroupData currently stored in
+  // the cache.
+  size_t size_for_testing() const { return size_; }
+
+  // Returns the number of compression groups currently in the cache. Includes
+  // groups whose data has yet to be fetched, groups with live Handles, and
+  // groups being kept alive by `lru_list_`.
+  size_t num_groups_for_testing() const {
+    return compression_group_data_map_.size();
+  }
+
  private:
+  // List of most recently used CompressionGroupData objects that aren't
+  // associated without any Handle, to keep alive data that's not currently in
+  // used. "Recency" here is defined by defined by how recently the last
+  // remaining Handle using them was destroyed. CompressionGroupData with live
+  // Handles are not included in this list.
+  //
+  // Entries are added to the back on Handle destruction if there are no other
+  // outstanding Handles (among other requirements), and removed from the front
+  // when the size limit is exceeded. Entries are also removed when a Handle is
+  // created for a CompressionGroupData. Other than this removal behavior, the
+  // list is used in a FIFO manner.
+  using LruList = std::list<scoped_refptr<CompressionGroupData>>;
+
   // Each receiver pipe in `receiver_set_` is restricted to only receive
   // scoring/bidding signals for the specific script origin identified by this
   // struct.
@@ -546,6 +582,18 @@ class CONTENT_EXPORT TrustedSignalsCacheImpl
       FetchMap::iterator fetch_it,
       TrustedSignalsFetcher::SignalsFetchResult signals_fetch_result);
 
+  // Called when the last Handle that owned CompressionGroupData is destroyed.
+  // May add `compression_group_data` to `lru_list_`.
+  void OnLastHandleDestroyed(
+      scoped_refptr<CompressionGroupData> compression_group_data);
+
+  // Removes `lru_list_it` from LruList, updating the CompressionGroupData's
+  // `lru_list_it` pointer to be nullopt. If there are no outstanding references
+  // to the CompressionGroupData, this will destroy it. Called by
+  // CompressionGroupData when assigning it a handle, or when destroying LruList
+  // entries to free up memory.
+  void RemoveFromLruList(LruList::iterator lru_list_it);
+
   // Called when the last reference of a CompressionGroupData object has been
   // released, and it's about to be destroyed. Does the following:
   //
@@ -578,6 +626,14 @@ class CONTENT_EXPORT TrustedSignalsCacheImpl
 
   base::UnguessableToken GetNetworkPartitionNonce(
       const NetworkPartitionNonceKey& network_partition_nonce_key);
+
+  // Starts `cleanup_lru_timer_` if it's not already running and `lru_list_` is
+  // not empty.
+  void MaybeStartCleanupTimer();
+
+  // Removes up all entries in `lru_list_` that have passed their scheduled
+  // removal time.
+  void Cleanup();
 
   // Virtual for testing.
   virtual std::unique_ptr<TrustedSignalsFetcher> CreateFetcher();
@@ -616,6 +672,18 @@ class CONTENT_EXPORT TrustedSignalsCacheImpl
   // seen again, a new UnguessableToken will be created.
   base::LRUCache<NetworkPartitionNonceKey, base::UnguessableToken>
       network_partition_nonce_cache_;
+
+  // Approximate size of all loaded CompressionGroupData in
+  // `compression_group_data_map_`. Doesn't fully account for all fields in
+  // every related data structure. Updated only on load completion and
+  // CompressionGroupData destruction - compression groups that haven't been
+  // fetched yet are considered to be of size 0.
+  size_t size_ = 0;
+
+  // See LruList for details.
+  LruList lru_list_;
+
+  base::OneShotTimer cleanup_timer_;
 };
 
 }  // namespace content

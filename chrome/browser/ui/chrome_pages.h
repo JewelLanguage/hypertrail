@@ -13,7 +13,6 @@
 #include "base/values.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/feedback/public/feedback_source.h"
 #include "chrome/browser/ui/user_education/show_promo_in_page.h"
 #include "components/content_settings/core/common/content_settings_types.h"
@@ -24,7 +23,7 @@
 #include "chrome/browser/signin/signin_promo.h"
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ui/webui/ash/settings/app_management/app_management_uma.h"
 #endif
 
@@ -65,7 +64,7 @@ enum HelpSource {
   // WebUI (the "About" page).
   HELP_SOURCE_WEBUI,
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // WebUI (the OS "About" page).
   HELP_SOURCE_WEBUI_CHROME_OS,
 #endif
@@ -106,7 +105,6 @@ void ShowSettings(Browser* browser);
 void ShowSettingsSubPage(Browser* browser, std::string_view sub_page);
 void ShowSettingsSubPageForProfile(Profile* profile, std::string_view sub_page);
 void ShowPageWithPromoForProfile(Profile* profile,
-                                 GURL url,
                                  ShowPromoInPage::Params promo_params);
 void ShowContentSettingsExceptions(Browser* browser,
                                    ContentSettingsType content_settings_type);
@@ -148,16 +146,13 @@ void ShowAllSitesSettingsFilteredByRwsOwner(
 // Shows the enterprise management info page in a browser tab.
 void ShowEnterpriseManagementPageInTabbedBrowser(Browser* browser);
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 void ShowAppManagementPage(Profile* profile,
                            const std::string& app_id,
                            ash::settings::AppManagementEntryPoint entry_point);
 
 void ShowGraduationApp(Profile* profile);
 
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS)
 // Constructs an OS settings GURL for the specified `sub_page`.
 GURL GetOSSettingsUrl(std::string_view sub_page);
 

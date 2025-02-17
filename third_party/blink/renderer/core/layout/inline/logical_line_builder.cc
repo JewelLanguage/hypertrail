@@ -154,8 +154,7 @@ InlineBoxState* LogicalLineBuilder::HandleItemResults(
       if (item_result.is_hyphenated) [[unlikely]] {
         DCHECK(item_result.hyphen);
         LayoutUnit hyphen_inline_size = item_result.hyphen.InlineSize();
-        line_box->AddChild(item, item_result, item_result.TextOffset(),
-                           box->text_top,
+        line_box->AddChild(item_result, box->text_top,
                            item_result.inline_size - hyphen_inline_size,
                            box->text_height, item.BidiLevel());
         PlaceHyphen(item_result, hyphen_inline_size, line_box, box);
@@ -165,12 +164,10 @@ InlineBoxState* LogicalLineBuilder::HandleItemResults(
         const auto one_em = item.Style()->ComputedFontSizeAsFixed();
         const auto text_height = one_em;
         const auto text_top = LayoutUnit();
-        line_box->AddChild(item, item_result, item_result.TextOffset(),
-                           text_top, item_result.inline_size, text_height,
-                           item.BidiLevel());
+        line_box->AddChild(item_result, text_top, item_result.inline_size,
+                           text_height, item.BidiLevel());
       } else {
-        line_box->AddChild(item, item_result, item_result.TextOffset(),
-                           box->text_top, item_result.inline_size,
+        line_box->AddChild(item_result, box->text_top, item_result.inline_size,
                            box->text_height, item.BidiLevel());
       }
 
@@ -207,7 +204,7 @@ InlineBoxState* LogicalLineBuilder::HandleItemResults(
       // Adds a LogicalLineItem with an InlineItem to check its
       // InlineItemType later.
       line_box->AddChild(
-          item, item_result, item_result.TextOffset(),
+          item_result,
           /* block_offset */ LayoutUnit(),
           item_result.inline_size + start_overhang + end_overhang,
           /* text_height */ LayoutUnit(), item.BidiLevel());
@@ -337,7 +334,7 @@ void LogicalLineBuilder::PlaceControlItem(const InlineItem& item,
     box->EnsureTextMetrics(*item.Style(), *box->font, baseline_type_);
   }
 
-  line_box->AddChild(item, std::move(item_result->shape_result),
+  line_box->AddChild(*item_result->item, std::move(item_result->shape_result),
                      item_result->TextOffset(), box->text_top,
                      item_result->inline_size, box->text_height,
                      item.BidiLevel());
@@ -380,7 +377,7 @@ InlineBoxState* LogicalLineBuilder::PlaceAtomicInline(
   } else {
     // The metrics should be as text instead of atomic inline box.
     const auto& style = layout_object->Parent()->StyleRef();
-    box->ComputeTextMetrics(style, style.GetFont(), baseline_type_);
+    box->ComputeTextMetrics(style, *style.GetFont(), baseline_type_);
     // Note: |item_result->spacing_before| is non-zero if this |item_result|
     // is |LayoutTextCombine| and after CJK character.
     // See "text-combine-justify.html".
@@ -560,7 +557,7 @@ void LogicalLineBuilder::PlaceListMarker(const InlineItem& item,
                                          InlineItemResult* item_result) {
   if (quirks_mode_) [[unlikely]] {
     box_states_->LineBoxState().EnsureTextMetrics(
-        *item.Style(), item.Style()->GetFont(), baseline_type_);
+        *item.Style(), *item.Style()->GetFont(), baseline_type_);
   }
 }
 
@@ -651,7 +648,7 @@ void LogicalLineBuilder::BidiReorder(
       //
       // min_element() below doesn't return the end iterator because we
       // ensure there is at least one item in the range.
-      column->start_index = *base::ranges::min_element(
+      column->start_index = *std::ranges::min_element(
           base::span(logical_to_visual)
               .subspan(column->start_index, column->size));
     }

@@ -4,6 +4,7 @@
 
 #include "components/autofill/core/browser/data_model/entity_type.h"
 
+#include "components/autofill/core/browser/data_model/entity_type_names.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -17,6 +18,7 @@ TEST(AutofillAttributeTypeTest, Relationships) {
   AttributeType a = AttributeType(AttributeTypeName::kPassportName);
   EXPECT_EQ(a.entity_type(), EntityType(EntityTypeName::kPassport));
   EXPECT_EQ(a.field_type(), PASSPORT_NAME_TAG);
+  EXPECT_EQ(a, AttributeType::FromFieldType(PASSPORT_NAME_TAG));
 }
 
 TEST(AutofillEntityTypeTest, Attributes) {
@@ -27,23 +29,14 @@ TEST(AutofillEntityTypeTest, Attributes) {
                                    AttributeType(kPassportNumber),
                                    AttributeType(kPassportCountry),
                                    AttributeType(kPassportExpiryDate),
-                                   AttributeType(kPassportIssueDate),
-                                   AttributeType(kPassportPlaceOfBirth)));
+                                   AttributeType(kPassportIssueDate)));
   ASSERT_FALSE(e.attributes().empty());
 }
 
-TEST(AutofillEntityTypeTest, UniqueKeys) {
+TEST(AutofillEntityTypeTest, ImportConstraints) {
   using enum AttributeTypeName;
   EntityType e = EntityType(EntityTypeName::kPassport);
-  EXPECT_THAT(e.unique_keys(), ElementsAre(UnorderedElementsAre(
-                                   AttributeType(kPassportNumber),
-                                   AttributeType(kPassportExpiryDate))));
-}
-
-TEST(AutofillEntityTypeTest, RequiredAttributes) {
-  using enum AttributeTypeName;
-  EntityType e = EntityType(EntityTypeName::kPassport);
-  EXPECT_THAT(e.required_attributes(),
+  EXPECT_THAT(e.import_constraints(),
               UnorderedElementsAre(
                   UnorderedElementsAre(AttributeType(kPassportNumber),
                                        AttributeType(kPassportName)),
@@ -51,6 +44,14 @@ TEST(AutofillEntityTypeTest, RequiredAttributes) {
                                        AttributeType(kPassportCountry)),
                   UnorderedElementsAre(AttributeType(kPassportNumber),
                                        AttributeType(kPassportExpiryDate))));
+}
+
+TEST(AutofillEntityTypeTest, MergeConstraints) {
+  using enum AttributeTypeName;
+  EntityType e = EntityType(EntityTypeName::kPassport);
+  EXPECT_THAT(e.merge_constraints(), ElementsAre(UnorderedElementsAre(
+                                         AttributeType(kPassportNumber),
+                                         AttributeType(kPassportExpiryDate))));
 }
 
 TEST(AutofillEntityTypeTest, NameAsString) {
@@ -63,8 +64,8 @@ TEST(AutofillEntityTypeTest, NameAsString) {
 TEST(AutofillEntityTypeTest, DisambiguationOrder) {
   using enum AttributeTypeName;
   auto lt = [](AttributeTypeName lhs, AttributeTypeName rhs) {
-    AttributeType::DisambiguationComparator lt;
-    return lt(AttributeType(lhs), AttributeType(rhs));
+    return AttributeType::DisambiguationOrder(AttributeType(lhs),
+                                              AttributeType(rhs));
   };
   EXPECT_TRUE(lt(kPassportName, kPassportCountry));
   EXPECT_TRUE(lt(kPassportCountry, kPassportExpiryDate));
@@ -77,6 +78,24 @@ TEST(AutofillEntityTypeTest, Syncable) {
   using enum EntityTypeName;
   EXPECT_FALSE(EntityType(kPassport).syncable());
   EXPECT_TRUE(EntityType(kLoyaltyCard).syncable());
+}
+
+TEST(AutofillEntityTypeTest, EntityGetNameForI18n) {
+  using enum EntityTypeName;
+  EntityType a = EntityType(kPassport);
+  EntityType b = EntityType(kDriversLicense);
+  EXPECT_EQ(a.GetNameForI18n(), u"Passport");
+  EXPECT_EQ(b.GetNameForI18n(), u"Driver's license");
+}
+
+TEST(AutofillEntityTypeTest, AttributeGetNameForI18n) {
+  using enum AttributeTypeName;
+  AttributeType a = AttributeType(kPassportCountry);
+  AttributeType b = AttributeType(kVehicleLicensePlate);
+  AttributeType c = AttributeType(kDriversLicenseExpirationDate);
+  EXPECT_EQ(a.GetNameForI18n(), u"Country");
+  EXPECT_EQ(b.GetNameForI18n(), u"License plate");
+  EXPECT_EQ(c.GetNameForI18n(), u"Expiration date");
 }
 
 }  // namespace

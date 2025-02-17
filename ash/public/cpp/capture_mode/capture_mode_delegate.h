@@ -254,7 +254,8 @@ class ASH_PUBLIC_EXPORT CaptureModeDelegate {
   // when the response is fetched.
   virtual void SendRegionSearch(const SkBitmap& image,
                                 const gfx::Rect& region,
-                                OnSearchUrlFetchedCallback callback) = 0;
+                                OnSearchUrlFetchedCallback search_callback,
+                                OnTextDetectionComplete text_callback) = 0;
 
   // Sends the captured `image`, `region`, and search box `text` to the backend.
   // Invokes `callback` when the response is fetched.
@@ -263,6 +264,9 @@ class ASH_PUBLIC_EXPORT CaptureModeDelegate {
       const gfx::Rect& region,
       const std::string& text,
       ash::OnSearchUrlFetchedCallback callback) = 0;
+
+  // Returns true if the network is currently in an offline or unknown state.
+  virtual bool IsNetworkConnectionOffline() const = 0;
 
   // Deletes the remote file under `path` and calls `callback` with result.
   virtual void DeleteRemoteFile(const base::FilePath& path,

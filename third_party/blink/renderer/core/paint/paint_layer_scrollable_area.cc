@@ -44,12 +44,14 @@
 
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 
+#include <optional>
 #include <utility>
 
 #include "base/numerics/checked_math.h"
 #include "base/task/single_thread_task_runner.h"
 #include "cc/animation/animation_timeline.h"
 #include "cc/input/main_thread_scrolling_reason.h"
+#include "cc/input/scroll_snap_data.h"
 #include "cc/input/snap_selection_strategy.h"
 #include "cc/layers/picture_layer.h"
 #include "third_party/blink/public/common/features.h"
@@ -114,7 +116,6 @@
 #include "third_party/blink/renderer/core/scroll/scroll_into_view_util.h"
 #include "third_party/blink/renderer/core/scroll/scrollable_area.h"
 #include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
-#include "third_party/blink/renderer/core/scroll/smooth_scroll_sequencer.h"
 #include "third_party/blink/renderer/core/timing/dom_window_performance.h"
 #include "third_party/blink/renderer/core/timing/event_timing.h"
 #include "third_party/blink/renderer/core/view_transition/view_transition.h"
@@ -229,10 +230,6 @@ void PaintLayerScrollableArea::DisposeImpl() {
 
   ClearScrollableArea();
 
-  if (SmoothScrollSequencer* sequencer = GetSmoothScrollSequencer()) {
-    sequencer->DidDisposeScrollableArea(*this);
-  }
-
   RunScrollCompleteCallbacks(ScrollableArea::ScrollCompletionMode::kFinished);
 
   layer_ = nullptr;
@@ -282,14 +279,6 @@ ChromeClient* PaintLayerScrollableArea::GetChromeClient() const {
   if (Page* page = GetLayoutBox()->GetFrame()->GetPage())
     return &page->GetChromeClient();
   return nullptr;
-}
-
-SmoothScrollSequencer* PaintLayerScrollableArea::GetSmoothScrollSequencer()
-    const {
-  if (HasBeenDisposed())
-    return nullptr;
-
-  return GetLayoutBox()->GetFrame()->GetSmoothScrollSequencer();
 }
 
 bool PaintLayerScrollableArea::IsActive() const {
@@ -1286,11 +1275,8 @@ mojom::blink::ColorScheme PaintLayerScrollableArea::UsedColorSchemeScrollbars()
   //   - color scheme flags are normal (including cases when flags are not
   //     specified),
   //   - the preferred color scheme is dark (OS-based),
-  //   - the browser preferred color scheme is dark.
-  //   - there is no custom browser theme active
-  //   - there is no color-picked browser theme active
-  //     (both theme conditions are embedded into
-  //        `GetPreferredRootScrollbarColorScheme()`)
+  //   - the browser preferred color scheme is dark (based on the lightness of
+  //     the toolbar's color).
   if (IsGlobalRootNonOverlayScroller() &&
       layout_box->StyleRef().ColorSchemeFlagsIsNormal()) {
     const auto& document = layout_box->GetDocument();
@@ -1974,27 +1960,39 @@ void PaintLayerScrollableArea::SetImplSnapStrategy(
   EnsureRareData().impl_snap_strategy_ = std::move(strategy);
 }
 
-std::optional<gfx::PointF>
-PaintLayerScrollableArea::GetSnapPositionAndSetTarget(
-    const cc::SnapSelectionStrategy& strategy) {
+std::optional<cc::SnapPositionData> PaintLayerScrollableArea::GetSnapPosition(
+    const cc::SnapSelectionStrategy& strategy) const {
   if (!RareData() || !RareData()->snap_container_data_)
     return std::nullopt;
 
-  cc::SnapContainerData& data = RareData()->snap_container_data_.value();
+  const cc::SnapContainerData& data = RareData()->snap_container_data_.value();
   if (!data.size())
     return std::nullopt;
 
-  std::optional<gfx::PointF> snap_point;
   cc::SnapPositionData snap = data.FindSnapPosition(strategy);
-  if (snap.type != cc::SnapPositionData::Type::kNone) {
-    snap_point = gfx::PointF(snap.position.x(), snap.position.y());
+  return std::make_optional(snap);
+}
+
+std::optional<gfx::PointF>
+PaintLayerScrollableArea::GetSnapPositionAndSetTarget(
+    const cc::SnapSelectionStrategy& strategy) {
+  std::optional<cc::SnapPositionData> snap = GetSnapPosition(strategy);
+  if (!snap.has_value()) {
+    return std::nullopt;
   }
 
-  if (data.SetTargetSnapAreaElementIds(snap.target_element_ids)) {
+  // Update the target element ids whether we found a snap position or not -
+  // as we may have to clear them if we are no longer snapped.
+  cc::SnapContainerData& data = RareData()->snap_container_data_.value();
+  if (data.SetTargetSnapAreaElementIds(snap->target_element_ids)) {
     GetLayoutBox()->SetNeedsPaintPropertyUpdate();
   }
 
-  return snap_point;
+  if (snap->type == cc::SnapPositionData::Type::kNone) {
+    return std::nullopt;
+  }
+
+  return std::make_optional<gfx::PointF>(snap->position);
 }
 
 bool PaintLayerScrollableArea::HasOverflowControls() const {
@@ -2451,16 +2449,8 @@ PhysicalRect PaintLayerScrollableArea::ScrollIntoView(
   if (params->is_for_scroll_sequence) {
     mojom::blink::ScrollBehavior behavior = DetermineScrollBehavior(
         params->behavior, GetLayoutBox()->StyleRef().GetScrollBehavior());
-    if (RuntimeEnabledFeatures::MultiSmoothScrollIntoViewEnabled()) {
-      SetScrollOffset(new_scroll_offset, params->type, behavior,
-                      ScrollCallback(), true);
-    } else {
-      CHECK(GetSmoothScrollSequencer());
-      DCHECK(params->type == mojom::blink::ScrollType::kProgrammatic ||
-             params->type == mojom::blink::ScrollType::kUser);
-      GetSmoothScrollSequencer()->QueueAnimation(this, new_scroll_offset,
-                                                 behavior);
-    }
+    SetScrollOffset(new_scroll_offset, params->type, behavior, ScrollCallback(),
+                    true);
   } else {
     SetScrollOffset(new_scroll_offset, params->type,
                     mojom::blink::ScrollBehavior::kInstant, ScrollCallback(),
@@ -2990,7 +2980,7 @@ void PaintLayerScrollableArea::InvalidatePaintOfScrollbarIfNeeded(
   if (!previously_was_overlay)
     previous_scrollbar_used_space_in_box = visual_rect.size();
 
-  // The IsEmpty() check avoids invalidaiton in cases when the visual rect
+  // The IsEmpty() check avoids invalidation in cases when the visual rect
   // changes from (0,0 0x0) to (0,0 0x100).
   if (!(new_scrollbar_used_space_in_box.IsEmpty() &&
         previous_scrollbar_used_space_in_box.IsEmpty()) &&

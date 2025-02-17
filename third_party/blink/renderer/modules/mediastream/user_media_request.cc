@@ -35,8 +35,8 @@
 
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/stringprintf.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_metric_builder.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink.h"
 #include "third_party/blink/public/platform/modules/webrtc/webrtc_logging.h"
 #include "third_party/blink/renderer/bindings/core/v8/dictionary.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_media_stream_constraints.h"
@@ -732,7 +732,7 @@ bool UserMediaRequest::IsSecureContextUse(String& error_message) {
     // Permissions policy deprecation messages.
     if (Audio()) {
       if (!window->IsFeatureEnabled(
-              mojom::blink::PermissionsPolicyFeature::kMicrophone,
+              network::mojom::PermissionsPolicyFeature::kMicrophone,
               ReportOptions::kReportOnFailure)) {
         UseCounter::Count(
             window, WebFeature::kMicrophoneDisabledByFeaturePolicyEstimate);
@@ -741,7 +741,7 @@ bool UserMediaRequest::IsSecureContextUse(String& error_message) {
     if (Video() &&
         VideoMediaStreamType() != MediaStreamType::DISPLAY_VIDEO_CAPTURE_SET) {
       if (!window->IsFeatureEnabled(
-              mojom::blink::PermissionsPolicyFeature::kCamera,
+              network::mojom::PermissionsPolicyFeature::kCamera,
               ReportOptions::kReportOnFailure)) {
         UseCounter::Count(window,
                           WebFeature::kCameraDisabledByFeaturePolicyEstimate);

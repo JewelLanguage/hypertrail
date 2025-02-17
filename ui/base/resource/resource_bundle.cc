@@ -11,6 +11,7 @@
 
 #include <stdint.h>
 
+#include <algorithm>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -28,7 +29,6 @@
 #include "base/numerics/byte_conversions.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -204,7 +204,7 @@ void DecompressIfNeeded(std::string_view data, OutputBufferType output) {
     DCHECK(success);
   } else {
     base::span<uint8_t> dest = GetBufferForWriting(output, data.size());
-    base::ranges::copy(data, dest.data());
+    std::ranges::copy(data, dest.data());
   }
 }
 
@@ -476,6 +476,18 @@ std::string ResourceBundle::LoadLocaleResources(const std::string& pref_locale,
                   std::size(path_copy));
     base::debug::Alias(path_copy);
 #endif  // BUILDFLAG(IS_WIN)
+
+    // Collect diagnostic info for https://crbug.com/394631579 .
+#if BUILDFLAG(IS_MAC)
+    SCOPED_CRASH_KEY_STRING32("LoadLocaleResources", "pref_locale",
+                              pref_locale);
+    SCOPED_CRASH_KEY_STRING32("LoadLocaleResources", "app_locale", app_locale);
+    SCOPED_CRASH_KEY_STRING1024("LoadLocaleResources", "override_filepath",
+                                GetOverriddenPakPath().AsUTF8Unsafe());
+    SCOPED_CRASH_KEY_STRING1024("LoadLocaleResources", "locale_filepath",
+                                locale_file_path.AsUTF8Unsafe());
+#endif  // BUILDFLAG(IS_MAC)
+
     NOTREACHED();
   }
 

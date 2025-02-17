@@ -16,12 +16,10 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
-#include "chrome/browser/apps/link_capturing/link_capturing_features.h"
 #include "chrome/browser/command_updater.h"
 #include "chrome/browser/download/bubble/download_bubble_prefs.h"
 #include "chrome/browser/media/router/media_router_feature.h"
@@ -79,6 +77,7 @@
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_controller.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
+#include "chrome/browser/web_applications/link_capturing_features.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/branded_strings.h"
@@ -442,7 +441,9 @@ void ToolbarView::Init() {
       if (features::IsToolbarPinningEnabled()) {
         pinned_toolbar_actions_container_
             ->GetActionItemFor(kActionShowChromeLabs)
-            ->SetVisible(show_chrome_labs_button_.GetValue());
+            ->SetVisible(show_chrome_labs_button_.GetValue() &&
+                         ShouldShowChromeLabsUI(chrome_labs_model_.get(),
+                                                browser_->profile()));
       } else {
         chrome_labs_button_->SetVisible(show_chrome_labs_button_.GetValue());
       }
@@ -758,7 +759,7 @@ void ToolbarView::EnabledStateChangedForCommand(int id, bool enabled) {
   DCHECK(display_mode_ == DisplayMode::NORMAL);
   const std::array<views::Button*, 5> kButtons{back_, forward_, reload_, home_,
                                                avatar_};
-  auto* button = *base::ranges::find(kButtons, id, &views::Button::tag);
+  auto* button = *std::ranges::find(kButtons, id, &views::Button::tag);
   DCHECK(button);
   button->SetEnabled(enabled);
 }
@@ -1116,20 +1117,14 @@ void ToolbarView::UpdateTypeAndSeverity(
   }
   app_menu_button_->GetViewAccessibility().SetName(accname_app);
   app_menu_button_->SetTypeAndSeverity(type_and_severity);
-
-  if (base::FeatureList::IsEnabled(features::kDefaultBrowserPromptRefresh) &&
-      DefaultBrowserPromptManager::GetInstance()->get_show_app_menu_prompt()) {
-    // Anytime the default chip is eligible to be shown, log whether the prompt
-    // was actually shown. This helps us understand how often it is pre-empted.
-    base::UmaHistogramBoolean(
-        "DefaultBrowser.AppMenu.DefaultChipShown",
-        type_and_severity.type ==
-            AppMenuIconController::IconType::DEFAULT_BROWSER_PROMPT);
-  }
 }
 
 ExtensionsToolbarContainer* ToolbarView::GetExtensionsToolbarContainer() {
   return extensions_container_;
+}
+
+PinnedToolbarActionsContainer* ToolbarView::GetPinnedToolbarActionsContainer() {
+  return pinned_toolbar_actions_container_;
 }
 
 gfx::Size ToolbarView::GetToolbarButtonSize() const {
@@ -1219,7 +1214,13 @@ IntentChipButton* ToolbarView::GetIntentChipButton() {
   return location_bar()->intent_chip();
 }
 
-DownloadToolbarButtonView* ToolbarView::GetDownloadButton() {
+ToolbarButton* ToolbarView::GetDownloadButton() {
+  if (base::FeatureList::IsEnabled(features::kPinnableDownloadsButton)) {
+    return pinned_toolbar_actions_container_
+               ? pinned_toolbar_actions_container_->GetButtonFor(
+                     kActionShowDownloads)
+               : nullptr;
+  }
   return download_button();
 }
 
@@ -1245,7 +1246,9 @@ void ToolbarView::OnChromeLabsPrefChanged() {
     actions::ActionItem* chrome_labs_action =
         pinned_toolbar_actions_container_->GetActionItemFor(
             kActionShowChromeLabs);
-    chrome_labs_action->SetVisible(show_chrome_labs_button_.GetValue());
+    chrome_labs_action->SetVisible(
+        show_chrome_labs_button_.GetValue() &&
+        ShouldShowChromeLabsUI(chrome_labs_model_.get(), browser_->profile()));
     GetViewAccessibility().AnnounceText(l10n_util::GetStringUTF16(
         chrome_labs_action->GetVisible()
             ? IDS_ACCESSIBLE_TEXT_CHROMELABS_BUTTON_ADDED_BY_ENTERPRISE_POLICY

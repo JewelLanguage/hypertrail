@@ -7,6 +7,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/stringprintf.h"
 #include "components/optimization_guide/core/model_execution/model_execution_util.h"
+#include "components/optimization_guide/core/model_execution/multimodal_message.h"
 #include "components/optimization_guide/core/model_execution/repetition_checker.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
 
@@ -116,7 +117,7 @@ OnDeviceExecution::OnDeviceExecution(
     ModelBasedCapabilityKey feature,
     OnDeviceOptions opts,
     ExecuteRemoteFn execute_remote_fn,
-    std::unique_ptr<google::protobuf::MessageLite> message,
+    MultimodalMessage message,
     std::unique_ptr<ResultLogger> logger,
     OptimizationGuideModelExecutionResultStreamingCallback callback,
     base::OnceCallback<void(bool)> cleanup_callback)
@@ -126,13 +127,11 @@ OnDeviceExecution::OnDeviceExecution(
       last_message_(std::move(message)),
       histogram_logger_(std::move(logger)),
       callback_(std::move(callback)),
-      cleanup_callback_(std::move(cleanup_callback)),
-      receiver_(this) {
+      cleanup_callback_(std::move(cleanup_callback)) {
   log_.mutable_model_execution_info()
       ->mutable_on_device_model_execution_info()
       ->add_execution_infos();
   start_ = base::TimeTicks::Now();
-  SetExecutionRequest(feature_, log_, *last_message_);
   *(log_.mutable_model_execution_info()
         ->mutable_on_device_model_execution_info()
         ->mutable_model_versions()) = opts_.model_versions;
@@ -194,7 +193,7 @@ void OnDeviceExecution::Cancel() {
 void OnDeviceExecution::BeginExecution(OnDeviceContext& context,
                                        const SamplingParams& sampling_params) {
   auto input = opts_.adapter->ConstructInputString(
-      *last_message_, /*want_input_context=*/false);
+      last_message_.read(), /*want_input_context=*/false);
   if (!input) {
     FallbackToRemote(Result::kFailedConstructingMessage);
     return;
@@ -209,22 +208,25 @@ void OnDeviceExecution::BeginExecution(OnDeviceContext& context,
   logged_request->set_execution_string(input->ToString());
   LogRequest(opts_.logger.get(), *logged_request);
 
-  auto options = on_device_model::mojom::InputOptions::New();
-  options->input = std::move(input->input);
-  options->max_tokens = opts_.token_limits.max_execute_tokens;
-  options->ignore_context = input->should_ignore_input_context;
+  auto append_options = on_device_model::mojom::AppendOptions::New();
+  append_options->input = std::move(input->input);
+  append_options->max_tokens = opts_.token_limits.max_execute_tokens;
+  session_->Append(std::move(append_options),
+                   context_receiver_.BindNewPipeAndPassRemote());
+
+  auto options = on_device_model::mojom::GenerateOptions::New();
   options->max_output_tokens = opts_.token_limits.max_output_tokens;
   options->top_k = sampling_params.top_k;
   options->temperature = sampling_params.temperature;
 
   opts_.safety_checker->RunRequestChecks(
-      *last_message_,
+      last_message_,
       base::BindOnce(&OnDeviceExecution::OnRequestSafetyResult,
                      weak_ptr_factory_.GetWeakPtr(), std::move(options)));
 }
 
 void OnDeviceExecution::OnRequestSafetyResult(
-    on_device_model::mojom::InputOptionsPtr options,
+    on_device_model::mojom::GenerateOptionsPtr options,
     SafetyChecker::Result safety_result) {
   if (safety_result.failed_to_run) {
     FallbackToRemote(Result::kFailedConstructingMessage);
@@ -250,8 +252,8 @@ void OnDeviceExecution::OnRequestSafetyResult(
 }
 
 void OnDeviceExecution::BeginRequestExecution(
-    on_device_model::mojom::InputOptionsPtr options) {
-  session_->Execute(std::move(options), receiver_.BindNewPipeAndPassRemote());
+    on_device_model::mojom::GenerateOptionsPtr options) {
+  session_->Generate(std::move(options), receiver_.BindNewPipeAndPassRemote());
   receiver_.set_disconnect_handler(base::BindOnce(
       &OnDeviceExecution::OnResponderDisconnect, base::Unretained(this)));
 }
@@ -286,7 +288,7 @@ void OnDeviceExecution::OnResponse(
       logged_response->set_status(
           proto::ON_DEVICE_MODEL_SERVICE_RESPONSE_STATUS_RETRACTED);
       CancelPendingResponse(Result::kResponseHadRepeats,
-                            ModelExecutionError::kFiltered);
+                            ModelExecutionError::kResponseLowQuality);
       return;
     }
 
@@ -310,11 +312,6 @@ void OnDeviceExecution::OnComplete(
   receiver_.reset();  // Suppress expected disconnect
 
   bool has_repeats = MutableLoggedResponse()->has_repeats();
-  // TODO(holte): Make input_token_count available earlier / in more cases.
-  if (!has_repeats) {
-    MutableLoggedRequest()->set_execution_num_tokens_processed(
-        summary->input_token_count);
-  }
 
   LogResponseHasRepeats(feature_, has_repeats);
   LogResponseCompleteTokens(feature_, num_response_tokens_);
@@ -329,6 +326,10 @@ void OnDeviceExecution::OnComplete(
   opts_.model_client->OnResponseCompleted();
 
   RunRawOutputSafetyCheck(ResponseCompleteness::kComplete);
+}
+
+void OnDeviceExecution::OnComplete(uint32_t tokens_processed) {
+  MutableLoggedRequest()->set_execution_num_tokens_processed(tokens_processed);
 }
 
 void OnDeviceExecution::OnResponderDisconnect() {
@@ -386,12 +387,6 @@ void OnDeviceExecution::OnRawOutputSafetyResult(
 }
 
 void OnDeviceExecution::MaybeParseResponse(ResponseCompleteness completeness) {
-  if (completeness == ResponseCompleteness::kPartial &&
-      features::ShouldUseTextSafetyRemoteFallbackForEligibleFeatures()) {
-    // We don't send streaming responses in this mode.
-    return;
-  }
-
   if (!opts_.adapter->ShouldParseResponse(completeness)) {
     return;
   }
@@ -403,7 +398,7 @@ void OnDeviceExecution::MaybeParseResponse(ResponseCompleteness completeness) {
   size_t previous_response_pos = latest_response_pos_;
   latest_response_pos_ = latest_safe_raw_output_.length;
   opts_.adapter->ParseResponse(
-      *last_message_, safe_response, previous_response_pos,
+      last_message_, safe_response, previous_response_pos,
       base::BindOnce(&OnDeviceExecution::OnParsedResponse,
                      weak_ptr_factory_.GetWeakPtr(), completeness));
 }
@@ -426,7 +421,7 @@ void OnDeviceExecution::OnParsedResponse(
     }
   }
   opts_.safety_checker->RunResponseChecks(
-      *last_message_, *output, completeness,
+      last_message_, *output, completeness,
       base::BindOnce(&OnDeviceExecution::OnResponseSafetyResult,
                      weak_ptr_factory_.GetWeakPtr(), completeness, *output));
 }
@@ -466,72 +461,7 @@ void OnDeviceExecution::OnResponseSafetyResult(
     return;
   }
 
-  if (features::ShouldUseTextSafetyRemoteFallbackForEligibleFeatures()) {
-    RunTextSafetyRemoteFallback(std::move(output));
-    return;
-  }
-
   SendSuccessCompletionCallback(output);
-}
-
-void OnDeviceExecution::RunTextSafetyRemoteFallback(
-    proto::Any success_response_metadata) {
-  auto ts_request = opts_.adapter->ConstructTextSafetyRequest(
-      *last_message_, current_response_);
-  if (!ts_request) {
-    CancelPendingResponse(Result::kFailedConstructingRemoteTextSafetyRequest,
-                          ModelExecutionError::kGenericFailure);
-    return;
-  }
-
-  proto::InternalOnDeviceModelExecutionInfo remote_ts_model_execution_info;
-  auto* ts_request_log = remote_ts_model_execution_info.mutable_request()
-                             ->mutable_text_safety_model_request();
-  ts_request_log->set_text(ts_request->text());
-  ts_request_log->set_url(ts_request->url());
-
-  execute_remote_fn_.Run(
-      ModelBasedCapabilityKey::kTextSafety, *ts_request, std::nullopt,
-      /*log_ai_data_request=*/nullptr,
-      base::BindOnce(&OnDeviceExecution::OnTextSafetyRemoteResponse,
-                     weak_ptr_factory_.GetWeakPtr(),
-                     std::move(remote_ts_model_execution_info),
-                     std::move(success_response_metadata)));
-}
-
-void OnDeviceExecution::OnTextSafetyRemoteResponse(
-    proto::InternalOnDeviceModelExecutionInfo remote_ts_model_execution_info,
-    proto::Any success_response_metadata,
-    OptimizationGuideModelExecutionResult result,
-    std::unique_ptr<ModelQualityLogEntry> remote_log_entry) {
-  bool is_unsafe =
-      !result.response.has_value() &&
-      result.response.error().error() ==
-          OptimizationGuideModelExecutionError::ModelExecutionError::kFiltered;
-  if (remote_log_entry) {
-    auto* ts_response_log = remote_ts_model_execution_info.mutable_response()
-                                ->mutable_text_safety_model_response();
-    ts_response_log->set_server_execution_id(
-        remote_log_entry->model_execution_id());
-    ts_response_log->set_is_unsafe(is_unsafe);
-  }
-  *(log_.mutable_model_execution_info()
-        ->mutable_on_device_model_execution_info()
-        ->add_execution_infos()) = remote_ts_model_execution_info;
-
-  if (is_unsafe) {
-    CancelPendingResponse(Result::kUsedOnDeviceOutputUnsafe,
-                          ModelExecutionError::kFiltered);
-    return;
-  }
-
-  if (!result.response.has_value()) {
-    CancelPendingResponse(Result::kTextSafetyRemoteRequestFailed,
-                          ModelExecutionError::kGenericFailure);
-    return;
-  }
-
-  SendSuccessCompletionCallback(success_response_metadata);
 }
 
 void OnDeviceExecution::FallbackToRemote(Result result) {
@@ -540,7 +470,7 @@ void OnDeviceExecution::FallbackToRemote(Result result) {
   }
   auto self = weak_ptr_factory_.GetWeakPtr();
   execute_remote_fn_.Run(
-      feature_, *last_message_, std::nullopt,
+      feature_, last_message_.BuildProtoMessage(), std::nullopt,
       std::make_unique<proto::LogAiDataRequest>(std::move(log_)),
       base::BindOnce(&InvokeStreamingCallbackWithRemoteResult,
                      std::move(callback_)));
@@ -594,7 +524,6 @@ void OnDeviceExecution::SendSuccessCompletionCallback(
   // Complete the log entry and promise it to the ModelQualityUploaderService.
   std::unique_ptr<ModelQualityLogEntry> log_entry;
   std::unique_ptr<proto::ModelExecutionInfo> model_execution_info;
-  SetExecutionResponse(feature_, log_, success_response_metadata);
   MutableLoggedResponse()->set_status(
       proto::ON_DEVICE_MODEL_SERVICE_RESPONSE_STATUS_SUCCESS);
   log_entry = std::make_unique<ModelQualityLogEntry>(opts_.log_uploader);
@@ -624,6 +553,7 @@ void OnDeviceExecution::Cleanup(bool healthy) {
   weak_ptr_factory_.InvalidateWeakPtrs();
   session_.reset();
   receiver_.reset();
+  context_receiver_.reset();
   callback_.Reset();
   log_.Clear();
   current_response_.clear();

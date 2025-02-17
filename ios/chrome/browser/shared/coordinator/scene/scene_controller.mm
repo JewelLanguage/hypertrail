@@ -339,14 +339,14 @@ void OnListFamilyMembersResponse(
 
 }  // namespace
 
-@interface SceneController () <ProfileStateObserver,
-                               HistoryCoordinatorDelegate,
+@interface SceneController () <HistoryCoordinatorDelegate,
                                IncognitoInterstitialCoordinatorDelegate,
                                PasswordCheckupCoordinatorDelegate,
                                PolicyWatcherBrowserAgentObserving,
-                               SettingsNavigationControllerDelegate,
+                               ProfileStateObserver,
                                SceneUIProvider,
                                SceneURLLoadingServiceDelegate,
+                               SettingsNavigationControllerDelegate,
                                TabGridCoordinatorDelegate,
                                WebStateListObserving,
                                YoutubeIncognitoCoordinatorDelegate> {
@@ -1512,17 +1512,12 @@ void OnListFamilyMembersResponse(
 - (void)handleModalsDismissalWithMode:(ApplicationModeForTabOpening)targetMode
                         urlLoadParams:(const UrlLoadParams&)urlLoadParams
                            completion:(ProceduralBlock)completion {
-  PrefService* prefs = GetApplicationContext()->GetLocalState();
-  BOOL canShowIncognitoInterstitial =
-      prefs->GetBoolean(prefs::kIncognitoInterstitialEnabled);
   BOOL canShowYoutubeIncognito =
       base::FeatureList::IsEnabled(kChromeStartupParametersAsync) &&
       base::FeatureList::IsEnabled(kYoutubeIncognito);
   BOOL incognitoDisabled = [self isIncognitoDisabled];
 
-  if (canShowIncognitoInterstitial &&
-      (targetMode == ApplicationModeForTabOpening::UNDETERMINED ||
-       targetMode == ApplicationModeForTabOpening::APP_SWITCHER_INCOGNITO)) {
+  if ([self canShowIncognitoInterstitialForTargetMode:targetMode]) {
     [self showIncognitoInterstitialWithUrlLoadParams:urlLoadParams];
     completion();
   } else {
@@ -1903,6 +1898,9 @@ using UserFeedbackDataCallback =
 // dispatcher.
 - (void)showSignin:(ShowSigninCommand*)command
     baseViewController:(UIViewController*)baseViewController {
+  if (!baseViewController) {
+    baseViewController = self.currentInterface.viewController;
+  }
   if (![self
           canPresentSigninCoordinatorOrCompletion:command.completion
                                baseViewController:baseViewController
@@ -2074,8 +2072,9 @@ using UserFeedbackDataCallback =
                                                       browser:self.mainInterface
                                                                   .browser
                                                   accessPoint:
-                                                      signin_metrics::AccessPoint::
-                                                          ACCESS_POINT_WEB_SIGNIN];
+                                                      signin_metrics::
+                                                          AccessPoint::
+                                                              kWebSignin];
   if (!self.signinCoordinator) {
     return;
   }
@@ -2593,10 +2592,10 @@ using UserFeedbackDataCallback =
 
   Browser* browser = self.mainInterface.browser;
 
-  self.settingsNavigationController = [SettingsNavigationController
-      safetyCheckControllerForBrowser:browser
-                             delegate:self
-                             referrer:referrer];
+  self.settingsNavigationController =
+      [SettingsNavigationController safetyCheckControllerForBrowser:browser
+                                                           delegate:self
+                                                           referrer:referrer];
 
   [baseViewController presentViewController:self.settingsNavigationController
                                    animated:YES
@@ -3033,7 +3032,7 @@ using UserFeedbackDataCallback =
   id<BookmarksCommands> bookmarksCommandsHandler = HandlerForProtocol(
       self.currentInterface.browser->GetCommandDispatcher(), BookmarksCommands);
 
-  [bookmarksCommandsHandler bulkCreateBookmarksWithURLs:URLs];
+  [bookmarksCommandsHandler addBookmarks:URLs];
 }
 
 - (void)addReadingListItems:(NSArray<NSURL*>*)URLs {
@@ -3055,46 +3054,46 @@ using UserFeedbackDataCallback =
                                      (const UrlLoadParams&)urlLoadParams
                                     dismissOmnibox:(BOOL)dismissOmnibox
                                         completion:(ProceduralBlock)completion {
-    PrefService* prefs = GetApplicationContext()->GetLocalState();
-    BOOL canShowIncognitoInterstitial =
-        prefs->GetBoolean(prefs::kIncognitoInterstitialEnabled);
+  PrefService* prefs = GetApplicationContext()->GetLocalState();
+  BOOL canShowIncognitoInterstitial =
+      prefs->GetBoolean(prefs::kIncognitoInterstitialEnabled);
 
-    if ([self isIncognitoForced]) {
-      targetMode = ApplicationModeForTabOpening::INCOGNITO;
-    } else if (!canShowIncognitoInterstitial &&
-               targetMode == ApplicationModeForTabOpening::UNDETERMINED) {
-      // Fallback to NORMAL mode if the Incognito interstitial is not
-      // available.
-      targetMode = ApplicationModeForTabOpening::NORMAL;
+  if ([self isIncognitoForced]) {
+    targetMode = ApplicationModeForTabOpening::INCOGNITO;
+  } else if (!canShowIncognitoInterstitial &&
+             targetMode == ApplicationModeForTabOpening::UNDETERMINED) {
+    // Fallback to NORMAL mode if the Incognito interstitial is not
+    // available.
+    targetMode = ApplicationModeForTabOpening::NORMAL;
+  }
+
+  UrlLoadParams copyOfUrlLoadParams = urlLoadParams;
+
+  __weak SceneController* weakSelf = self;
+  void (^dismissModalsCompletion)() = ^{
+    [weakSelf handleModalsDismissalWithMode:targetMode
+                              urlLoadParams:copyOfUrlLoadParams
+                                 completion:completion];
+  };
+
+  if (targetMode == ApplicationModeForTabOpening::APP_SWITCHER_INCOGNITO) {
+    targetMode = ApplicationModeForTabOpening::INCOGNITO;
+  }
+
+  // Wrap the post-dismiss-modals action with the incognito auth check.
+  if (targetMode == ApplicationModeForTabOpening::INCOGNITO) {
+    IncognitoReauthSceneAgent* reauthAgent =
+        [IncognitoReauthSceneAgent agentFromScene:self.sceneState];
+    if (reauthAgent.authenticationRequired) {
+      void (^wrappedDismissModalCompletion)() = dismissModalsCompletion;
+      dismissModalsCompletion = ^{
+        [weakSelf
+            handleModelsDismissalWithReauthAgent:reauthAgent
+                         dismissModalsCompletion:wrappedDismissModalCompletion
+                                      completion:completion];
+      };
     }
-
-    UrlLoadParams copyOfUrlLoadParams = urlLoadParams;
-
-    __weak SceneController* weakSelf = self;
-    void (^dismissModalsCompletion)() = ^{
-      [weakSelf handleModalsDismissalWithMode:targetMode
-                                urlLoadParams:copyOfUrlLoadParams
-                                   completion:completion];
-    };
-
-    if (targetMode == ApplicationModeForTabOpening::APP_SWITCHER_INCOGNITO) {
-      targetMode = ApplicationModeForTabOpening::INCOGNITO;
-    }
-
-    // Wrap the post-dismiss-modals action with the incognito auth check.
-    if (targetMode == ApplicationModeForTabOpening::INCOGNITO) {
-      IncognitoReauthSceneAgent* reauthAgent =
-          [IncognitoReauthSceneAgent agentFromScene:self.sceneState];
-      if (reauthAgent.authenticationRequired) {
-        void (^wrappedDismissModalCompletion)() = dismissModalsCompletion;
-        dismissModalsCompletion = ^{
-          [weakSelf
-              handleModelsDismissalWithReauthAgent:reauthAgent
-                           dismissModalsCompletion:wrappedDismissModalCompletion
-                                        completion:completion];
-        };
-      }
-    }
+  }
 
   [self dismissModalDialogsWithCompletion:dismissModalsCompletion
                            dismissOmnibox:dismissOmnibox];
@@ -3794,7 +3793,6 @@ using UserFeedbackDataCallback =
           weakSelf.sceneState.signinInProgress = NO;
         }
 
-
         if (IsSigninForcedByPolicy()) {
           // Handle intents after sign-in is done when the forced sign-in policy
           // is enabled.
@@ -3932,6 +3930,29 @@ using UserFeedbackDataCallback =
 
   self.passwordCheckupCoordinator.delegate = nil;
   self.passwordCheckupCoordinator = nil;
+}
+
+// Returns the condition to check in order to show the `IncognitoIntertitial`
+// for a given `ApplicationModeForTabOpening`.
+- (BOOL)canShowIncognitoInterstitialForTargetMode:
+    (ApplicationModeForTabOpening)targetMode {
+  // The incognito intertitial can be shown in two cases:
+  //    1- The incognito interstitial is enabled and the target mode is either
+  //    `UNDETERMINED` or `APP_SWITCHER_INCOGNITO`.
+  //    2- The youtube experience is enabled and the mode is
+  //    `APP_SWITCHER_UNDETERMINED`.
+  PrefService* prefs = GetApplicationContext()->GetLocalState();
+  BOOL shouldShowIncognitoInterstitial =
+      prefs->GetBoolean(prefs::kIncognitoInterstitialEnabled) &&
+      (targetMode == ApplicationModeForTabOpening::UNDETERMINED ||
+       targetMode == ApplicationModeForTabOpening::APP_SWITCHER_INCOGNITO);
+  BOOL canShowYoutubeIncognito =
+      base::FeatureList::IsEnabled(kChromeStartupParametersAsync) &&
+      base::FeatureList::IsEnabled(kYoutubeIncognito);
+  return shouldShowIncognitoInterstitial ||
+         (canShowYoutubeIncognito &&
+          targetMode ==
+              ApplicationModeForTabOpening::APP_SWITCHER_UNDETERMINED);
 }
 
 #pragma mark - IncognitoInterstitialCoordinatorDelegate

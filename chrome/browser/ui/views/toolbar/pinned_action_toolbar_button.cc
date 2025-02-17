@@ -7,6 +7,7 @@
 #include <string>
 #include <type_traits>
 
+#include "base/auto_reset.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/strcat.h"
 #include "chrome/app/vector_icons/vector_icons.h"
@@ -37,10 +38,6 @@
 #include "ui/views/controls/button/button_controller.h"
 #include "ui/views/view_class_properties.h"
 #include "ui/views/view_utils.h"
-
-namespace {
-const gfx::VectorIcon kEmptyIcon;
-}  // namespace
 
 DEFINE_UI_CLASS_PROPERTY_TYPE(PinnedToolbarActionFlexPriority)
 DEFINE_UI_CLASS_PROPERTY_KEY(
@@ -456,7 +453,7 @@ void PinnedActionToolbarButtonActionViewInterface::OnViewChangedImpl(
   if (image_model.IsVectorIcon()) {
     action_view_->SetVectorIcon(action_view_->IsIconVisible()
                                     ? *image_model.GetVectorIcon().vector_icon()
-                                    : kEmptyIcon);
+                                    : gfx::VectorIcon::EmptyIcon());
   } else {
     action_view_->SetImageModel(
         views::Button::STATE_NORMAL,
@@ -464,15 +461,14 @@ void PinnedActionToolbarButtonActionViewInterface::OnViewChangedImpl(
   }
   // Set the accessible name. Fall back to the tooltip if one is not provided.
   // If pinned, the pinned state is added to the accessible name.
-  auto accessible_name = action_item->GetAccessibleName().empty()
-                             ? action_view_->GetTooltipText(gfx::Point())
-                             : action_item->GetAccessibleName();
-  auto stateful_accessible_name =
+  const std::u16string accessible_name(action_item->GetAccessibleName().empty()
+                                           ? action_view_->GetTooltipText()
+                                           : action_item->GetAccessibleName());
+  action_view_->GetViewAccessibility().SetName(
       action_view_->IsPinned()
           ? l10n_util::GetStringFUTF16(
                 IDS_PINNED_ACTION_BUTTON_ACCESSIBLE_TITLE, accessible_name)
-          : accessible_name;
-  action_view_->GetViewAccessibility().SetName(stateful_accessible_name);
+          : accessible_name);
   action_view_->UpdateStatusIndicator();
 }
 

@@ -9,6 +9,7 @@
 #include <unordered_map>
 
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/extensions/api/omnibox/omnibox_api.h"
 #include "components/omnibox/browser/autocomplete_match.h"
@@ -48,6 +49,8 @@ class UnscopedExtensionProviderDelegateImpl
              bool minimal_changes,
              std::set<std::string> unscoped_mode_extension_ids) override;
   void Stop(bool clear_cached_results) override;
+  void DeleteSuggestion(const TemplateURL* template_url,
+                        const std::u16string& suggestion_text) override;
 
   // OmniboxInputWatcher::Observer:
   void OnOmniboxInputEntered() override;
@@ -63,8 +66,15 @@ class UnscopedExtensionProviderDelegateImpl
       int relevance,
       const std::string& extension_id);
 
+  // Returns true if an extension is enabled.
+  bool IsEnabledExtension(const std::string& extension_id);
+
   // Clears the current list of cached matches and suggestion group information.
   void ClearSuggestions();
+
+  void OnActionExecuted(const std::string& extension_id,
+                        const std::string& action_name,
+                        const std::string& contents);
 
   // Incremented each time a new request for suggestions is sent to extensions
   // or when the input is accepted. Used to discard any suggestions that may be
@@ -97,6 +107,9 @@ class UnscopedExtensionProviderDelegateImpl
   base::ScopedObservation<OmniboxSuggestionsWatcher,
                           OmniboxSuggestionsWatcher::Observer>
       omnibox_suggestions_observation_{this};
+
+  base::WeakPtrFactory<UnscopedExtensionProviderDelegateImpl> weak_factory_{
+      this};
 };
 
 #endif  // CHROME_BROWSER_AUTOCOMPLETE_UNSCOPED_EXTENSION_PROVIDER_DELEGATE_IMPL_H_

@@ -57,7 +57,6 @@
 #include "third_party/blink/public/common/device_memory/approximated_device_memory.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
-#include "third_party/blink/public/common/permissions_policy/origin_with_possible_wildcards.h"
 #include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "ui/display/display.h"
@@ -552,7 +551,7 @@ struct ClientHintsExtendedData {
       // See crbug.com/1470634.
       const std::optional<FencedFrameProperties>& fenced_frame_properties =
           frame_tree_node->GetFencedFrameProperties();
-      base::span<const blink::mojom::PermissionsPolicyFeature> permissions;
+      base::span<const network::mojom::PermissionsPolicyFeature> permissions;
       if (fenced_frame_properties) {
         permissions = fenced_frame_properties->effective_enabled_permissions();
       }
@@ -929,16 +928,11 @@ void AddPrefetchNavigationRequestClientHintsHeaders(
     net::HttpRequestHeaders* headers,
     BrowserContext* context,
     ClientHintsControllerDelegate* delegate,
-    bool is_ua_override_on,
-    bool is_javascript_enabled) {
+    bool is_ua_override_on) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(context);
 
-  // Since prefetch navigation doesn't have a related frame tree node,
-  // |is_javascript_enabled| is passed in to get whether a typical frame tree
-  // node would support javascript.
-  if (!is_javascript_enabled ||
-      !ShouldAddClientHints(origin, nullptr, delegate)) {
+  if (!ShouldAddClientHints(origin, nullptr, delegate)) {
     return;
   }
 

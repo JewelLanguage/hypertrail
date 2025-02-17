@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ash/file_manager/app_service_file_tasks.h"
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -140,8 +141,8 @@ class AppServiceFileTasksTest : public testing::Test {
     file_tasks::FindAppServiceTasks(profile(), entries, file_urls,
                                     dlp_source_urls, &resulting_tasks->tasks);
     // Sort by app ID so we don't rely on ordering.
-    base::ranges::sort(
-        resulting_tasks->tasks, base::ranges::less(),
+    std::ranges::sort(
+        resulting_tasks->tasks, std::ranges::less(),
         [](const auto& task) { return task.task_descriptor.app_id; });
 
     return resulting_tasks;

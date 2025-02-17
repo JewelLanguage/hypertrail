@@ -40,12 +40,13 @@ import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.RequiresRestart;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.TestAnimations.EnableAnimations;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
@@ -58,13 +59,13 @@ import org.chromium.chrome.test.transit.hub.RegularTabSwitcherStation;
 import org.chromium.chrome.test.transit.hub.TabSwitcherGroupCardFacility;
 import org.chromium.chrome.test.transit.hub.TabSwitcherListEditorFacility;
 import org.chromium.chrome.test.transit.hub.TabSwitcherStation;
+import org.chromium.chrome.test.transit.hub.UndoSnackbarFacility;
 import org.chromium.chrome.test.transit.ntp.RegularNewTabPageStation;
 import org.chromium.chrome.test.transit.page.PageStation;
 import org.chromium.chrome.test.transit.page.WebPageStation;
 import org.chromium.chrome.test.transit.tabmodel.TabThumbnailsCapturedCarryOn;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.components.embedder_support.util.UrlConstants;
-import org.chromium.components.omnibox.OmniboxFeatureList;
 import org.chromium.components.tab_groups.TabGroupColorId;
 import org.chromium.net.test.EmbeddedTestServer;
 
@@ -77,9 +78,11 @@ import java.util.concurrent.ExecutionException;
 @SuppressWarnings("ConstantConditions")
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-@DisableFeatures({OmniboxFeatureList.ANDROID_HUB_SEARCH})
 @Restriction({Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE})
 @Batch(Batch.PER_CLASS)
+// TODO(https://crbug.com/392634251): Fix line height when elegant text height is used with Roboto
+// or enable Google Sans (Text) in //chrome/ tests on Android T+.
+@Features.DisableFeatures(ChromeFeatureList.ANDROID_ELEGANT_TEXT_HEIGHT)
 public class TabSwitcherLayoutPTTest {
 
     private static final String TEST_URL = "/chrome/test/data/android/google.html";
@@ -95,7 +98,7 @@ public class TabSwitcherLayoutPTTest {
     @Rule
     public ChromeRenderTestRule mRenderTestRule =
             ChromeRenderTestRule.Builder.withPublicCorpus()
-                    .setRevision(4)
+                    .setRevision(5)
                     .setBugComponent(ChromeRenderTestRule.Component.UI_BROWSER_MOBILE_HUB)
                     .build();
 
@@ -606,6 +609,44 @@ public class TabSwitcherLayoutPTTest {
         // Assert that the expected fields are correct
         tabSwitcher.expectGroupCard(List.of(firstTabId, secondTabId), "Test");
         verifyGroupCardColor(TabGroupColorId.BLUE);
+
+        // Open NTP PageStation for InitialStateRule to reset
+        RegularNewTabPageStation ntp = tabSwitcher.openNewTab();
+        assertFinalDestination(ntp);
+    }
+
+    @Test
+    @MediumTest
+    public void testTabGroupOverflowMenuInTabSwitcher_closeGroup() {
+        WebPageStation firstPage = mInitialStateRule.startOnBlankPage();
+
+        // Open 2 tabs
+        int firstTabId = firstPage.getLoadedTab().getId();
+        RegularNewTabPageStation secondPage = firstPage.openNewTabFast();
+        int secondTabId = secondPage.getLoadedTab().getId();
+        RegularTabSwitcherStation tabSwitcher = secondPage.openRegularTabSwitcher();
+
+        // Group both tabs
+        TabSwitcherListEditorFacility editor = tabSwitcher.openAppMenu().clickSelectTabs();
+        editor = editor.addTabToSelection(0, firstTabId);
+        editor = editor.addTabToSelection(1, secondTabId);
+        NewTabGroupDialogFacility dialog = editor.openAppMenuWithEditor().groupTabs();
+        dialog.pressDone();
+
+        // Close the tab group via the app menu
+        TabSwitcherGroupCardFacility tabGroupCard =
+                tabSwitcher.expectGroupCard(
+                        List.of(firstTabId, secondTabId),
+                        TabSwitcherGroupCardFacility.DEFAULT_N_TABS_TITLE);
+        UndoSnackbarFacility undoSnackbar = tabGroupCard.openAppMenu().closeRegularTabGroup();
+        tabSwitcher.verifyTabSwitcherCardCount(0);
+
+        // Press undo to verify that functionality
+        undoSnackbar.pressUndo();
+        tabSwitcher.expectGroupCard(
+                List.of(firstTabId, secondTabId),
+                TabSwitcherGroupCardFacility.DEFAULT_N_TABS_TITLE);
+        tabSwitcher.verifyTabSwitcherCardCount(1);
 
         // Open NTP PageStation for InitialStateRule to reset
         RegularNewTabPageStation ntp = tabSwitcher.openNewTab();

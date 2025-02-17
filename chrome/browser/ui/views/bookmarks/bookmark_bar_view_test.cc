@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
@@ -15,7 +16,6 @@
 #include "base/functional/callback.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/scoped_multi_source_observation.h"
 #include "base/scoped_observation.h"
@@ -878,6 +878,12 @@ VIEW_TEST(BookmarkBarViewTest4, MAYBE_ContextMenus)
 
 // Tests drag and drop within the same menu.
 class BookmarkBarViewTest5 : public BookmarkBarViewDragTestBase {
+ public:
+  void OnWidgetDragComplete(views::Widget* widget) override {
+    BookmarkBarViewDragTestBase::OnWidgetDragComplete(widget);
+    // TODO(crbug.com/393126961): Check that the menu is still showing.
+  }
+
  protected:
   // BookmarkBarViewDragTestBase:
   void OnMenuOpened() override {
@@ -984,6 +990,7 @@ class BookmarkBarViewTest7 : public BookmarkBarViewDragTestBase {
               bb_view_->all_bookmarks_button()->GetState());
 
     BookmarkBarViewDragTestBase::OnWidgetDragComplete(widget);
+    EXPECT_FALSE(MenuIsShowing(bb_view_->GetMenu()));
   }
 
  protected:
@@ -1037,6 +1044,11 @@ class BookmarkBarViewTest8 : public BookmarkBarViewDragTestBase {
         FROM_HERE,
         base::BindOnce(base::IgnoreResult(&ui_controls::SendMouseMove),
                        target.x(), target.y(), ui_controls::kNoWindowHint));
+  }
+
+  void OnWidgetDragComplete(views::Widget* widget) override {
+    BookmarkBarViewDragTestBase::OnWidgetDragComplete(widget);
+    EXPECT_FALSE(MenuIsShowing(bb_view_->GetMenu()));
   }
 
  protected:
@@ -1445,7 +1457,7 @@ class BookmarkBarViewTest13 : public BookmarkBarViewEventTestBase {
 
     // Find the first separator.
     views::SubmenuView* submenu = context_menu->GetSubmenu();
-    const auto i = base::ranges::find_if_not(
+    const auto i = std::ranges::find_if_not(
         submenu->children(), views::IsViewClass<views::MenuItemView>);
     ASSERT_FALSE(i == submenu->children().end());
 

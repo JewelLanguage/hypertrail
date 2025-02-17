@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/passwords/password_change/successful_password_change_view.h"
 
+#include "base/functional/bind.h"
+#include "base/functional/callback_forward.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/passwords/bubble_controllers/password_change/successful_password_change_bubble_controller.h"
 #include "chrome/browser/ui/passwords/passwords_model_delegate.h"
@@ -178,19 +180,6 @@ std::unique_ptr<views::View> CreateManagePasswordsView(
   return manage_passwords_button;
 }
 
-std::unique_ptr<views::View> CreateFooterView() {
-  // TODO(crbug.com/381054978): Add proper closure.
-  base::RepeatingClosure open_password_manager_closure =
-      base::BindRepeating([]() {});
-  // TODO(crbug.com/381054978): Use proper strings.
-  return CreateGooglePasswordManagerLabel(
-      /*text_message_id=*/
-      IDS_PASSWORD_BUBBLES_FOOTER_SAVING_ON_DEVICE,
-      /*link_message_id=*/
-      IDS_PASSWORD_BUBBLES_PASSWORD_MANAGER_LINK_TEXT_SAVING_ON_DEVICE,
-      open_password_manager_closure);
-}
-
 }  // namespace
 
 SuccessfulPasswordChangeView::SuccessfulPasswordChangeView(
@@ -212,7 +201,6 @@ SuccessfulPasswordChangeView::SuccessfulPasswordChangeView(
   box_layout->set_cross_axis_alignment(views::LayoutAlignment::kStretch);
   box_layout->SetCollapseMarginsSpacing(true);
   box_layout->set_between_child_spacing(spacing);
-  box_layout->set_inside_border_insets(gfx::Insets::VH(spacing, 0));
   // Set the margins to 0 such that the `root_view` fills the whole page bubble
   // width.
   set_margins(gfx::Insets());
@@ -239,6 +227,19 @@ SuccessfulPasswordChangeView::SuccessfulPasswordChangeView(
       this));
 }
 
+std::unique_ptr<views::View> SuccessfulPasswordChangeView::CreateFooterView() {
+  base::RepeatingClosure navigate_to_settings =
+      base::BindRepeating(&SuccessfulPasswordChangeBubbleController::
+                              NavigateToPasswordChangeSettings,
+                          base::Unretained(controller_.get()));
+  return CreateGooglePasswordManagerLabel(
+      /*text_message_id=*/
+      IDS_PASSWORD_MANAGER_UI_PASSWORD_CHANGE_FOOTER,
+      /*link_message_id=*/
+      IDS_PASSWORD_MANAGER_UI_PASSWORD_CHANGE_SETTINGS_LINK,
+      navigate_to_settings);
+}
+
 SuccessfulPasswordChangeView::~SuccessfulPasswordChangeView() = default;
 
 PasswordBubbleControllerBase* SuccessfulPasswordChangeView::GetController() {
@@ -251,7 +252,8 @@ SuccessfulPasswordChangeView::GetController() const {
 }
 
 void SuccessfulPasswordChangeView::AddedToWidget() {
-  SetBubbleHeader(IDR_SAVE_PASSWORD, IDR_SAVE_PASSWORD_DARK);
+  SetBubbleHeader(IDR_PASSWORD_CHANGE_SUCCESS,
+                  IDR_PASSWORD_CHANGE_SUCCESS_DARK);
 }
 
 BEGIN_METADATA(SuccessfulPasswordChangeView)

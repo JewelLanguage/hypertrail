@@ -241,7 +241,9 @@ declare global {
         iconUrl: string;
         id: string;
         incognitoAccess: AccessModifier;
+        userScriptsAccess: AccessModifier;
         installWarnings: string[];
+        isCommandRegistrationHandledExternally: boolean;
         launchUrl?: string;
         location: Location;
         locationText?: string;
@@ -286,6 +288,7 @@ declare global {
         extensionId: string;
         fileAccess?: boolean;
         incognitoAccess?: boolean;
+        userScriptsAccess?: boolean;
         errorCollection?: boolean;
         hostAccess?: HostAccess;
         showAccessRequestsInToolbar?: boolean;

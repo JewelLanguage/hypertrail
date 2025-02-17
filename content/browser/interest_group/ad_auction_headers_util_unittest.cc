@@ -27,6 +27,7 @@
 #include "net/http/http_version.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
+#include "services/network/public/cpp/permissions_policy/origin_with_possible_wildcards.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/blink/public/common/features.h"
@@ -72,11 +73,11 @@ class InterceptingContentBrowserClient : public ContentBrowserClient {
 blink::ParsedPermissionsPolicy CreatePermissivePolicy() {
   blink::ParsedPermissionsPolicy policy;
   policy.emplace_back(
-      blink::mojom::PermissionsPolicyFeature::kRunAdAuction,
+      network::mojom::PermissionsPolicyFeature::kRunAdAuction,
       /*allowed_origins=*/
-      std::vector{*blink::OriginWithPossibleWildcards::FromOrigin(
+      std::vector{*network::OriginWithPossibleWildcards::FromOrigin(
                       url::Origin::Create(GURL("https://google.com"))),
-                  *blink::OriginWithPossibleWildcards::FromOrigin(
+                  *network::OriginWithPossibleWildcards::FromOrigin(
                       url::Origin::Create(GURL("https://foo1.com")))},
       /*self_if_matches=*/std::nullopt,
       /*matches_all_origins=*/false,
@@ -87,8 +88,8 @@ blink::ParsedPermissionsPolicy CreatePermissivePolicy() {
 blink::ParsedPermissionsPolicy CreateRestrictivePolicy() {
   blink::ParsedPermissionsPolicy policy;
   policy.emplace_back(
-      blink::mojom::PermissionsPolicyFeature::kRunAdAuction,
-      /*allowed_origins=*/std::vector<blink::OriginWithPossibleWildcards>(),
+      network::mojom::PermissionsPolicyFeature::kRunAdAuction,
+      /*allowed_origins=*/std::vector<network::OriginWithPossibleWildcards>(),
       /*self_if_matches=*/std::nullopt,
       /*matches_all_origins=*/false,
       /*matches_opaque_src=*/false);
@@ -625,19 +626,7 @@ TEST_F(ProcessAdAuctionResponseHeadersTest, AdditionalBid) {
               ::testing::IsEmpty());
 }
 
-class ProcessAdAuctionResponseHeadersWithSellerNonceTest
-    : public ProcessAdAuctionResponseHeadersTest {
- protected:
-  ProcessAdAuctionResponseHeadersWithSellerNonceTest() {
-    feature_list_.InitAndEnableFeature(blink::features::kFledgeSellerNonce);
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-TEST_F(ProcessAdAuctionResponseHeadersWithSellerNonceTest,
-       AdditionalBidWithNoSellerNonce) {
+TEST_F(ProcessAdAuctionResponseHeadersTest, AdditionalBidWithNoSellerNonce) {
   net::HttpResponseHeaders::Builder headers_builder({1, 1}, "200 OK");
   headers_builder.AddHeader(kAdAuctionAdditionalBidResponseHeaderKey,
                             "00000000-0000-0000-0000-000000000000:e30=");
@@ -668,8 +657,7 @@ TEST_F(ProcessAdAuctionResponseHeadersWithSellerNonceTest,
               ::testing::IsEmpty());
 }
 
-TEST_F(ProcessAdAuctionResponseHeadersWithSellerNonceTest,
-       AdditionalBidWithSellerNonce) {
+TEST_F(ProcessAdAuctionResponseHeadersTest, AdditionalBidWithSellerNonce) {
   net::HttpResponseHeaders::Builder headers_builder({1, 1}, "200 OK");
   headers_builder.AddHeader(kAdAuctionAdditionalBidResponseHeaderKey,
                             "00000000-0000-0000-0000-000000000000:"
@@ -744,7 +732,7 @@ TEST_F(ProcessAdAuctionResponseHeadersTest,
               ::testing::IsEmpty());
 }
 
-TEST_F(ProcessAdAuctionResponseHeadersWithSellerNonceTest,
+TEST_F(ProcessAdAuctionResponseHeadersTest,
        AdditionalBid_MultipleNoncesAndMultipleBidsPerNonceWithSellerNonce) {
   net::HttpResponseHeaders::Builder headers_builder({1, 1}, "200 OK");
   headers_builder.AddHeader(kAdAuctionAdditionalBidResponseHeaderKey,
@@ -831,7 +819,7 @@ TEST_F(ProcessAdAuctionResponseHeadersTest,
                                        /*seller_nonce=*/std::nullopt)));
 }
 
-TEST_F(ProcessAdAuctionResponseHeadersWithSellerNonceTest,
+TEST_F(ProcessAdAuctionResponseHeadersTest,
        AdditionalBid_InvalidHeaderSkippedWithSellerNonce) {
   net::HttpResponseHeaders::Builder headers_builder({1, 1}, "200 OK");
 
@@ -875,8 +863,7 @@ TEST_F(ProcessAdAuctionResponseHeadersWithSellerNonceTest,
                   /*seller_nonce=*/"00000000-0000-0000-0000-000000000003")));
 }
 
-TEST_F(ProcessAdAuctionResponseHeadersWithSellerNonceTest,
-       AdditionalBid_ErrorMessages) {
+TEST_F(ProcessAdAuctionResponseHeadersTest, AdditionalBid_ErrorMessages) {
   struct {
     std::string input;
     base::expected<void, std::string> result;

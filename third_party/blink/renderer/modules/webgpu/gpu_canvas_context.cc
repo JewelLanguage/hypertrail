@@ -112,22 +112,19 @@ SkAlphaType GPUCanvasContext::GetAlphaType() const {
              : kPremul_SkAlphaType;
 }
 
-SkColorType GPUCanvasContext::GetSkColorType() const {
+viz::SharedImageFormat GPUCanvasContext::GetSharedImageFormat() const {
   if (!swap_buffers_) {
-    return kN32_SkColorType;
+    return GetN32FormatForCanvas();
+    ;
   }
-  return viz::ToClosestSkColorType(swap_buffers_->Format());
+  return swap_buffers_->Format();
 }
 
 gfx::ColorSpace GPUCanvasContext::GetColorSpace() const {
-  return SkColorSpaceToGfxColorSpace(GetSkColorSpace());
-}
-
-sk_sp<SkColorSpace> GPUCanvasContext::GetSkColorSpace() const {
   if (!swap_buffers_) {
-    return SkColorSpace::MakeSRGB();
+    return gfx::ColorSpace::CreateSRGB();
   }
-  return PredefinedColorSpaceToSkColorSpace(color_space_);
+  return PredefinedColorSpaceToGfxColorSpace(color_space_);
 }
 
 void GPUCanvasContext::Stop() {
@@ -321,16 +318,13 @@ ImageBitmap* GPUCanvasContext::TransferToImageBitmap(
       texture_descriptor_.size.width, texture_descriptor_.size.height,
       sk_color_type, kPremul_SkAlphaType);
 
-  bool is_overlay_candidate =
-      client_si->usage().Has(gpu::SHARED_IMAGE_USAGE_SCANOUT);
   return MakeGarbageCollected<ImageBitmap>(
       AcceleratedStaticBitmapImage::CreateFromCanvasSharedImage(
           std::move(client_si), sk_image_sync_token,
           /* shared_image_texture_id = */ 0, sk_image_info,
           GetContextProviderWeakPtr(), base::PlatformThread::CurrentRef(),
           ThreadScheduler::Current()->CleanupTaskRunner(),
-          std::move(release_callback),
-          /*supports_display_compositing=*/true, is_overlay_candidate));
+          std::move(release_callback)));
 }
 
 // gpu_presentation_context.idl
@@ -758,11 +752,11 @@ void GPUCanvasContext::CopyToSwapTexture() {
     device_->AddSingletonWarning(GPUSingletonWarning::kNonPreferredFormat);
   }
 
-  wgpu::ImageCopyTexture source = {
+  wgpu::TexelCopyTextureInfo source = {
       .texture = texture_->GetHandle(),
       .aspect = wgpu::TextureAspect::All,
   };
-  wgpu::ImageCopyTexture destination = {
+  wgpu::TexelCopyTextureInfo destination = {
       .texture = swap_texture_->GetHandle(),
       .aspect = wgpu::TextureAspect::All,
   };
@@ -837,11 +831,11 @@ bool GPUCanvasContext::CopyTextureToResourceProvider(
                            reservation.id, reservation.generation,
                            static_cast<uint64_t>(usage),
                            dst_client_si->mailbox());
-  wgpu::ImageCopyTexture source = {
+  wgpu::TexelCopyTextureInfo source = {
       .texture = texture,
       .aspect = wgpu::TextureAspect::All,
   };
-  wgpu::ImageCopyTexture destination = {
+  wgpu::TexelCopyTextureInfo destination = {
       .texture = reserved_texture,
       .aspect = wgpu::TextureAspect::All,
   };
@@ -926,8 +920,7 @@ scoped_refptr<StaticBitmapImage> GPUCanvasContext::SnapshotInternal(
   // usually related to OffscreenCanvas; in cases where the image created from
   // this Snapshot will be sent eventually to the Display Compositor.
   auto resource_provider = CanvasResourceProvider::CreateWebGPUImageProvider(
-      size, GetSkColorType(), GetAlphaType(),
-      SkColorSpaceToGfxColorSpace(GetSkColorSpace()),
+      size, GetSharedImageFormat(), GetAlphaType(), GetColorSpace(),
       swap_buffers_->GetSharedImageUsagesForDisplay());
   if (!resource_provider)
     return nullptr;

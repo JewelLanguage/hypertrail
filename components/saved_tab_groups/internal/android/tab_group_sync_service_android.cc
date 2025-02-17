@@ -179,7 +179,10 @@ void TabGroupSyncServiceAndroid::MakeTabGroupShared(
       TabGroupSyncConversionsBridge::FromJavaTabGroupId(env, j_group_id);
   std::string collaboration_id =
       ConvertJavaStringToUTF8(env, j_collaboration_id);
-  tab_group_sync_service_->MakeTabGroupShared(tab_group_id, collaboration_id);
+  // TODO(crbug.com/382557489): implement the callback.
+  tab_group_sync_service_->MakeTabGroupShared(
+      tab_group_id, collaboration_id,
+      TabGroupSyncService::TabGroupSharingCallback());
 }
 
 void TabGroupSyncServiceAndroid::AboutToUnShareTabGroup(
@@ -268,14 +271,16 @@ void TabGroupSyncServiceAndroid::SetTabSelected(
     JNIEnv* env,
     const JavaParamRef<jobject>& j_caller,
     const JavaParamRef<jobject>& j_group_id,
-    jint j_tab_id) {
+    jint j_tab_id,
+    const JavaParamRef<jstring>& j_tab_title) {
   std::optional<LocalTabGroupID> group_id;
   if (j_group_id) {
     group_id =
         TabGroupSyncConversionsBridge::FromJavaTabGroupId(env, j_group_id);
   }
   auto tab_id = FromJavaTabId(j_tab_id);
-  tab_group_sync_service_->OnTabSelected(group_id, tab_id);
+  auto tab_title = ConvertJavaStringToUTF16(env, j_tab_title);
+  tab_group_sync_service_->OnTabSelected(group_id, tab_id, tab_title);
 }
 
 ScopedJavaLocalRef<jobjectArray> TabGroupSyncServiceAndroid::GetAllGroupIds(

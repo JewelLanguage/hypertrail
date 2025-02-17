@@ -80,9 +80,6 @@ namespace {
 
 using base::test::RunOnceCallback;
 using test::CreateTestAddressFormData;
-using test::CreateTestCreditCardFormData;
-using test::CreateTestPersonalInformationFormData;
-using test::CreateTestUnclassifiedFormData;
 using ::testing::_;
 using ::testing::AllOf;
 using ::testing::AnyOf;
@@ -211,6 +208,7 @@ class MockAutofillClient : public TestAutofillClient {
               OfferPlusAddressCreation,
               (const url::Origin&, bool, PlusAddressCallback),
               (override));
+  MOCK_METHOD(void, ShowAutofillSettings, (SuggestionType), (override));
   MOCK_METHOD(void,
               ShowPlusAddressAffiliationError,
               (std::u16string, std::u16string, base::OnceClosure),
@@ -330,6 +328,16 @@ class AutofillExternalDelegateTest : public testing::Test {
     manager().OnFormsSeen({queried_form()}, {});
     external_delegate().OnQuery(queried_form(), queried_field(), caret_bounds,
                                 trigger_source, update_datalist);
+  }
+
+  void IssueOnQuery(test::FormDescription form_description) {
+    queried_form_ = test::GetFormData(form_description);
+    manager().AddSeenForm(queried_form(),
+                          test::GetHeuristicTypes(form_description),
+                          test::GetServerTypes(form_description));
+    external_delegate().OnQuery(queried_form(), queried_field(), gfx::Rect(),
+                                kDefaultTriggerSource,
+                                /*update_datalist=*/false);
   }
 
   void IssueOnQuery(
@@ -1007,13 +1015,13 @@ TEST_F(AutofillExternalDelegateTest, AutofillSuggestionAvailability_Autofill) {
 }
 
 // Test that a11y autofill availability is set to `kAutofillAvailable` when
-// the popup is open with the `kRetrieveAutofillAi` suggestion.
+// the popup is open with the `kFillAutofillAi` suggestion.
 TEST_F(AutofillExternalDelegateTest,
        AutofillSuggestionAvailability_RetrieveAutofillAi) {
   IssueOnQuery();
 
   std::vector<Suggestion> suggestions = {
-      Suggestion(u"Autofill with AI", SuggestionType::kRetrieveAutofillAi)};
+      Suggestion(u"Autofill with AI", SuggestionType::kFillAutofillAi)};
   OnSuggestionsReturned(queried_field().global_id(), suggestions);
 
   EXPECT_CALL(driver(),
@@ -1164,68 +1172,50 @@ TEST_F(AutofillExternalDelegateTest, AcceptSuggestion_TriggerSource) {
                                           SuggestionPosition{.row = 1});
 }
 
-// Tests that on acceptance of a `kRetrieveAutofillAi` suggestion,
-// the `AutofillAiDelegate::OnClickedTriggerSuggestion()` event handler is
-// called.
-TEST_F(AutofillExternalDelegateTest,
-       DidAcceptRetrieveAutofillAiSuggestionCallsEventHandler) {
-  EXPECT_CALL(*client().GetAutofillAiDelegate(), OnClickedTriggerSuggestion);
-  external_delegate().DidAcceptSuggestion(
-      Suggestion(u"Autocomplete", SuggestionType::kRetrieveAutofillAi), {});
-}
+// Tests that on selecting and accepting a `kFillAutofillAi` suggestion with
+// `Suggestion::AutofillAiPayload` payload previews and fills the form,
+// respectively.
+TEST_F(AutofillExternalDelegateTest, FillAutofillAiFillsFullForm) {
+  IssueOnQuery(
+      {.fields = {{.role = PASSPORT_NAME_TAG, .heuristic_type = NAME_FIRST},
+                  {.role = PASSPORT_NAME_TAG, .heuristic_type = NAME_LAST},
+                  {.role = PASSPORT_NUMBER},
+                  {.role = IBAN_VALUE, .heuristic_type = IBAN_VALUE},
+                  {.role = UNKNOWN_TYPE, .heuristic_type = UNKNOWN_TYPE}}});
+  const std::u16string value_to_fill = u"123";
+  const FieldGlobalId& field_to_fill = queried_form().fields()[2].global_id();
 
-// Tests that on acceptance of a `kFillAutofillAi` suggestion with
-// `Suggestion::AutofillAiPayload` payload, the full form is filled
-// accordingly.
-TEST_F(AutofillExternalDelegateTest, DidAcceptFillAutofillAiFillsFullForm) {
-  FormData form = CreateTestAddressFormData();
-  ASSERT_GT(form.fields().size(), 0UL);
-  const std::u16string value_to_fill = u"John";
-  FormFieldData* field_to_fill =
-      test_api(form).FindFieldByNameForTest(u"firstname");
-  ASSERT_TRUE(field_to_fill);
+  auto field_with_value = [](FieldGlobalId field_id,
+                             std::u16string_view value) {
+    return AllOf(Property("global_id", &FormFieldData::global_id, field_id),
+                 Property("value", &FormFieldData::value, value));
+  };
 
-  manager().OnFormsSeen({form}, {});
-  external_delegate().OnQuery(form, *field_to_fill,
-                              /*caret_bounds=*/gfx::Rect(),
-                              AutofillSuggestionTriggerSource::kAutofillAi,
-                              /*update_datalist=*/false);
-  Suggestion fill_suggestion =
-      Suggestion(u"Autocomplete", SuggestionType::kFillAutofillAi);
-  fill_suggestion.payload = Suggestion::AutofillAiPayload(
-      {{field_to_fill->global_id(), value_to_fill}}, {});
-
-  std::vector<FormFieldData> filled_fields;
-  EXPECT_CALL(driver(), ApplyFormAction)
-      .WillOnce(DoAll(SaveArgElementsTo<2>(&filled_fields),
-                      Return(std::vector<FieldGlobalId>{})));
-  external_delegate().DidAcceptSuggestion(fill_suggestion, {});
-
-  EXPECT_THAT(filled_fields,
-              ElementsAre(AllOf(
-                  Property("global_id", &FormFieldData::global_id,
-                           field_to_fill->global_id()),
-                  Property("value", &FormFieldData::value, value_to_fill))));
-}
-
-// Tests that on acceptance of a `kFillAutofillAi` suggestion with
-// `Suggestion::ValueToFill` payload, the queried field is filled.
-TEST_F(AutofillExternalDelegateTest, DidAcceptFillAutofillAiFillsSingleField) {
-  IssueOnQuery();
-  ASSERT_GT(queried_form().fields().size(), 0UL);
-  const std::u16string value_to_fill = u"John";
+  EXPECT_CALL(driver(), ApplyFormAction(_, mojom::ActionPersistence::kPreview,
+                                        ElementsAre(field_with_value(
+                                            field_to_fill, value_to_fill)),
+                                        _, _))
+      .WillOnce(Return(std::vector<FieldGlobalId>{}));
+  EXPECT_CALL(driver(), ApplyFormAction(_, mojom::ActionPersistence::kFill,
+                                        ElementsAre(field_with_value(
+                                            field_to_fill, value_to_fill)),
+                                        _, _))
+      .WillOnce(Return(std::vector<FieldGlobalId>{}));
 
   Suggestion fill_suggestion =
-      Suggestion(u"Autocomplete", SuggestionType::kFillAutofillAi);
-  fill_suggestion.payload = Suggestion::ValueToFill(value_to_fill);
-
-  EXPECT_CALL(
-      manager(),
-      FillOrPreviewField(mojom::ActionPersistence::kFill,
-                         mojom::FieldActionType::kReplaceAll,
-                         HasQueriedFormId(), HasQueriedFieldId(), value_to_fill,
-                         SuggestionType::kFillAutofillAi, _));
+      Suggestion(u"123", SuggestionType::kFillAutofillAi);
+  fill_suggestion.payload =
+      Suggestion::AutofillAiPayload({{field_to_fill, value_to_fill}});
+  external_delegate().DidSelectSuggestion(fill_suggestion);
   external_delegate().DidAcceptSuggestion(fill_suggestion, {});
+}
+
+TEST_F(AutofillExternalDelegateTest, AcceptManageAutofillAi) {
+  Suggestion manage_suggestion =
+      Suggestion(u"Manage information", SuggestionType::kManageAutofillAi);
+  EXPECT_CALL(client(),
+              ShowAutofillSettings(SuggestionType::kManageAutofillAi));
+  external_delegate().DidAcceptSuggestion(manage_suggestion, {});
 }
 
 // Tests that the `AutofillAutofillAiDelegate` is notified when the
@@ -1301,13 +1291,10 @@ TEST_F(AutofillExternalDelegatePlusAddressTest,
 
   EXPECT_CALL(client(), ShowAutofillSuggestions(
                             PopupOpenArgsAre(SuggestionVectorIdsAre(
-                                SuggestionType::kAddressEntry,
                                 SuggestionType::kFillExistingPlusAddress)),
                             _));
   const std::u16string plus_address = u"test+plus@test.example";
   std::vector<Suggestion> suggestions;
-  suggestions.emplace_back(/*main_text=*/u"example@gmail.com",
-                           SuggestionType::kAddressEntry);
   suggestions.emplace_back(/*main_text=*/plus_address,
                            SuggestionType::kFillExistingPlusAddress);
   // This function tests the filling of existing plus addresses, which is why
@@ -1322,7 +1309,7 @@ TEST_F(AutofillExternalDelegatePlusAddressTest,
                          HasQueriedFormId(), HasQueriedFieldId(), plus_address,
                          SuggestionType::kFillExistingPlusAddress,
                          std::optional(EMAIL_ADDRESS)));
-  external_delegate().DidSelectSuggestion(suggestions[1]);
+  external_delegate().DidSelectSuggestion(suggestions[0]);
   EXPECT_CALL(client(), HideAutofillSuggestions(
                             SuggestionHidingReason::kAcceptSuggestion));
   EXPECT_CALL(plus_address_delegate(),
@@ -1341,7 +1328,7 @@ TEST_F(AutofillExternalDelegatePlusAddressTest,
                          HasQueriedFormId(), HasQueriedFieldId(), plus_address,
                          SuggestionType::kFillExistingPlusAddress,
                          std::optional(EMAIL_ADDRESS)));
-  external_delegate().DidAcceptSuggestion(suggestions[1],
+  external_delegate().DidAcceptSuggestion(suggestions[0],
                                           SuggestionPosition{.row = 0});
 }
 
@@ -1955,51 +1942,6 @@ TEST_F(AutofillExternalDelegatePlusAddressTest,
                                           SuggestionPosition{.row = 0});
   ASSERT_TRUE(reshow_suggestions);
   std::move(reshow_suggestions).Run();
-}
-
-TEST_F(
-    AutofillExternalDelegateTest,
-    AutofillAi_DidPerformButtonAction_ThumbsUpFeedbackIsForwardedToDelegate) {
-  IssueOnQuery();
-
-  // TODO(crbug.com/362468426): Update comment in case it is decided that
-  // feedback will be its own suggestion.
-  EXPECT_CALL(
-      *client().GetAutofillAiDelegate(),
-      UserFeedbackReceived(AutofillAiDelegate::UserFeedback::kThumbsUp));
-
-  external_delegate().DidPerformButtonActionForSuggestion(
-      Suggestion(SuggestionType::kAutofillAiFeedback),
-      AutofillAiSuggestionButtonAction::kThumbsUpClicked);
-}
-
-TEST_F(
-    AutofillExternalDelegateTest,
-    AutofillAi_DidPerformButtonAction_ThumbsDownFeedbackIsForwardedToDelegate) {
-  IssueOnQuery();
-
-  // TODO(crbug.com/362468426): Update comment in case it is decided that
-  // feedback will be its own suggestion.
-  EXPECT_CALL(
-      *client().GetAutofillAiDelegate(),
-      UserFeedbackReceived(AutofillAiDelegate::UserFeedback::kThumbsDown));
-
-  external_delegate().DidPerformButtonActionForSuggestion(
-      Suggestion(SuggestionType::kAutofillAiFeedback),
-      AutofillAiSuggestionButtonAction::kThumbsDownClicked);
-}
-
-TEST_F(AutofillExternalDelegateTest,
-       AutofillAi_DidPerformButtonAction_LearnMoreIsForwardedToDelegate) {
-  IssueOnQuery();
-
-  // TODO(crbug.com/362468426): Update comment in case it is decided that
-  // feedback will be its own suggestion.
-  EXPECT_CALL(*client().GetAutofillAiDelegate(), UserClickedLearnMore());
-
-  external_delegate().DidPerformButtonActionForSuggestion(
-      Suggestion(SuggestionType::kAutofillAiFeedback),
-      AutofillAiSuggestionButtonAction::kLearnMoreClicked);
 }
 
 TEST_F(AutofillExternalDelegateTest,

@@ -4,7 +4,6 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/serialization/v8_script_value_serializer.h"
 
-#include "base/auto_reset.h"
 #include "base/feature_list.h"
 #include "base/numerics/byte_conversions.h"
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-blink.h"
@@ -706,9 +705,12 @@ bool V8ScriptValueSerializer::WriteDOMObject(ScriptWrappable* wrappable,
           "because it had a rendering context.");
       return false;
     }
+    SerializedTextDirectionSettings serialized_direction(
+        canvas->GetTextDirection(nullptr));
     WriteAndRequireInterfaceTag(kOffscreenCanvasTransferTag);
     WriteUint32(canvas->width());
     WriteUint32(canvas->height());
+    WriteUint32Enum(serialized_direction.GetSerializedTextDirection());
     WriteUint64(canvas->PlaceholderCanvasId());
     WriteUint32(canvas->ClientId());
     WriteUint32(canvas->SinkId());

@@ -207,6 +207,9 @@ std::string CaptureTypeWithPattern(
 std::string NoCapturePattern(const std::string& pattern,
                              const CaptureOptions& options = CaptureOptions());
 
+// A wrapper for NoCapturePattern() that makes the match optional.
+std::string NoCapturePatternOptional(const std::string& pattern);
+
 // Returns a capture group named by the string representation of |type| that
 // matches |pattern| with an additional uncaptured |prefix_pattern| and
 // |suffix_pattern|.
@@ -240,6 +243,16 @@ std::string CaptureTypeWithPattern(
     const std::string& pattern,
     const CaptureOptions options = CaptureOptions());
 
+// A wrapper for CaptureTypeWithPattern() that makes the match optional.
+std::string CaptureTypeWithPatternOptional(const FieldType& type,
+                                           const std::string& pattern);
+
+// Calls CaptureTypeWithPatternOptional with a pattern created by the
+// concatenation of the string_views in |pattern_span_initializer_list|.
+std::string CaptureTypeWithPatternOptional(
+    const FieldType& type,
+    std::initializer_list<std::string_view> pattern_span_initializer_list);
+
 // Normalizes and rewrites `text` using the rules for `country_code`.
 // If `country_code` is empty, it defaults to US.
 std::u16string NormalizeAndRewrite(const AddressCountryCode& country_code,
@@ -247,11 +260,13 @@ std::u16string NormalizeAndRewrite(const AddressCountryCode& country_code,
                                    bool keep_white_space);
 
 // Collapses white spaces and line breaks, converts the string to lower case and
-// removes diacritics.
+// handles diactrics using rules for `country_code`.
 // If |keep_white_spaces| is true, white spaces are collapsed. Otherwise,
 // white spaces are completely removed.
-std::u16string NormalizeValue(std::u16string_view value,
-                              bool keep_white_space = true);
+std::u16string NormalizeValue(
+    std::u16string_view value,
+    bool keep_white_space = true,
+    const AddressCountryCode& country_code = AddressCountryCode(""));
 
 // Returns true of both vectors contain the same tokens in the same order.
 bool AreSortedTokensEqual(const std::vector<AddressToken>& first,

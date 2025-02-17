@@ -91,6 +91,7 @@ id<GREYMatcher> ContinueButtonWithIdentityMatcher(
   AppLaunchConfiguration config = [super appConfigurationForTestCase];
 
   config.features_enabled.push_back(kIdentityDiscAccountMenu);
+  config.features_enabled.push_back(kUseAccountListFromIdentityManager);
   config.features_enabled.push_back(kSeparateProfilesForManagedAccounts);
 
   return config;
@@ -173,6 +174,7 @@ id<GREYMatcher> ContinueButtonWithIdentityMatcher(
   AppLaunchConfiguration config = [super appConfigurationForTestCase];
 
   config.features_enabled.push_back(kIdentityDiscAccountMenu);
+  config.features_enabled.push_back(kUseAccountListFromIdentityManager);
   config.features_enabled.push_back(kSeparateProfilesForManagedAccounts);
   // Note: Can't use the actual feature definition, because its build target
   // depends on a bunch of stuff that mustn't make it into the EG test target.
@@ -232,7 +234,8 @@ id<GREYMatcher> ContinueButtonWithIdentityMatcher(
 
 // Tests signing in with a managed account during the FRE. This should convert
 // the existing profile to a managed profile.
-- (void)testSignInWithManagedAccount {
+// TODO(crbug.com/394536438): Test is flaky.
+- (void)FLAKY_testSignInWithManagedAccount {
   // Separate profiles are only available in iOS 17+.
   if (!@available(iOS 17, *)) {
     return;

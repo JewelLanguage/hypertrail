@@ -32,19 +32,23 @@ class IOSWebContentHandlerImpl : public supervised_user::WebContentHandler {
   ~IOSWebContentHandlerImpl() override;
 
   // supervised_user::WebContentHandler implementation:
-  void RequestLocalApproval(const GURL& url,
-                            const std::u16string& child_display_name,
-                            const supervised_user::UrlFormatter& url_formatter,
-                            ApprovalRequestInitiatedCallback callback) override;
+  void RequestLocalApproval(
+      const GURL& url,
+      const std::u16string& child_display_name,
+      const supervised_user::UrlFormatter& url_formatter,
+      const supervised_user::FilteringBehaviorReason& filtering_behavior_reason,
+      ApprovalRequestInitiatedCallback callback) override;
   bool IsMainFrame() const override;
   void CleanUpInfoBarOnMainFrame() override;
   int64_t GetInterstitialNavigationId() const override;
   void GoBack() override;
+  void MaybeCloseLocalApproval() override;
 
  private:
+  friend class ParentAccessTabHelperTest;
+
   // Processes the outcome of the local approval request.
   void OnLocalApprovalRequestCompleted(
-      supervised_user::SupervisedUserSettingsService& settings_service,
       const GURL& url,
       base::TimeTicks start_time,
       supervised_user::LocalApprovalResult approval_result);
@@ -52,6 +56,7 @@ class IOSWebContentHandlerImpl : public supervised_user::WebContentHandler {
   void Close();
 
   const bool is_main_frame_;
+  bool is_bottomsheet_shown_ = false;
   raw_ptr<web::WebState> web_state_;
   __weak id<ParentAccessCommands> commands_handler_;
   base::WeakPtrFactory<IOSWebContentHandlerImpl> weak_factory_{this};

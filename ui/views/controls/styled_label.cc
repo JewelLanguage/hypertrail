@@ -13,7 +13,6 @@
 
 #include "base/i18n/rtl.h"
 #include "base/memory/raw_ptr.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -193,11 +192,12 @@ void StyledLabel::SetLineHeight(int line_height) {
   OnPropertyChanged(&line_height_, kPropertyEffectsPreferredSizeChanged);
 }
 
-StyledLabel::ColorVariant StyledLabel::GetDisplayedOnBackgroundColor() const {
+std::optional<ui::ColorVariant> StyledLabel::GetDisplayedOnBackgroundColor()
+    const {
   return displayed_on_background_color_;
 }
 
-void StyledLabel::SetDisplayedOnBackgroundColor(ColorVariant color) {
+void StyledLabel::SetDisplayedOnBackgroundColor(ui::ColorVariant color) {
   if (color == displayed_on_background_color_) {
     return;
   }
@@ -331,7 +331,7 @@ void StyledLabel::ClickFirstLinkForTesting() {
 }
 
 views::Link* StyledLabel::GetFirstLinkForTesting() {
-  const auto it = base::ranges::find_if(children(), &IsViewClass<LinkFragment>);
+  const auto it = std::ranges::find_if(children(), &IsViewClass<LinkFragment>);
   return (it == children().cend()) ? nullptr : static_cast<views::Link*>(*it);
 }
 
@@ -594,19 +594,15 @@ std::unique_ptr<Label> StyledLabel::CreateLabel(
     result->SetEnabledColorId(default_enabled_color_id_);
   }
   if (!style_info.tooltip.empty()) {
-    result->SetTooltipText(style_info.tooltip);
+    result->SetCustomTooltipText(style_info.tooltip);
   }
   if (!style_info.accessible_name.empty()) {
     result->GetViewAccessibility().SetName(style_info.accessible_name);
   }
-  if (absl::holds_alternative<SkColor>(displayed_on_background_color_)) {
-    result->SetBackgroundColor(
-        absl::get<SkColor>(displayed_on_background_color_));
-  } else if (absl::holds_alternative<ui::ColorId>(
-                 displayed_on_background_color_)) {
-    result->SetBackgroundColorId(
-        absl::get<ui::ColorId>(displayed_on_background_color_));
+  if (displayed_on_background_color_) {
+    result->SetBackgroundColor(*displayed_on_background_color_);
   }
+
   result->SetAutoColorReadabilityEnabled(auto_color_readability_enabled_);
   result->SetSubpixelRenderingEnabled(subpixel_rendering_enabled_);
   return result;
@@ -614,19 +610,13 @@ std::unique_ptr<Label> StyledLabel::CreateLabel(
 
 void StyledLabel::UpdateLabelBackgroundColor() {
   for (View* child : children()) {
-    if (!child->GetProperty(kStyledLabelCustomViewKey)) {
+    if (!child->GetProperty(kStyledLabelCustomViewKey) &&
+        displayed_on_background_color_) {
       // TODO(kylixrd): Should updating the label background color even be
       // allowed if there are custom views?
       DCHECK(IsViewClass<Label>(child) || IsViewClass<LinkFragment>(child));
-      static_cast<Label*>(child)->SetBackgroundColorId(
-          absl::holds_alternative<ui::ColorId>(displayed_on_background_color_)
-              ? std::optional<ui::ColorId>(
-                    absl::get<ui::ColorId>(displayed_on_background_color_))
-              : std::nullopt);
-      if (absl::holds_alternative<SkColor>(displayed_on_background_color_)) {
-        static_cast<Label*>(child)->SetBackgroundColor(
-            absl::get<SkColor>(displayed_on_background_color_));
-      }
+      static_cast<Label*>(child)->SetBackgroundColor(
+          *displayed_on_background_color_);
     }
   }
 }
@@ -674,8 +664,8 @@ void StyledLabel::RecreateChildViews() {
         // Transfer ownership for any views in layout_views_->owned_views or
         // custom_views_.  The actual pointer is the same in both arms below.
         if (view->GetProperty(kStyledLabelCustomViewKey)) {
-          auto custom_view = base::ranges::find(custom_views_, view,
-                                                &std::unique_ptr<View>::get);
+          auto custom_view = std::ranges::find(custom_views_, view,
+                                               &std::unique_ptr<View>::get);
           DCHECK(custom_view != custom_views_.end());
           AddChildView(std::move(*custom_view));
           custom_views_.erase(custom_view);
@@ -717,7 +707,8 @@ ADD_PROPERTY_METADATA(int, TextContext)
 ADD_PROPERTY_METADATA(int, DefaultTextStyle)
 ADD_PROPERTY_METADATA(int, LineHeight)
 ADD_PROPERTY_METADATA(bool, AutoColorReadabilityEnabled)
-ADD_PROPERTY_METADATA(StyledLabel::ColorVariant, DisplayedOnBackgroundColor)
+ADD_PROPERTY_METADATA(std::optional<ui::ColorVariant>,
+                      DisplayedOnBackgroundColor)
 ADD_PROPERTY_METADATA(std::optional<ui::ColorId>, DefaultEnabledColorId)
 END_METADATA
 

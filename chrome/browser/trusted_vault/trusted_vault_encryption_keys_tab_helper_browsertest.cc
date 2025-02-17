@@ -28,7 +28,6 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/fenced_frame_test_util.h"
 #include "content/public/test/prerender_test_util.h"
-#include "device/fido/features.h"
 #include "google_apis/gaia/gaia_id.h"
 #include "google_apis/gaia/gaia_switches.h"
 #include "google_apis/gaia/gaia_urls.h"
@@ -62,13 +61,13 @@ using testing::ElementsAreArray;
 using testing::Eq;
 using testing::IsEmpty;
 
-constexpr char kFakeGaiaId[] = "fake_gaia_id";
+constexpr GaiaId::Literal kFakeGaiaId("fake_gaia_id");
 
 #if !BUILDFLAG(IS_ANDROID)
 const AccountInfo& FakeAccount() {
   static const base::NoDestructor<AccountInfo> account([]() {
     AccountInfo account;
-    account.gaia = GaiaId(kFakeGaiaId);
+    account.gaia = kFakeGaiaId;
     return account;
   }());
   return *account;
@@ -103,8 +102,8 @@ void ExecJsSetSyncEncryptionKeys(content::RenderFrameHost* render_frame_host,
             "%s", [buffer], %d);
       }
     )",
-      kConsoleFailureMessage, key[0], kConsoleSuccessMessage, kFakeGaiaId,
-      key_version);
+      kConsoleFailureMessage, key[0], kConsoleSuccessMessage,
+      kFakeGaiaId.ToString(), key_version);
 
   std::ignore = content::ExecJs(render_frame_host, script);
 }
@@ -129,8 +128,8 @@ void ExecJsSetClientEncryptionKeysForSecurityDomain(
             new Map([['%s', [{epoch: 0, key}]]]));
       }
     )",
-      kConsoleFailureMessage, key[0], kConsoleSuccessMessage, kFakeGaiaId,
-      security_domain_name);
+      kConsoleFailureMessage, key[0], kConsoleSuccessMessage,
+      kFakeGaiaId.ToString(), security_domain_name);
 
   std::ignore = content::ExecJs(render_frame_host, script);
 }
@@ -161,7 +160,8 @@ void ExecJsSetClientEncryptionKeysForInvalidSecurityDomain(
             new Map([['invalid', [{epoch: 0, key}]]]));
       }
     )",
-      kConsoleFailureMessage, key[0], kConsoleSuccessMessage, kFakeGaiaId);
+      kConsoleFailureMessage, key[0], kConsoleSuccessMessage,
+      kFakeGaiaId.ToString());
 
   std::ignore = content::ExecJs(render_frame_host, script);
 }
@@ -181,7 +181,7 @@ void ExecJsSetClientEncryptionKeysWithIllformedArgs(
             new Map([['chromesync', [{epoch: 0}]]]));
       }
     )",
-      kConsoleFailureMessage, kConsoleSuccessMessage, kFakeGaiaId);
+      kConsoleFailureMessage, kConsoleSuccessMessage, kFakeGaiaId.ToString());
 
   std::ignore = content::ExecJs(render_frame_host, script);
 }
@@ -209,7 +209,7 @@ void ExecJsAddTrustedSyncEncryptionRecoveryMethod(
       }
     )",
       kConsoleFailureMessage, public_key[0], kConsoleSuccessMessage,
-      kFakeGaiaId);
+      kFakeGaiaId.ToString());
 
   std::ignore = content::ExecJs(render_frame_host, script);
 }
@@ -345,12 +345,6 @@ class TrustedVaultEncryptionKeysTabHelperBrowserTest
   content::test::PrerenderTestHelper prerender_helper_;
 };
 
-class TrustedVaultEncryptionKeysTabHelperWithEnclaveBrowserTest
-    : public TrustedVaultEncryptionKeysTabHelperBrowserTest {
-  base::test::ScopedFeatureList scoped_feature_list_{
-      device::kWebAuthnEnclaveAuthenticator};
-};
-
 // Tests that chrome.setSyncEncryptionKeys() works in the main frame, except on
 // Android. On Android, this particular Javascript API isn't defined.
 #if BUILDFLAG(IS_ANDROID)
@@ -408,7 +402,7 @@ void ExecJsSetClientEncryptionKeysWithMultipleKeys(
       }
     )",
       kConsoleFailureMessage, key1[0], key2[0], kConsoleSuccessMessage,
-      kFakeGaiaId);
+      kFakeGaiaId.ToString());
 
   std::ignore = content::ExecJs(render_frame_host, script);
 }
@@ -554,9 +548,8 @@ IN_PROC_BROWSER_TEST_F(TrustedVaultEncryptionKeysTabHelperBrowserTest,
 }
 
 #if !BUILDFLAG(IS_CHROMEOS)
-IN_PROC_BROWSER_TEST_F(
-    TrustedVaultEncryptionKeysTabHelperWithEnclaveBrowserTest,
-    SetPasskeysKeyInEnclaveManager) {
+IN_PROC_BROWSER_TEST_F(TrustedVaultEncryptionKeysTabHelperBrowserTest,
+                       SetPasskeysKeyInEnclaveManager) {
   const GURL initial_url =
       https_server()->GetURL("accounts.google.com", "/title1.html");
   ASSERT_TRUE(content::NavigateToURL(web_contents(), initial_url));

@@ -29,11 +29,7 @@ class WebViewPasswordFeatureManager
   ~WebViewPasswordFeatureManager() override = default;
 
   bool IsGenerationEnabled() const override;
-  bool IsOptedInForAccountStorage() const override;
-
-  password_manager::PasswordForm::Store GetDefaultPasswordStore()
-      const override;
-  bool IsDefaultPasswordStoreSet() const override;
+  bool IsAccountStorageEnabled() const override;
 
   password_manager::features_util::PasswordAccountStorageUsageLevel
   ComputePasswordAccountStorageUsageLevel() const override;

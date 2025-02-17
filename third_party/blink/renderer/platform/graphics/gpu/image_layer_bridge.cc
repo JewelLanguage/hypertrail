@@ -6,8 +6,6 @@
 
 #include "base/memory/read_only_shared_memory_region.h"
 #include "cc/layers/texture_layer.h"
-#include "components/viz/common/resources/bitmap_allocation.h"
-#include "components/viz/common/resources/shared_bitmap.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
 #include "components/viz/common/resources/transferable_resource.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -34,14 +32,17 @@ scoped_refptr<StaticBitmapImage> MakeAccelerated(
     const scoped_refptr<StaticBitmapImage>& source,
     base::WeakPtr<WebGraphicsContext3DProviderWrapper>
         context_provider_wrapper) {
+  bool can_use_source_directly = source->IsTextureBacked();
 #if BUILDFLAG(IS_MAC)
-  // On MacOS, if |source| is not an overlay candidate, it is worth copying it
-  // to a new buffer that is an overlay candidate, even when |source| is
-  // already on the GPU.
-  if (source->IsOverlayCandidate()) {
-#else
-  if (source->IsTextureBacked()) {
+  //  On MacOS, if |source| doesn't have SCANOUT usage, it is worth copying it
+  //  to a new buffer with the SCANOUT even when |source| is
+  //  already on the GPU, to keep using delegated compositing.
+  can_use_source_directly =
+      can_use_source_directly &&
+      source->GetSharedImage()->usage().Has(gpu::SHARED_IMAGE_USAGE_SCANOUT);
 #endif
+
+  if (can_use_source_directly) {
     return source;
   }
 
@@ -62,7 +63,8 @@ scoped_refptr<StaticBitmapImage> MakeAccelerated(
 #endif  // BUILDFLAG(IS_LINUX)
   auto provider = CanvasResourceProvider::CreateSharedImageProvider(
       gfx::Size(source->Size().width(), source->Size().height()),
-      image_info.colorType(), image_info.alphaType(),
+      viz::SkColorTypeToSinglePlaneSharedImageFormat(image_info.colorType()),
+      image_info.alphaType(),
       SkColorSpaceToGfxColorSpace(image_info.refColorSpace()),
       CanvasResourceProvider::ShouldInitialize::kNo, context_provider_wrapper,
       RasterMode::kGPU, kSharedImageUsageFlags);
@@ -192,7 +194,7 @@ bool ImageLayerBridge::PrepareTransferableResource(
     bool is_overlay_candidate =
         shared_image->usage().Has(gpu::SHARED_IMAGE_USAGE_SCANOUT);
 
-    SkColorType color_type = image_for_compositor->GetSkColorInfo().colorType();
+    SkColorType color_type = image_for_compositor->GetSkImageInfo().colorType();
     *out_resource = viz::TransferableResource::MakeGpu(
         shared_image, shared_image->GetTextureTarget(),
         image_for_compositor->GetSyncToken(), size,
@@ -237,9 +239,9 @@ bool ImageLayerBridge::PrepareTransferableResource(
 
     // Copy from SkImage into SharedMemory owned by |resource|.
     auto dst_mapping = resource.shared_image->Map();
-    if (!sk_image->readPixels(dst_info,
-                              dst_mapping->GetMemoryForPlane(0).data(),
-                              dst_info.minRowBytes(), 0, 0)) {
+    if (!sk_image->readPixels(/*context=*/nullptr,
+                              dst_mapping->GetSkPixmapForPlane(0, dst_info), 0,
+                              0)) {
       return false;
     }
 

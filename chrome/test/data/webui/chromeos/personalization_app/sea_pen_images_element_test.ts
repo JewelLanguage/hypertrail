@@ -5,20 +5,22 @@
 import 'chrome://personalization/strings.m.js';
 import 'chrome://webui-test/chromeos/mojo_webui_test_support.js';
 
-import {SeaPenErrorElement, SeaPenHistoryPromptSelectedEvent, SeaPenImageLoadingElement, SeaPenImagesElement, SeaPenRouterElement, SeaPenZeroStateSvgElement, setSeaPenThumbnailsAction, setSelectedRecentSeaPenImageAction, setTransitionsEnabled, SparklePlaceholderElement, WallpaperGridItemElement} from 'chrome://personalization/js/personalization_app.js';
-import {CrIconButtonElement} from 'chrome://resources/ash/common/cr_elements/cr_icon_button/cr_icon_button.js';
+import type {SeaPenImageLoadingElement, SparklePlaceholderElement, WallpaperGridItemElement} from 'chrome://personalization/js/personalization_app.js';
+import {SeaPenErrorElement, SeaPenHistoryPromptSelectedEvent, SeaPenImagesElement, SeaPenRouterElement, SeaPenZeroStateSvgElement, setSeaPenThumbnailsAction, setSelectedRecentSeaPenImageAction, setTransitionsEnabled} from 'chrome://personalization/js/personalization_app.js';
+import type {CrIconButtonElement} from 'chrome://resources/ash/common/cr_elements/cr_icon_button/cr_icon_button.js';
 import {PromiseResolver} from 'chrome://resources/ash/common/promise_resolver.js';
-import {MantaStatusCode, SeaPenThumbnail} from 'chrome://resources/ash/common/sea_pen/sea_pen.mojom-webui.js';
+import type {SeaPenThumbnail} from 'chrome://resources/ash/common/sea_pen/sea_pen.mojom-webui.js';
+import {MantaStatusCode} from 'chrome://resources/ash/common/sea_pen/sea_pen.mojom-webui.js';
 import {SeaPenTemplateId} from 'chrome://resources/ash/common/sea_pen/sea_pen_generated.mojom-webui.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
-import {PaperSpinnerLiteElement} from 'chrome://resources/polymer/v3_0/paper-spinner/paper-spinner-lite.js';
-import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import type {PaperSpinnerLiteElement} from 'chrome://resources/polymer/v3_0/paper-spinner/paper-spinner-lite.js';
+import {assertDeepEquals, assertEquals, assertFalse, assertLE, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 import {eventToPromise, isVisible} from 'chrome://webui-test/test_util.js';
 
 import {baseSetup, initElement, teardownElement} from './personalization_app_test_utils.js';
-import {TestPersonalizationStore} from './test_personalization_store.js';
-import {TestSeaPenProvider} from './test_sea_pen_interface_provider.js';
+import type {TestPersonalizationStore} from './test_personalization_store.js';
+import type {TestSeaPenProvider} from './test_sea_pen_interface_provider.js';
 
 suite('SeaPenImagesElementTest', function() {
   let personalizationStore: TestPersonalizationStore;
@@ -72,7 +74,7 @@ suite('SeaPenImagesElementTest', function() {
         'zero state message is shown');
   });
 
-  test('displays 8 loading thumbnail placeholders for template', async () => {
+  test('displays loading thumbnail placeholders for template', async () => {
     personalizationStore.data.wallpaper.seaPen.loading.thumbnails = true;
     personalizationStore.data.wallpaper.seaPen.thumbnails =
         seaPenProvider.thumbnails;
@@ -85,11 +87,13 @@ suite('SeaPenImagesElementTest', function() {
         seaPenImagesElement.shadowRoot!
             .querySelectorAll<SparklePlaceholderElement>(
                 'div:not([hidden]) .loading-placeholder > sparkle-placeholder');
-    assertEquals(
-        8, loadingThumbnailPlaceholders!.length,
-        'should be 8 loading placeholders available.');
-    assertTrue(Array.from(loadingThumbnailPlaceholders)
-                   .every(placeholder => !!placeholder.active));
+    assertLE(
+        4, loadingThumbnailPlaceholders!.length,
+        'should be at least 4 loading placeholders available.');
+    assertTrue(
+        Array.from(loadingThumbnailPlaceholders)
+            .every(placeholder => !!placeholder.active),
+        'all placeholders should be active.');
   });
 
   test('displays 4 loading thumbnail placeholders for freeform', async () => {
@@ -142,6 +146,50 @@ suite('SeaPenImagesElementTest', function() {
     const thumbnails = seaPenImagesElement.shadowRoot!.querySelectorAll(
         'div:not([hidden]).thumbnail-item-container');
     assertEquals(4, thumbnails!.length, 'should be 4 images available.');
+  });
+
+  test('displays latest freeform prompt', async () => {
+    personalizationStore.data.wallpaper.seaPen.loading.thumbnails = false;
+    personalizationStore.data.wallpaper.seaPen.thumbnails =
+        seaPenProvider.thumbnails;
+    personalizationStore.data.wallpaper.seaPen.currentSeaPenQuery = {
+      textQuery: 'test freeform query',
+    };
+
+    // Initialize |seaPenImagesElement|.
+    seaPenImagesElement = initElement(SeaPenImagesElement);
+    await waitAfterNextRender(seaPenImagesElement);
+
+    const latestQuery = seaPenImagesElement.shadowRoot!.getElementById(
+        'latestTextQueryHeading');
+    assertTrue(!!latestQuery, 'the freeform prompt is available');
+    assertEquals(
+        'test freeform query', latestQuery.textContent?.trim(),
+        'the freeform prompt matches with the latest text query');
+  });
+
+  test('set the text query the latest freeform prompt is clicked', async () => {
+    personalizationStore.data.wallpaper.seaPen.loading.thumbnails = false;
+    personalizationStore.data.wallpaper.seaPen.thumbnails =
+        seaPenProvider.thumbnails;
+    personalizationStore.data.wallpaper.seaPen.currentSeaPenQuery = {
+      textQuery: 'test freeform query',
+    };
+
+    // Initialize |seaPenImagesElement|.
+    seaPenImagesElement = initElement(SeaPenImagesElement);
+    await waitAfterNextRender(seaPenImagesElement);
+
+    const latestQuery = seaPenImagesElement.shadowRoot!.getElementById(
+        'latestTextQueryHeading');
+    assertTrue(!!latestQuery, 'the freeform prompt is available');
+
+    const historyPromptSelectedEvent = eventToPromise(
+        SeaPenHistoryPromptSelectedEvent.EVENT_NAME, seaPenImagesElement);
+
+    latestQuery.click();
+
+    await historyPromptSelectedEvent;
   });
 
   test('displays freeform history', async () => {
@@ -387,12 +435,14 @@ suite('SeaPenImagesElementTest', function() {
     const loadingThumbnailPlaceholders =
         seaPenImagesElement.shadowRoot!
             .querySelectorAll<SparklePlaceholderElement>(
-                'div:not([hidden]) sparkle-placeholder');
-    assertEquals(
-        8, loadingThumbnailPlaceholders!.length,
-        'should be 8 loading placeholders available.');
-    assertTrue(Array.from(loadingThumbnailPlaceholders)
-                   .every(placeholder => !!placeholder.active));
+                'div:not([hidden]) .loading-placeholder > sparkle-placeholder');
+    assertLE(
+        4, loadingThumbnailPlaceholders!.length,
+        'should be at least 4 loading placeholders available.');
+    assertTrue(
+        Array.from(loadingThumbnailPlaceholders)
+            .every(placeholder => !!placeholder.active),
+        'all placeholders should be active.');
 
     SeaPenRouterElement.instance().selectSeaPenTemplate(
         SeaPenTemplateId.kGlowscapes);

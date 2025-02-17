@@ -36,7 +36,6 @@
 #include "base/test/values_test_util.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/bluetooth/bluetooth_chooser_context_factory.h"
@@ -142,12 +141,9 @@
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
+#include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/smart_card/smart_card_permission_context.h"
 #include "chrome/browser/smart_card/smart_card_permission_context_factory.h"
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/scoped_user_manager.h"
 #endif
@@ -356,12 +352,13 @@ class SiteSettingsHandlerBaseTest : public testing::Test {
         /*is_main_profile=*/true);
     EXPECT_TRUE(profile_);
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     SetUpUserManager(profile_.get());
 #endif
   }
 
   void SetUp() override {
+    TestingBrowserProcess::GetGlobal()->CreateGlobalFeaturesForTesting();
     browsing_topics::BrowsingTopicsServiceFactory::GetInstance()
         ->SetTestingFactoryAndUse(
             profile(),
@@ -400,24 +397,24 @@ class SiteSettingsHandlerBaseTest : public testing::Test {
     }
   }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   void SetUpUserManager(TestingProfile* profile) {
     // On ChromeOS a user account is needed in order to check whether the user
     // account is affiliated with the device owner for the purposes of applying
     // enterprise policy.
-    constexpr char kTestUserGaiaId[] = "1111111111";
+    constexpr GaiaId::Literal kTestUserGaiaId("1111111111");
     auto fake_user_manager = std::make_unique<ash::FakeChromeUserManager>();
     auto* fake_user_manager_ptr = fake_user_manager.get();
     scoped_user_manager_ = std::make_unique<user_manager::ScopedUserManager>(
         std::move(fake_user_manager));
 
     auto account_id =
-        AccountId::FromUserEmailGaiaId(kTestUserEmail, GaiaId(kTestUserGaiaId));
+        AccountId::FromUserEmailGaiaId(kTestUserEmail, kTestUserGaiaId);
     fake_user_manager_ptr->AddUserWithAffiliation(account_id,
                                                   /*is_affiliated=*/true);
     fake_user_manager_ptr->LoginUser(account_id);
   }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   TestingProfile* profile() { return profile_.get(); }
   Profile* incognito_profile() { return incognito_profile_; }
@@ -1180,7 +1177,7 @@ class SiteSettingsHandlerBaseTest : public testing::Test {
   raw_ptr<Profile, DanglingUntriaged> incognito_profile_ = nullptr;
   content::TestWebUI web_ui_;
   std::unique_ptr<SiteSettingsHandler> handler_;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   std::unique_ptr<user_manager::ScopedUserManager> scoped_user_manager_;
 #endif
   raw_ptr<browsing_topics::MockBrowsingTopicsService>
@@ -3130,6 +3127,7 @@ class SiteSettingsHandlerInfobarTest : public BrowserWithTestWindowTest {
   SiteSettingsHandlerInfobarTest& operator=(
       const SiteSettingsHandlerInfobarTest&) = delete;
   void SetUp() override {
+    TestingBrowserProcess::GetGlobal()->CreateGlobalFeaturesForTesting();
     BrowserWithTestWindowTest::SetUp();
 
     handler_ = std::make_unique<SiteSettingsHandler>(profile());
@@ -3176,16 +3174,18 @@ class SiteSettingsHandlerInfobarTest : public BrowserWithTestWindowTest {
     BrowserWithTestWindowTest::TearDown();
   }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   // On ChromeOS a user account is needed in order to check whether the user
   // account is affiliated with the device owner for the purposes of applying
   // enterprise policy.
   void LogIn(std::string_view email, const GaiaId& gaia_id) override {
     BrowserWithTestWindowTest::LogIn(email, gaia_id);
-    user_manager()->SetUserAffiliated(
-        AccountId::FromUserEmailGaiaId(email, gaia_id), true);
+    user_manager()->SetUserPolicyStatus(
+        AccountId::FromUserEmailGaiaId(email, gaia_id),
+        /*is_managed=*/true,
+        /*is_affiliated=*/true);
   }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   infobars::ContentInfoBarManager* GetInfoBarManagerForTab(Browser* browser,
                                                            int tab_index,

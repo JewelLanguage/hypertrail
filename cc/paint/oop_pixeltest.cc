@@ -2862,16 +2862,19 @@ class OopPathPixelTest : public OopPixelTest,
     display_item_list->EndPaintOfUnpaired(options.full_raster_rect);
     display_item_list->Finalize();
 
-    auto comparator =
-#if BUILDFLAG(IS_IOS)
-        // TODO(crbug.com/40280014): We have larger errors on the platform, but
-        // the images here still seem visually indistinguishable.
-        FuzzyPixelComparator().SetErrorPixelsPercentageLimit(0.5f);
-#else
-        // Allow 8 pixels in 100x100 image to be different due to non-AA pixel
-        // rounding.
+    // Allow 8 pixels in 100x100 image to be different due to non-AA pixel
+    // rounding.
+    FuzzyPixelComparator comparator =
         FuzzyPixelComparator().SetErrorPixelsPercentageLimit(0.08f);
-#endif
+
+    // TODO(crbug.com/40280014): We have larger errors when running these
+    // tests with Graphite, but the images here still seem visually
+    // indistinguishable.
+    auto* cmd = base::CommandLine::ForCurrentProcess();
+    if (features::IsSkiaGraphiteEnabled(cmd)) {
+      comparator.SetErrorPixelsPercentageLimit(0.5f);
+    }
+
     auto actual = Raster(display_item_list, options);
     ExpectEquals(actual, FILE_PATH_LITERAL("oop_path.png"), comparator);
   }
@@ -2927,9 +2930,12 @@ TEST_F(OopPixelTest, SkSLCommandShader) {
     uniform float2 u_btm_right;
     uniform vec4 u_border_color;
     uniform vec4 u_center_color;
+    uniform int u_nudge;
 
     vec4 main(float2 coord) {
-      if (all(greaterThanEqual(coord, u_top_left)) &&
+      float2 adjusted = u_top_left;
+      adjusted.x = u_top_left.x + float(u_nudge);
+      if (all(greaterThanEqual(coord, adjusted)) &&
           all(lessThan(coord, u_btm_right))) {
         return u_center_color;
       } else {
@@ -2941,13 +2947,15 @@ TEST_F(OopPixelTest, SkSLCommandShader) {
       kDrawRedRect,
       /*float_uniforms=*/{{.name = SkString("u_border_alpha"), .value = 0.5f}},
       /*float2_uniforms=*/
-      {{.name = SkString("u_top_left"), .value = SkV2{25.f, 25.f}},
+      {{.name = SkString("u_top_left"), .value = SkV2{23.f, 25.f}},
        {.name = SkString("u_btm_right"), .value = SkV2{75.f, 75.f}}},
       /*float4_uniforms=*/
       {{.name = SkString("u_border_color"),
         .value = SkColorToSkV4(SkColors::kRed)},
        {.name = SkString("u_center_color"),
-        .value = SkColorToSkV4(SkColors::kGreen)}});
+        .value = SkColorToSkV4(SkColors::kGreen)}},
+      /*int_uniforms=*/
+      {{.name = SkString("u_nudge"), .value = 2}});
   ASSERT_TRUE(shader);
 
   const gfx::Size rect(100, 100);

@@ -6,6 +6,7 @@
 
 #include "base/types/cxx23_to_underlying.h"
 #include "build/build_config.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/optimization_guide/core/feature_registry/feature_registration.h"
 #include "components/optimization_guide/core/model_execution/model_execution_prefs.h"
@@ -16,11 +17,6 @@ namespace autofill_ai {
 // Autofill offers improvements on how field types and filling values are
 // predicted.
 BASE_FEATURE(kAutofillAi, "AutofillAi", base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Bootstrap autofill prediction while opt-ing in for improvements.
-BASE_FEATURE(kAutofillAiBootstrapping,
-             "AutofillAiBootstrapping",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool IsAutofillAiSupported(const PrefService* prefs) {
   constexpr bool is_supported_platform = BUILDFLAG(IS_CHROMEOS) ||
@@ -33,7 +29,8 @@ bool IsAutofillAiSupported(const PrefService* prefs) {
       base::to_underlying(optimization_guide::model_execution::prefs::
                               ModelExecutionEnterprisePolicyValue::kDisable);
   static_assert(kAutofillPredictionSettingsDisabled == 2);
-  return base::FeatureList::IsEnabled(kAutofillAi) &&
+  return base::FeatureList::IsEnabled(
+             autofill::features::kAutofillAiWithDataSchema) &&
          prefs->GetInteger(
              optimization_guide::prefs::
                  kAutofillPredictionImprovementsEnterprisePolicyAllowed) !=

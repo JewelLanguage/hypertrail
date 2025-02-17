@@ -21,7 +21,6 @@ Vissa funktioner kanske inte är tillgängliga och ändringar i inställningarna
 <translation id="1184145431117212167">Installationen misslyckades eftersom du använder en version av Windows som inte stöds.</translation>
 <translation id="1194807384646768652">Den här nedladdningen blockerades av Chrome eftersom filtypen inte brukar laddas ned och den kan vara farlig</translation>
 <translation id="1203500561924088507">Tack för att du installerat programmet. Du måste starta om webbläsaren innan du använder <ph name="BUNDLE_NAME" />.</translation>
-<translation id="1229096353876452996">Google rekommenderar att du ställer in Chrome som standard</translation>
 <translation id="1265739287306757398">Läs mer</translation>
 <translation id="1278833599417554002">Starta om för att uppdatera &amp;Chrome</translation>
 <translation id="1290883685122687410">Konfigureringsfel: <ph name="METAINSTALLER_EXIT_CODE" />. <ph name="WINDOWS_ERROR" /></translation>
@@ -42,7 +41,6 @@ Vissa funktioner kanske inte är tillgängliga och ändringar i inställningarna
 <translation id="1507198376417198979">Anpassa din nya Chrome-profil</translation>
 <translation id="1547295885616600893">ChromeOS fungerar tack vare <ph name="BEGIN_LINK_CROS_OSS" />ytterligare program med öppen källkod<ph name="END_LINK_CROS_OSS" />.</translation>
 <translation id="1553358976309200471">Uppdatera Chrome</translation>
-<translation id="1583073672411044740"><ph name="EXISTING_USER" /> är redan inloggad på den här Chrome-profilen. En ny Chrome-profil skapas för <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="1587223624401073077">Google Chrome använder din kamera.</translation>
 <translation id="1587325591171447154"><ph name="FILE_NAME" /> är skadlig och har blockerats av Chrome.</translation>
 <translation id="1597911401261118146"><ph name="BEGIN_LINK" />Logga in i Chrome<ph name="END_LINK" /> om du vill kontrollera att dina lösenord skyddas från dataintrång och andra säkerhetsproblem.</translation>
@@ -59,7 +57,6 @@ Vissa funktioner kanske inte är tillgängliga och ändringar i inställningarna
 <translation id="1698376642261615901">Google Chrome är en webbläsare som kör webbsidor och program med ljusets hastighet. Den är snabb, stabil och lätt att använda. Surfa säkrare med Google Chrome, som har inbyggt skydd mot skadlig kod och nätfiske.</translation>
 <translation id="1713301662689114961">{0,plural, =1{Om en timme startas Chrome om}other{Om # timmar startas Chrome om}}</translation>
 <translation id="1722488837206509557">Detta gör att du kan välja bland tillgängliga enheter och visa innehåll på dem.</translation>
-<translation id="1734234790201236882">Det här lösenordet sparas i ditt Google-konto. Du behöver inte komma ihåg det.</translation>
 <translation id="1786003790898721085">Se till att du är inloggad i Chrome på <ph name="TARGET_DEVICE_NAME" /> och försök skicka igen.</translation>
 <translation id="1786044937610313874">Genvägar öppnas i Chrome</translation>
 <translation id="178701303897325119">Detta tillägg stöds inte längre. Vi rekommenderar att du tar bort det i stället.</translation>
@@ -85,6 +82,7 @@ Vissa funktioner kanske inte är tillgängliga och ändringar i inställningarna
 <translation id="2094648590148273905">Villkor för ChromeOS Flex</translation>
 <translation id="2094919256425865063">Vill du avsluta Chrome ändå?</translation>
 <translation id="2106831557840787829">ChromeOS Flex fungerar tack vare ytterligare <ph name="BEGIN_LINK_CROS_OSS" />program med öppen källkod<ph name="END_LINK_CROS_OSS" />, liksom <ph name="BEGIN_LINK_LINUX_OSS" />utvecklingsmiljön för Linux<ph name="END_LINK_LINUX_OSS" />.</translation>
+<translation id="2108778574543343055">Inaktivera att Chrome körs i bakgrunden för appar</translation>
 <translation id="2120620239521071941"><ph name="ITEMS_COUNT" /> tas bort från enheten. Logga in i Chrome som <ph name="USER_EMAIL" /> om du vill kunna återställa datan senare.</translation>
 <translation id="2121284319307530122">Starta om för att uppdatera &amp;Chrome</translation>
 <translation id="2123055963409958220">Hjälp oss att förbättra Chrome genom att rapportera <ph name="BEGIN_LINK" />dina aktuella inställningar<ph name="END_LINK" /></translation>
@@ -128,7 +126,6 @@ Vissa funktioner kanske inte är tillgängliga och ändringar i inställningarna
 <translation id="2574930892358684005"><ph name="EXISTING_USER" /> är redan inloggad på den här Chrome-profilen. Du kan hålla isär webbinformationen genom att skapa en egen profil i Chrome.</translation>
 <translation id="2580411288591421699">Det går inte att installera samma version av Google Chrome som redan körs. Stäng Google Chrome och försök igen.</translation>
 <translation id="2586406160782125153">Webbinformationen raderas från enheten. Logga in i Chrome som <ph name="USER_EMAIL" /> om du vill kunna återställa datan senare.</translation>
-<translation id="2597976513418770460">Få saker i webbläsaren Chrome från <ph name="ACCOUNT_EMAIL" /></translation>
 <translation id="259935314519650377">Det gick inte att cachelagra det nedladdade installationsprogrammet. Fel: <ph name="UNPACK_CACHING_ERROR_CODE" />.</translation>
 <translation id="2632707915638608719">Få mer gjort med tillägg för Chrome</translation>
 <translation id="2645435784669275700">ChromeOS</translation>
@@ -147,12 +144,12 @@ Vissa funktioner kanske inte är tillgängliga och ändringar i inställningarna
 <translation id="2797864378188255696">När du loggar in på Googles tjänster, som Gmail eller YouTube, med <ph name="USER_EMAIL" /> kan du logga in automatiskt i Chrome med samma konto</translation>
 <translation id="2799162042226656283">Chrome på ditt sätt</translation>
 <translation id="2799223571221894425">Starta om</translation>
+<translation id="2818684386420968393">Inaktivera att Chrome körs i bakgrunden för appar</translation>
 <translation id="2825024317344269723">Farlig webbplats. Chrome tog bort aviseringar.</translation>
 <translation id="2841525013647267359">Översätt från</translation>
 <translation id="2846251086934905009">Installationsfel: Installationsprogrammet slutfördes inte. Installationen har avbrutits.</translation>
 <translation id="2853415089995957805">Sidor som du troligen kommer att besöka läses in i förväg i Chrome så att de läses in snabbare när du besöker dem</translation>
 <translation id="2857540653560290388">Chrome startas …</translation>
-<translation id="2857972467023607093">Det finns redan en Chrome-profil med detta konto</translation>
 <translation id="286025080868315611">Läs mer om varför vissa nedladdningar blockeras i Chrome</translation>
 <translation id="2861074815332034794">Chrome uppdateras (<ph name="PROGRESS_PERCENT" />)</translation>
 <translation id="2871893339301912279">Du är inloggad i Chrome.</translation>
@@ -207,7 +204,6 @@ Vissa funktioner kanske inte är tillgängliga och ändringar i inställningarna
 <translation id="345171907106878721">Lägg till dig själv i Chrome</translation>
 <translation id="3453763134178591239">Villkor för ChromeOS</translation>
 <translation id="3503306920980160878">Du behöver ge Chrome åtkomst till din plats om den ska kunna delas med webbplatsen</translation>
-<translation id="3512634283363927263">Dessa sidor är avsedda för Chrome-utvecklare och kanske inte underhålls eller testas aktivt. Om du vill aktivera dem navigerar du till <ph name="BEGIN_LINK" />chrome://chrome-urls<ph name="LINK_END" />, klickar på knappen för att aktivera felsökningssidor och navigerar sedan till den här sidan igen.</translation>
 <translation id="3533694711092285624">Det finns inga sparade lösenord. Chrome kan bara kontrollera dina lösenord om du sparar dem.</translation>
 <translation id="3541482654983822893">Chrome kan inte kontrollera dina lösenord. Försök igen om ett dygn.</translation>
 <translation id="3564543103555793392">När du loggar in i Chrome kan du spara bokmärken och lösenord med mera som du sedan kan använda på telefonen</translation>
@@ -225,7 +221,6 @@ Vissa funktioner kanske inte är tillgängliga och ändringar i inställningarna
 <translation id="3673813398384385993">Chrome har upptäckt att <ph name="EXTENSION_NAME" /> innehåller skadlig kod</translation>
 <translation id="3695446226812920698">Läs mer</translation>
 <translation id="3697952514309507634">Andra Chrome-profiler</translation>
-<translation id="3700276346088749847">rensa kontots Chrome-data</translation>
 <translation id="3703994572283698466">ChromeOS fungerar tack vare ytterligare <ph name="BEGIN_LINK_CROS_OSS" /> program med öppen källkod<ph name="END_LINK_CROS_OSS" />, liksom <ph name="BEGIN_LINK_LINUX_OSS" />utvecklingsmiljön för Linux<ph name="END_LINK_LINUX_OSS" />.</translation>
 <translation id="3716540481907974026">ChromeOS Flex-version</translation>
 <translation id="3718181793972440140">Ett objekt tas bort från enheten. Logga in i Chrome som <ph name="USER_EMAIL" /> om du vill kunna återställa datan senare.</translation>
@@ -234,7 +229,6 @@ Vissa funktioner kanske inte är tillgängliga och ändringar i inställningarna
 <translation id="3785324443014631273">Det gick inte att synkronisera data med ChromeOS Flex på grund av ett inloggningsfel.</translation>
 <translation id="3795971588916395511">Google ChromeOS</translation>
 <translation id="3809772425479558446">För Google Chrome krävs Windows 10 eller senare.</translation>
-<translation id="3835168907083856002">En ny Chrome-profil skapas för <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="383928141529488001">Google Chrome behöver åtkomst till Bluetooth för att utforska 
  Bluetooth-enheter. <ph name="IDS_SERIAL_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH_LINK" /></translation>
 <translation id="386202838227397562">Stäng alla Google Chrome-fönster och försök igen.</translation>
@@ -283,7 +277,6 @@ Vissa funktioner kanske inte är tillgängliga och ändringar i inställningarna
 <translation id="4389991535395284064">När du surfar i inkognitoläge visas en varning i Chrome innan en webbplats läses in med en osäker anslutning</translation>
 <translation id="4427306783828095590">Förbättrat skydd är bättre på att blockera nätfiske och skadlig kod</translation>
 <translation id="4434353761996769206">Installationsfel: <ph name="INSTALLER_ERROR" /></translation>
-<translation id="4438657683599538446">Logga in på Chrome som <ph name="USER_EMAIL" /></translation>
 <translation id="4450664632294415862">Chrome – nätverksinloggning – <ph name="PAGE_TITLE" /></translation>
 <translation id="4458462641685292929">En annan process i Google Chrome pågår. Försök igen senare.</translation>
 <translation id="4459234553906210702">Genom annonsmätning kan webbplatser du besöker begära information från Chrome som hjälper dem att mäta annonsernas resultat. Med annonsmätning begränsas spårningen från webbplats till webbplats genom att så lite information som möjligt överförs mellan webbplatserna.</translation>
@@ -327,6 +320,7 @@ Vissa funktioner kanske inte är tillgängliga och ändringar i inställningarna
 <translation id="4990567037958725628">Google Chrome Canary</translation>
 <translation id="4997044641749333913">Chrome kan inaktivera dessa flikar så att allt förblir snabbt och din surfupplevelse blir bättre.</translation>
 <translation id="5003967926796347400">Klicka på Google Lösenordshantering</translation>
+<translation id="5114340746415930644">Ange lösenfrasen om du vill använda och spara Chrome-data i ditt konto, <ph name="USER_EMAIL" /></translation>
 <translation id="5120334927898581447">Logga in i Chrome när du loggar in i andra tjänster från Google</translation>
 <translation id="5126049312684316860">Chrome läser in ännu fler sidor i förväg som du troligen kommer att besöka, så att de läses in snabbare när du besöker dem</translation>
 <translation id="5132929315877954718">Upptäck fantastiska program, spel, tillägg och teman för Google Chrome.</translation>
@@ -364,8 +358,10 @@ Google Chrome kan inte återställa dina inställningar.</translation>
 <translation id="5596627076506792578">Fler alternativ</translation>
 <translation id="5602351063754773347">Vi rekommenderar att du tar bort det. <ph name="BEGIN_LINK" />Läs mer om tillägg som stöds<ph name="END_LINK" /></translation>
 <translation id="5648328599815354043">Chrome gör mer för att skydda dig online</translation>
+<translation id="5649680279845190972">Logga in i Chrome om du vill ha tilläggen med mera på alla dina datorer</translation>
 <translation id="565744775970812598"><ph name="FILE_NAME" /> kan vara skadlig och har blockerats av Chrome.</translation>
 <translation id="566568153320186256">Chrome sparar batteri genom att begränsa aktivitet i bakgrunden och visuella effekter, till exempel jämnare scrollning och bildfrekvenser för video. <ph name="BEGIN_LINK" />Läs mer om strömsparläget<ph name="END_LINK" /></translation>
+<translation id="567202749201779594">Rensa Chrome-data i kontot</translation>
 <translation id="5678190148303298925">{COUNT,plural, =0{Administratören meddelar att du bör starta om Chrome så att uppdateringen tillämpas}=1{Administratören meddelar att du bör starta om Chrome så att uppdateringen tillämpas. Inkognitofönstret öppnas inte igen.}other{Administratören meddelar att du bör starta om Chrome så att uppdateringen tillämpas. De # inkognitofönstren öppnas inte igen.}}</translation>
 <translation id="5686916850681061684">Anpassa och styr Google Chrome. Någonting behöver ses över. Klicka här för mer information.</translation>
 <translation id="5690427481109656848">Google LLC</translation>
@@ -442,18 +438,17 @@ Google Chrome kan inte återställa dina inställningar.</translation>
 <translation id="6497147134301593682">Chrome avslutades automatiskt</translation>
 <translation id="6506909944137591434">Du behöver ge Chrome kamerabehörighet om du vill skapa en 3D-karta över dina omgivningar</translation>
 <translation id="6515495397637126556"><ph name="PAGE_TITLE" /> – Google Chrome Dev</translation>
-<translation id="6515549163407364048">Logga in i Chrome om du vill ha tilläggen på alla dina datorer</translation>
 <translation id="6520670145826811516">Ge Chrome åtkomst i <ph name="BEGIN_LINK" />systeminställningarna<ph name="END_LINK" /> om du vill använda platsen</translation>
 <translation id="659498884637196217">I Google Lösenordshantering på den här enheten</translation>
 <translation id="6632473616050862500">ChromeOS Flex fungerar tack vare ytterligare <ph name="BEGIN_LINK_CROS_OSS" />program med öppen källkod<ph name="END_LINK_CROS_OSS" />,.</translation>
 <translation id="6660596345553328257">Vill du logga in i Chrome?</translation>
+<translation id="6664219008737641504">Om du har glömt lösenfrasen eller vill ändra den här inställningen kan du <ph name="SETTINGS_LINK" /> Chrome-datan i kontot</translation>
 <translation id="6676384891291319759">Gå ut på Internet</translation>
 <translation id="6679975945624592337">Låt Google Chrome köras i bakgrunden</translation>
 <translation id="6696915334902295848">Du behöver ge Chrome mikrofonbehörighet för den här webbplatsen</translation>
 <translation id="6712881677154121168">Nedladdningsfel: <ph name="DOWNLOAD_ERROR" /></translation>
 <translation id="6718739135284199302">Gör Chrome snabbare</translation>
 <translation id="6735387454586646204">ChromeOS Flex-system</translation>
-<translation id="6739177684496155661">Vill du fortsätta i en ny Chrome-profil?</translation>
 <translation id="6750954913813541382">Text som du skriver i webbläsaren Chrome skickas till Google för att kontrollera stavningen</translation>
 <translation id="677276454032249905">Vill du avsluta Chrome ändå?</translation>
 <translation id="6794858689789885890">Radera alltid webbplatsdata från enheten när du stänger Chrome</translation>
@@ -478,9 +473,6 @@ Google Chrome kan inte återställa dina inställningar.</translation>
 <translation id="7024536598735240744">Uppackningsfel: <ph name="UNPACK_ERROR" />.</translation>
 <translation id="7025789849649390912">Installationen avbröts.</translation>
 <translation id="7025800014283535195">Du kan byta mellan Chrome-profiler här</translation>
-<translation id="7036251913954633326">Om du bara vill använda det här kontot en enda gång kan du använda <ph name="GUEST_LINK_BEGIN" />gästläget<ph name="GUEST_LINK_END" /> i webbläsaren Chrome. Om du vill lägga till ett konto åt någon annan <ph name="LINK_BEGIN" />lägger du till en ny person<ph name="LINK_END" /> på <ph name="DEVICE_TYPE" />.
-
-Behörigheter som du redan har gett webbplatser och appar kan gälla för det här kontot. Du kan hantera dina Google-konton i <ph name="SETTINGS_LINK_BEGIN" />inställningarna<ph name="SETTINGS_LINK_END" />.</translation>
 <translation id="7048502283602470098">Utforska AI</translation>
 <translation id="7059914902409643750">Anpassa Chrome</translation>
 <translation id="7071827361006050863">Webbinformation raderas snart i Chrome</translation>
@@ -523,7 +515,6 @@ Behörigheter som du redan har gett webbplatser och appar kan gälla för det h�
 <translation id="7572537927358445944">Av • Chrome kan inte verifiera var tillägget kommer från</translation>
 <translation id="7583399374488819119">Installationsprogram för <ph name="COMPANY_NAME" /></translation>
 <translation id="7606334485649076285">Google ChromeOS Flex</translation>
-<translation id="7617512710641355143">Chrome hanteras</translation>
 <translation id="7626032353295482388">Välkommen till Chrome</translation>
 <translation id="7626072681686626474"><ph name="MANAGER" /> kräver att du läser och godkänner följande användarvillkor innan du använder enheten. Villkoren varken utökar, ändrar eller begränsar villkoren för Google ChromeOS.</translation>
 <translation id="7629695634924605473">Om dina lösenord någonsin skulle läcka ut får du veta det i Chrome</translation>
@@ -556,7 +547,6 @@ Behörigheter som du redan har gett webbplatser och appar kan gälla för det h�
 <translation id="7845233973568007926">Tack för att du installerat programmet. Du måste starta om datorn innan du använder <ph name="BUNDLE_NAME" />.</translation>
 <translation id="7852254990718225089">AI i Chrome gör webben snabbare, säkrare och mer tillgänglig</translation>
 <translation id="7872446069773932638">Laddar ned … <ph name="SECONDS" /> sekund/sekunder återstår</translation>
-<translation id="7880591377632733558">Välkommen till Chrome, <ph name="ACCOUNT_FIRST_NAME" />!</translation>
 <translation id="7886087451482920026">Välj text med Google Lens</translation>
 <translation id="7890208801193284374">Om du delar en dator med vänner och familj kan de konfigurera Chrome precis som de vill och surfa separat.</translation>
 <translation id="7896673875602241923">Någon har tidigare loggat in i Chrome som <ph name="ACCOUNT_EMAIL_LAST" /> på den här datorn. Skapa en ny Chrome-användare så att dina uppgifter hålls separat.</translation>
@@ -566,7 +556,6 @@ Behörigheter som du redan har gett webbplatser och appar kan gälla för det h�
 <translation id="7947083960301164556">Se vad som är nytt</translation>
 <translation id="7951272445806340501">ChromeOS Flex måste startas om för att uppdateringen ska börja gälla.</translation>
 <translation id="7959172989483770734">Hantera Chrome-profiler</translation>
-<translation id="7962368738413920945">Webbplatser fortsätter förmodligen att fungera som förväntat men de kommer inte ihåg dig efter att du stänger alla Chrome-fönster</translation>
 <translation id="7962410387636238736">Den här datorn får inte längre uppdateringar för Google Chrome eftersom Windows XP och Windows Vista inte längre stöds.</translation>
 <translation id="8005666035647241369">I Google Lösenordshantering på den här enheten</translation>
 <translation id="8008534537613507642">Installera om Chrome</translation>
@@ -608,7 +597,6 @@ Behörigheter som du redan har gett webbplatser och appar kan gälla för det h�
 <translation id="8428213095426709021">Inställningar</translation>
 <translation id="8429214465555795676">Du måste logga in på Chrome med <ph name="EMAIL" /> om du vill fortsätta. Detta säkerställer att organisationens policyer följs.</translation>
 <translation id="8433638294851456451">Logga in på Chrome på båda enheterna om du vill skicka ett nummer från Android-telefonen.</translation>
-<translation id="8451192282033883849">Kontot hanteras av <ph name="MANAGER_NAME" />. Administratören kan se och redigera den här Chrome-profilen och tillhörande data som bokmärken, historik och lösenord.</translation>
 <translation id="8496177819998570653">Googles Lösenordshantering</translation>
 <translation id="8498858610309223613">En särskild säkerhetsuppdatering för Google Chrome installerades precis. Starta om webbläsaren nu. Flikarna återställs efteråt.</translation>
 <translation id="8516431725144212809">Chromes uppskattning av dina intressen</translation>
@@ -667,7 +655,6 @@ Behörigheter som du redan har gett webbplatser och appar kan gälla för det h�
 <translation id="919706545465235479">Du måste uppdatera Chrome innan synkroniseringen kan starta</translation>
 <translation id="922152298093051471">Anpassa Chrome</translation>
 <translation id="93760716455950538">Starta om ChromeOS Flex</translation>
-<translation id="940313311831216333">Logga in och aktivera synkronisering om du vill få tillgång till dina saker i Chrome på olika enheter.</translation>
 <translation id="943390475793766444">Den här filen bör genomsökas eftersom den kan vara farlig.</translation>
 <translation id="945522503751344254">Skicka feedback</translation>
 <translation id="983803489796659991">Installationen misslyckades eftersom uppdateringsservern inte har någon hashdata för appen.</translation>

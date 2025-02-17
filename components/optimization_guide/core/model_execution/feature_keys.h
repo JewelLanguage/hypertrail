@@ -28,6 +28,8 @@ enum class ModelBasedCapabilityKey {
   kHistorySearch =
       proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_HISTORY_SEARCH,
   kSummarize = proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_SUMMARIZE,
+  kFormsClassifications = proto::ModelExecutionFeature::
+      MODEL_EXECUTION_FEATURE_FORMS_CLASSIFICATIONS,
   kFormsPredictions =
       proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_FORMS_PREDICTIONS,
   kFormsAnnotations =
@@ -65,6 +67,8 @@ inline std::ostream& operator<<(std::ostream& out,
       return out << "HistorySearch";
     case ModelBasedCapabilityKey::kSummarize:
       return out << "Summarize";
+    case ModelBasedCapabilityKey::kFormsClassifications:
+      return out << "FormsClassifications";
     case ModelBasedCapabilityKey::kFormsPredictions:
       return out << "FormsPredictions";
     case ModelBasedCapabilityKey::kFormsAnnotations:
@@ -85,7 +89,7 @@ inline std::ostream& operator<<(std::ostream& out,
   return out;
 }
 
-inline constexpr std::array<ModelBasedCapabilityKey, 16>
+inline constexpr std::array<ModelBasedCapabilityKey, 17>
     kAllModelBasedCapabilityKeys = {
         ModelBasedCapabilityKey::kCompose,
         ModelBasedCapabilityKey::kTabOrganization,
@@ -95,6 +99,7 @@ inline constexpr std::array<ModelBasedCapabilityKey, 16>
         ModelBasedCapabilityKey::kPromptApi,
         ModelBasedCapabilityKey::kHistorySearch,
         ModelBasedCapabilityKey::kSummarize,
+        ModelBasedCapabilityKey::kFormsClassifications,
         ModelBasedCapabilityKey::kFormsPredictions,
         ModelBasedCapabilityKey::kFormsAnnotations,
         ModelBasedCapabilityKey::kHistoryQueryIntent,
@@ -114,14 +119,17 @@ enum class UserVisibleFeatureKey {
   kWallpaperSearch =
       static_cast<int>(ModelBasedCapabilityKey::kWallpaperSearch),
   kHistorySearch = static_cast<int>(ModelBasedCapabilityKey::kHistorySearch),
+  kPasswordChangeSubmission =
+      static_cast<int>(ModelBasedCapabilityKey::kPasswordChangeSubmission),
 };
 
-inline constexpr std::array<UserVisibleFeatureKey, 4>
+inline constexpr std::array<UserVisibleFeatureKey, 5>
     kAllUserVisibleFeatureKeys = {
         UserVisibleFeatureKey::kCompose,
         UserVisibleFeatureKey::kTabOrganization,
         UserVisibleFeatureKey::kWallpaperSearch,
         UserVisibleFeatureKey::kHistorySearch,
+        UserVisibleFeatureKey::kPasswordChangeSubmission,
 };
 
 inline ModelBasedCapabilityKey ToModelBasedCapabilityKey(
@@ -135,6 +143,8 @@ inline ModelBasedCapabilityKey ToModelBasedCapabilityKey(
       return ModelBasedCapabilityKey::kWallpaperSearch;
     case UserVisibleFeatureKey::kHistorySearch:
       return ModelBasedCapabilityKey::kHistorySearch;
+    case UserVisibleFeatureKey::kPasswordChangeSubmission:
+      return ModelBasedCapabilityKey::kPasswordChangeSubmission;
   }
 }
 
@@ -155,6 +165,9 @@ inline ModelBasedCapabilityKey ToModelBasedCapabilityKey(
       return ModelBasedCapabilityKey::kPromptApi;
     case proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_HISTORY_SEARCH:
       return ModelBasedCapabilityKey::kHistorySearch;
+    case proto::ModelExecutionFeature::
+        MODEL_EXECUTION_FEATURE_FORMS_CLASSIFICATIONS:
+      return ModelBasedCapabilityKey::kFormsClassifications;
     case proto::ModelExecutionFeature::
         MODEL_EXECUTION_FEATURE_FORMS_PREDICTIONS:
       return ModelBasedCapabilityKey::kFormsPredictions;
@@ -206,6 +219,9 @@ inline proto::ModelExecutionFeature ToModelExecutionFeatureProto(
     case ModelBasedCapabilityKey::kHistorySearch:
       return proto::ModelExecutionFeature::
           MODEL_EXECUTION_FEATURE_HISTORY_SEARCH;
+    case ModelBasedCapabilityKey::kFormsClassifications:
+      return proto::ModelExecutionFeature::
+          MODEL_EXECUTION_FEATURE_FORMS_CLASSIFICATIONS;
     case ModelBasedCapabilityKey::kFormsPredictions:
       return proto::ModelExecutionFeature::
           MODEL_EXECUTION_FEATURE_FORMS_PREDICTIONS;

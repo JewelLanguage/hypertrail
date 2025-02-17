@@ -7,10 +7,13 @@
 #include <memory>
 #include <string>
 
+#include "base/base_switches.h"
+#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/threading/thread_restrictions.h"
+#include "chrome/browser/extensions/load_error_reporter.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/value_store/value_store_factory_impl.h"
 #include "content/public/browser/browser_context.h"
@@ -141,6 +144,9 @@ class DesktopAndroidExtensionRegistrarDelegate
 DesktopAndroidExtensionSystem::DesktopAndroidExtensionSystem(
     BrowserContext* browser_context)
     : browser_context_(browser_context),
+      // TODO(crbug.com/356905053): Provide real sorting once the web app story
+      // on Android is finalized.
+      app_sorting_(std::make_unique<NullAppSorting>()),
       store_factory_(base::MakeRefCounted<value_store::ValueStoreFactoryImpl>(
           browser_context->GetPath())) {}
 
@@ -179,8 +185,8 @@ bool DesktopAndroidExtensionSystem::AddExtension(
 }
 
 void DesktopAndroidExtensionSystem::DisableExtension(
-    const std::string& extension_id,
-    int disable_reasons) {
+    const ExtensionId& extension_id,
+    const DisableReasonSet& disable_reasons) {
   registrar_->DisableExtension(extension_id, disable_reasons);
 }
 
@@ -216,6 +222,11 @@ void DesktopAndroidExtensionSystem::InitForRegularProfile(
   if (is_ready()) {
     return;
   }
+
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  bool allow_noisy_errors =
+      !command_line->HasSwitch(::switches::kNoErrorDialogs);
+  LoadErrorReporter::Init(allow_noisy_errors);
 
   registrar_delegate_ =
       std::make_unique<DesktopAndroidExtensionRegistrarDelegate>(
@@ -269,7 +280,7 @@ QuotaService* DesktopAndroidExtensionSystem::quota_service() {
 }
 
 AppSorting* DesktopAndroidExtensionSystem::app_sorting() {
-  return nullptr;
+  return app_sorting_.get();
 }
 
 const base::OneShotEvent& DesktopAndroidExtensionSystem::ready() const {

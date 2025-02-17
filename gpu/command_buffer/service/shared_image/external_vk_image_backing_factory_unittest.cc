@@ -9,11 +9,11 @@
 
 #include "gpu/command_buffer/service/shared_image/external_vk_image_backing_factory.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
 #include "base/functional/callback_helpers.h"
-#include "base/ranges/algorithm.h"
 #include "build/build_config.h"
 #include "cc/test/pixel_test_utils.h"
 #include "components/viz/common/gpu/vulkan_in_process_context_provider.h"
@@ -99,8 +99,8 @@ class ExternalVkImageBackingFactoryDawnTest
   }
 
  protected:
-  static constexpr WGPUInstanceDescriptor dawn_instance_desc_ = {
-      .features =
+  static constexpr wgpu::InstanceDescriptor dawn_instance_desc_ = {
+      .capabilities =
           {
               .timedWaitAnyEnable = true,
           },
@@ -305,11 +305,11 @@ TEST_F(ExternalVkImageBackingFactoryDawnTest, SkiaVulkanWrite_DawnRead) {
     // Encode the buffer copy
     wgpu::CommandEncoder encoder = dawn_device_.CreateCommandEncoder();
     {
-      wgpu::ImageCopyTexture src_copy_view = {};
+      wgpu::TexelCopyTextureInfo src_copy_view = {};
       src_copy_view.origin = {0, 0, 0};
       src_copy_view.texture = src_texture;
 
-      wgpu::ImageCopyBuffer dst_copy_view = {};
+      wgpu::TexelCopyBufferInfo dst_copy_view = {};
       dst_copy_view.buffer = dst_buffer;
       dst_copy_view.layout.bytesPerRow = 256;
       dst_copy_view.layout.offset = 0;

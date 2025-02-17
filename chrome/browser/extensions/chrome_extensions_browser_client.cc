@@ -34,6 +34,7 @@
 #include "chrome/browser/extensions/chrome_component_extension_resource_manager.h"
 #include "chrome/browser/extensions/chrome_content_browser_client_extensions_part.h"
 #include "chrome/browser/extensions/chrome_extension_host_delegate.h"
+#include "chrome/browser/extensions/chrome_extension_system_factory.h"
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
 #include "chrome/browser/extensions/chrome_extensions_browser_api_provider.h"
 #include "chrome/browser/extensions/chrome_extensions_browser_interface_binders.h"
@@ -43,7 +44,6 @@
 #include "chrome/browser/extensions/error_console/error_console.h"
 #include "chrome/browser/extensions/event_router_forwarder.h"
 #include "chrome/browser/extensions/extension_service.h"
-#include "chrome/browser/extensions/extension_system_factory.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/favicon/favicon_util.h"
@@ -64,8 +64,6 @@
 #include "chrome/browser/renderer_host/chrome_navigation_ui_data.h"
 #include "chrome/browser/safe_browsing/extension_telemetry/declarative_net_request_action_signal.h"
 #include "chrome/browser/safe_browsing/extension_telemetry/declarative_net_request_signal.h"
-#include "chrome/browser/safe_browsing/extension_telemetry/extension_telemetry_service.h"
-#include "chrome/browser/safe_browsing/extension_telemetry/extension_telemetry_service_factory.h"
 #include "chrome/browser/safe_browsing/extension_telemetry/remote_host_contacted_signal.h"
 #include "chrome/browser/safe_browsing/extension_telemetry/tabs_execute_script_signal.h"
 #include "chrome/browser/task_manager/web_contents_tags.h"
@@ -85,6 +83,7 @@
 #include "components/embedder_support/user_agent_utils.h"
 #include "components/privacy_sandbox/privacy_sandbox_prefs.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
+#include "components/safe_browsing/buildflags.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/update_client/update_client.h"
 #include "components/version_info/version_info.h"
@@ -123,6 +122,11 @@
 #include "components/user_manager/user_manager.h"
 #else
 #include "extensions/browser/updater/null_extension_cache.h"
+#endif
+
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+#include "chrome/browser/safe_browsing/extension_telemetry/extension_telemetry_service.h"
+#include "chrome/browser/safe_browsing/extension_telemetry/extension_telemetry_service_factory.h"
 #endif
 
 namespace extensions {
@@ -512,7 +516,7 @@ bool ChromeExtensionsBrowserClient::IsLoggedInAsPublicAccount() {
 
 ExtensionSystemProvider*
 ChromeExtensionsBrowserClient::GetExtensionSystemFactory() {
-  return ExtensionSystemFactory::GetInstance();
+  return ChromeExtensionSystemFactory::GetInstance();
 }
 
 void ChromeExtensionsBrowserClient::RegisterBrowserInterfaceBindersForFrame(
@@ -792,6 +796,7 @@ void ChromeExtensionsBrowserClient::NotifyExtensionApiTabExecuteScript(
     content::BrowserContext* context,
     const ExtensionId& extension_id,
     const std::string& code) const {
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   auto* telemetry_service =
       safe_browsing::ExtensionTelemetryServiceFactory::GetForProfile(
           Profile::FromBrowserContext(context));
@@ -802,20 +807,26 @@ void ChromeExtensionsBrowserClient::NotifyExtensionApiTabExecuteScript(
   auto signal = std::make_unique<safe_browsing::TabsExecuteScriptSignal>(
       extension_id, code);
   telemetry_service->AddSignal(std::move(signal));
+#endif
 }
 
 bool ChromeExtensionsBrowserClient::IsExtensionTelemetryServiceEnabled(
     content::BrowserContext* context) const {
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   auto* telemetry_service =
       safe_browsing::ExtensionTelemetryServiceFactory::GetForProfile(
           Profile::FromBrowserContext(context));
   return telemetry_service && telemetry_service->enabled();
+#else
+  return false;
+#endif
 }
 
 void ChromeExtensionsBrowserClient::NotifyExtensionApiDeclarativeNetRequest(
     content::BrowserContext* context,
     const ExtensionId& extension_id,
     const std::vector<api::declarative_net_request::Rule>& rules) const {
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   auto* telemetry_service =
       safe_browsing::ExtensionTelemetryServiceFactory::GetForProfile(
           Profile::FromBrowserContext(context));
@@ -828,6 +839,7 @@ void ChromeExtensionsBrowserClient::NotifyExtensionApiDeclarativeNetRequest(
   auto signal = std::make_unique<safe_browsing::DeclarativeNetRequestSignal>(
       extension_id, rules);
   telemetry_service->AddSignal(std::move(signal));
+#endif
 }
 
 void ChromeExtensionsBrowserClient::
@@ -836,6 +848,7 @@ void ChromeExtensionsBrowserClient::
         const ExtensionId& extension_id,
         const GURL& request_url,
         const GURL& redirect_url) const {
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   auto* telemetry_service =
       safe_browsing::ExtensionTelemetryServiceFactory::GetForProfile(
           Profile::FromBrowserContext(context));
@@ -852,6 +865,7 @@ void ChromeExtensionsBrowserClient::
       CreateDeclarativeNetRequestRedirectActionSignal(extension_id, request_url,
                                                       redirect_url);
   telemetry_service->AddSignal(std::move(signal));
+#endif
 }
 
 // static
@@ -1020,7 +1034,9 @@ void ChromeExtensionsBrowserClient::GetWebViewStoragePartitionConfig(
 
 void ChromeExtensionsBrowserClient::CreatePasswordReuseDetectionManager(
     content::WebContents* web_contents) const {
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
   ChromePasswordReuseDetectionManagerClient::CreateForWebContents(web_contents);
+#endif
 }
 
 media_device_salt::MediaDeviceSaltService*

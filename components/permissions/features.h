@@ -21,7 +21,7 @@ BASE_DECLARE_FEATURE(kOneTimePermission);
 
 #if !BUILDFLAG(IS_ANDROID)
 COMPONENT_EXPORT(PERMISSIONS_COMMON)
-BASE_DECLARE_FEATURE(kKeyboardAndPointerLockPrompt);
+BASE_DECLARE_FEATURE(kKeyboardLockPrompt);
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 COMPONENT_EXPORT(PERMISSIONS_COMMON)
@@ -172,6 +172,10 @@ COMPONENT_EXPORT(PERMISSIONS_COMMON)
 extern const base::FeatureParam<std::string>
     kWebKioskBrowserPermissionsAllowlist;
 
+#if !BUILDFLAG(IS_ANDROID)
+COMPONENT_EXPORT(PERMISSIONS_COMMON)
+extern const base::FeatureParam<bool> kKeyboardLockPromptUIStyle;
+#endif
 }  // namespace feature_params
 }  // namespace permissions
 

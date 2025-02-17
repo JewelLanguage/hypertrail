@@ -12,8 +12,17 @@
 #include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
+#include "components/autofill/core/browser/suggestions/suggestion.h"
 
-namespace autofill::payments {
+namespace autofill {
+
+class BnplIssuer;
+
+namespace payments {
+
+using UpdateSuggestionsCallback =
+    base::RepeatingCallback<void(std::vector<Suggestion>,
+                                 AutofillSuggestionTriggerSource)>;
 
 struct BnplFetchVcnResponseDetails;
 
@@ -29,6 +38,9 @@ class BnplManager {
   BnplManager& operator=(const BnplManager& other) = delete;
   ~BnplManager();
 
+  // Retrieve supported BNPL issuers.
+  static const std::array<std::string_view, 2>& GetSupportedBnplIssuerIds();
+
   // Initializes the BNPL flow, which includes UI shown to the user to select an
   // issuer, a possible ToS dialog, and redirecting to the selected issuer's
   // website before filling the form, if the flow succeeds.
@@ -39,19 +51,40 @@ class BnplManager {
   void InitBnplFlow(uint64_t final_checkout_amount,
                     OnBnplVcnFetchedCallback on_bnpl_vcn_fetched_callback);
 
-  // This function attempts to convert a string representation of a monetary
-  // value in dollars into a uint64_t by parsing it as a double and multiplying
-  // the result by 1,000,000. It assumes the input uses a decimal point ('.') as
-  // the separator for fractional values (not a decimal comma). The function
-  // only supports English-style monetary representations like $, USD, etc.
-  // Multiplication by 1,000,000 is done to represent the monetary value in
-  // micro-units (1 dollar = 1,000,000 micro-units), which is commonly used in
-  // systems that require high precision for financial calculations.
-  std::optional<uint64_t> MaybeParseAmountToMonetaryMicroUnits(
-      const std::string& amount);
+  // Notifies the BNPL manager that suggestion generation has been requested
+  // with the given `trigger_source`. This must be called before
+  // `OnSuggestionsShown()` and `OnAmountExtractionReturned()`, so that the
+  // manager can update suggestions for buy-now-pay-later.
+  void NotifyOfSuggestionGeneration(
+      const AutofillSuggestionTriggerSource trigger_source);
+
+  // Runs after credit card suggestions are shown and collects the current
+  // shown suggestions and a callback for updating the suggestions. This must
+  // be called after `NotifyOfSuggestionGeneration()`, so that the manager can
+  // update suggestions for buy-now-pay-later.
+  void OnSuggestionsShown(
+      base::span<const Suggestion> suggestions,
+      UpdateSuggestionsCallback update_suggestions_callback);
+
+  // Runs after amount extraction completion and collects the amount extraction
+  // result. This must be called after `NotifyOfSuggestionGeneration()`, so
+  // that the manager can update suggestions for buy-now-pay-later.
+  void OnAmountExtractionReturned(
+      const std::optional<uint64_t>& extracted_amount);
+
+  // Returns the supported country codes for BNPL.
+  static std::set<std::string> GetBnplSupportedCountries();
+
+  // Returns if there is at least one synced BNPL issuer and if the BNPL
+  // feature is enabled. Does not check for user's locale.
+  bool ShouldShowBnplSettingsToggle() const;
 
  private:
   friend class BnplManagerTestApi;
+  friend class BnplManagerTest;
+
+  using SuggestionsShownResponse =
+      std::tuple<std::vector<Suggestion>, UpdateSuggestionsCallback>;
 
   // A collection of information that represents the state of an ongoing BNPL
   // flow.
@@ -64,13 +97,13 @@ class BnplManager {
     // Billing customer number for the user's Google Payments account.
     int64_t billing_customer_number;
 
-    // Risk data contains the fingerprint data for the user and the device.
-    std::string risk_data;
-
     // BNPL Issuer Data - Populated when user selects a BNPL issuer
     // Instrument ID used by the server to identify a specific BNPL issuer. This
     // is selected by the user.
     std::string instrument_id;
+
+    // Risk data contains the fingerprint data for the user and the device.
+    std::string risk_data;
 
     // Context token shared between client and Payments server.
     std::string context_token;
@@ -78,6 +111,9 @@ class BnplManager {
     // URL that the the partner redirected the user to after finishing the BNPL
     // flow on the partner website.
     GURL redirect_url;
+
+    // The ID of the BNPL partner the user is trying to retrieve the VCN from.
+    std::string issuer_id;
 
     // The final checkout amount on the page (in micros), used for the ongoing
     // BNPL flow.
@@ -96,6 +132,13 @@ class BnplManager {
   void OnVcnDetailsFetched(PaymentsAutofillClient::PaymentsRpcResult result,
                            const BnplFetchVcnResponseDetails& response_details);
 
+  // Combines `responses` from suggestion shown event and amount extraction,
+  // and try to show card suggestions with buy-now-pay-later suggestion.
+  void MaybeUpdateSuggestionsWithBnpl(
+      const AutofillSuggestionTriggerSource trigger_source,
+      std::vector<std::variant<SuggestionsShownResponse,
+                               std::optional<uint64_t>>> responses);
+
   // The associated payments autofill client.
   const raw_ref<PaymentsAutofillClient> payments_autofill_client_;
 
@@ -103,9 +146,16 @@ class BnplManager {
   // ongoing. Set when a flow is initiated, and reset upon flow completion.
   std::unique_ptr<OngoingFlowState> ongoing_flow_state_;
 
+  // Callback to collect the current shown suggestion list and checkout
+  // amount, and insert BNPL suggestion if the amount is eligible.
+  std::optional<base::RepeatingCallback<void(
+      std::variant<SuggestionsShownResponse, std::optional<uint64_t>>)>>
+      update_suggestions_barrier_callback_;
+
   base::WeakPtrFactory<BnplManager> weak_factory_{this};
 };
 
-}  // namespace autofill::payments
+}  // namespace payments
+}  // namespace autofill
 
 #endif  // COMPONENTS_AUTOFILL_CORE_BROWSER_PAYMENTS_BNPL_MANAGER_H_

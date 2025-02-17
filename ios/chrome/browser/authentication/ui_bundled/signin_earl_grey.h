@@ -53,8 +53,9 @@ class GURL;
 // Adds `fakeIdentity` to the fake system identity interaction manager with
 // capabilities set or unset. This is used to simulate adding the `fakeIdentity`
 // through the fake SSO Auth flow done by
-// `FakeSystemIdentityInteractionManager`. See
-// `kFakeAuthAddAccountButtonIdentifier` to trigger the add account flow.
+// `FakeSystemIdentityInteractionManager`. Use
+// `[SigninEarlGreyUI addFakeAccountInFakeAddAccountMenu:fakeIdentity];` to
+// trigger the add account flow.
 - (void)addFakeIdentityForSSOAuthAddAccountFlow:
             (FakeSystemIdentity*)fakeIdentity
                         withUnknownCapabilities:(BOOL)usingUnknownCapabilities;
@@ -69,6 +70,9 @@ class GURL;
 // Returns the gaia ID of the signed-in account.
 // If there is no signed-in account returns an empty string.
 - (NSString*)primaryAccountGaiaID;
+
+// Returns the gaia IDs of all accounts in the current profile.
+- (NSSet<NSString*>*)accountsInProfileGaiaIDs;
 
 // Checks that no identity is signed in.
 - (BOOL)isSignedOut;
@@ -90,6 +94,10 @@ class GURL;
 // UI function enable sync too.
 // TODO(crbug.com/40067025): Remove this last remark when sync is disabled.
 - (void)signinWithFakeIdentity:(FakeSystemIdentity*)identity;
+
+// Calls `[self signinWithFakeIdentity:identity]` and then waits for sync
+// transport state to become active.
+- (void)signinAndWaitForSyncTransportStateActive:(FakeSystemIdentity*)identity;
 
 // TODO(crbug.com/40066949): Remove all tests invoking this when deleting the
 // MaybeMigrateSyncingUserToSignedIn() call on //ios (not right after launching
@@ -120,12 +128,6 @@ class GURL;
 
 // Induces a GREYAssert if an identity is signed in.
 - (void)verifySignedOut;
-
-// Induces a GREYAssert if the Sync state does not match `enabled`.
-- (void)verifySyncUIEnabled:(BOOL)enabled;
-
-// Induces a GREYAssert if the Sync cell is not hidden.
-- (void)verifySyncUIIsHidden;
 
 - (void)setSelectedType:(syncer::UserSelectableType)type enabled:(BOOL)enabled;
 

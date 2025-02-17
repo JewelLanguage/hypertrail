@@ -4,14 +4,17 @@
 
 #include "chrome/browser/ui/views/page_action/page_action_container_view.h"
 
-#include "chrome/browser/ui/views/page_action/page_action_constants.h"
 #include "chrome/browser/ui/views/page_action/page_action_view.h"
+#include "chrome/browser/ui/views/page_action/page_action_view_params.h"
 #include "components/vector_icons/vector_icons.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/views/test/views_test_base.h"
 
 namespace page_actions {
 namespace {
+
+constexpr int kDefaultBetweenIconSpacing = 8;
+constexpr int kDefaultIconSize = 16;
 
 class MockIconLabelViewDelegate : public IconLabelBubbleView::Delegate {
  public:
@@ -34,10 +37,19 @@ class PageActionContainerViewTest : public views::ViewsTestBase {
     views::ViewsTestBase::TearDown();
     actions::ActionManager::Get().ResetActions();
   }
+
+  PageActionViewParams DefaultViewParams() {
+    return PageActionViewParams{
+        .icon_size = kDefaultIconSize,
+        .between_icon_spacing = kDefaultBetweenIconSpacing,
+        .icon_label_bubble_delegate = &icon_label_view_delegate_};
+  }
+
+ private:
+  MockIconLabelViewDelegate icon_label_view_delegate_;
 };
 
 TEST_F(PageActionContainerViewTest, GetPageActionView) {
-  MockIconLabelViewDelegate icon_label_view_delegate;
   actions::ActionItem* action_item = actions::ActionManager::Get().AddAction(
       actions::ActionItem::Builder()
           .SetImage(ui::ImageModel::FromVectorIcon(vector_icons::kBackArrowIcon,
@@ -47,8 +59,7 @@ TEST_F(PageActionContainerViewTest, GetPageActionView) {
           .Build());
 
   auto page_action_container = std::make_unique<PageActionContainerView>(
-      std::vector<actions::ActionItem*>{action_item},
-      &icon_label_view_delegate);
+      std::vector<actions::ActionItem*>{action_item}, DefaultViewParams());
 
   PageActionView* page_action_view =
       page_action_container->GetPageActionView(0);
@@ -57,67 +68,6 @@ TEST_F(PageActionContainerViewTest, GetPageActionView) {
 
   // Returns null if the action ID is not found.
   EXPECT_EQ(nullptr, page_action_container->GetPageActionView(1));
-}
-
-TEST_F(PageActionContainerViewTest, EmptyView) {
-  MockIconLabelViewDelegate icon_label_view_delegate;
-  auto page_action_container = std::make_unique<PageActionContainerView>(
-      std::vector<actions::ActionItem*>{}, &icon_label_view_delegate);
-
-  EXPECT_EQ(gfx::Insets().set_right(0),
-            page_action_container->GetInsideBorderInsets());
-}
-
-TEST_F(PageActionContainerViewTest, NonEmptyViewWithNoVisiblePageAction) {
-  MockIconLabelViewDelegate icon_label_view_delegate;
-  actions::ActionItem* action_item = actions::ActionManager::Get().AddAction(
-      actions::ActionItem::Builder()
-          .SetImage(ui::ImageModel::FromVectorIcon(vector_icons::kBackArrowIcon,
-                                                   ui::kColorSysPrimary,
-                                                   /*icon_size=*/16))
-          .SetVisible(false)
-          .SetActionId(0)
-          .Build());
-
-  auto page_action_container = std::make_unique<PageActionContainerView>(
-      std::vector<actions::ActionItem*>{action_item},
-      &icon_label_view_delegate);
-
-  EXPECT_EQ(gfx::Insets().set_right(0),
-            page_action_container->GetInsideBorderInsets());
-}
-
-TEST_F(PageActionContainerViewTest, NonEmptyViewWithVisiblePageAction) {
-  MockIconLabelViewDelegate icon_label_view_delegate;
-  actions::ActionItem* action_item1 = actions::ActionManager::Get().AddAction(
-      actions::ActionItem::Builder()
-          .SetImage(ui::ImageModel::FromVectorIcon(vector_icons::kBackArrowIcon,
-                                                   ui::kColorSysPrimary,
-                                                   /*icon_size=*/16))
-          .SetVisible(false)
-          .SetActionId(0)
-          .Build());
-  actions::ActionItem* action_item2 = actions::ActionManager::Get().AddAction(
-      actions::ActionItem::Builder()
-          .SetImage(ui::ImageModel::FromVectorIcon(vector_icons::kBackArrowIcon,
-                                                   ui::kColorSysPrimary,
-                                                   /*icon_size=*/16))
-          .SetVisible(true)
-          .SetActionId(1)
-          .Build());
-
-  auto page_action_container = std::make_unique<PageActionContainerView>(
-      std::vector<actions::ActionItem*>{action_item1, action_item2},
-      &icon_label_view_delegate);
-
-  // Because no model exist, no page action will be visible.
-  EXPECT_EQ(gfx::Insets().set_right(0),
-            page_action_container->GetInsideBorderInsets());
-
-  page_action_container->GetPageActionView(0)->SetVisible(true);
-
-  EXPECT_EQ(gfx::Insets().set_right(kPageActionBetweenIconSpacing),
-            page_action_container->GetInsideBorderInsets());
 }
 
 }  // namespace

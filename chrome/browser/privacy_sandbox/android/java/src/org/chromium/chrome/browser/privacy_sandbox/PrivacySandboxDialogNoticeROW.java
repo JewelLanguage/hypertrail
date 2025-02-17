@@ -21,7 +21,6 @@ import org.chromium.chrome.browser.content.WebContentsFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.browser_ui.widget.ChromeDialog;
-import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.thinwebview.ThinWebView;
 import org.chromium.content_public.browser.LifecycleState;
 import org.chromium.content_public.browser.WebContents;
@@ -29,7 +28,6 @@ import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.text.ChromeClickableSpan;
 import org.chromium.ui.text.SpanApplier;
-import org.chromium.ui.util.ColorUtils;
 import org.chromium.ui.widget.ButtonCompat;
 import org.chromium.ui.widget.CheckableImageView;
 import org.chromium.ui.widget.ChromeImageButton;
@@ -38,7 +36,7 @@ import org.chromium.url.GURL;
 
 /** Dialog in the form of a notice shown for the Privacy Sandbox. */
 public class PrivacySandboxDialogNoticeROW extends ChromeDialog
-        implements View.OnClickListener, DialogInterface.OnShowListener {
+        implements DialogInterface.OnShowListener {
     private final PrivacySandboxBridge mPrivacySandboxBridge;
     private View mContentView;
 
@@ -64,6 +62,7 @@ public class PrivacySandboxDialogNoticeROW extends ChromeDialog
     private long mPrivacyPolicyClickedTimestamp;
     private final ActivityWindowAndroid mActivityWindowAndroid;
     private boolean mIsPrivacyPageLoaded;
+    private View.OnClickListener mOnClickListener;
 
     public PrivacySandboxDialogNoticeROW(
             Context context,
@@ -79,11 +78,12 @@ public class PrivacySandboxDialogNoticeROW extends ChromeDialog
         mContentView =
                 LayoutInflater.from(context).inflate(R.layout.privacy_sandbox_notice_row, null);
         setContentView(mContentView);
+        mOnClickListener = getOnClickListener();
 
         ButtonCompat ackButton = mContentView.findViewById(R.id.ack_button);
-        ackButton.setOnClickListener(this);
+        ackButton.setOnClickListener(mOnClickListener);
         ButtonCompat settingsButton = mContentView.findViewById(R.id.settings_button);
-        settingsButton.setOnClickListener(this);
+        settingsButton.setOnClickListener(mOnClickListener);
 
         mMoreButton = mContentView.findViewById(R.id.more_button);
         mActionButtons = mContentView.findViewById(R.id.action_buttons);
@@ -91,7 +91,7 @@ public class PrivacySandboxDialogNoticeROW extends ChromeDialog
 
         // Controls for the expanding section.
         mDropdownElement = mContentView.findViewById(R.id.dropdown_element);
-        mDropdownElement.setOnClickListener(this);
+        mDropdownElement.setOnClickListener(mOnClickListener);
         mDropdownContainer = mContentView.findViewById(R.id.dropdown_container);
         mExpandArrowView = mContentView.findViewById(R.id.expand_arrow);
         mExpandArrowView.setImageDrawable(PrivacySandboxDialogUtils.createExpandDrawable(context));
@@ -101,10 +101,10 @@ public class PrivacySandboxDialogNoticeROW extends ChromeDialog
         mPrivacyPolicyView = mContentView.findViewById(R.id.privacy_policy_view);
         mPrivacyPolicyContent = mContentView.findViewById(R.id.privacy_policy_content);
         mPrivacyPolicyBackButton = mContentView.findViewById(R.id.privacy_policy_back_button);
-        mPrivacyPolicyBackButton.setOnClickListener(this);
+        mPrivacyPolicyBackButton.setOnClickListener(mOnClickListener);
         mIsPrivacyPageLoaded = false;
 
-        mMoreButton.setOnClickListener(this);
+        mMoreButton.setOnClickListener(mOnClickListener);
         setOnShowListener(this);
         setCancelable(false);
 
@@ -122,6 +122,17 @@ public class PrivacySandboxDialogNoticeROW extends ChromeDialog
                             }
                         });
         handleAdsApiUxEnhancements();
+    }
+
+    private View.OnClickListener getOnClickListener() {
+        return new PrivacySandboxDebouncedOnClick(
+                "ThreeAdsAPIsNoticeModal"
+                        + PrivacySandboxDialogUtils.getSurfaceTypeAsString(mSurfaceType)) {
+            @Override
+            public void processClick(View v) {
+                processClickImpl(v);
+            }
+        };
     }
 
     private void handleAdsApiUxEnhancements() {
@@ -186,9 +197,7 @@ public class PrivacySandboxDialogNoticeROW extends ChromeDialog
         super.show();
     }
 
-    // OnClickListener:
-    @Override
-    public void onClick(View view) {
+    public void processClickImpl(View view) {
         int id = view.getId();
         if (id == R.id.ack_button) {
             RecordUserAction.record("Settings.PrivacySandbox.NoticeRowDialog.AckClicked");
@@ -294,17 +303,6 @@ public class PrivacySandboxDialogNoticeROW extends ChromeDialog
         }
     }
 
-    private String getPrivacyPolicyUrl() {
-        boolean isNightMode = ColorUtils.inNightMode(mActivityWindowAndroid.getContext().get());
-        return mPrivacySandboxBridge.shouldUsePrivacyPolicyChinaDomain()
-                ? (isNightMode
-                        ? UrlConstants.GOOGLE_EMBEDDED_PRIVACY_POLICY_DARK_MODE_CHINA
-                        : UrlConstants.GOOGLE_EMBEDDED_PRIVACY_POLICY_CHINA)
-                : (isNightMode
-                        ? UrlConstants.GOOGLE_EMBEDDED_PRIVACY_POLICY_DARK_MODE
-                        : UrlConstants.GOOGLE_EMBEDDED_PRIVACY_POLICY);
-    }
-
     private void handlePrivacyPolicyFeature() {
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.PRIVACY_SANDBOX_PRIVACY_POLICY)) {
             mLearnMoreDescription5V2 =
@@ -349,11 +347,8 @@ public class PrivacySandboxDialogNoticeROW extends ChromeDialog
                             }
                         };
                 mThinWebView =
-                        PrivacySandboxDialogController.createThinWebView(
-                                mWebContents,
-                                mProfile,
-                                mActivityWindowAndroid,
-                                getPrivacyPolicyUrl());
+                        PrivacySandboxDialogController.createPrivacyPolicyThinWebView(
+                                mWebContents, mProfile, mActivityWindowAndroid);
             }
         }
     }

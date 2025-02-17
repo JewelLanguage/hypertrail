@@ -12,8 +12,8 @@
 #include "base/test/test_future.h"
 #include "base/types/expected.h"
 #include "build/build_config.h"
-#include "chrome/browser/apps/link_capturing/link_capturing_features.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
+#include "chrome/browser/web_applications/link_capturing_features.h"
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_tab_helper.h"
@@ -52,8 +52,9 @@ std::vector<base::test::FeatureRefAndParams> GetFeaturesToEnableLinkCapturingUX(
     return {{::features::kPwaNavigationCapturing,
              {{::features::kNavigationCapturingDefaultState.name,
                "reimpl_default_off"}}}};
+  } else {
+    return {{}, {}};
   }
-  return {{::apps::features::kLinkCapturingUiUpdate, {}}};
 #else
   // TODO(crbug.com/351775835): Integrate testing for all enum states of
   // `CapturingState`.
@@ -84,8 +85,6 @@ std::string ToString(LinkCapturingFeatureVersion version) {
     case LinkCapturingFeatureVersion::kV2DefaultOff:
       return "V2DefaultOff";
 #if !BUILDFLAG(IS_CHROMEOS)
-    case LinkCapturingFeatureVersion::kV1DefaultOn:
-      return "V1DefaultOn";
     case LinkCapturingFeatureVersion::kV2DefaultOn:
       return "V2DefaultOn";
 #endif
@@ -108,23 +107,11 @@ std::vector<base::test::FeatureRefAndParams> GetFeaturesToEnableLinkCapturingUX(
       return GetFeaturesToEnableLinkCapturingUX(
           /*override_captures_by_default=*/false, /*use_v2=*/true);
 #if !BUILDFLAG(IS_CHROMEOS)
-    case LinkCapturingFeatureVersion::kV1DefaultOn:
-      return GetFeaturesToEnableLinkCapturingUX(
-          /*override_captures_by_default=*/true, /*use_v2=*/false);
     case LinkCapturingFeatureVersion::kV2DefaultOn:
       return GetFeaturesToEnableLinkCapturingUX(
           /*override_captures_by_default=*/true, /*use_v2=*/true);
 #endif
   }
-}
-
-std::vector<base::test::FeatureRef> GetFeaturesToDisableLinkCapturingUX() {
-  CHECK_IS_TEST();
-#if BUILDFLAG(IS_CHROMEOS)
-  return {::apps::features::kLinkCapturingUiUpdate};
-#else
-  return {::features::kPwaNavigationCapturing};
-#endif  // BUILDFLAG(IS_CHROMEOS)
 }
 
 base::expected<void, std::string> EnableLinkCapturingByUser(

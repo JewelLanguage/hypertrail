@@ -29,6 +29,7 @@ namespace http://www.w3.org/1999/xhtml
     property animate
     property append
     property appendChild
+    property ariaActiveDescendantElement
     property ariaAtomic
     property ariaAutoComplete
     property ariaBrailleLabel
@@ -39,15 +40,21 @@ namespace http://www.w3.org/1999/xhtml
     property ariaColIndex
     property ariaColIndexText
     property ariaColSpan
+    property ariaControlsElements
     property ariaCurrent
+    property ariaDescribedByElements
     property ariaDescription
+    property ariaDetailsElements
     property ariaDisabled
+    property ariaErrorMessageElements
     property ariaExpanded
+    property ariaFlowToElements
     property ariaHasPopup
     property ariaHidden
     property ariaInvalid
     property ariaKeyShortcuts
     property ariaLabel
+    property ariaLabelledByElements
     property ariaLevel
     property ariaLive
     property ariaModal
@@ -541,7 +548,9 @@ html element details
 html element dfn
 html element dialog
     property close
+    property closedBy
     property open
+    property requestClose
     property returnValue
     property show
     property showModal
@@ -1256,6 +1265,7 @@ namespace http://www.w3.org/2000/svg
     property animate
     property append
     property appendChild
+    property ariaActiveDescendantElement
     property ariaAtomic
     property ariaAutoComplete
     property ariaBrailleLabel
@@ -1266,15 +1276,21 @@ namespace http://www.w3.org/2000/svg
     property ariaColIndex
     property ariaColIndexText
     property ariaColSpan
+    property ariaControlsElements
     property ariaCurrent
+    property ariaDescribedByElements
     property ariaDescription
+    property ariaDetailsElements
     property ariaDisabled
+    property ariaErrorMessageElements
     property ariaExpanded
+    property ariaFlowToElements
     property ariaHasPopup
     property ariaHidden
     property ariaInvalid
     property ariaKeyShortcuts
     property ariaLabel
+    property ariaLabelledByElements
     property ariaLevel
     property ariaLive
     property ariaModal

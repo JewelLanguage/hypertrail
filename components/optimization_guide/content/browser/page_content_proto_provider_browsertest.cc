@@ -250,7 +250,7 @@ IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest,
   EXPECT_EQ(iframe.content_attributes().attribute_type(),
             optimization_guide::proto::CONTENT_ATTRIBUTE_IFRAME);
   const auto& iframe_data = iframe.content_attributes().iframe_data();
-  AssertValidURL(iframe_data.url(), "a.com");
+  EXPECT_TRUE(iframe_data.url().empty());
   EXPECT_FALSE(iframe_data.likely_ad_frame());
 
   EXPECT_EQ(iframe.children_nodes().size(), 1);
@@ -266,7 +266,7 @@ IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest,
   EXPECT_EQ(iframe.content_attributes().attribute_type(),
             optimization_guide::proto::CONTENT_ATTRIBUTE_IFRAME);
   const auto& iframe_data = iframe.content_attributes().iframe_data();
-  AssertValidURL(iframe_data.url(), "a.com");
+  EXPECT_TRUE(iframe_data.url().empty());
   EXPECT_FALSE(iframe_data.likely_ad_frame());
 
   EXPECT_EQ(iframe.children_nodes().size(), 1);
@@ -296,11 +296,18 @@ IN_PROC_BROWSER_TEST_P(PageContentProtoProviderBrowserTestSiteIsolation,
 
   constexpr char kMainFrame[] =
       "OptimizationGuide.AIPageContent.RendererLatency.MainFrame";
+  constexpr char kMainFrameSchedulingDelay[] =
+      "OptimizationGuide.AIPageContent.RendererLatencyWithSchedulingDelay."
+      "Critical.MainFrame";
   constexpr char kRemoteSubframe[] =
       "OptimizationGuide.AIPageContent.RendererLatency.RemoteSubFrame";
+  constexpr char kRemoteSubframeSchedulingDelay[] =
+      "OptimizationGuide.AIPageContent.RendererLatencyWithSchedulingDelay."
+      "Critical.RemoteSubFrame";
   constexpr char kTotal[] = "OptimizationGuide.AIPageContent.TotalLatency";
 
   tester.ExpectTotalCount(kMainFrame, 1);
+  tester.ExpectTotalCount(kMainFrameSchedulingDelay, 1);
   tester.ExpectTotalCount(kTotal, 1);
 
 #if BUILDFLAG(IS_ANDROID)
@@ -310,6 +317,8 @@ IN_PROC_BROWSER_TEST_P(PageContentProtoProviderBrowserTestSiteIsolation,
   }
 #endif
   tester.ExpectTotalCount(kRemoteSubframe, EnableCrossSiteFrames() ? 1 : 0);
+  tester.ExpectTotalCount(kRemoteSubframeSchedulingDelay,
+                          EnableCrossSiteFrames() ? 1 : 0);
 }
 
 IN_PROC_BROWSER_TEST_P(PageContentProtoProviderBrowserTestSiteIsolation,
@@ -330,12 +339,23 @@ IN_PROC_BROWSER_TEST_P(PageContentProtoProviderBrowserTestSiteIsolation,
   ASSERT_EQ(page_content().root_node().children_nodes().size(), 1);
 
   constexpr char kMainFrame[] =
-      "OptimizationGuide.AIPageContent.IdleDeadlineExceedDuration.MainFrame";
+      "OptimizationGuide.AIPageContent.RendererLatency.MainFrame";
+  constexpr char kMainFrameSchedulingDelay[] =
+      "OptimizationGuide.AIPageContent.RendererLatencyWithSchedulingDelay."
+      "NonCritical.MainFrame";
   constexpr char kRemoteSubframe[] =
-      "OptimizationGuide.AIPageContent.IdleDeadlineExceedDuration."
-      "RemoteSubFrame";
+      "OptimizationGuide.AIPageContent.RendererLatency.RemoteSubFrame";
+  constexpr char kRemoteSubframeSchedulingDelay[] =
+      "OptimizationGuide.AIPageContent.RendererLatencyWithSchedulingDelay."
+      "Critical.RemoteSubFrame";
+  constexpr char kRemoteSubframeSchedulingDelayNonCritical[] =
+      "OptimizationGuide.AIPageContent.RendererLatencyWithSchedulingDelay."
+      "NonCritical.RemoteSubFrame";
+  constexpr char kTotal[] = "OptimizationGuide.AIPageContent.TotalLatency";
 
   tester.ExpectTotalCount(kMainFrame, 1);
+  tester.ExpectTotalCount(kMainFrameSchedulingDelay, 1);
+  tester.ExpectTotalCount(kTotal, 1);
 
 #if BUILDFLAG(IS_ANDROID)
   // TODO(crbug.com/384585933): Enable this assert on Android.
@@ -345,7 +365,10 @@ IN_PROC_BROWSER_TEST_P(PageContentProtoProviderBrowserTestSiteIsolation,
 #endif
   // TODO(crbug.com/389737599): We should have a metric for subframes once they
   // can use off critical path scheduling.
-  tester.ExpectTotalCount(kRemoteSubframe, 0);
+  tester.ExpectTotalCount(kRemoteSubframeSchedulingDelayNonCritical, 0);
+  tester.ExpectTotalCount(kRemoteSubframe, EnableCrossSiteFrames() ? 1 : 0);
+  tester.ExpectTotalCount(kRemoteSubframeSchedulingDelay,
+                          EnableCrossSiteFrames() ? 1 : 0);
 }
 
 // Ensure that clip from an ancestor frame is included in visible rect

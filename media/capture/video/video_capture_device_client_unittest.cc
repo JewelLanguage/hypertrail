@@ -17,7 +17,6 @@
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "components/viz/common/resources/shared_image_format.h"
 #include "components/viz/test/test_context_provider.h"
 #include "media/base/limits.h"
@@ -38,9 +37,9 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "media/capture/video/chromeos/video_capture_jpeg_decoder.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 using ::testing::_;
 using ::testing::AtLeast;
@@ -62,17 +61,15 @@ namespace {
 constexpr auto si_usage = gpu::SHARED_IMAGE_USAGE_CPU_WRITE_ONLY |
                           gpu::SHARED_IMAGE_USAGE_DISPLAY_READ;
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 std::unique_ptr<VideoCaptureJpegDecoder> ReturnNullPtrAsJpecDecoder() {
   return nullptr;
 }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
-class FakeVideoEffectsManagerImpl : public media::mojom::VideoEffectsManager {
+class FakeVideoEffectsManagerImpl
+    : public media::mojom::ReadonlyVideoEffectsManager {
   void GetConfiguration(GetConfigurationCallback callback) override {}
-  void SetConfiguration(
-      media::mojom::VideoEffectsConfigurationPtr configuration,
-      SetConfigurationCallback callback) override {}
   void AddObserver(
       ::mojo::PendingRemote<media::mojom::VideoEffectsConfigurationObserver>
           observer) override {}
@@ -163,7 +160,7 @@ class VideoCaptureDeviceClientTest : public ::testing::Test {
   void Cleanup() {
     receiver_ = nullptr;
     device_client_.reset();
-    video_effects_manager_receiver_.reset();
+    processor_readonly_manager_receiver_.reset();
 
     // VideoCaptureDeviceClient's dtor submits a task to destroy its effects
     // processor. In order to avoid LSAN warnings, we need to wait for that task
@@ -180,8 +177,11 @@ class VideoCaptureDeviceClientTest : public ::testing::Test {
       fake_video_effects_processor_;
   FakeVideoEffectsManagerImpl fake_video_effects_manager_;
 
-  mojo::Receiver<media::mojom::VideoEffectsManager>
-      video_effects_manager_receiver_{&fake_video_effects_manager_};
+  mojo::Receiver<media::mojom::ReadonlyVideoEffectsManager>
+      processor_readonly_manager_receiver_{&fake_video_effects_manager_};
+
+  mojo::Receiver<media::mojom::ReadonlyVideoEffectsManager>
+      readonly_video_effects_manager_receiver_{&fake_video_effects_manager_};
 
   // Must outlive `receiver_`.
   std::unique_ptr<VideoCaptureDeviceClient> device_client_;
@@ -193,7 +193,7 @@ class VideoCaptureDeviceClientTest : public ::testing::Test {
     receiver_ = controller.get();
     test_sii_ = base::MakeRefCounted<gpu::TestSharedImageInterface>();
     test_sii_->UseTestGMBInSharedImageCreationWithBufferUsage();
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     device_client_ = std::make_unique<VideoCaptureDeviceClient>(
         std::move(controller), buffer_pool,
         base::BindRepeating(&ReturnNullPtrAsJpecDecoder));
@@ -204,16 +204,21 @@ class VideoCaptureDeviceClientTest : public ::testing::Test {
     mojo::PendingRemote<video_effects::mojom::VideoEffectsProcessor>
         processor_remote(processor_receiver.InitWithNewPipeAndPassRemote());
 
-    mojo::PendingRemote<mojom::VideoEffectsManager> manager_remote =
-        video_effects_manager_receiver_.BindNewPipeAndPassRemote();
+    mojo::PendingRemote<mojom::ReadonlyVideoEffectsManager> manager_remote =
+        processor_readonly_manager_receiver_.BindNewPipeAndPassRemote();
 
     fake_video_effects_processor_.emplace(std::move(processor_receiver),
                                           std::move(manager_remote));
 
+    mojo::PendingRemote<media::mojom::ReadonlyVideoEffectsManager>
+        readonly_effects_manager_remote =
+            readonly_video_effects_manager_receiver_.BindNewPipeAndPassRemote();
+
     device_client_ = std::make_unique<VideoCaptureDeviceClient>(
         std::move(controller), buffer_pool,
-        media::VideoEffectsContext(std::move(processor_remote)));
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+        media::VideoEffectsContext(std::move(processor_remote),
+                                   std::move(readonly_effects_manager_remote)));
+#endif  // BUILDFLAG(IS_CHROMEOS)
   }
 };
 
@@ -605,7 +610,7 @@ TEST_F(VideoCaptureDeviceClientTest, CheckRotationsAndCrops) {
 TEST_F(VideoCaptureDeviceClientTest, DestructionClosesVideoEffectsManager) {
   InitWithSharedMemoryBufferPool();
   base::RunLoop run_loop;
-  video_effects_manager_receiver_.set_disconnect_handler(
+  processor_readonly_manager_receiver_.set_disconnect_handler(
       run_loop.QuitClosure());
   receiver_ = nullptr;
   EXPECT_NO_FATAL_FAILURE(device_client_.reset());

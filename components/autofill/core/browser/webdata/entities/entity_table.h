@@ -28,8 +28,8 @@ class EntityInstance;
 // entities             Contains entity instances.
 //
 //   guid               Uniquely identifies the entity instance (primary key).
-//   type               The instance's entity type, represented as integer
-//                      value of the EntityTypeName.
+//   type               The instance's entity type, represented as string
+//                      EntityType::name_as_string().
 //   nickname           The instance's string nickname.
 //   date_modified      The date on which this instance was last modified, in
 //                      time_t.
@@ -38,9 +38,9 @@ class EntityInstance;
 //                      from the `entities` table.
 //
 //   entity_guid        Identifies owning entity instances (it's a foreign key).
-//   type               The instance's attribute type, represented as integer
-//                      value of the AttributeTypeName.
-//   value              The string value of the attribute.
+//   type               The instance's attribute type, represented as string
+//                      AttributeType::name_as_string().
+//   value_encrypted    The encrypted string value of the attribute.
 //   context            The format string of the attribute.
 // -----------------------------------------------------------------------------
 class EntityTable : public WebDatabaseTable {
@@ -57,20 +57,15 @@ class EntityTable : public WebDatabaseTable {
   bool CreateTablesIfNecessary() override;
   bool MigrateToVersion(int version, bool* update_compatible_version) override;
 
-  // Returns true if adding the entity succeeded.
-  // It does not validate the entity itself, but it does check that no such
-  // entity with the same GUID exists.
-  bool AddEntityInstance(const EntityInstance& entity);
-
   // Returns true if removing the entity and then re-adding it is successful.
-  bool UpdateEntityInstance(const EntityInstance& entity);
+  bool AddOrUpdateEntityInstance(const EntityInstance& entity);
 
   // Returns true if removing the entity succeeded, even if there were zero or
   // multiple matches.
   bool RemoveEntityInstance(const base::Uuid& guid);
 
   // Removes all stored entities and their attributes that were modified in the
-  // given range.
+  // given range [`delete_begin`, `delete_end`).
   //
   // Prefer this function over iterating over GetEntityInstances() and calling
   // RemoveEntityInstance() because this function also removes invalid entities.
@@ -86,6 +81,14 @@ class EntityTable : public WebDatabaseTable {
   // - At least one of the necessary-attributes constraints from the schema is
   //   satisfied.
   std::vector<EntityInstance> GetEntityInstances() const;
+
+ private:
+  // Returns true if adding the entity succeeded.
+  // It does not validate the entity itself, but it does check that no such
+  // entity with the same GUID exists.
+  bool AddEntityInstance(const EntityInstance& entity);
+
+  friend class EntityTableTestApi;
 };
 
 }  // namespace autofill

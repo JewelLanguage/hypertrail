@@ -110,6 +110,11 @@ chromium-metrics-reviews@google.com.
 
 <!-- LINT.ThenChange(/components/sync_bookmarks/bookmark_model_merger.cc:BookmarksGUIDDuplicates) -->
 
+<enum name="BooleanIsFirstSync">
+  <int value="0" label="Not first sync"/>
+  <int value="1" label="First sync"/>
+</enum>
+
 <enum name="BooleanIsSignedIn">
   <int value="0" label="Not signed in"/>
   <int value="1" label="Signed in"/>
@@ -165,6 +170,16 @@ chromium-metrics-reviews@google.com.
 
 <!-- LINT.ThenChange(/components/sync_bookmarks/bookmark_specifics_conversions.cc:InvalidBookmarkSpecificsError) -->
 
+<!-- LINT.IfChange(NudgedUpdateResult) -->
+
+<enum name="NudgedUpdateResult">
+  <int value="0" label="Success"/>
+  <int value="1" label="Empty response"/>
+  <int value="2" label="Failed to download data"/>
+</enum>
+
+<!-- LINT.ThenChange(/components/sync/engine/data_type_worker.cc:NudgedUpdateResult) -->
+
 <!-- LINT.IfChange(OutgoingPasswordSharingInvitationCommitError) -->
 
 <enum name="OutgoingPasswordSharingInvitationCommitError">
@@ -192,11 +207,19 @@ chromium-metrics-reviews@google.com.
 <!-- LINT.IfChange(PaymentsAccountStorageUponConfiguration) -->
 
 <enum name="PaymentsAccountStorageUponConfiguration">
-  <int value="0" label="Signed in implicitly with in-memory storage"/>
+  <int value="0"
+      label="(deprecated) Signed in implicitly with in-memory storage"/>
   <int value="1" label="Signed in explicitly with on-disk storage"/>
   <int value="2" label="Signed in explicitly with in-memory storage"/>
   <int value="3"
+      label="(deprecated) Signed in implicitly with on-disk storage"/>
+  <int value="4" label="Signed in implicitly with in-memory storage"/>
+  <int value="5"
       label="(UNEXPECTED) Signed in implicitly with on-disk storage"/>
+  <int value="6"
+      label="Signed in with Sync-the-feature on with on-disk storage"/>
+  <int value="7"
+      label="Signed in with Sync-the-feature on with in-memory storage"/>
 </enum>
 
 <!-- LINT.ThenChange(/components/browser_sync/common_controller_builder.cc:PaymentsAccountStorageUponConfiguration) -->
@@ -332,6 +355,8 @@ chromium-metrics-reviews@google.com.
   <int value="78" label="LastPlusAddressFillingTime"/>
   <int value="79" label="SafeBrowsingEnhanced"/>
   <int value="80" label="FacilitatedPaymentsEwallet"/>
+  <int value="81" label="AutofillBnplEnabled"/>
+  <int value="82" label="AutofillHasSeenBnpl"/>
 <!-- LINT.ThenChange(/components/sync_preferences/common_syncable_prefs_database.cc:CommonSyncablePref)-->
 
 <!-- LINT.IfChange(ChromeSyncablePref) -->
@@ -1093,6 +1118,18 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Unknown reason"/>
 </enum>
 
+<!-- LINT.IfChange(SyncMetadataConsistency) -->
+
+<enum name="SyncMetadataConsistency">
+  <int value="0" label="Metadata consistent"/>
+  <int value="1" label="Cache guid mismatch"/>
+  <int value="2" label="Data type id mismatch"/>
+  <int value="3" label="Empty persisted authenticated account id"/>
+  <int value="4" label="Authenticated account id mismatch"/>
+</enum>
+
+<!-- LINT.ThenChange(/components/sync/model/client_tag_based_data_type_processor.cc:SyncMetadataConsistency) -->
+
 <!-- LINT.IfChange(SyncPassphraseType) -->
 
 <enum name="SyncPassphraseType">
@@ -1236,29 +1273,6 @@ chromium-metrics-reviews@google.com.
 
 <!-- LINT.ThenChange(/components/trusted_vault/proto/local_trusted_vault.proto:TrustedVaultDegradedRecoverabilityValue) -->
 
-<!-- LINT.IfChange(TrustedVaultDownloadKeysStatus) -->
-
-<enum name="TrustedVaultDownloadKeysStatus">
-  <int value="0" label="Success"/>
-  <int value="1" label="Member not found or corrupted (deprecated)"/>
-  <int value="2" label="No new keys"/>
-  <int value="3" label="Key proof verification failed"/>
-  <int value="4" label="Access token fetching failed"/>
-  <int value="5" label="Other error"/>
-  <int value="6" label="Member not found"/>
-  <int value="7" label="Membership not found"/>
-  <int value="8" label="Membership corrupted"/>
-  <int value="9" label="Membership empty"/>
-  <int value="10" label="No primary account"/>
-  <int value="11" label="Device not registered"/>
-  <int value="12" label="Throttled client side"/>
-  <int value="13" label="Corrupted local device registration"/>
-  <int value="14" label="Aborted"/>
-  <int value="15" label="Network error"/>
-</enum>
-
-<!-- LINT.ThenChange(/components/trusted_vault/trusted_vault_histograms.h:TrustedVaultDownloadKeysStatus) -->
-
 <!-- LINT.IfChange(TrustedVaultFetchKeysAttempt) -->
 
 <enum name="TrustedVaultFetchKeysAttempt">
@@ -1276,16 +1290,6 @@ chromium-metrics-reviews@google.com.
 </enum>
 
 <!-- LINT.ThenChange(/components/trusted_vault/trusted_vault_histograms.h:TrustedVaultHintDegradedRecoverabilityChangedReason) -->
-
-<!-- LINT.IfChange(TrustedVaultRecoverabilityStatus) -->
-
-<enum name="TrustedVaultRecoverabilityStatus">
-  <int value="0" label="Not degraded"/>
-  <int value="1" label="Degraded"/>
-  <int value="2" label="Error"/>
-</enum>
-
-<!-- LINT.ThenChange(/components/trusted_vault/trusted_vault_connection.h:TrustedVaultRecoverabilityStatus) -->
 
 <!-- LINT.IfChange(TrustedVaultUserActionTrigger) -->
 

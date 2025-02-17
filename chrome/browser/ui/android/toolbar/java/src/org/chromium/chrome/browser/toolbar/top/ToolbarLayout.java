@@ -287,13 +287,6 @@ public abstract class ToolbarLayout extends FrameLayout
     @CallSuper
     protected void onMenuButtonDisabled() {}
 
-    // Set hover tooltip text for buttons shared between phones and tablets.
-    public void setTooltipTextForToolbarButtons() {
-        // Set hover tooltip text for home.
-        setTooltipText(
-                getHomeButton(), getContext().getString(R.string.accessibility_toolbar_btn_home));
-    }
-
     /**
      * Set hover tooltip text for buttons shared between phones and tablets. @TODO: Remove and use
      * the method in UiUtils.java instead once JaCoCo issue is resolved.
@@ -601,10 +594,6 @@ public abstract class ToolbarLayout extends FrameLayout
 
     protected abstract CaptureReadinessResult isReadyForTextureCapture();
 
-    boolean setForceTextureCapture(boolean forceTextureCapture) {
-        return false;
-    }
-
     void setLayoutUpdater(Runnable layoutUpdater) {}
 
     /**
@@ -649,7 +638,8 @@ public abstract class ToolbarLayout extends FrameLayout
                 && event.getToolType(0) == MotionEvent.TOOL_TYPE_MOUSE) {
             int action = event.getActionMasked();
             if (action == MotionEvent.ACTION_BUTTON_PRESS
-                    || action == MotionEvent.ACTION_BUTTON_RELEASE) {
+                    || action == MotionEvent.ACTION_BUTTON_RELEASE
+                    || action == MotionEvent.ACTION_SCROLL) {
                 return true;
             }
         }

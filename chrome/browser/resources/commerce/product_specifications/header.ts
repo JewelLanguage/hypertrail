@@ -9,6 +9,7 @@ import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import 'chrome://resources/cr_elements/icons.html.js';
 import './header_menu.js';
 
+import {ProductSpecificationsBrowserProxyImpl} from 'chrome://resources/cr_components/commerce/product_specifications_browser_proxy.js';
 import type {CrIconButtonElement} from 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
 import type {CrInputElement} from 'chrome://resources/cr_elements/cr_input/cr_input.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
@@ -37,9 +38,15 @@ export class HeaderElement extends CrLitElement {
 
   static override get properties() {
     return {
-      menuButtonDisabled: {
+      // Whether the menu button and subtitle input are disabled.
+      disabled: {
         type: Boolean,
-        value: false,
+        reflect: true,
+      },
+
+      isPageTitleClickable: {
+        type: Boolean,
+        reflect: true,
       },
 
       subtitle: {
@@ -49,23 +56,20 @@ export class HeaderElement extends CrLitElement {
 
       showingMenu_: {
         type: Boolean,
-        value: false,
         reflect: true,
       },
 
-      showingInput_: {
-        type: Boolean,
-        value: false,
-      },
+      showingInput_: {type: Boolean},
     };
   }
 
-  menuButtonDisabled: boolean;
+  disabled: boolean = false;
+  isPageTitleClickable: boolean = false;
   subtitle: string|null = null;
 
-  protected showingMenu_: boolean;
-  protected showingInput_: boolean;
-  protected pageName_: string;
+  protected showingMenu_: boolean = false;
+  protected showingInput_: boolean = false;
+  protected pageName_: string = '';
   protected maxNameLength_: number = loadTimeData.getInteger('maxNameLength');
 
   override render() {
@@ -82,11 +86,15 @@ export class HeaderElement extends CrLitElement {
   }
 
   private get input_(): CrInputElement|null {
-    const input = this.shadowRoot!.querySelector('cr-input');
+    const input = this.shadowRoot.querySelector('cr-input');
     return input;
   }
 
   protected async onRenaming_() {
+    if (this.disabled) {
+      return;
+    }
+
     this.showingInput_ = true;
     await this.updateComplete;
     this.input_?.focus();
@@ -132,6 +140,14 @@ export class HeaderElement extends CrLitElement {
       event.stopPropagation();
       this.onRenaming_();
     }
+  }
+
+  protected onPageTitleClick_() {
+    if (!this.isPageTitleClickable) {
+      return;
+    }
+
+    ProductSpecificationsBrowserProxyImpl.getInstance().showComparePage(false);
   }
 }
 

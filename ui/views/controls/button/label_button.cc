@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <string_view>
 #include <utility>
 
 #include "base/lazy_instance.h"
@@ -19,6 +20,7 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
+#include "ui/color/color_variant.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/animation/throb_animation.h"
 #include "ui/gfx/canvas.h"
@@ -49,7 +51,7 @@ constexpr Button::ButtonState kEnabledStates[] = {
 
 LabelButton::LabelButton(
     PressedCallback callback,
-    const std::u16string& text,
+    std::u16string_view text,
     int button_context,
     std::unique_ptr<LabelButtonImageContainer> image_container)
     : Button(std::move(callback)),
@@ -127,11 +129,11 @@ bool LabelButton::HasImage(ButtonState state) const {
          !button_state_image_models_[state]->IsEmpty();
 }
 
-const std::u16string& LabelButton::GetText() const {
+std::u16string_view LabelButton::GetText() const {
   return label_->GetText();
 }
 
-void LabelButton::SetText(const std::u16string& text) {
+void LabelButton::SetText(std::u16string_view text) {
   SetTextInternal(text);
 }
 
@@ -634,8 +636,8 @@ void LabelButton::StateChanged(ButtonState old_state) {
   VisualStateChanged();
 }
 
-void LabelButton::SetTextInternal(const std::u16string& text) {
-  GetViewAccessibility().SetName(text);
+void LabelButton::SetTextInternal(std::u16string_view text) {
+  GetViewAccessibility().SetName(std::u16string(text));
   label_->SetText(text);
 
   // Setting text cancels ShrinkDownThenClearText().
@@ -724,15 +726,17 @@ void LabelButton::ResetLabelEnabledColor() {
   if (GetState() == STATE_DISABLED) {
     return;
   }
-  const absl::variant<SkColor, ui::ColorId>& color =
-      button_state_colors_[GetState()];
-  if (absl::holds_alternative<SkColor>(color) &&
-      label_->GetEnabledColor() != absl::get<SkColor>(color)) {
-    label_->SetEnabledColor(absl::get<SkColor>(color));
-  } else if (absl::holds_alternative<ui::ColorId>(color)) {
-    // Omitting the check that the new color id differs from the existing color
-    // id, because the setter already does that check.
-    label_->SetEnabledColorId(absl::get<ui::ColorId>(color));
+
+  const auto& color_variant = button_state_colors_[GetState()];
+  if (color_variant) {
+    if (auto color = color_variant->GetSkColor();
+        color && color != label_->GetEnabledColor()) {
+      label_->SetEnabledColor(*color);
+    } else if (auto color_id = color_variant->GetColorId()) {
+      // Omitting the check that the new color id differs from the existing
+      // color id, because the setter already does that check.
+      label_->SetEnabledColorId(*color_id);
+    }
   }
 }
 
@@ -760,7 +764,7 @@ void LabelButtonActionViewInterface::ActionItemChangedImpl(
 }
 
 BEGIN_METADATA(LabelButton)
-ADD_PROPERTY_METADATA(std::u16string, Text)
+ADD_PROPERTY_METADATA(std::u16string_view, Text)
 ADD_PROPERTY_METADATA(gfx::HorizontalAlignment, HorizontalAlignment)
 ADD_PROPERTY_METADATA(gfx::Size, MinSize)
 ADD_PROPERTY_METADATA(gfx::Size, MaxSize)

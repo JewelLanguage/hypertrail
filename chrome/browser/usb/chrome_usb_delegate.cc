@@ -29,6 +29,7 @@
 #include "content/public/browser/page.h"
 #include "content/public/browser/render_frame_host.h"
 #include "services/device/public/mojom/usb_enumeration_options.mojom.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-shared.h"
 #include "third_party/blink/public/common/features_generated.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -336,7 +337,7 @@ bool ChromeUsbDelegate::HasDevicePermission(
     is_usb_unrestricted =
         frame &&
         frame->IsFeatureEnabled(
-            blink::mojom::PermissionsPolicyFeature::kUsbUnrestricted) &&
+            network::mojom::PermissionsPolicyFeature::kUsbUnrestricted) &&
         content::HasIsolatedContextCapability(frame);
   }
 

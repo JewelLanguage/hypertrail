@@ -30,6 +30,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/i18n/time_formatting.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
@@ -547,7 +548,7 @@ void GlanceablesTasksView::UpdateTasksInTaskList(
       l10n_util::GetStringFUTF16(
           IDS_GLANCEABLES_TASKS_SELECTED_LIST_ACCESSIBLE_NAME,
           base::UTF8ToUTF16(task_list_title)));
-  items_container_view()->NotifyAccessibilityEvent(
+  items_container_view()->NotifyAccessibilityEventDeprecated(
       ax::mojom::Event::kChildrenChanged,
       /*send_native_event=*/true);
 

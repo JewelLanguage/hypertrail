@@ -57,7 +57,7 @@ class IsolatedWebAppBrowserTestHarness : public WebAppBrowserTestBase {
 
  protected:
   std::unique_ptr<net::EmbeddedTestServer> CreateAndStartServer(
-      const base::FilePath::StringPieceType& chrome_test_data_relative_root);
+      base::FilePath::StringViewType chrome_test_data_relative_root);
   IsolatedWebAppUrlInfo InstallDevModeProxyIsolatedWebApp(
       const url::Origin& origin);
   content::RenderFrameHost* OpenApp(const webapps::AppId& app_id,
@@ -104,7 +104,7 @@ class UpdateDiscoveryTaskResultWaiter
 };
 
 std::unique_ptr<net::EmbeddedTestServer> CreateAndStartDevServer(
-    const base::FilePath::StringPieceType& chrome_test_data_relative_root);
+    base::FilePath::StringViewType chrome_test_data_relative_root);
 
 IsolatedWebAppUrlInfo InstallDevModeProxyIsolatedWebApp(
     Profile* profile,
@@ -118,20 +118,6 @@ void CreateIframe(content::RenderFrameHost* parent_frame,
                   const std::string& iframe_id,
                   const GURL& url,
                   const std::string& permissions_policy);
-
-// Adds an Isolated Web App to the WebAppRegistrar. The IWA will have an empty
-// filepath for |IsolatedWebAppLocation|.
-webapps::AppId AddDummyIsolatedAppToRegistry(
-    Profile* profile,
-    const GURL& start_url,
-    const std::string& name,
-    const IsolationData& isolation_data =
-        IsolationData::Builder(IwaStorageOwnedBundle{/*dir_name_ascii=*/"",
-                                                     /*dev_mode=*/false},
-                               base::Version("1.0.0"))
-            .Build(),
-    webapps::WebappInstallSource install_source =
-        webapps::WebappInstallSource::IWA_GRAPHICAL_INSTALLER);
 
 // Simulates navigating `web_contents` main frame to the provided isolated-app:
 // URL for unit tests. `TestWebContents::NavigateAndCommit` won't work for IWAs

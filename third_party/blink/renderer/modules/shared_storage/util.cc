@@ -7,9 +7,9 @@
 #include "base/feature_list.h"
 #include "base/memory/scoped_refptr.h"
 #include "components/aggregation_service/aggregation_coordinator_utils.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/shared_storage/shared_storage_utils.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
 #include "third_party/blink/public/mojom/shared_storage/shared_storage.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_throw_dom_exception.h"
@@ -72,7 +72,7 @@ bool CheckSharedStoragePermissionsPolicy(ExecutionContext& execution_context,
   }
 
   if (!execution_context.IsFeatureEnabled(
-          mojom::blink::PermissionsPolicyFeature::kSharedStorage)) {
+          network::mojom::PermissionsPolicyFeature::kSharedStorage)) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kInvalidAccessError,
         "The \"shared-storage\" Permissions Policy denied the method on "
@@ -169,6 +169,23 @@ bool CheckPrivateAggregationConfig(
     }
     out_filtering_id_max_bytes = static_cast<uint32_t>(
         options.privateAggregationConfig()->filteringIdMaxBytes());
+  }
+
+  if (options.privateAggregationConfig()->hasMaxContributions() &&
+      base::FeatureList::IsEnabled(
+          features::kPrivateAggregationApiMaxContributions)) {
+    const auto requested_max_contributions =
+        options.privateAggregationConfig()->maxContributions();
+    if (requested_max_contributions == 0) {
+      resolver.Reject(V8ThrowDOMException::CreateOrEmpty(
+          script_state.GetIsolate(), DOMExceptionCode::kDataError,
+          "maxContributions must be positive"));
+      return false;
+    }
+    const uint16_t max_contributions_clamped =
+        base::MakeClampedNum(requested_max_contributions);
+    out_private_aggregation_config->max_contributions =
+        max_contributions_clamped;
   }
 
   return true;

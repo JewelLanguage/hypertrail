@@ -2,8 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/contextual_cueing/contextual_cueing_enums.h"
 #include "chrome/browser/contextual_cueing/contextual_cueing_features.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
@@ -20,11 +22,14 @@
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/optimization_guide/core/optimization_metadata.h"
+#include "components/optimization_guide/proto/contextual_cueing_metadata.pb.h"
 #include "components/optimization_guide/proto/icon_view_metadata.pb.h"
 #include "components/signin/public/identity_manager/account_capabilities_test_mutator.h"
+#include "components/ukm/test_ukm_recorder.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 
 #if BUILDFLAG(ENABLE_GLIC)
 
@@ -39,10 +44,17 @@ class FakeGlicNudgeObserver : public GlicNudgeObserver {
 class ContextualCueingHelperBrowserTest : public InProcessBrowserTest {
  public:
   ContextualCueingHelperBrowserTest() {
-    scoped_feature_list_.InitWithFeatures(
-        {features::kGlic, features::kTabstripComboButton,
-         contextual_cueing::kContextualCueing},
-        {});
+    scoped_feature_list_.InitWithFeaturesAndParameters(
+        // Disable feature engagement logic.
+        {{contextual_cueing::kContextualCueing,
+          {{"BackoffTime", "0h"},
+           {"BackoffMultiplierBase", "0.0"},
+           {"NudgeCapTime", "0h"},
+           {"NudgeCapCount", "10"},
+           {"MinPageCountBetweenNudges", "0"}}},
+         {features::kGlic, {}},
+         {features::kTabstripComboButton, {}}},
+        /*disabled_features=*/{});
   }
 
   void SetUpOnMainThread() override {
@@ -61,16 +73,20 @@ class ContextualCueingHelperBrowserTest : public InProcessBrowserTest {
                                     base::Unretained(this)));
   }
 
-  void SetUpEnabledHints() {
-    optimization_guide::proto::OptimizationGuideIconViewMetadata
-        icon_view_metadata;
-    icon_view_metadata.set_cue_label("test label");
+  void SetUpEnabledHints(
+      std::optional<optimization_guide::proto::GlicContextualCueingMetadata>
+          override_metadata = std::nullopt) {
+    optimization_guide::proto::GlicContextualCueingMetadata cueing_metadata;
+    cueing_metadata.add_cueing_configurations()->set_cue_label("test label");
+    if (override_metadata) {
+      cueing_metadata = *override_metadata;
+    }
     optimization_guide::OptimizationMetadata metadata;
-    metadata.SetAnyMetadataForTesting(icon_view_metadata);
+    metadata.SetAnyMetadataForTesting(cueing_metadata);
     OptimizationGuideKeyedServiceFactory::GetForProfile(browser()->profile())
-        ->AddHintForTesting(
-            GURL("https://enabled.com/"),
-            optimization_guide::proto::OPTIMIZATION_GUIDE_ICON_VIEW, metadata);
+        ->AddHintForTesting(GURL("https://enabled.com/"),
+                            optimization_guide::proto::GLIC_CONTEXTUAL_CUEING,
+                            metadata);
   }
 
   void EnableSignIn() {
@@ -104,6 +120,9 @@ class ContextualCueingHelperBrowserTest : public InProcessBrowserTest {
 
 IN_PROC_BROWSER_TEST_F(ContextualCueingHelperBrowserTest,
                        TestCueLabelDisplayed) {
+  base::HistogramTester histogram_tester;
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
+
   EnableSignIn();
   SetUpEnabledHints();
 
@@ -115,6 +134,140 @@ IN_PROC_BROWSER_TEST_F(ContextualCueingHelperBrowserTest,
       WindowOpenDisposition::NEW_FOREGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
   EXPECT_EQ("test label", nudge_observer.last_nudge_label_);
+
+  histogram_tester.ExpectUniqueSample(
+      "ContextualCueing.NudgeDecision.GlicContextualCueing",
+      contextual_cueing::NudgeDecision::kSuccess, 1);
+
+  auto entries = ukm_recorder.GetEntriesByName(
+      ukm::builders::ContextualCueing_NudgeDecision::kEntryName);
+  EXPECT_EQ(1u, entries.size());
+  auto* entry = entries[0].get();
+  ukm_recorder.ExpectEntryMetric(
+      entry,
+      ukm::builders::ContextualCueing_NudgeDecision::kOptimizationTypeName,
+      static_cast<int64_t>(optimization_guide::proto::GLIC_CONTEXTUAL_CUEING));
+  ukm_recorder.ExpectEntryMetric(
+      entry, ukm::builders::ContextualCueing_NudgeDecision::kNudgeDecisionName,
+      static_cast<int64_t>(contextual_cueing::NudgeDecision::kSuccess));
+}
+
+IN_PROC_BROWSER_TEST_F(ContextualCueingHelperBrowserTest, TestCueNotAvailable) {
+  base::HistogramTester histogram_tester;
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
+
+  EnableSignIn();
+
+  FakeGlicNudgeObserver nudge_observer;
+  glic_nudge_controller()->AddObserver(&nudge_observer);
+
+  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL("https://enabled.com/"),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+  EXPECT_EQ("", nudge_observer.last_nudge_label_);
+
+  histogram_tester.ExpectUniqueSample(
+      "ContextualCueing.NudgeDecision.GlicContextualCueing",
+      contextual_cueing::NudgeDecision::kServerDataUnavailable, 1);
+
+  auto entries = ukm_recorder.GetEntriesByName(
+      ukm::builders::ContextualCueing_NudgeDecision::kEntryName);
+  EXPECT_EQ(1u, entries.size());
+  auto* entry = entries[0].get();
+  ukm_recorder.ExpectEntryMetric(
+      entry,
+      ukm::builders::ContextualCueing_NudgeDecision::kOptimizationTypeName,
+      static_cast<int64_t>(optimization_guide::proto::GLIC_CONTEXTUAL_CUEING));
+  ukm_recorder.ExpectEntryMetric(
+      entry, ukm::builders::ContextualCueing_NudgeDecision::kNudgeDecisionName,
+      static_cast<int64_t>(
+          contextual_cueing::NudgeDecision::kServerDataUnavailable));
+}
+
+IN_PROC_BROWSER_TEST_F(ContextualCueingHelperBrowserTest,
+                       TestServerDataMalformed) {
+  base::HistogramTester histogram_tester;
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
+
+  EnableSignIn();
+  optimization_guide::OptimizationMetadata metadata;
+  metadata.set_any_metadata(optimization_guide::proto::Any());
+  OptimizationGuideKeyedServiceFactory::GetForProfile(browser()->profile())
+      ->AddHintForTesting(GURL("https://enabled.com/"),
+                          optimization_guide::proto::GLIC_CONTEXTUAL_CUEING,
+                          metadata);
+
+  FakeGlicNudgeObserver nudge_observer;
+  glic_nudge_controller()->AddObserver(&nudge_observer);
+
+  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL("https://enabled.com/"),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+  EXPECT_EQ("", nudge_observer.last_nudge_label_);
+
+  histogram_tester.ExpectUniqueSample(
+      "ContextualCueing.NudgeDecision.GlicContextualCueing",
+      contextual_cueing::NudgeDecision::kServerDataMalformed, 1);
+
+  auto entries = ukm_recorder.GetEntriesByName(
+      ukm::builders::ContextualCueing_NudgeDecision::kEntryName);
+  EXPECT_EQ(1u, entries.size());
+  auto* entry = entries[0].get();
+  ukm_recorder.ExpectEntryMetric(
+      entry,
+      ukm::builders::ContextualCueing_NudgeDecision::kOptimizationTypeName,
+      static_cast<int64_t>(optimization_guide::proto::GLIC_CONTEXTUAL_CUEING));
+  ukm_recorder.ExpectEntryMetric(
+      entry, ukm::builders::ContextualCueing_NudgeDecision::kNudgeDecisionName,
+      static_cast<int64_t>(
+          contextual_cueing::NudgeDecision::kServerDataMalformed));
+}
+
+IN_PROC_BROWSER_TEST_F(ContextualCueingHelperBrowserTest,
+                       TestServerDataNoCueLabel) {
+  base::HistogramTester histogram_tester;
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
+
+  EnableSignIn();
+  optimization_guide::proto::GlicContextualCueingMetadata cueing_metadata;
+  auto* cueing_config = cueing_metadata.add_cueing_configurations();
+  cueing_config->set_cue_label("cue label");
+  auto* cond = cueing_config->add_conditions();
+  cond->set_signal(optimization_guide::proto::
+                       CONTEXTUAL_CUEING_CLIENT_SIGNAL_PDF_PAGE_COUNT);
+  cond->set_cueing_operator(
+      optimization_guide::proto::
+          CONTEXTUAL_CUEING_OPERATOR_GREATER_THAN_OR_EQUAL_TO);
+  cond->set_int64_threshold(100);
+  SetUpEnabledHints(cueing_metadata);
+
+  FakeGlicNudgeObserver nudge_observer;
+  glic_nudge_controller()->AddObserver(&nudge_observer);
+
+  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL("https://enabled.com/"),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+  EXPECT_EQ("", nudge_observer.last_nudge_label_);
+
+  histogram_tester.ExpectUniqueSample(
+      "ContextualCueing.NudgeDecision.GlicContextualCueing",
+      contextual_cueing::NudgeDecision::kClientConditionsUnmet, 1);
+
+  auto entries = ukm_recorder.GetEntriesByName(
+      ukm::builders::ContextualCueing_NudgeDecision::kEntryName);
+  EXPECT_EQ(1u, entries.size());
+  auto* entry = entries[0].get();
+  ukm_recorder.ExpectEntryMetric(
+      entry,
+      ukm::builders::ContextualCueing_NudgeDecision::kOptimizationTypeName,
+      static_cast<int64_t>(optimization_guide::proto::GLIC_CONTEXTUAL_CUEING));
+  ukm_recorder.ExpectEntryMetric(
+      entry, ukm::builders::ContextualCueing_NudgeDecision::kNudgeDecisionName,
+      static_cast<int64_t>(
+          contextual_cueing::NudgeDecision::kClientConditionsUnmet));
 }
 
 IN_PROC_BROWSER_TEST_F(ContextualCueingHelperBrowserTest,
@@ -133,7 +286,7 @@ IN_PROC_BROWSER_TEST_F(ContextualCueingHelperBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(ContextualCueingHelperBrowserTest,
-                       TestCueLabelDisplayedForActiveTab) {
+                       TestCueLabelClearedOnTabChange) {
   EnableSignIn();
   SetUpEnabledHints();
 
@@ -153,10 +306,60 @@ IN_PROC_BROWSER_TEST_F(ContextualCueingHelperBrowserTest,
   EXPECT_TRUE(nudge_observer.last_nudge_label_.empty());
 
   browser()->tab_strip_model()->ActivateTabAt(1);
-  EXPECT_EQ("test label", nudge_observer.last_nudge_label_);
+  EXPECT_TRUE(nudge_observer.last_nudge_label_.empty());
 
   browser()->tab_strip_model()->ActivateTabAt(2);
   EXPECT_TRUE(nudge_observer.last_nudge_label_.empty());
 }
 
+IN_PROC_BROWSER_TEST_F(ContextualCueingHelperBrowserTest,
+                       TestCueShownHistogram) {
+  base::HistogramTester histogram_tester;
+
+  EnableSignIn();
+  SetUpEnabledHints();
+
+  FakeGlicNudgeObserver nudge_observer;
+  glic_nudge_controller()->AddObserver(&nudge_observer);
+
+  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL("https://enabled.com/"),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+
+  histogram_tester.ExpectUniqueSample(
+      "ContextualCueing.NudgeInteraction",
+      contextual_cueing::NudgeInteraction::kShown, 1);
+}
+
+IN_PROC_BROWSER_TEST_F(ContextualCueingHelperBrowserTest,
+                       TestNudgeDismissedTabChangeHistogramShown) {
+  base::HistogramTester histogram_tester;
+
+  EnableSignIn();
+  SetUpEnabledHints();
+
+  FakeGlicNudgeObserver nudge_observer;
+  glic_nudge_controller()->AddObserver(&nudge_observer);
+
+  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL("https://enabled.com/"),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+
+  histogram_tester.ExpectUniqueSample(
+      "ContextualCueing.NudgeInteraction",
+      contextual_cueing::NudgeInteraction::kShown, 1);
+
+  base::HistogramTester histogram_tester_2;
+  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL("https://disabled.com/"),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+
+  EXPECT_TRUE(nudge_observer.last_nudge_label_.empty());
+  histogram_tester_2.ExpectUniqueSample(
+      "ContextualCueing.NudgeInteraction",
+      contextual_cueing::NudgeInteraction::kIgnoredTabChange, 1);
+}
 #endif

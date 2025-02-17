@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/paint/pre_paint_tree_walk.h"
 
+#include "base/debug/dump_without_crashing.h"
 #include "base/types/optional_util.h"
 #include "third_party/blink/renderer/core/dom/document_lifecycle.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
@@ -267,10 +268,6 @@ void PrePaintTreeWalk::InvalidatePaintForHitTesting(
   context.paint_invalidator_context.painting_layer->SetNeedsRepaint();
   // We record hit test data when the painting layer repaints. No need to
   // invalidate the display item client.
-  if (!RuntimeEnabledFeatures::HitTestOpaquenessEnabled()) {
-    ObjectPaintInvalidator(object).InvalidateDisplayItemClient(
-        object, PaintInvalidationReason::kHitTest);
-  }
 }
 
 bool PrePaintTreeWalk::NeedsTreeBuilderContextUpdate(

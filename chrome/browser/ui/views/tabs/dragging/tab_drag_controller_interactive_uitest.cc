@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "chrome/browser/ui/views/tabs/dragging/tab_drag_controller_interactive_uitest.h"
 
 #include <stddef.h>
@@ -1428,8 +1433,8 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
 // Creates a browser with four tabs. The last two tabs are in Tab Group 1. The
 // second tab is in Tab Group 2. Dragging the second tab over one to the right
 // will result in the tab joining Tab Group 1. While this drag is still in
-// session, pressing escape will revert group of the tab to before the drag
-// session started.
+// session, pressing escape will revert group of the tab, but will not recreate
+// the group because the group was closed during dragging.
 IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
                        RevertDragSingleTabGroupIntoGroup) {
   ASSERT_TRUE(browser()->tab_strip_model()->SupportsTabGroups());
@@ -1456,16 +1461,14 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
 
   ASSERT_TRUE(TabDragController::IsActive());
 
-  // Pressing escape will revert the tabs to original state before the drag.
+  // Reverting the drag (by pressing escape) will not rebuild the group because
+  // saved group information is not saved in the tab drag controller, so the
+  // group would be duplicated.
   ASSERT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_ESCAPE, false,
                                               false, false, false));
   EXPECT_EQ("0 1 2 3", IDString(model));
   EXPECT_EQ(group_model->GetTabGroup(group1)->ListTabs(), gfx::Range(2, 4));
-  EXPECT_EQ(group_model->GetTabGroup(group2)->ListTabs(), gfx::Range(1, 2));
-  const tab_groups::TabGroupVisualData* group2_visual_data =
-      group_model->GetTabGroup(group2)->visual_data();
-  EXPECT_THAT(group2_visual_data->title(), new_data.title());
-  EXPECT_THAT(group2_visual_data->color(), new_data.color());
+  EXPECT_FALSE(group_model->ContainsTabGroup(group2));
 }
 
 // Creates a browser with four tabs. The middle two belong in the same Tab
@@ -2883,12 +2886,14 @@ void DoubleNestedRunLoopStep2(DetachToBrowserTabDragControllerTest* test,
   // Drag to target_tab_strip. This should cause TabDragController to ask to end
   // the nested run loop. Normally, we'd return from here to allow the nested
   // loop to exit, but to reproduce the conditions for the crash, we won't.
-  drag_controller->Drag(target_center);
+  ASSERT_EQ(drag_controller->Drag(target_center),
+            TabDragController::Liveness::ALIVE);
 
   // Call Drag directly - still on the nested run loop! - in a way that would
   // spawn a nested run loop if processed.
-  drag_controller->Drag(target_center +
-                        gfx::Vector2d(0, GetDetachY(target_tab_strip)));
+  ASSERT_EQ(drag_controller->Drag(
+                target_center + gfx::Vector2d(0, GetDetachY(target_tab_strip))),
+            TabDragController::Liveness::ALIVE);
 
   // Release input to ensure the nested run loop does actually exit.
   EXPECT_TRUE(test->ReleaseInput(0, /*async=*/true));
@@ -3521,17 +3526,15 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTestWithTabbedWebApp,
   // Try dragging the home tab enough that it would usually detach.
   const Tab* tab = tab_strip->tab_at(0);
   ASSERT_TRUE(PressInputAtCenter(tab));
-  ASSERT_TRUE(DragInputToCenterNotifyWhenDone(
-      tab, base::BindLambdaForTesting([&]() {
-        ASSERT_TRUE(TabDragController::IsActive());
+  ASSERT_TRUE(DragInputToCenter(tab, gfx::Vector2d(0, GetDetachY(tab_strip))));
 
-        ASSERT_TRUE(ReleaseInput());
+  ASSERT_TRUE(TabDragController::IsActive());
 
-        // There should only be one browser window containing two tabs.
-        EXPECT_EQ(1u, browser_list()->size());
-        EXPECT_EQ(browser()->tab_strip_model()->count(), 2);
-      }),
-      gfx::Vector2d(0, GetDetachY(tab_strip))));
+  ASSERT_TRUE(ReleaseInput());
+
+  // There should only be one browser window containing two tabs.
+  EXPECT_EQ(1u, browser_list()->size());
+  EXPECT_EQ(browser()->tab_strip_model()->count(), 2);
 }
 
 // Tabbed web apps without a home tab do not have home tab added.

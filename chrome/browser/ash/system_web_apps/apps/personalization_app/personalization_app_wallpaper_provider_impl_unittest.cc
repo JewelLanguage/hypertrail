@@ -43,6 +43,7 @@
 #include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
 #include "chrome/browser/ash/system_web_apps/apps/personalization_app/mock_personalization_app_manager.h"
 #include "chrome/browser/ash/system_web_apps/apps/personalization_app/personalization_app_manager_factory.h"
+#include "chrome/browser/ash/wallpaper_handlers/mock_google_photos_wallpaper_handlers.h"
 #include "chrome/browser/ash/wallpaper_handlers/mock_wallpaper_handlers.h"
 #include "chrome/browser/ash/wallpaper_handlers/test_wallpaper_fetcher_delegate.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
@@ -80,7 +81,7 @@ namespace ash::personalization_app {
 namespace {
 
 constexpr char kFakeTestEmail[] = "fakeemail@personalization";
-constexpr char kTestGaiaId[] = "1234567890";
+constexpr GaiaId::Literal kTestGaiaId("1234567890");
 
 // Create fake Jpg image bytes.
 std::string CreateJpgBytes() {
@@ -112,7 +113,7 @@ void AddAndLoginUser(const AccountId& account_id) {
 }
 
 AccountId GetTestAccountId() {
-  return AccountId::FromUserEmailGaiaId(kFakeTestEmail, GaiaId(kTestGaiaId));
+  return AccountId::FromUserEmailGaiaId(kFakeTestEmail, kTestGaiaId);
 }
 
 // Create a test 1x1 image with a given |color|.

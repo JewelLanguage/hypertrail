@@ -693,7 +693,7 @@ var availableTests = [
           }));
 
       // Remove the IBAN with the given guid.
-      chrome.autofillPrivate.removeEntry(ibanGuid);
+      chrome.autofillPrivate.removePaymentsEntity(ibanGuid);
     }));
   },
 
@@ -713,11 +713,11 @@ var availableTests = [
           }));
 
       // Remove the card with the given guid.
-      chrome.autofillPrivate.removeEntry(cardGuid);
+      chrome.autofillPrivate.removePaymentsEntity(cardGuid);
     }));
   },
 
-  function removeEntry() {
+  function removePaymentsEntity() {
     var guid;
 
     var numCalls = 0;
@@ -735,7 +735,7 @@ var availableTests = [
         chrome.test.assertEq(creditCard.name, NAME);
 
         guid = creditCard.guid;
-        chrome.autofillPrivate.removeEntry(guid);
+        chrome.autofillPrivate.removePaymentsEntity(guid);
       } else if (numCalls == 3) {
         chrome.test.assertEq(creditCardList.length, 0);
         chrome.test.succeed();
@@ -887,20 +887,6 @@ var availableTests = [
     chrome.test.succeed();
   },
 
-  function triggerAnnotationsBootstrapping_ExpectTrue() {
-    chrome.autofillPrivate.triggerAnnotationsBootstrapping(function(success) {
-      chrome.test.assertTrue(success, 'Expected bootstrapping to succeed');
-      chrome.test.succeed();
-    });
-  },
-
-  function triggerAnnotationsBootstrapping_ExpectFalse() {
-    chrome.autofillPrivate.triggerAnnotationsBootstrapping(function(success) {
-      chrome.test.assertFalse(success, 'Expected bootstrapping to fail');
-      chrome.test.succeed();
-    });
-  },
-
   function logServerIbanLinkClicked() {
     chrome.autofillPrivate.logServerIbanLinkClicked();
     chrome.test.assertNoLastError();
@@ -961,10 +947,6 @@ var TESTS_FOR_CONFIG = {
   'addVirtualCard': ['addVirtualCard'],
   'removeVirtualCard': ['removeVirtualCard'],
   'setAutofillSyncToggleEnabled': ['setAutofillSyncToggleEnabled'],
-  'TriggerAnnotationsBootstrapping_Success':
-      ['triggerAnnotationsBootstrapping_ExpectTrue'],
-  'TriggerAnnotationsBootstrapping_Failure':
-      ['triggerAnnotationsBootstrapping_ExpectFalse'],
   'logServerIbanLinkClicked': ['logServerIbanLinkClicked'],
 };
 

@@ -29,13 +29,19 @@
 #include "content/browser/interest_group/for_debugging_only_report_util.h"
 #include "content/browser/interest_group/interest_group_update.h"
 #include "content/browser/interest_group/storage_interest_group.h"
+#include "content/public/browser/browser_thread.h"
+#include "content/public/browser/network_service_instance.h"
+#include "content/public/test/browser_task_environment.h"
+#include "content/public/test/test_utils.h"
 #include "content/services/auction_worklet/public/mojom/bidder_worklet.mojom.h"
 #include "crypto/sha2.h"
+#include "services/network/network_service.h"
 #include "sql/database.h"
 #include "sql/meta_table.h"
 #include "sql/test/scoped_error_expecter.h"
 #include "sql/test/test_helpers.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/interest_group/ad_auction_constants.h"
 #include "third_party/blink/public/common/interest_group/interest_group.h"
 #include "third_party/blink/public/common/interest_group/test/interest_group_test_utils.h"
 #include "third_party/blink/public/common/interest_group/test_interest_group_builder.h"
@@ -66,13 +72,17 @@ class InterestGroupStorageTest : public testing::Test {
 
   void SetUp() override {
     ASSERT_TRUE(temp_directory_.CreateUniqueTempDir());
-    scoped_feature_list_.InitAndEnableFeatureWithParameters(
-        blink::features::kInterestGroupStorage,
-        {{"max_owners", "10"},
-         {"max_groups_per_owner", "10"},
-         {"max_negative_groups_per_owner", "30"},
-         {"max_ops_before_maintenance", "100"},
-         {"max_storage_per_owner", "4096"}});
+    scoped_feature_list_.InitWithFeaturesAndParameters(
+        {{
+             blink::features::kInterestGroupStorage,
+             {{"max_owners", "10"},
+              {"max_groups_per_owner", "10"},
+              {"max_negative_groups_per_owner", "30"},
+              {"max_ops_before_maintenance", "100"},
+              {"max_storage_per_owner", "4096"}},
+         },
+         {blink::features::kFledgeAuctionDealSupport, {}}},
+        {});
   }
 
   // Returns a summary of all interest groups. Each interest group is returned
@@ -101,7 +111,7 @@ class InterestGroupStorageTest : public testing::Test {
         FILE_PATH_LITERAL("InterestGroups"));
   }
 
-  base::test::SingleThreadTaskEnvironment& task_environment() {
+  content::BrowserTaskEnvironment& task_environment() {
     return task_environment_;
   }
 
@@ -111,7 +121,7 @@ class InterestGroupStorageTest : public testing::Test {
     result.name = name;
     result.bidding_url = owner.GetURL().Resolve("/bidding_script.js");
     result.update_url = owner.GetURL().Resolve("/update_script.js");
-    result.expiry = base::Time::Now() + base::Days(30);
+    result.expiry = base::Time::Now() + blink::MaxInterestGroupLifetime();
     result.execution_mode =
         blink::InterestGroup::ExecutionMode::kCompatibilityMode;
     return result;
@@ -127,7 +137,7 @@ class InterestGroupStorageTest : public testing::Test {
     result.owner = owner;
     result.name = name;
     result.additional_bid_key = kAdditionalBidKey;
-    result.expiry = base::Time::Now() + base::Days(30);
+    result.expiry = base::Time::Now() + blink::MaxInterestGroupLifetime();
     return result;
   }
 
@@ -169,6 +179,7 @@ class InterestGroupStorageTest : public testing::Test {
         case 26:
         case 27:
         case 30:
+        case 32:
           *version_changed_ig_fields = false;
           break;
         default:
@@ -201,6 +212,8 @@ class InterestGroupStorageTest : public testing::Test {
     // instance.
 
     switch (version_number) {
+      case 32:
+        [[fallthrough]];
       case 31:
         result.ads.value()[0].creative_scanning_metadata = "scan 1";
         result.ad_components.value()[1].creative_scanning_metadata = "scan 2";
@@ -298,7 +311,7 @@ class InterestGroupStorageTest : public testing::Test {
     // Set to a valid non-expired time, to match InterestGroupBuilder. Note that
     // Now() will change each run (time starts at the actual current time, even
     // with MOCK_TIME), so upgrade tests will need to ignore the expiry.
-    result.expiry = base::Time::Now() + base::Days(30);
+    result.expiry = base::Time::Now() + blink::MaxInterestGroupLifetime();
 
     return result;
   }
@@ -387,7 +400,7 @@ class InterestGroupStorageTest : public testing::Test {
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
-  base::test::SingleThreadTaskEnvironment task_environment_{
+  content::BrowserTaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
 };
 
@@ -1360,24 +1373,29 @@ TEST_F(InterestGroupStorageTest, RecordsDebugReportLockoutAndCooldown) {
   std::optional<DebugReportLockoutAndCooldowns> cooldowns =
       storage->GetDebugReportLockoutAndCooldowns(origins);
   ASSERT_TRUE(cooldowns.has_value());
-  EXPECT_FALSE(cooldowns->last_report_sent_time.has_value());
+  EXPECT_FALSE(cooldowns->lockout.has_value());
   EXPECT_TRUE(cooldowns->debug_report_cooldown_map.empty());
 
-  std::optional<base::Time> lockout = storage->GetDebugReportLockout();
+  std::optional<DebugReportLockout> lockout = storage->GetDebugReportLockout();
   ASSERT_FALSE(lockout.has_value());
 
   base::Time time = base::Time::Now();
   base::Time expected_time = base::Time::FromDeltaSinceWindowsEpoch(
       time.ToDeltaSinceWindowsEpoch().CeilToMultiple(base::Hours(1)));
-  storage->RecordDebugReportLockout(time);
+  storage->RecordDebugReportLockout(
+      time, blink::features::kFledgeDebugReportLockout.Get());
   cooldowns = storage->GetDebugReportLockoutAndCooldowns(origins);
   ASSERT_TRUE(cooldowns.has_value());
-  ASSERT_TRUE(cooldowns->last_report_sent_time.has_value());
-  EXPECT_EQ(expected_time, *cooldowns->last_report_sent_time);
+  ASSERT_TRUE(cooldowns->lockout.has_value());
+  EXPECT_EQ(expected_time, cooldowns->lockout->starting_time);
+  EXPECT_EQ(blink::features::kFledgeDebugReportLockout.Get(),
+            cooldowns->lockout->duration);
   EXPECT_TRUE(cooldowns->debug_report_cooldown_map.empty());
   lockout = storage->GetDebugReportLockout();
   ASSERT_TRUE(lockout.has_value());
-  EXPECT_EQ(expected_time, *lockout);
+  EXPECT_EQ(expected_time, lockout->starting_time);
+  EXPECT_EQ(blink::features::kFledgeDebugReportLockout.Get(),
+            lockout->duration);
 
   storage->RecordDebugReportCooldown(test_origin, time,
                                      DebugReportCooldownType::kShortCooldown);
@@ -1386,17 +1404,18 @@ TEST_F(InterestGroupStorageTest, RecordsDebugReportLockoutAndCooldown) {
   expected_cooldown_map[test_origin] = DebugReportCooldown(
       expected_time, DebugReportCooldownType::kShortCooldown);
   ASSERT_TRUE(cooldowns.has_value());
-  ASSERT_TRUE(cooldowns->last_report_sent_time.has_value());
-  EXPECT_EQ(expected_time, *cooldowns->last_report_sent_time);
+  ASSERT_TRUE(cooldowns->lockout.has_value());
+  EXPECT_EQ(expected_time, cooldowns->lockout->starting_time);
   EXPECT_EQ(expected_cooldown_map, cooldowns->debug_report_cooldown_map);
   expected_cooldown_map.clear();
 
-  // Ensure we get to a different hour, to get a different time.
+  // Ensure we get to a different hour, to get a different time. Also test
+  // customize lockout duration.
   task_environment().FastForwardBy(base::Minutes(90));
   base::Time time2 = base::Time::Now();
   base::Time expected_time2 = base::Time::FromDeltaSinceWindowsEpoch(
       time2.ToDeltaSinceWindowsEpoch().CeilToMultiple(base::Hours(1)));
-  storage->RecordDebugReportLockout(time2);
+  storage->RecordDebugReportLockout(time2, /*duration=*/base::Days(90));
   storage->RecordDebugReportCooldown(
       test_origin, time2, DebugReportCooldownType::kRestrictedCooldown);
   storage->RecordDebugReportCooldown(test_origin2, time2,
@@ -1407,9 +1426,57 @@ TEST_F(InterestGroupStorageTest, RecordsDebugReportLockoutAndCooldown) {
   expected_cooldown_map[test_origin2] = DebugReportCooldown(
       expected_time2, DebugReportCooldownType::kShortCooldown);
   ASSERT_TRUE(cooldowns.has_value());
-  ASSERT_TRUE(cooldowns->last_report_sent_time.has_value());
-  EXPECT_EQ(expected_time2, *cooldowns->last_report_sent_time);
+  ASSERT_TRUE(cooldowns->lockout.has_value());
+  EXPECT_EQ(expected_time2, cooldowns->lockout->starting_time);
+  EXPECT_EQ(base::Days(90), cooldowns->lockout->duration);
   EXPECT_EQ(expected_cooldown_map, cooldowns->debug_report_cooldown_map);
+}
+
+TEST_F(InterestGroupStorageTest, SetDebugReportLockoutUntilIGExpires) {
+  const char kName1[] = "name1";
+  const char kName2[] = "name2";
+  const char kName3[] = "name3";
+  const url::Origin kOrigin = url::Origin::Create(GURL("https://owner.test"));
+  std::unique_ptr<InterestGroupStorage> storage = CreateStorage();
+
+  const base::TimeDelta kDelta = base::Days(1);
+
+  base::Time start = base::Time::Now();
+  base::Time later = start + kDelta;
+  base::Time even_later = later + kDelta;
+
+  // Already expired when joined.
+  storage->JoinInterestGroup(
+      blink::TestInterestGroupBuilder(kOrigin, kName1).SetExpiry(start).Build(),
+      kOrigin.GetURL());
+
+  // Expires when time reaches `later`.
+  storage->JoinInterestGroup(
+      blink::TestInterestGroupBuilder(kOrigin, kName2).SetExpiry(later).Build(),
+      kOrigin.GetURL());
+
+  // Expires when time reaches `even_later`.
+  storage->JoinInterestGroup(blink::TestInterestGroupBuilder(kOrigin, kName3)
+                                 .SetExpiry(even_later)
+                                 .Build(),
+                             kOrigin.GetURL());
+
+  std::optional<DebugReportLockout> lockout = storage->GetDebugReportLockout();
+  ASSERT_FALSE(lockout.has_value());
+
+  storage->SetDebugReportLockoutUntilIGExpires();
+  lockout = storage->GetDebugReportLockout();
+  ASSERT_TRUE(lockout.has_value());
+  base::Time expected_starting_time = base::Time::FromDeltaSinceWindowsEpoch(
+      start.ToDeltaSinceWindowsEpoch().CeilToMultiple(base::Hours(1)));
+  EXPECT_EQ(expected_starting_time, lockout->starting_time);
+  EXPECT_EQ(even_later - expected_starting_time, lockout->duration);
+
+  // All IGs joined before has already expired.
+  task_environment().FastForwardBy(base::Days(3));
+  storage->SetDebugReportLockoutUntilIGExpires();
+  lockout = storage->GetDebugReportLockout();
+  ASSERT_FALSE(lockout.has_value());
 }
 
 TEST_F(InterestGroupStorageTest, DeleteExpiredDebugReportCooldown) {
@@ -1453,6 +1520,38 @@ TEST_F(InterestGroupStorageTest, DeleteExpiredDebugReportCooldown) {
   // Allow enough idle time to trigger maintenance.
   task_environment().FastForwardBy(InterestGroupStorage::kDefaultIdlePeriod +
                                    base::Seconds(1));
+
+  cooldowns = storage->GetDebugReportLockoutAndCooldowns(origins);
+  ASSERT_TRUE(cooldowns.has_value());
+  EXPECT_TRUE(cooldowns->debug_report_cooldown_map.empty());
+}
+
+TEST_F(InterestGroupStorageTest, DeleteAllDebugReportCooldowns) {
+  const url::Origin test_origin =
+      url::Origin::Create(GURL("https://owner.example.com"));
+  const url::Origin test_origin2 =
+      url::Origin::Create(GURL("https://seller.example.com"));
+  std::vector<url::Origin> origins{test_origin, test_origin2};
+  std::unique_ptr<InterestGroupStorage> storage = CreateStorage();
+
+  base::Time time = base::Time::Now();
+  base::Time expected_time = base::Time::FromDeltaSinceWindowsEpoch(
+      time.ToDeltaSinceWindowsEpoch().CeilToMultiple(base::Hours(1)));
+  storage->RecordDebugReportCooldown(test_origin, time,
+                                     DebugReportCooldownType::kShortCooldown);
+  storage->RecordDebugReportCooldown(test_origin2, time,
+                                     DebugReportCooldownType::kShortCooldown);
+  std::optional<DebugReportLockoutAndCooldowns> cooldowns =
+      storage->GetDebugReportLockoutAndCooldowns(origins);
+  std::map<url::Origin, DebugReportCooldown> expected_cooldown_map;
+  expected_cooldown_map[test_origin] = DebugReportCooldown(
+      expected_time, DebugReportCooldownType::kShortCooldown);
+  expected_cooldown_map[test_origin2] = DebugReportCooldown(
+      expected_time, DebugReportCooldownType::kShortCooldown);
+  ASSERT_TRUE(cooldowns.has_value());
+  EXPECT_EQ(expected_cooldown_map, cooldowns->debug_report_cooldown_map);
+
+  storage->DeleteAllDebugReportCooldowns();
 
   cooldowns = storage->GetDebugReportLockoutAndCooldowns(origins);
   ASSERT_TRUE(cooldowns.has_value());
@@ -1634,19 +1733,19 @@ TEST_F(InterestGroupStorageTest,
   g1.ad_components.emplace();
   g1.ad_components->emplace_back(ad1_url, "component_metadata1");
   g1.ad_components->emplace_back(ad3_url, "component_metadata3");
-  g1.expiry = base::Time::Now() + InterestGroupStorage::kHistoryLength;
+  g1.expiry = base::Time::Now() + blink::MaxInterestGroupLifetimeForMetadata();
 
   InterestGroup g2 = g1;
   g2.ads->emplace_back(ad2_url, "metadata2");
   g2.name = "name 2";
-  g2.expiry =
-      base::Time::Now() + InterestGroupStorage::kHistoryLength + base::Hours(1);
+  g2.expiry = base::Time::Now() + blink::MaxInterestGroupLifetimeForMetadata() +
+              base::Hours(1);
 
   InterestGroup g3 = g1;
   g3.ad_components->clear();
   g3.name = "name 3";
-  g3.expiry =
-      base::Time::Now() + InterestGroupStorage::kHistoryLength + base::Hours(2);
+  g3.expiry = base::Time::Now() + blink::MaxInterestGroupLifetimeForMetadata() +
+              base::Hours(2);
 
   std::string k_anon_bid_key_1 =
       blink::HashedKAnonKeyForAdBid(g1, ad1_url.spec());
@@ -1803,8 +1902,8 @@ TEST_F(InterestGroupStorageTest,
   storage->UpdateKAnonymity(blink::InterestGroupKey(g3.owner, g3.name),
                             {k_anon_bid_key_1}, update_time3,
                             /*replace_existing_values*/ true);
-  task_environment().FastForwardBy(InterestGroupStorage::kHistoryLength -
-                                   base::Hours(1));
+  task_environment().FastForwardBy(
+      blink::MaxInterestGroupLifetimeForMetadata() - base::Hours(1));
 
   returned_groups = storage->GetInterestGroupsForOwner(g1.owner);
   {
@@ -2404,8 +2503,8 @@ TEST_F(InterestGroupStorageTest, DBMaintenanceExpiresOldInterestGroups) {
   histograms.ExpectTotalCount("Storage.InterestGroup.DBSize", 1);
   histograms.ExpectTotalCount("Storage.InterestGroup.DBMaintenanceTime", 1);
 
-  task_environment().FastForwardBy(InterestGroupStorage::kHistoryLength -
-                                   base::Days(1));
+  task_environment().FastForwardBy(
+      blink::MaxInterestGroupLifetimeForMetadata() - base::Days(1));
   // Verify that maintenance has not run. It's been long enough, but we haven't
   // made any calls.
   EXPECT_EQ(storage->GetLastMaintenanceTimeForTesting(),
@@ -2588,6 +2687,14 @@ class InterestGroupStorageWithNoIdleFastForwardTest
         {
             {"max_ops_before_maintenance", "1000000000"}  // 1 billion ops
         });
+
+    GetNetworkService();
+    // Wait for the Network Service to initialize on the IO thread.
+    RunAllPendingInMessageLoop(content::BrowserThread::IO);
+    // Disable metrics updater to avoid test timeouts when doing long
+    // fast-forwards.
+    network::NetworkService::GetNetworkServiceForTesting()
+        ->ResetMetricsUpdaterForTesting();
   }
 
   std::unique_ptr<InterestGroupStorage> CreateStorage() {
@@ -2654,8 +2761,8 @@ TEST_F(InterestGroupStorageWithNoIdleFastForwardTest,
   // need to ensure that the test starting time is several hours after midnight
   // UTC for this to be true, so go with noon tomorrow UTC.
   const base::TimeDelta kExpiryDeltas[] = {
-      InterestGroupStorage::kHistoryLength - base::Microseconds(1),
-      InterestGroupStorage::kHistoryLength};
+      blink::MaxInterestGroupLifetimeForMetadata() - base::Microseconds(1),
+      blink::MaxInterestGroupLifetimeForMetadata()};
 
   const base::Time noon_tomorrow_utc =
       base::Time::FromDeltaSinceWindowsEpoch(
@@ -2698,7 +2805,7 @@ TEST_F(InterestGroupStorageWithNoIdleFastForwardTest,
       // interest group. This is because these counts are kept on a per UTC day
       // basis. Win history isn't affected, only join and bid history.
       const base::Time join_bid_expiry = base::Time::FromDeltaSinceWindowsEpoch(
-          (start + InterestGroupStorage::kHistoryLength)
+          (start + blink::MaxInterestGroupLifetimeForMetadata())
               .ToDeltaSinceWindowsEpoch()
               .FloorToMultiple(base::Days(1)));
       // Make sure `expiry_delta` is big enough for the required fast forwards
@@ -2856,6 +2963,53 @@ TEST_F(InterestGroupStorageWithNoIdleFastForwardTest,
       // Leave the interest group so it doesn't affect the next test.
       storage->LeaveInterestGroup(kGroupKey, kOrigin);
     }
+  }
+}
+
+TEST_F(InterestGroupStorageTest,
+       SelectableBuyerAndSellerReportingIdsDisappearWhenDealSupportDisabled) {
+  const url::Origin test_origin =
+      url::Origin::Create(GURL("https://owner.example.com"));
+  GURL ad1_url = GURL("https://owner.example.com/ad1");
+  InterestGroup g = NewInterestGroup(test_origin, "name");
+  g.ads.emplace();
+  g.ads->emplace_back(
+      ad1_url, "metadata1",
+      /*size_group=*/std::nullopt,
+      /*buyer_reporting_id=*/"brid1",
+      /*buyer_and_seller_reporting_id=*/"shrid1",
+      /*selectable_buyer_and_seller_reporting_ids=*/
+      std::vector<std::string>{"selectable_id1", "selectable_id2"});
+
+  std::unique_ptr<InterestGroupStorage> storage = CreateStorage();
+  storage->JoinInterestGroup(g, test_origin.GetURL());
+
+  {
+    std::vector<StorageInterestGroup> interest_groups =
+        storage->GetInterestGroupsForOwner(test_origin);
+    ASSERT_EQ(1u, interest_groups.size());
+    EXPECT_EQ("name", interest_groups[0].interest_group.name);
+    ASSERT_EQ(1u, interest_groups[0].interest_group.ads->size());
+    EXPECT_THAT(interest_groups[0]
+                    .interest_group.ads.value()[0]
+                    .selectable_buyer_and_seller_reporting_ids.value(),
+                testing::ElementsAre("selectable_id1", "selectable_id2"));
+  }
+
+  {
+    base::test::ScopedFeatureList scoped_feature_list;
+    scoped_feature_list.InitAndDisableFeature(
+        blink::features::kFledgeAuctionDealSupport);
+
+    std::vector<StorageInterestGroup> interest_groups =
+        storage->GetInterestGroupsForOwner(test_origin);
+    ASSERT_EQ(1u, interest_groups.size());
+    EXPECT_EQ("name", interest_groups[0].interest_group.name);
+    ASSERT_EQ(1u, interest_groups[0].interest_group.ads->size());
+    EXPECT_EQ(interest_groups[0]
+                  .interest_group.ads.value()[0]
+                  .selectable_buyer_and_seller_reporting_ids,
+              std::nullopt);
   }
 }
 
@@ -3332,6 +3486,32 @@ TEST_F(InterestGroupStorageTest, UpgradeFromV16) {
   std::optional<base::Time> last_reported =
       storage->GetLastKAnonymityReported(key_without_ig_in_ig_table);
   EXPECT_EQ(last_reported, base::Time::Min() + base::Microseconds(8));
+}
+
+// The lockout_debugging_only_report table schema is changed from V31 to V32.
+TEST_F(InterestGroupStorageTest, UpgradeFromV31) {
+  // Create V31 database from dump
+  base::FilePath file_path;
+  base::PathService::Get(base::DIR_SRC_TEST_DATA_ROOT, &file_path);
+  file_path =
+      file_path.AppendASCII("content/test/data/interest_group/schemaV31.sql");
+  ASSERT_TRUE(base::PathExists(file_path));
+  ASSERT_TRUE(sql::test::CreateDatabaseFromSQL(db_path(), file_path));
+
+  // Upgrade.
+  std::unique_ptr<InterestGroupStorage> storage = CreateStorage();
+  ASSERT_TRUE(storage);
+
+  // Make sure the database can accept new data (including new fields) correctly
+  // after the migration.
+  base::Time now_nearest_next_hour = base::Time::FromDeltaSinceWindowsEpoch(
+      base::Time::Now().ToDeltaSinceWindowsEpoch().CeilToMultiple(
+          base::Hours(1)));
+  storage->RecordDebugReportLockout(now_nearest_next_hour, base::Days(90));
+  std::optional<DebugReportLockout> lockout = storage->GetDebugReportLockout();
+  ASSERT_TRUE(lockout.has_value());
+  EXPECT_EQ(now_nearest_next_hour, lockout->starting_time);
+  EXPECT_EQ(base::Days(90), lockout->duration);
 }
 
 TEST_F(InterestGroupStorageTest, MultiVersionUpgradeTest) {
@@ -3881,7 +4061,8 @@ TEST_F(InterestGroupStorageTest, OnlyDeletesExpiredKAnon) {
   // data unless it's been reported <1 day ago.
   storage->JoinInterestGroup(g, GURL("https://owner.example.com/join"));
 
-  task_environment().FastForwardBy(InterestGroupStorage::kHistoryLength);
+  task_environment().FastForwardBy(
+      blink::MaxInterestGroupLifetimeForMetadata());
   storage->UpdateLastKAnonymityReported(k_anon_key_1);
   EXPECT_EQ(1u, storage->GetAllInterestGroupsUnfilteredForTesting().size());
   task_environment().FastForwardBy(InterestGroupStorage::kDefaultIdlePeriod);

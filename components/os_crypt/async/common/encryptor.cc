@@ -4,6 +4,7 @@
 
 #include "components/os_crypt/async/common/encryptor.h"
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <vector>
@@ -11,8 +12,9 @@
 #include "base/check.h"
 #include "base/containers/span.h"
 #include "base/logging.h"
-#include "base/ranges/algorithm.h"
+#include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/buildflag.h"
 #include "components/os_crypt/async/common/algorithm.mojom.h"
 #include "components/os_crypt/sync/os_crypt.h"
 #include "crypto/aead.h"
@@ -25,8 +27,6 @@
 #include <windows.h>
 
 #include <dpapi.h>
-
-#include "components/os_crypt/async/common/encryptor_features.h"
 #endif
 
 namespace os_crypt_async {
@@ -53,8 +53,7 @@ Encryptor::Key::Key(base::span<const uint8_t> key,
 #endif
 {
 #if BUILDFLAG(IS_WIN)
-  if (base::FeatureList::IsEnabled(features::kProtectEncryptionKey) &&
-      !encrypted_) {
+  if (!encrypted_) {
     encrypted_ = ::CryptProtectMemory(std::data(key_), std::size(key_),
                                       CRYPTPROTECTMEMORY_SAME_PROCESS);
   }
@@ -88,7 +87,6 @@ Encryptor::Key Encryptor::Key::Clone() const {
 #else
   Encryptor::Key key(key_, *algorithm_, /*encrypted=*/false);
 #endif
-  key.is_os_crypt_sync_compatible_ = is_os_crypt_sync_compatible_;
   return key;
 }
 
@@ -98,20 +96,15 @@ Encryptor::Encryptor(mojo::DefaultConstruct::Tag) : Encryptor() {}
 Encryptor::Encryptor(Encryptor&& other) = default;
 Encryptor& Encryptor::operator=(Encryptor&& other) = default;
 
-Encryptor::Encryptor(KeyRing keys, const std::string& provider_for_encryption)
+Encryptor::Encryptor(
+    KeyRing keys,
+    const std::string& provider_for_encryption,
+    const std::string& provider_for_os_crypt_sync_compatible_encryption)
     : keys_(std::move(keys)),
-      provider_for_encryption_(provider_for_encryption) {
-  // It is not permitted to have multiple keys that mark themselves as OSCrypt
-  // sync compatible.
-  bool already_found_os_crypt_compatible = false;
-  for (const auto& key : keys_) {
-    if (key.second.is_os_crypt_sync_compatible_) {
-      CHECK(!already_found_os_crypt_compatible)
-          << "Cannot have more than one key marked OSCrypt sync compatible.";
-      already_found_os_crypt_compatible = true;
-    }
-  }
-}
+      provider_for_encryption_(provider_for_encryption),
+      provider_for_os_crypt_sync_compatible_encryption_(
+          provider_for_os_crypt_sync_compatible_encryption) {}
+
 Encryptor::~Encryptor() = default;
 
 std::vector<uint8_t> Encryptor::Key::Encrypt(
@@ -245,9 +238,10 @@ std::optional<std::vector<uint8_t>> Encryptor::EncryptString(
 
   const auto& it = keys_.find(provider_for_encryption_);
 
-  if (it == keys_.end()) {
-    // This can happen if there is no default provider, or `keys_` is empty. In
-    // this case, fall back to legacy OSCrypt encryption.
+  if (it == keys_.end() || !it->second.has_value()) {
+    // This can happen if there is no default provider, or `keys_` is empty, or
+    // if the key is temporarily unavailable for encryption. In these cases,
+    // fall back to legacy OSCrypt encryption.
     std::string ciphertext;
     if (OSCrypt::EncryptString(data, &ciphertext)) {
       return std::vector<uint8_t>(ciphertext.cbegin(), ciphertext.cend());
@@ -256,7 +250,7 @@ std::optional<std::vector<uint8_t>> Encryptor::EncryptString(
   }
 
   const auto& [provider, key] = *it;
-  std::vector<uint8_t> ciphertext = key.Encrypt(base::as_byte_span(data));
+  std::vector<uint8_t> ciphertext = key->Encrypt(base::as_byte_span(data));
 
   // This adds the provider prefix on the start of the data.
   ciphertext.insert(ciphertext.begin(), provider.cbegin(), provider.cend());
@@ -269,6 +263,7 @@ std::optional<std::string> Encryptor::DecryptData(
     DecryptFlags* flags) const {
   if (flags) {
     flags->should_reencrypt = false;
+    flags->temporarily_unavailable = false;
   }
 
   if (data.empty()) {
@@ -279,43 +274,60 @@ std::optional<std::string> Encryptor::DecryptData(
     if (data.size() < provider.size()) {
       continue;
     }
-    if (base::ranges::equal(provider, data.first(provider.size()))) {
-      // This removes the provider prefix from the front of the data.
-      auto ciphertext = data.subspan(provider.size());
-      // The Key does the raw decrypt.
-      auto plaintext = key.Decrypt(ciphertext);
-      if (plaintext) {
-        if (flags) {
-          flags->should_reencrypt = provider != provider_for_encryption_;
+    if (std::ranges::equal(provider, data.first(provider.size()))) {
+      if (key.has_value()) {
+        // This removes the provider prefix from the front of the data.
+        auto ciphertext = data.subspan(provider.size());
+        // The Key does the raw decrypt.
+        auto plaintext = key->Decrypt(ciphertext);
+        if (plaintext) {
+          if (flags) {
+            flags->should_reencrypt = provider != provider_for_encryption_;
+          }
+          return std::string(plaintext->begin(), plaintext->end());
+        } else {
+          // A key is present, and the data header matches the key prefix, but
+          // the decrypt did not work. This either means the data is invalid, or
+          // the key is invalid. This is a permanent failure.
+          return std::nullopt;
         }
-        return std::string(plaintext->begin(), plaintext->end());
+      } else {
+        // Indicate that this might be a temporary failure. Do not return an
+        // error yet as OSCrypt Sync might still be able to decrypt this data.
+        if (flags) {
+          flags->temporarily_unavailable = true;
+        }
+        break;
       }
     }
   }
 
-  // No keys are loaded, or no suitable provider was found, or decryption
-  // failed. Fallback to using legacy OSCrypt to attempt decryption.
+  // OSCrypt is available, so fallback to using legacy OSCrypt to attempt
+  // decryption. This must be attempted first because some platforms report
+  // IsEncryptionAvailable is false when it really is available.
   std::string string_data(data.begin(), data.end());
   std::string plaintext;
   if (OSCrypt::DecryptString(string_data, &plaintext)) {
-    // If OSCrypt is using os_crypt_posix.cc and it's passed invalid data to
-    // decrypt, it simply returns the data. This is a quirk of
-    // os_crypt_posix.cc. In this case, it's not really possible to tell whether
-    // or not encryption worked or not, and certainly not advisable to recommend
-    // a re-encryption of this potentially invalid data.
-    // TODO(crbug.com/365712505): Remove this fallback.
-#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_APPLE) &&         \
-        !(BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CASTOS)) || \
-    BUILDFLAG(IS_FUCHSIA)
-    if (plaintext == string_data) {
-      return plaintext;
-    }
-#endif  // BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_APPLE) && !(BUILDFLAG(IS_LINUX)
-        // && !BUILDFLAG(IS_CASTOS)) || BUILDFLAG(IS_FUCHSIA)
-    if (!provider_for_encryption_.empty() && flags) {
-      flags->should_reencrypt = true;
+    if (flags) {
+      // Possibly, an OSCrypt sync compatible Key Provider had temporarily
+      // failed to provide a key for this data, so reset the
+      // `temporarily_unavailable` flag here, as the data successfully
+      // decrypted.
+      flags->temporarily_unavailable = false;
+      // If fallback to OSCrypt happened but there is a valid key provider, with
+      // a valid key, then recommend re-encryption.
+      if (DefaultEncryptionProviderAvailable()) {
+        flags->should_reencrypt = true;
+      }
     }
     return plaintext;
+  }
+
+  // If OSCrypt failed to decrypt, then check if EncryptionIsAvailable. If
+  // encryption is not available, then this is a temporary failure. See above
+  // for why this check can't be earlier.
+  if (!OSCrypt::IsEncryptionAvailable() && flags) {
+    flags->temporarily_unavailable = true;
   }
 
   return std::nullopt;
@@ -341,32 +353,28 @@ bool Encryptor::DecryptString16(const std::string& ciphertext,
 Encryptor Encryptor::Clone(Option option) const {
   KeyRing keyring;
   for (const auto& [provider, key] : keys_) {
-    keyring.emplace(provider, key.Clone());
+    if (key.has_value()) {
+      keyring.emplace(provider, key->Clone());
+    } else {
+      keyring.emplace(provider, std::nullopt);
+    }
   }
-
-  std::string provider_for_encryption;
 
   switch (option) {
     case Option::kNone:
-      provider_for_encryption = provider_for_encryption_;
-      break;
+      return Encryptor(std::move(keyring), provider_for_encryption_,
+                       provider_for_os_crypt_sync_compatible_encryption_);
     case Option::kEncryptSyncCompat:
-      for (const auto& [provider, key] : keyring) {
-        if (key.is_os_crypt_sync_compatible_) {
-          provider_for_encryption = provider;
-          break;
-        }
-      }
-      break;
+      return Encryptor(std::move(keyring),
+                       provider_for_os_crypt_sync_compatible_encryption_,
+                       provider_for_os_crypt_sync_compatible_encryption_);
   }
 
-  // Can be empty provider, if no suitable provider is available.
-  return Encryptor(std::move(keyring), provider_for_encryption);
+  NOTREACHED() << "Unsupported Option.";
 }
 
 bool Encryptor::IsEncryptionAvailable() const {
-  if (!provider_for_encryption_.empty() &&
-      keys_.contains(provider_for_encryption_)) {
+  if (DefaultEncryptionProviderAvailable()) {
     return true;
   }
 
@@ -379,6 +387,12 @@ bool Encryptor::IsDecryptionAvailable() const {
   }
 
   return OSCrypt::IsEncryptionAvailable();
+}
+
+bool Encryptor::DefaultEncryptionProviderAvailable() const {
+  return !provider_for_encryption_.empty() &&
+         keys_.contains(provider_for_encryption_) &&
+         keys_.at(provider_for_encryption_).has_value();
 }
 
 }  // namespace os_crypt_async

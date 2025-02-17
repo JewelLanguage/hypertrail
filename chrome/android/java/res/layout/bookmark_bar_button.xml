@@ -21,13 +21,14 @@ found in the LICENSE file.
       android:layout_height="@dimen/bookmark_bar_button_icon_size"
       android:layout_marginEnd="@dimen/bookmark_bar_button_icon_margin_end"
       android:contentDescription="@string/bookmark_bar_button_icon_content_description"
-      android:scaleType="fitCenter"
-      app:tint="@color/default_icon_color_tint_list" />
+      android:scaleType="fitCenter" />
 
   <TextView
       android:id="@+id/bookmark_bar_button_title"
       style="@style/TextAppearance.TextMedium.Primary.Baseline"
       android:layout_width="wrap_content"
-      android:layout_height="wrap_content" />
+      android:layout_height="wrap_content"
+      android:ellipsize="end"
+      android:maxLines="1" />
 
 </org.chromium.chrome.browser.bookmarks.bar.BookmarkBarButton>

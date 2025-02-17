@@ -92,7 +92,7 @@ void ScrollMarkerGroupPseudoElement::AddToFocusGroup(
 ScrollMarkerPseudoElement* ScrollMarkerGroupPseudoElement::FindNextScrollMarker(
     const Element* current) {
   if (wtf_size_t index = focus_group_.Find(current); index != kNotFound) {
-    return focus_group_[std::min(index + 1, focus_group_.size() - 1)];
+    return focus_group_[index == focus_group_.size() - 1 ? 0u : index + 1];
   }
   return nullptr;
 }
@@ -101,7 +101,7 @@ ScrollMarkerPseudoElement*
 ScrollMarkerGroupPseudoElement::FindPreviousScrollMarker(
     const Element* current) {
   if (wtf_size_t index = focus_group_.Find(current); index != kNotFound) {
-    return focus_group_[index == 0 ? 0u : index - 1];
+    return focus_group_[index == 0u ? focus_group_.size() - 1 : index - 1];
   }
   return nullptr;
 }
@@ -141,12 +141,20 @@ void ScrollMarkerGroupPseudoElement::ActivateScrollMarker(
   mojom::blink::ScrollIntoViewParamsPtr params =
       scroll_into_view_util::CreateScrollIntoViewParams(
           *scroll_marker->parentElement()->GetComputedStyle());
-  scroll_marker->ScrollIntoViewNoVisualUpdate(std::move(params));
+  scroll_marker->ScrollIntoViewNoVisualUpdate(std::move(params),
+                                              UltimateOriginatingElement());
   GetDocument().SetFocusedElement(scroll_marker,
                                   FocusParams(SelectionBehaviorOnFocus::kNone,
                                               mojom::blink::FocusType::kNone,
                                               /*capabilities=*/nullptr));
   SetSelected(*scroll_marker);
+  // - per https://drafts.csswg.org/css-overflow-5/#scroll-target-focus
+  // we want to start our search from scroll target of ::scroll-marker,
+  // which is ultimate originating element for regular scroll marker
+  // and TODO(378698659): the first element in ::column's view for column
+  // scroll marker, but it's not clear yet what how to implement that.
+  GetDocument().SetSequentialFocusNavigationStartingPoint(
+      scroll_marker->UltimateOriginatingElement());
 }
 
 bool ScrollMarkerGroupPseudoElement::SetSelected(

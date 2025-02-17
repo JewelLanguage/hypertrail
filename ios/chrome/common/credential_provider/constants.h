@@ -10,8 +10,12 @@
 // Path to the persisted file for the credential provider archivable store.
 NSURL* CredentialProviderSharedArchivableStoreURL();
 
-// Key for the app group user defaults containing the user ID, which can be
-// validated in the extension.
+// Key for the app group user defaults containing the managed user ID, which can
+// be validated in the extension.
+// This is non-nil iff the user's account is managed (e.g. by an enterprise).
+NSString* AppGroupUserDefaultsCredentialProviderManagedUserID();
+
+// Key for the app group user defaults containing the current user ID.
 NSString* AppGroupUserDefaultsCredentialProviderUserID();
 
 // Key for the app group user defaults containing the current user email.
@@ -39,6 +43,10 @@ NSString* AppGroupUserDefaultsCredentialProviderSavingPasskeysEnabled();
 // Key for the app group user defaults containing whether syncing passwords is
 // currently enabled.
 NSString* AppGroupUserDefaultsCredentialProviderPasswordSyncSetting();
+
+// Key for the app group user defaults containing whether automatic passkey
+// upgrade is currently enabled.
+NSString* AppGroupUserDefaulsCredentialProviderAutomaticPasskeyUpgradeEnabled();
 
 // Key for the app group user defaults containing whether passkey PRF support is
 // currently enabled.

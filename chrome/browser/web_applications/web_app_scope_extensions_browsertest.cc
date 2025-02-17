@@ -203,7 +203,7 @@ IN_PROC_BROWSER_TEST_P(WebAppScopeExtensionsBrowserTest,
             "start_url": "/",
             "scope": "/",
             "scope_extensions": [{
-              "origin": "$1"
+              "type": "origin", "value": "$1"
             }]
           })",
           {secondary_origin_.Serialize()}, nullptr),
@@ -248,7 +248,7 @@ IN_PROC_BROWSER_TEST_P(WebAppScopeExtensionsBrowserTest,
             "start_url": "/",
             "scope": "/",
             "scope_extensions": [{
-              "origin": "$1"
+              "type": "origin", "value": "$1"
             }]
           })",
           {secondary_origin_.Serialize()}, nullptr),
@@ -283,7 +283,7 @@ IN_PROC_BROWSER_TEST_P(WebAppScopeExtensionsBrowserTest,
             "start_url": "/simple.html",
             "scope": "/",
             "scope_extensions": [{
-              "origin": "$1"
+              "type": "origin", "value": "$1"
             }],
             "launch_handler": {
               "client_mode": "focus-existing"
@@ -348,7 +348,7 @@ IN_PROC_BROWSER_TEST_P(WebAppScopeExtensionsBrowserTest,
             "start_url": "/",
             "scope": "/",
             "scope_extensions": [{
-              "origin": "$1"
+              "type": "origin", "value": "$1"
             }]
           })",
           {secondary_origin_.Serialize()}, nullptr),
@@ -364,7 +364,8 @@ INSTANTIATE_TEST_SUITE_P(
     All,
     WebAppScopeExtensionsBrowserTest,
 #if BUILDFLAG(IS_CHROMEOS)
-    testing::Values(apps::test::LinkCapturingFeatureVersion::kV1DefaultOff)
+    testing::Values(apps::test::LinkCapturingFeatureVersion::kV1DefaultOff,
+                    apps::test::LinkCapturingFeatureVersion::kV2DefaultOff)
 #else
     testing::Values(apps::test::LinkCapturingFeatureVersion::kV2DefaultOff,
                     apps::test::LinkCapturingFeatureVersion::kV2DefaultOn)
@@ -389,7 +390,7 @@ IN_PROC_BROWSER_TEST_P(WebAppScopeExtensionsDisabledBrowserTest,
             "start_url": "/",
             "scope": "/",
             "scope_extensions": [{
-              "origin": "$1"
+              "type": "origin", "value": "$1"
             }]
           })",
           {secondary_origin_.Serialize()}, nullptr),
@@ -413,7 +414,8 @@ INSTANTIATE_TEST_SUITE_P(
     All,
     WebAppScopeExtensionsDisabledBrowserTest,
 #if BUILDFLAG(IS_CHROMEOS)
-    testing::Values(apps::test::LinkCapturingFeatureVersion::kV1DefaultOff)
+    testing::Values(apps::test::LinkCapturingFeatureVersion::kV1DefaultOff,
+                    apps::test::LinkCapturingFeatureVersion::kV2DefaultOff)
 #else
     testing::Values(apps::test::LinkCapturingFeatureVersion::kV2DefaultOff,
                     apps::test::LinkCapturingFeatureVersion::kV2DefaultOn)
@@ -479,7 +481,7 @@ constexpr char kTestManifestBody[] = R"({
   }],
   "scope_extensions": [
     {
-      "origin": "https://test.com"
+      "type": "origin", "value": "https://test.com"
     }
   ]
 })";

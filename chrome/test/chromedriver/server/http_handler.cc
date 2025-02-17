@@ -2,15 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "chrome/test/chromedriver/server/http_handler.h"
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string_view>
@@ -24,7 +20,6 @@
 #include "base/json/json_writer.h"
 #include "base/logging.h"  // For CHECK macros.
 #include "base/memory/scoped_refptr.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -1216,7 +1211,7 @@ HttpHandler::HttpHandler(
                         base::BindRepeating(&ExecuteSendCommandFromWebSocket))),
   };
   command_map_ =
-      std::make_unique<CommandMap>(commands, commands + std::size(commands));
+      std::make_unique<CommandMap>(std::begin(commands), std::end(commands));
 
   static_bidi_command_map_.emplace(
       "session.status", base::BindRepeating(&ExecuteBidiSessionStatus));
@@ -1963,7 +1958,7 @@ void HttpHandler::OnClose(HttpServerInterface* http_server, int connection_id) {
     return;
   }
   std::vector<int>& bucket = ses_it->second;
-  auto bucket_it = base::ranges::find(bucket, connection_id);
+  auto bucket_it = std::ranges::find(bucket, connection_id);
   // The case when it can happen:
   // The session thread has sent a response (e.g. Quit command) to the client.
   // After that the session thread preempted before closing all connections.

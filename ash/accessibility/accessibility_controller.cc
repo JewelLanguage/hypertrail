@@ -151,7 +151,7 @@ struct FeatureDialogData {
 // A static array describing each feature.
 const FeatureData kFeatures[] = {
     {FeatureType::kAlwaysShowScrollbar,
-     prefs::kAccessibilityOverlayScrollbarEnabled, nullptr, 0,
+     prefs::kAccessibilityAlwaysShowScrollbarsEnabled, nullptr, 0,
      /*toggleable_in_quicksettings=*/false},
     {FeatureType::kAutoclick, prefs::kAccessibilityAutoclickEnabled,
      &kSystemMenuAccessibilityAutoClickIcon,
@@ -298,7 +298,7 @@ constexpr const char* const kCopiedOnSigninAccessibilityPrefs[]{
     prefs::kAccessibilityFaceGazeEnabled,
     prefs::kAccessibilityMonoAudioEnabled,
     prefs::kAccessibilityReducedAnimationsEnabled,
-    prefs::kAccessibilityOverlayScrollbarEnabled,
+    prefs::kAccessibilityAlwaysShowScrollbarsEnabled,
     prefs::kAccessibilityMouseKeysEnabled,
     prefs::kAccessibilityMouseKeysAcceleration,
     prefs::kAccessibilityMouseKeysMaxSpeed,
@@ -1266,7 +1266,7 @@ void AccessibilityController::RegisterProfilePrefs(
   registry->RegisterIntegerPref(prefs::kAccessibilityDisableTrackpadMode,
                                 static_cast<int>(DisableTouchpadMode::kNever));
   registry->RegisterIntegerPref(prefs::kAccessibilityCursorColor,
-                                kDefaultCursorColor);
+                                ui::kDefaultCursorColor);
 
   // Not syncable because it might change depending on application locale,
   // user settings, and because different languages can cause speech recognition
@@ -1590,8 +1590,8 @@ void AccessibilityController::RegisterProfilePrefs(
                                   kDefaultFlashNotificationsColor);
   }
 
-  registry->RegisterBooleanPref(prefs::kAccessibilityOverlayScrollbarEnabled,
-                                false);
+  registry->RegisterBooleanPref(
+      prefs::kAccessibilityAlwaysShowScrollbarsEnabled, false);
 }
 
 void AccessibilityController::Shutdown() {
@@ -3031,7 +3031,7 @@ void AccessibilityController::UpdateCursorColor(SkColor cursor_color,
 void AccessibilityController::TrackCursorColorEnabledDuration(
     SkColor cursor_color) {
   // Check if a custom cursor color is currently enabled.
-  bool is_custom_color_enabled = cursor_color != kDefaultCursorColor;
+  const bool is_custom_color_enabled = cursor_color != ui::kDefaultCursorColor;
 
   if (last_cursor_color_enabled_time_ == base::Time()) {
     cursor_color_enabled_ = is_custom_color_enabled;

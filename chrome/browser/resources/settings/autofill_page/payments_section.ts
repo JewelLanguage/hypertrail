@@ -43,9 +43,6 @@ import type {PaymentsManagerProxy} from './payments_manager_proxy.js';
 import {PaymentsManagerImpl} from './payments_manager_proxy.js';
 import {getTemplate} from './payments_section.html.js';
 
-export const GOOGLE_PAY_HELP_URL =
-    'https://support.google.com/googlepay?p=card_benefits_chrome';
-
 type DotsCardMenuiClickEvent = CustomEvent<{
   creditCard: chrome.autofillPrivate.CreditCardEntry,
   anchorElement: HTMLElement,
@@ -191,6 +188,27 @@ export class SettingsPaymentsSectionElement extends
         type: String,
         value() {
           return loadTimeData.getString('cardBenefitsToggleSublabel');
+        },
+      },
+
+      /**
+       * Checks if the pay over time settings toggle should be shown.
+       */
+      shouldShowPayOverTimeSettingsToggle_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('shouldShowPayOverTimeSettingsToggle');
+        },
+      },
+
+      /**
+       * Sublabel for the pay over time toggle. The sublabel text also includes
+       * a link to learn about pay over time.
+       */
+      payOverTimeSublabel_: {
+        type: String,
+        value() {
+          return loadTimeData.getString('autofillPayOverTimeSettingsSublabel');
         },
       },
     };
@@ -553,21 +571,19 @@ export class SettingsPaymentsSectionElement extends
   }
 
   private shouldShowAddVirtualCardButton_(): boolean {
-    if (this.activeCreditCard_ === null || !this.activeCreditCard_!.metadata) {
+    if (this.activeCreditCard_ === null || !this.activeCreditCard_.metadata) {
       return false;
     }
-    return !!this.activeCreditCard_!.metadata!
-                 .isVirtualCardEnrollmentEligible &&
-        !this.activeCreditCard_!.metadata!.isVirtualCardEnrolled;
+    return !!this.activeCreditCard_.metadata.isVirtualCardEnrollmentEligible &&
+        !this.activeCreditCard_.metadata.isVirtualCardEnrolled;
   }
 
   private shouldShowRemoveVirtualCardButton_(): boolean {
-    if (this.activeCreditCard_ === null || !this.activeCreditCard_!.metadata) {
+    if (this.activeCreditCard_ === null || !this.activeCreditCard_.metadata) {
       return false;
     }
-    return !!this.activeCreditCard_!.metadata!
-                 .isVirtualCardEnrollmentEligible &&
-        !!this.activeCreditCard_!.metadata!.isVirtualCardEnrolled;
+    return !!this.activeCreditCard_.metadata.isVirtualCardEnrollmentEligible &&
+        !!this.activeCreditCard_.metadata.isVirtualCardEnrolled;
   }
 
   /**
@@ -671,7 +687,8 @@ export class SettingsPaymentsSectionElement extends
    * sublabel link is clicked.
    */
   private onCardBenefitsSublabelLinkClick_() {
-    OpenWindowProxyImpl.getInstance().openUrl(GOOGLE_PAY_HELP_URL);
+    OpenWindowProxyImpl.getInstance().openUrl(
+        loadTimeData.getString('cardBenefitsToggleLearnMoreUrl'));
   }
 
   /**
@@ -683,6 +700,15 @@ export class SettingsPaymentsSectionElement extends
     return this.i18n(
         card === undefined ? 'enableCvcStorageAriaLabelForNoCvcSaved' :
                              'enableCvcStorageLabel');
+  }
+
+  /**
+   * Opens an article to learn about pay over time when the pay over time
+   * toggle sublabel link is clicked.
+   */
+  private onPayOverTimeSublabelLinkClick_() {
+    OpenWindowProxyImpl.getInstance().openUrl(
+        loadTimeData.getString('autofillPayOverTimeSettingsLearnMoreUrl'));
   }
 }
 

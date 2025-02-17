@@ -20,6 +20,8 @@ struct EmbedderMetadata {
         output_size(output_size),
         search_score_threshold(search_score_threshold) {}
 
+  bool IsValid() { return model_version != 0 && output_size != 0; }
+
   int64_t model_version;
   size_t output_size;
   std::optional<double> search_score_threshold;
@@ -48,6 +50,18 @@ enum class EmbeddingsModelInfoStatus {
   kMaxValue = kInvalidAdditionalFiles,
 };
 
+// Classifies the priority of embeddings generation requests.
+enum PassagePriority {
+  // Executed as quickly as possible, runs faster and costs more resources.
+  kUserInitiated = 0,
+
+  // Execution is deprioritized and runs more slowly but more economically.
+  kPassive = 1,
+
+  // Execution may be delayed indefinitely and runs economically.
+  kLatent = 2,
+};
+
 // The status of an embeddings generation attempt.
 enum class ComputeEmbeddingsStatus {
   // Embeddings are generated successfully.
@@ -59,10 +73,12 @@ enum class ComputeEmbeddingsStatus {
   // Failure occurred during model execution.
   kExecutionFailure = 2,
 
-  // The generation request was skipped. This could happen if the embeddings
-  // request for a user query, which may have been obsolete (by a newer user
-  // query) by the time the embedder is free.
-  kSkipped = 3,
+  // The generation request was canceled, either explicitly or due to limits.
+  kCanceled = 3,
+
+  // This must be kept in sync with ComputeEmbeddingsStatus in
+  // history/enums.xml.
+  kMaxValue = kCanceled,
 };
 
 }  // namespace passage_embeddings

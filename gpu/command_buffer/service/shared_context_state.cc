@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "gpu/command_buffer/service/shared_context_state.h"
 
 #include <atomic>
@@ -523,17 +528,20 @@ bool SharedContextState::InitializeSkia(
     gpu::raster::GrShaderCache* cache,
     GpuProcessShmCount* use_shader_cache_shm_count,
     gl::ProgressReporter* progress_reporter) {
-  static crash_reporter::CrashKeyString<16> crash_key("gr-context-type");
-  crash_key.Set(GrContextTypeToString(gr_context_type_));
-
   // Record the Skia backend type the first time Skia/SharedContextState is
-  // initialized. This can happen more than once and on different threads but
-  // the backend type should never change.
+  // initialized. This can happen more than once and on different threads, as we
+  // can have SharedContextState which uses GL that can be created later but
+  // isn't the primary Skia context type.
   static std::atomic<bool> once(true);
   if (once.exchange(false, std::memory_order_relaxed)) {
     SkiaBackendType context_enum = FindSkiaBackendType(this);
     base::UmaHistogramEnumeration("GPU.SkiaBackendType", context_enum);
+    // Record gr-context-type crash key.
+    static crash_reporter::CrashKeyString<16> crash_key("gr-context-type");
+    crash_key.Set(GrContextTypeToString(gr_context_type_));
   }
+
+  is_drdc_enabled_ = features::IsDrDcEnabled() && !workarounds.disable_drdc;
 
   if (gr_context_type_ == GrContextType::kNone) {
     // SharedContextState only exists to hold a GL context for WebGL fallback
@@ -654,7 +662,6 @@ bool SharedContextState::InitializeGanesh(
       base::BindRepeating(&SharedContextState::ScheduleSkiaCleanup,
                           base::Unretained(this)));
   gr_cache_controller_ = std::make_unique<raster::GrCacheController>(this);
-  is_drdc_enabled_ = features::IsDrDcEnabled() && !workarounds.disable_drdc;
   return true;
 }
 
@@ -720,9 +727,14 @@ bool SharedContextState::InitializeGraphite(
           gpu_main_graphite_recorder_.get(), graphite_context_.get(),
           dawn_context_provider_);
 
-  viz_compositor_graphite_recorder_ =
-      MakeGraphiteRecorder(graphite_context_, context_options.fGpuBudgetInBytes,
-                           max_viz_compositor_image_provider_cache_bytes);
+  // Only create the Viz recorder for the SharedContextState used by the
+  // compositor which will be the GPU main context without DrDC and the
+  // the CompositorGpuThread context with DrDC.
+  if (!is_drdc_enabled_ || created_on_compositor_gpu_thread_) {
+    viz_compositor_graphite_recorder_ = MakeGraphiteRecorder(
+        graphite_context_, context_options.fGpuBudgetInBytes,
+        max_viz_compositor_image_provider_cache_bytes);
+  }
 
   transfer_cache_ = std::make_unique<ServiceTransferCache>(
       gpu_preferences,
@@ -747,8 +759,7 @@ bool SharedContextState::InitializeGL(
   DCHECK(context_->IsCurrent(nullptr));
 
   bool use_passthrough_cmd_decoder =
-      gpu_preferences.use_passthrough_cmd_decoder &&
-      gles2::PassthroughCommandDecoderSupported();
+      gpu_preferences.use_passthrough_cmd_decoder;
   // Virtualized contexts don't work with passthrough command decoder.
   // See https://crbug.com/914976
   DCHECK(!use_passthrough_cmd_decoder || !use_virtualized_gl_contexts_);
@@ -1441,10 +1452,17 @@ int32_t SharedContextState::GetMaxTextureSize() {
   } else {
 #if BUILDFLAG(SKIA_USE_DAWN)
     if (dawn_context_provider()) {
+#ifdef WGPU_BREAKING_CHANGE_FLATTEN_LIMITS
+      wgpu::Limits limits = {};
+      auto succeded = dawn_context_provider()->GetDevice().GetLimits(&limits);
+      CHECK(succeded);
+      max_texture_size = limits.maxTextureDimension2D;
+#else
       wgpu::SupportedLimits limits = {};
       auto succeded = dawn_context_provider()->GetDevice().GetLimits(&limits);
       CHECK(succeded);
       max_texture_size = limits.limits.maxTextureDimension2D;
+#endif  // WGPU_BREAKING_CHANGE_FLATTEN_LIMITS
     }
 #endif  // BUILDFLAG(SKIA_USE_DAWN)
 #if BUILDFLAG(SKIA_USE_METAL)

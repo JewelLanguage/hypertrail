@@ -7,12 +7,12 @@
 
 syntax = "proto2";
 
-option optimize_for = LITE_RUNTIME;
-
 package safe_browsing;
 
 import "components/enterprise/common/proto/connectors.proto";
 import "components/safe_browsing/core/common/proto/csd.proto";
+
+option optimize_for = LITE_RUNTIME;
 
 message RTLookupRequest {
   // If applicable, URL submitted from Chrome.
@@ -69,6 +69,8 @@ message RTLookupRequest {
   //   * Client supports referrer chains.
   // Version 3:
   //   * Client support the |report_type| and |frame_type| fields.
+  // Version 4:
+  //   * Client may include |referring_webapk| in |referring_app_info| field.
   optional int32 version = 6 [default = 0];
 
   // The operating system of the client.
@@ -111,6 +113,10 @@ message RTLookupRequest {
 
   // The Android app that launched Chrome.
   optional ReferringAppInfo referring_app_info = 15;
+
+  // Local IP addresses of the device. This is only used for enterprise
+  // requests.
+  repeated string local_ips = 16;
 }
 
 message RTLookupResponse {

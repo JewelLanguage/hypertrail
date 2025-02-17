@@ -7,10 +7,12 @@
 #import "base/containers/contains.h"
 #import "base/functional/bind.h"
 #import "base/ios/ios_util.h"
+#import "base/metrics/histogram_functions.h"
 #import "base/metrics/user_metrics.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/feature_engagement/public/event_constants.h"
 #import "components/feature_engagement/public/tracker.h"
+#import "components/lens/lens_overlay_metrics.h"
 #import "components/omnibox/browser/omnibox_field_trial.h"
 #import "components/open_from_clipboard/clipboard_recent_content.h"
 #import "components/prefs/pref_service.h"
@@ -202,15 +204,8 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
           UIUserInterfaceSizeClassRegular ||
       self.traitCollection.verticalSizeClass == UIUserInterfaceSizeClassCompact;
 
-  if (shouldShowVoiceSearch) {
-    if (self.voiceSearchEnabled) {
-      self.trailingButtonState = kVoiceSearchButton;
-    } else {
-      self.trailingButtonState = kNoButton;
-    }
-  } else {
-    self.trailingButtonState = kShareButton;
-  }
+  self.trailingButtonState =
+      shouldShowVoiceSearch ? kVoiceSearchButton : kShareButton;
 }
 
 - (id<ContextualPanelEntrypointVisibilityDelegate>)
@@ -251,32 +246,13 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
     BOOL showSpeedbumpMenu = GetLensOverlayOnboardingTreatment() ==
                              LensOverlayOnboardingTreatment::kSpeedbumpMenu;
     if (showSpeedbumpMenu) {
-      __weak __typeof__(self) weakSelf = self;
-      _lensOverlayPlaceholderView.menu = [UIMenu
-          menuWithTitle:l10n_util::GetNSString(IDS_IOS_LENS_PRODUCT_NAME)
-               children:@[
-                 [UIAction actionWithTitle:
-                               l10n_util::GetNSString(
-                                   IDS_IOS_LENS_OVERLAY_SPEEDBUMP_MENU_SCREEN)
-                                     image:nil
-                                identifier:nil
-                                   handler:^(UIAction* _) {
-                                     [weakSelf openLensOverlay];
-                                   }],
-                 [UIAction actionWithTitle:
-                               l10n_util::GetNSString(
-                                   IDS_IOS_LENS_OVERLAY_SPEEDBUMP_MENU_CAMERA)
-                                     image:nil
-                                identifier:nil
-                                   handler:^(UIAction* _) {
-                                     [weakSelf openLensViewFinder];
-                                   }],
-               ]];
+      _lensOverlayPlaceholderView.menu = [self createSpeedbumpMenu];
       _lensOverlayPlaceholderView.showsMenuAsPrimaryAction = YES;
     } else {
-      [_lensOverlayPlaceholderView addTarget:self
-                                      action:@selector(openLensOverlay)
-                            forControlEvents:UIControlEventTouchUpInside];
+      [_lensOverlayPlaceholderView
+                 addTarget:self
+                    action:@selector(handleLensEntrypointPressed)
+          forControlEvents:UIControlEventTouchUpInside];
     }
   }
 
@@ -354,8 +330,9 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
 }
 
 - (void)updateForFullscreenEnabled:(BOOL)enabled {
-  if (!enabled)
+  if (!enabled) {
     [self updateForFullscreenProgress:1.0];
+  }
 }
 
 - (void)animateFullscreenWithAnimator:(FullscreenAnimator*)animator {
@@ -632,7 +609,7 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
     case kShareButton: {
       [self.locationBarSteadyView.trailingButton
                  addTarget:self.dispatcher
-                    action:@selector(sharePage)
+                    action:@selector(showShareSheet)
           forControlEvents:UIControlEventTouchUpInside];
 
       // Add self as a target to collect the metrics.
@@ -691,7 +668,7 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
           self.locationBarSteadyView.trailingButton.frame.size.width / 2;
       self.locationBarSteadyView.trailingButton.clipsToBounds = YES;
 
-      [self.locationBarSteadyView enableTrailingButton:YES];
+      [self.locationBarSteadyView enableTrailingButton:self.voiceSearchEnabled];
     }
   }
 }
@@ -725,6 +702,37 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
   return ios::provider::IsLensSupported() &&
          base::FeatureList::IsEnabled(kEnableLensInOmniboxCopiedImage) &&
          self.lensImageEnabled;
+}
+
+// Creates a new menu to use as the "speedbump" menu for the lens overlay
+// entrypoint. Only used in LensOverlayOnboardingTreatment::kSpeedbumpMenu.
+- (UIMenu*)createSpeedbumpMenu {
+  DCHECK(GetLensOverlayOnboardingTreatment() ==
+         LensOverlayOnboardingTreatment::kSpeedbumpMenu);
+
+  NSString* lensOverlayTitle =
+      l10n_util::GetNSString(IDS_IOS_LENS_OVERLAY_SPEEDBUMP_MENU_SCREEN);
+  __weak __typeof__(self) weakSelf = self;
+  UIAction* lensOverlayAction =
+      [UIAction actionWithTitle:lensOverlayTitle
+                          image:nil
+                     identifier:nil
+                        handler:^(UIAction* /* action */) {
+                          [weakSelf handleLensSpeedbumpMenuOpenLensOverlay];
+                        }];
+
+  NSString* cameraTitle =
+      l10n_util::GetNSString(IDS_IOS_LENS_OVERLAY_SPEEDBUMP_MENU_CAMERA);
+  UIAction* viewfinderAction =
+      [UIAction actionWithTitle:cameraTitle
+                          image:nil
+                     identifier:nil
+                        handler:^(UIAction* /* action */) {
+                          [weakSelf handleLensSpeedbumpMenuOpenLensViewFinder];
+                        }];
+  NSString* menuTitle = l10n_util::GetNSString(IDS_IOS_LENS_PRODUCT_NAME);
+  return [UIMenu menuWithTitle:menuTitle
+                      children:@[ lensOverlayAction, viewfinderAction ]];
 }
 
 #pragma mark - UIContextMenuInteractionDelegate
@@ -964,6 +972,29 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
   }
 }
 
+- (void)handleLensSpeedbumpMenuOpenLensViewFinder {
+  RecordAction(UserMetricsAction("MobileToolbarLensOverlayTap"));
+
+  base::UmaHistogramEnumeration(
+      "Lens.Overlay.SpeedbumpMenu",
+      lens::LensOverlaySpeedbumpMenuSelection::kSearchWithCamera);
+  [self openLensViewFinder];
+}
+
+- (void)handleLensSpeedbumpMenuOpenLensOverlay {
+  RecordAction(UserMetricsAction("MobileToolbarLensOverlayTap"));
+
+  base::UmaHistogramEnumeration(
+      "Lens.Overlay.SpeedbumpMenu",
+      lens::LensOverlaySpeedbumpMenuSelection::kSearchYourScreen);
+  [self openLensOverlay];
+}
+
+- (void)handleLensEntrypointPressed {
+  RecordAction(UserMetricsAction("MobileToolbarLensOverlayTap"));
+  [self openLensOverlay];
+}
+
 // Creates and shows the LVF input selection UI.
 - (void)openLensViewFinder {
   TriggerHapticFeedbackForSelectionChange();
@@ -981,7 +1012,6 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
     self.tracker->NotifyEvent(
         feature_engagement::events::kLensOverlayEntrypointUsed);
   }
-  RecordAction(UserMetricsAction("MobileToolbarLensOverlayTap"));
   TriggerHapticFeedbackForSelectionChange();
   [self.dispatcher createAndShowLensUI:YES
                             entrypoint:LensOverlayEntrypoint::kLocationBar

@@ -29,7 +29,7 @@ class DummySampleCountIterator : public SampleCountIterator {
   void Next() override { NOTREACHED(); }
   void Get(HistogramBase::Sample32* min,
            int64_t* max,
-           HistogramBase::Count* count) override {
+           HistogramBase::Count32* count) override {
     NOTREACHED();
   }
 };
@@ -43,12 +43,12 @@ class DummyHistogramSamples : public HistogramSamples {
 
   // HistogramSamples:
   void Accumulate(HistogramBase::Sample32 value,
-                  HistogramBase::Count count) override {}
-  HistogramBase::Count GetCount(HistogramBase::Sample32 value) const override {
-    return HistogramBase::Count();
+                  HistogramBase::Count32 count) override {}
+  HistogramBase::Count32 GetCount(HistogramBase::Sample32 value) const override {
+    return HistogramBase::Count32();
   }
-  HistogramBase::Count TotalCount() const override {
-    return HistogramBase::Count();
+  HistogramBase::Count32 TotalCount() const override {
+    return HistogramBase::Count32();
   }
   std::unique_ptr<SampleCountIterator> Iterator() const override {
     return std::make_unique<DummySampleCountIterator>();
@@ -79,8 +79,8 @@ HistogramType DummyHistogram::GetHistogramType() const {
 }
 
 bool DummyHistogram::HasConstructionArguments(
-    Sample expected_minimum,
-    Sample expected_maximum,
+    Sample32 expected_minimum,
+    Sample32 expected_maximum,
     size_t expected_bucket_count) const {
   return true;
 }

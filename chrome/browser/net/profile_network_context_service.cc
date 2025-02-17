@@ -142,10 +142,10 @@
 #endif
 
 #if BUILDFLAG(CHROME_ROOT_STORE_CERT_MANAGEMENT_UI)
-#include "chrome/browser/net/server_certificate_database.h"     // nogncheck
-#include "chrome/browser/net/server_certificate_database.pb.h"  // nogncheck
-#include "chrome/browser/net/server_certificate_database_service.h"  // nogncheck
 #include "chrome/browser/net/server_certificate_database_service_factory.h"  // nogncheck
+#include "components/server_certificate_database/server_certificate_database.h"  // nogncheck
+#include "components/server_certificate_database/server_certificate_database.pb.h"  // nogncheck
+#include "components/server_certificate_database/server_certificate_database_service.h"  // nogncheck
 #endif
 
 namespace {
@@ -437,12 +437,16 @@ ProfileNetworkContextService::ProfileNetworkContextService(Profile* profile)
     // `server_cert_database_observer_` is a CallbackListSubscription which
     // will unregister the observer once the ProfileNetworkContextService is
     // destroyed.
-    server_cert_database_observer_ =
+    net::ServerCertificateDatabaseService* server_cert_db_service =
         net::ServerCertificateDatabaseServiceFactory::GetForBrowserContext(
-            profile_)
-            ->AddObserver(base::BindRepeating(
-                &ProfileNetworkContextService::UpdateAdditionalCertificates,
-                base::Unretained(this)));
+            profile_);
+    // The service can be null for AshInternals profiles.
+    if (server_cert_db_service) {
+      server_cert_database_observer_ =
+          server_cert_db_service->AddObserver(base::BindRepeating(
+              &ProfileNetworkContextService::UpdateAdditionalCertificates,
+              base::Unretained(this)));
+    }
   }
 #endif
 
@@ -803,27 +807,23 @@ void ProfileNetworkContextService::UpdateAdditionalCertificates() {
     net::ServerCertificateDatabaseService* cert_db_service =
         net::ServerCertificateDatabaseServiceFactory::GetForBrowserContext(
             profile_);
-
-    cert_db_service->GetAllCertificates(
-        base::BindOnce(&ProfileNetworkContextService::
-                           UpdateAdditionalCertificatesWithUserAddedCerts,
-                       weak_factory_.GetWeakPtr()));
-  } else {
-    profile_->ForEachLoadedStoragePartition(
-        [&](content::StoragePartition* storage_partition) {
-          storage_partition->GetCertVerifierServiceUpdater()
-              ->UpdateAdditionalCertificates(
-                  GetCertificatePolicy(storage_partition->GetPath()));
-        });
+    // The service can be null for AshInternals profiles. If it's null, fall
+    // through to updating the additional certs without it.
+    if (cert_db_service) {
+      cert_db_service->GetAllCertificates(
+          base::BindOnce(&ProfileNetworkContextService::
+                             UpdateAdditionalCertificatesWithUserAddedCerts,
+                         weak_factory_.GetWeakPtr()));
+      return;
+    }
   }
-#else
+#endif
   profile_->ForEachLoadedStoragePartition(
       [&](content::StoragePartition* storage_partition) {
         storage_partition->GetCertVerifierServiceUpdater()
             ->UpdateAdditionalCertificates(
                 GetCertificatePolicy(storage_partition->GetPath()));
       });
-#endif
 }
 
 #if BUILDFLAG(CHROME_ROOT_STORE_CERT_MANAGEMENT_UI)
@@ -1118,12 +1118,18 @@ void ProfileNetworkContextService::CreateClientCertIssuerSourcesWithDBCerts(
 void ProfileNetworkContextService::CreateClientCertIssuerSources(
     net::ClientCertIssuerSourceGetterCallback callback) {
   if (base::FeatureList::IsEnabled(features::kEnableCertManagementUIV2Write)) {
-    net::ServerCertificateDatabaseServiceFactory::GetForBrowserContext(profile_)
-        ->GetAllCertificates(
-            base::BindOnce(&ProfileNetworkContextService::
-                               CreateClientCertIssuerSourcesWithDBCerts,
-                           weak_factory_.GetWeakPtr(), std::move(callback)));
-    return;
+    net::ServerCertificateDatabaseService* cert_db_service =
+        net::ServerCertificateDatabaseServiceFactory::GetForBrowserContext(
+            profile_);
+    // The service can be null for AshInternals profiles. If it's null fall
+    // through to creating the ClientCertIssuerSource without it.
+    if (cert_db_service) {
+      cert_db_service->GetAllCertificates(
+          base::BindOnce(&ProfileNetworkContextService::
+                             CreateClientCertIssuerSourcesWithDBCerts,
+                         weak_factory_.GetWeakPtr(), std::move(callback)));
+      return;
+    }
   }
 
   CreateClientCertIssuerSourcesWithDBCerts(std::move(callback),
@@ -1355,14 +1361,6 @@ void ProfileNetworkContextService::ConfigureNetworkContextParamsInternal(
     network_context_params->file_paths->cookie_database_name =
         base::FilePath(chrome::kCookieFilename);
 
-#if BUILDFLAG(IS_WIN)
-    // The cookie database used by this profile will be locked for exclusive
-    // access by sqlite3 implementation in the network service.
-    //
-    // TODO(crbug.com/377642763): See if we can remove this flag.
-    network_context_params->enable_locking_cookie_database = true;
-#endif  // BUILDFLAG(IS_WIN)
-
     g_browser_process->system_network_context_manager()
         ->AddCookieEncryptionManagerToNetworkContextParams(
             network_context_params);
@@ -1490,7 +1488,9 @@ void ProfileNetworkContextService::ConfigureNetworkContextParamsInternal(
   // add an isManaged() check here.
 
 #if BUILDFLAG(CHROME_ROOT_STORE_CERT_MANAGEMENT_UI)
-  if (base::FeatureList::IsEnabled(features::kEnableCertManagementUIV2Write)) {
+  if (base::FeatureList::IsEnabled(features::kEnableCertManagementUIV2Write) &&
+      net::ServerCertificateDatabaseServiceFactory::GetForBrowserContext(
+          profile_)) {
     cert_verifier_creation_params->wait_for_update = true;
     UpdateAdditionalCertificates();
   } else {

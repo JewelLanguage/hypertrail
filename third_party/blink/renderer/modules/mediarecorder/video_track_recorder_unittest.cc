@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "third_party/blink/renderer/modules/mediarecorder/video_track_recorder.h"
 
 #include <array>
@@ -1284,7 +1289,7 @@ TEST_P(VideoTrackRecorderPassthroughTest, HandlesFrames) {
   auto now = base::TimeTicks::Now();
   video_track_recorder_->OnEncodedVideoFrameForTesting(now, frame, now);
   std::string str = "abc";
-  EXPECT_EQ(encoded_data->AsSpan(), base::as_byte_span(str));
+  EXPECT_EQ(*encoded_data, base::as_byte_span(str));
 
   // Frame 2 (deltaframe)
   frame = CreateFrame(/*is_key_frame=*/false, GetParam());

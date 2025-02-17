@@ -42,6 +42,7 @@ import org.chromium.chrome.browser.compositor.layouts.LayoutUpdateHost;
 import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
 import org.chromium.chrome.browser.compositor.scene_layer.SolidColorSceneLayer;
 import org.chromium.chrome.browser.compositor.scene_layer.StaticTabSceneLayer;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.layouts.EventFilter;
 import org.chromium.chrome.browser.layouts.LayoutManager;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
@@ -61,6 +62,7 @@ import org.chromium.components.omnibox.OmniboxFeatures;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.resources.ResourceManager;
+import org.chromium.ui.util.XrUtils;
 
 import java.util.Collections;
 import java.util.function.DoubleConsumer;
@@ -331,6 +333,15 @@ public class HubLayout extends Layout implements HubLayoutController, AppHeaderO
         if (isStartingToHide()) return;
 
         try (TraceEvent e = TraceEvent.scoped("HubLayout.startHiding")) {
+            // End spatialization, if active as the tab switcher is hiding on an XR device.
+            // It hides the contents and root view temporarily before any transition to the browsing
+            // layout takes place and before the notifications are sent to the observer(s).
+            if (XrUtils.getInstance().isFsmOnXrDevice()) {
+                HubContainerView containerView = mHubController.getContainerView();
+                containerView.setVisibility(View.INVISIBLE);
+                mRootView.setVisibility(View.INVISIBLE);
+            }
+
             super.startHiding();
 
             // Since we are hiding this is no-longer fully shown.
@@ -473,8 +484,7 @@ public class HubLayout extends Layout implements HubLayoutController, AppHeaderO
         updateEmptyLayerColor(mPaneManager.getFocusedPaneSupplier().get());
 
         @ColorInt
-        int backgroundColor =
-                NewTabAnimationsUtils.getBackgroundColor(getContext(), newIsIncognito);
+        int backgroundColor = NewTabAnimationUtils.getBackgroundColor(getContext(), newIsIncognito);
         SyncOneshotSupplierImpl<ShrinkExpandAnimationData> animationDataSupplier =
                 new SyncOneshotSupplierImpl<>();
         HubLayoutAnimatorProvider animatorProvider =
@@ -507,25 +517,41 @@ public class HubLayout extends Layout implements HubLayoutController, AppHeaderO
         // animation originated from wherever on the Hub was clicked. This defaults to the top
         // left/right of the pane host view.
         boolean isRtl = LocalizationUtils.isLayoutRtl();
-        Rect initialRect = null;
-        int x = isRtl ? finalRect.right : finalRect.left;
-        int y = finalRect.top;
-        if (isRtl) {
-            initialRect = new Rect(x - 1, y, x, y + 1);
-        } else {
-            initialRect = new Rect(x, y, x + 1, y + 1);
-        }
+        Rect initialRect;
+        int cornerRadius;
+        if (ChromeFeatureList.sShowNewTabAnimations.isEnabled()) {
+            // Without this code, the upper corner shows a bit of blinking when running the
+            // animation. This ensures the {@link ShrinkExpandImageView} fully covers the upper
+            // corner.
+            if (isRtl) {
+                finalRect.right += 1;
+            } else {
+                finalRect.left -= 1;
+            }
+            finalRect.top -= 1;
 
+            initialRect = new Rect();
+            NewTabAnimationUtils.updateRects(
+                    initialRect, finalRect, isRtl, /* isTopAligned= */ true);
+            cornerRadius =
+                    getContext()
+                            .getResources()
+                            .getDimensionPixelSize(R.dimen.new_tab_animation_rect_corner_radius);
+        } else {
+            cornerRadius = 0;
+            int y = finalRect.top;
+            int x;
+            if (isRtl) {
+                x = finalRect.right;
+                initialRect = new Rect(x - 1, y, x, y + 1);
+            } else {
+                x = finalRect.left;
+                initialRect = new Rect(x, y, x + 1, y + 1);
+            }
+        }
         animationDataSupplier.set(
-                new ShrinkExpandAnimationData(
-                        initialRect,
-                        finalRect,
-                        /* initialTopCornerRadius= */ 0,
-                        /* initialBottomCornerRadius= */ 0,
-                        /* finalTopCornerRadius= */ 0,
-                        /* finalBottomCornerRadius= */ 0,
-                        /* thumbnailSize= */ null,
-                        /* useFallbackAnimation= */ false));
+                ShrinkExpandAnimationData.createHubNewTabAnimationData(
+                        initialRect, finalRect, cornerRadius, /* useFallbackAnimation= */ false));
 
         assert mCurrentAnimationRunner == null;
         mCurrentAnimationRunner =
@@ -534,6 +560,7 @@ public class HubLayout extends Layout implements HubLayoutController, AppHeaderO
                 new HubLayoutAnimationListener() {
                     @Override
                     public void onEnd(boolean wasForcedToFinish) {
+                        // TODO(crbug.com/40933120): Add fade animator.
                         doneHiding();
                     }
                 });

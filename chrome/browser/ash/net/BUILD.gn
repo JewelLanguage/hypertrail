@@ -4,7 +4,7 @@
 
 import("//build/config/chromeos/ui_mode.gni")
 
-assert(is_chromeos_ash)
+assert(is_chromeos)
 
 static_library("net") {
   sources = [
@@ -49,10 +49,8 @@ static_library("net") {
   public_deps = [ "//chrome/browser:browser_public_dependencies" ]
 
   deps = [
-    "//ash/components/arc",
     "//ash/public/cpp",
     "//base",
-    "//chrome/browser:browser_process",
     "//chrome/browser/ash/app_list/arc",
     "//chrome/browser/ash/login/session",
     "//chrome/browser/ash/net/dns_over_https",
@@ -79,6 +77,7 @@ static_library("net") {
     "//chromeos/ash/components/network/portal_detector",
     "//chromeos/ash/components/sync_wifi",
     "//chromeos/ash/components/system",
+    "//chromeos/ash/experiences/arc",
     "//chromeos/ash/services/bluetooth_config:in_process_bluetooth_config",
     "//chromeos/services/network_config/public/cpp",
     "//components/captive_portal/core",

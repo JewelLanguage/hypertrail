@@ -10,17 +10,32 @@
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
-#include "build/build_config.h"
 #include "components/keyed_service/core/keyed_service.h"
+
+#if BUILDFLAG(IS_ANDROID)
+#include "base/android/scoped_java_ref.h"
+#endif
 
 namespace search_engines {
 class SearchEngineChoiceService;
 }
 
-class PrefService;
 
 namespace regional_capabilities {
+class RegionalCapabilitiesService;
+}
 
+namespace testing::regional_capabilities {
+int GetCountryId(::regional_capabilities::RegionalCapabilitiesService&);
+}
+
+class PrefService;
+
+namespace TemplateURLPrepopulateData {
+class Resolver;
+}
+
+namespace regional_capabilities {
 // Service for managing the state related to Search Engine Choice (mostly
 // for the country information).
 class RegionalCapabilitiesService : public KeyedService {
@@ -31,13 +46,20 @@ class RegionalCapabilitiesService : public KeyedService {
    public:
     using CountryIdCallback = base::OnceCallback<void(int)>;
 
-    virtual ~Client();
+    virtual ~Client() = default;
 
-    virtual void FetchCountryId(CountryIdCallback country_id_fetched_callback)
-#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
-        = 0
-#endif
-        ;
+    // Synchronously returns a country to use in current run for this profile.
+    //
+    // The default implementation uses `country_codes::GetCurrentCountryID()`.
+    virtual int GetFallbackCountryId() = 0;
+
+    // Computes a country to associate with this profile, returning it by
+    // running `country_id_fetched_callback`. If it is not run synchronously,
+    // `GetFallbackCountryId()` should be used by the service for the current
+    // run. `country_id_fetched_callback` should be called only if a country was
+    // successfully obtained.
+    virtual void FetchCountryId(
+        CountryIdCallback country_id_fetched_callback) = 0;
   };
 
   RegionalCapabilitiesService(
@@ -45,15 +67,49 @@ class RegionalCapabilitiesService : public KeyedService {
       std::unique_ptr<Client> regional_capabilities_client);
   ~RegionalCapabilitiesService() override;
 
+  // Returns whether the profile country is a EEA member.
+  //
+  // Testing note: To control the value this returns in manual or automated
+  // tests, see `switches::kSearchEngineChoiceCountry`.
+  bool IsInEeaCountry();
+
   // Clears the country id cache to be able to change countries multiple times
   // in tests.
   void ClearCountryIdCacheForTesting();
 
+#if BUILDFLAG(IS_ANDROID)
+  // -- JNI Interface ---------------------------------------------------------
+
+  // Returns a reference to the Java-side `RegionalCapabilitiesService`, lazily
+  // creating it if needed.
+  base::android::ScopedJavaLocalRef<jobject> GetJavaObject();
+
+  // If the Java-side service has been created, commands it to destroy itself.
+  void DestroyJavaObject();
+
+  // See `IsInEeaCountry()`.
+  jboolean IsInEeaCountry(JNIEnv* env);
+
+  // -- JNI Interface End -----------------------------------------------------
+#endif
+
  private:
+  // -- Private access allow-list begin ---------------------------------------
+
+  // TemplateURLPrepopulateData::Resolver needs to know the exact country to
+  // provide the right search engine data.
+  // See https://crbug.com/328040066
+  friend class TemplateURLPrepopulateData::Resolver;
+
+  // Test-only. See https://crbug.com/328040066
+  friend int ::testing::regional_capabilities::GetCountryId(
+      ::regional_capabilities::RegionalCapabilitiesService&);
+
   // TODO(b:328040066): Investigate friend-ing methods instead whole classes
   // to tighten private access further.
   friend class search_engines::SearchEngineChoiceService;
-  friend class RegionalCapabilitiesServiceTest;
+
+  // -- Private access allow-list end -----------------------------------------
 
   // Returns the country ID to use in the context of regional checks.
   // Can be overridden using `switches::kSearchEngineChoiceCountry`.
@@ -70,10 +126,13 @@ class RegionalCapabilitiesService : public KeyedService {
   // in runtime (different runs can still return different values, though).
   std::optional<int> country_id_cache_;
 
+#if BUILDFLAG(IS_ANDROID)
+  // Corresponding Java object.
+  base::android::ScopedJavaGlobalRef<jobject> java_ref_;
+#endif
+
   base::WeakPtrFactory<RegionalCapabilitiesService> weak_ptr_factory_{this};
 };
-
-bool IsEeaCountry(int country_id);
 
 }  // namespace regional_capabilities
 

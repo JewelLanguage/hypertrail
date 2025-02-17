@@ -47,8 +47,6 @@
 #include "chrome/browser/ui/webui/ash/edu_coexistence/edu_coexistence_login_handler.h"
 #include "chrome/browser/ui/webui/signin/ash/edu_account_login_handler.h"
 #include "chrome/browser/ui/webui/signin/ash/inline_login_handler_impl.h"
-#include "chrome/grit/arc_account_picker_resources.h"
-#include "chrome/grit/arc_account_picker_resources_map.h"
 #include "chrome/grit/edu_coexistence_resources.h"
 #include "chrome/grit/edu_coexistence_resources_map.h"
 #include "chrome/grit/gaia_action_buttons_resources.h"
@@ -129,7 +127,6 @@ void CreateAndAddWebUIDataSource(Profile* profile) {
       network::mojom::CSPDirectiveName::ConnectSrc, "connect-src *;");
 
 #if BUILDFLAG(IS_CHROMEOS)
-  source->AddResourcePaths(kArcAccountPickerResources);
   source->AddResourcePaths(kGaiaActionButtonsResources);
   source->AddResourcePaths(kEduCoexistenceResources);
   source->AddResourcePaths(kSupervisionResources);
@@ -171,13 +168,10 @@ void CreateAndAddWebUIDataSource(Profile* profile) {
 #if BUILDFLAG(IS_CHROMEOS)
       {"title", IDS_ACCOUNT_MANAGER_DIALOG_TITLE},
       {"ok", IDS_APP_OK},
-      {"nextButtonLabel", IDS_ACCOUNT_MANAGER_DIALOG_NEXT_BUTTON},
       {"accountManagerDialogWelcomeTitle",
        IDS_ACCOUNT_MANAGER_DIALOG_WELCOME_TITLE},
       {"accountManagerDialogWelcomeCheckbox",
        IDS_ACCOUNT_MANAGER_DIALOG_WELCOME_CHECKBOX},
-      {"accountManagerDialogArcAccountPickerTitle",
-       IDS_ACCOUNT_MANAGER_DIALOG_ARC_ACCOUNT_PICKER_TITLE},
       {"addAccountLabel", IDS_ACCOUNT_MANAGER_DIALOG_ADD_ACCOUNT_LABEL},
       {"accountUseInArcButtonLabel",
        IDS_SETTINGS_ACCOUNT_MANAGER_USE_IN_ARC_BUTTON_LABEL},
@@ -212,84 +206,25 @@ void CreateAndAddWebUIDataSource(Profile* profile) {
       "secondaryGoogleAccountSigninAllowed",
       profile->GetPrefs()->GetBoolean(
           ::account_manager::prefs::kSecondaryGoogleAccountSigninAllowed));
-  source->AddBoolean(
-      "isArcAccountRestrictionsEnabled",
-      ash::AccountAppsAvailability::IsArcAccountRestrictionsEnabled());
-  // The "Apps Settings" link points to Apps > Manage your apps.
+  source->AddBoolean("shouldSkipWelcomePage",
+                     profile->GetPrefs()->GetBoolean(
+                         ash::prefs::kShouldSkipInlineLoginWelcomePage));
+
+  bool is_incognito_enabled =
+      (IncognitoModePrefs::GetAvailability(profile->GetPrefs()) !=
+       policy::IncognitoModeAvailability::kDisabled);
+  int message_id =
+      is_incognito_enabled
+          ? IDS_ACCOUNT_MANAGER_DIALOG_WELCOME_BODY
+          : IDS_ACCOUNT_MANAGER_DIALOG_WELCOME_BODY_WITHOUT_INCOGNITO;
   source->AddString(
-      "accountManagerDialogArcToggleLabel",
+      "accountManagerDialogWelcomeBody",
       l10n_util::GetStringFUTF16(
-          IDS_ACCOUNT_MANAGER_DIALOG_ARC_TOGGLE_LABEL,
-          base::UTF8ToUTF16(
-              chrome::GetOSSettingsUrl(
-                  chromeos::settings::mojom::kAppManagementSubpagePath)
-                  .spec())));
-  source->AddString(
-      "accountManagerDialogArcAccountPickerBody",
-      l10n_util::GetStringFUTF16(
-          IDS_ACCOUNT_MANAGER_DIALOG_ARC_ACCOUNT_PICKER_BODY,
+          message_id,
           base::UTF8ToUTF16(chrome::GetOSSettingsUrl(
                                 chromeos::settings::mojom::kPeopleSectionPath)
-                                .spec())));
-  source->AddBoolean(
-      "shouldSkipWelcomePage",
-      ash::AccountAppsAvailability::IsArcAccountRestrictionsEnabled()
-          ? false
-          : profile->GetPrefs()->GetBoolean(
-                ash::prefs::kShouldSkipInlineLoginWelcomePage));
-  if (ash::AccountAppsAvailability::IsArcAccountRestrictionsEnabled()) {
-    int message_id = IDS_ACCOUNT_MANAGER_DIALOG_WELCOME_BODY_V2_WITHOUT_GUEST;
-    // Offer browser guest mode or device guest mode, if available.
-    if (profiles::IsGuestModeEnabled()) {
-      message_id = IDS_ACCOUNT_MANAGER_DIALOG_WELCOME_BODY_V2_WITH_GUEST_MODE;
-    } else if (user_manager::UserManager::Get()->IsGuestSessionAllowed()) {
-      message_id =
-          IDS_ACCOUNT_MANAGER_DIALOG_WELCOME_BODY_V2_WITH_DEVICE_GUEST_MODE;
-    }
-
-    source->AddString(
-        "accountManagerDialogWelcomeBody",
-        l10n_util::GetStringFUTF16(
-            message_id,
-            // "add a new person" link:
-            chrome::kAddNewUserURL,
-            // Device type:
-            ui::GetChromeOSDeviceName(),
-            // Settings > Accounts link:
-            base::UTF8ToUTF16(chrome::GetOSSettingsUrl(
-                                  chromeos::settings::mojom::kPeopleSectionPath)
-                                  .spec())));
-
-    source->AddString(
-        "accountManagerDialogWelcomeBodyArc",
-        l10n_util::GetStringFUTF16(
-            IDS_ACCOUNT_MANAGER_DIALOG_WELCOME_BODY_ARC,
-            // "add a new person" link:
-            chrome::kAddNewUserURL,
-            // Device type:
-            ui::GetChromeOSDeviceName(),
-            // "Apps Settings" link:
-            base::UTF8ToUTF16(
-                chrome::GetOSSettingsUrl(
-                    chromeos::settings::mojom::kAppManagementSubpagePath)
-                    .spec())));
-  } else {
-    bool is_incognito_enabled =
-        (IncognitoModePrefs::GetAvailability(profile->GetPrefs()) !=
-         policy::IncognitoModeAvailability::kDisabled);
-    int message_id =
-        is_incognito_enabled
-            ? IDS_ACCOUNT_MANAGER_DIALOG_WELCOME_BODY
-            : IDS_ACCOUNT_MANAGER_DIALOG_WELCOME_BODY_WITHOUT_INCOGNITO;
-    source->AddString(
-        "accountManagerDialogWelcomeBody",
-        l10n_util::GetStringFUTF16(
-            message_id,
-            base::UTF8ToUTF16(chrome::GetOSSettingsUrl(
-                                  chromeos::settings::mojom::kPeopleSectionPath)
-                                  .spec()),
-            ui::GetChromeOSDeviceName()));
-  }
+                                .spec()),
+          ui::GetChromeOSDeviceName()));
 
   source->AddBoolean("isChild",
                      user_manager::UserManager::Get()->IsLoggedInAsChildUser());

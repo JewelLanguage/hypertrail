@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "base/linux_util.h"
 
 #include <dirent.h>
@@ -28,13 +33,12 @@
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 
 namespace base {
 
 namespace {
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 std::string GetKeyValueFromOSReleaseFile(const std::string& input,
                                          const char* key) {
   StringPairs key_value_pairs;
@@ -92,7 +96,7 @@ class DistroNameGetter {
     }
   }
 };
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 bool GetThreadsFromProcessDir(const char* dir_path, std::vector<pid_t>* tids) {
   DirReaderPosix dir_reader(dir_path);
@@ -120,7 +124,7 @@ constexpr int kDistroSize = 128 + 1;
 // We use this static string to hold the Linux distro info. If we
 // crash, the crash handler code will send this in the crash dump.
 char g_linux_distro[kDistroSize] =
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     "CrOS";
 #elif BUILDFLAG(IS_ANDROID)
     "Android";
@@ -136,15 +140,15 @@ char g_linux_distro[kDistroSize] =
 BASE_EXPORT std::string GetKeyValueFromOSReleaseFileForTesting(
     const std::string& input,
     const char* key) {
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
   return GetKeyValueFromOSReleaseFile(input, key);
 #else
   return "";
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 }
 
 std::string GetLinuxDistro() {
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
   // We do this check only once per process. If it fails, there's
   // little reason to believe it will work if we attempt to run it again.
   static DistroNameGetter distro_name_getter;

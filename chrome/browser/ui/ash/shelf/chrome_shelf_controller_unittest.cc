@@ -22,9 +22,6 @@
 #include <utility>
 #include <vector>
 
-#include "ash/components/arc/arc_prefs.h"
-#include "ash/components/arc/mojom/app.mojom.h"
-#include "ash/components/arc/mojom/compatibility_mode.mojom.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/web_app_id_constants.h"
@@ -99,8 +96,6 @@
 #include "chrome/browser/ash/system_web_apps/apps/os_flags_system_web_app_info.h"
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/ash/system_web_apps/test_support/test_system_web_app_manager.h"
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_delegate.h"
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_delegate_map.h"
 #include "chrome/browser/ash/wallpaper_handlers/wallpaper_fetcher_delegate.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
@@ -155,9 +150,14 @@
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
 #include "chromeos/ash/components/file_manager/app_id.h"
 #include "chromeos/ash/experiences/arc/app/arc_app_constants.h"
+#include "chromeos/ash/experiences/arc/arc_prefs.h"
 #include "chromeos/ash/experiences/arc/metrics/arc_metrics_constants.h"
+#include "chromeos/ash/experiences/arc/mojom/app.mojom.h"
+#include "chromeos/ash/experiences/arc/mojom/compatibility_mode.mojom.h"
 #include "chromeos/ash/experiences/arc/test/arc_util_test_support.h"
 #include "chromeos/ash/experiences/arc/test/fake_app_instance.h"
+#include "chromeos/ash/experiences/system_web_apps/types/system_web_app_delegate.h"
+#include "chromeos/ash/experiences/system_web_apps/types/system_web_app_delegate_map.h"
 #include "components/account_id/account_id.h"
 #include "components/app_constants/constants.h"
 #include "components/exo/shell_surface_util.h"
@@ -212,6 +212,7 @@
 #include "ui/events/event_constants.h"
 #include "ui/events/types/event_type.h"
 #include "ui/gfx/image/image_skia_operations.h"
+#include "ui/gfx/image/image_skia_rep.h"
 #include "ui/gfx/image/image_unittest_util.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/views/widget/widget.h"
@@ -1283,8 +1284,6 @@ class ChromeShelfControllerTestBase : public BrowserWithTestWindowTest,
     const std::unique_ptr<web_app::ScopedBundledIsolatedWebApp> app_bundle =
         web_app::IsolatedWebAppBuilder(web_app::ManifestBuilder())
             .BuildBundle();
-    app_bundle->FakeInstallPageState(profile());
-    app_bundle->TrustSigningKey();
     const web_app::IsolatedWebAppUrlInfo url_info =
         app_bundle
             ->InstallWithSource(
@@ -1372,7 +1371,7 @@ class ChromeShelfControllerTestBase : public BrowserWithTestWindowTest,
 
   syncer::SyncData GetSyncDataFor(std::string_view app_id) const {
     auto sync_data = app_list_syncable_service_->GetAllSyncDataForTesting();
-    auto itr = base::ranges::find(sync_data, app_id, [](const auto& sync_item) {
+    auto itr = std::ranges::find(sync_data, app_id, [](const auto& sync_item) {
       return sync_item.GetSpecifics().app_list().item_id();
     });
     EXPECT_FALSE(itr == sync_data.end());
@@ -1662,10 +1661,7 @@ class MultiProfileMultiBrowserShelfLayoutChromeShelfControllerTest
     // TODO(crbug.com/40286020): Merge into BrowserWithTestWindowTest.
     const AccountId account_id = AccountId::FromUserEmailGaiaId(email, gaia_id);
     // Add a user to the fake user manager.
-    auto* user = user_manager()->AddGaiaUser(account_id,
-                                             user_manager::UserType::kRegular);
-    ash_test_helper()->test_session_controller_client()->AddUserSession(
-        user->GetDisplayEmail());
+    user_manager()->AddGaiaUser(account_id, user_manager::UserType::kRegular);
     user_manager()->UserLoggedIn(
         account_id,
         user_manager::FakeUserManager::GetFakeUsernameHash(account_id),
@@ -2654,8 +2650,8 @@ TEST_F(ChromeShelfControllerMultiProfileWithArcTest, DISABLED_ArcMultiUser) {
   // Gmail created when secondary user is active.
 
   constexpr char kUser2[] = "user2@example.com";
-  constexpr char kFakeGaia2[] = "fakegaia2";
-  TestingProfile* profile2 = CreateMultiUserProfile(kUser2, GaiaId(kFakeGaia2));
+  const GaiaId kFakeGaia2("fakegaia2");
+  TestingProfile* profile2 = CreateMultiUserProfile(kUser2, kFakeGaia2);
   const AccountId account_id(
       multi_user_util::GetAccountIdFromProfile(profile()));
   const AccountId account_id2(
@@ -3158,9 +3154,8 @@ TEST_F(MultiProfileMultiBrowserShelfLayoutChromeShelfControllerTest,
 
     // After switching to a second user the item should be gone.
     const char kUser2[] = "user2@example.com";
-    const char kFakeGaia2[] = "fakegaia2";
-    TestingProfile* profile2 =
-        CreateMultiUserProfile(kUser2, GaiaId(kFakeGaia2));
+    const GaiaId kFakeGaia2("fakegaia2");
+    TestingProfile* profile2 = CreateMultiUserProfile(kUser2, kFakeGaia2);
     const AccountId account_id2(
         multi_user_util::GetAccountIdFromProfile(profile2));
     const AccountId account_id(
@@ -3184,8 +3179,8 @@ TEST_F(MultiProfileMultiBrowserShelfLayoutChromeShelfControllerTest,
 
   // First test: Create an app when the user is not active.
   constexpr char kUser2[] = "user2@example.com";
-  constexpr char kFakeGaia2[] = "fakegaia2";
-  TestingProfile* profile2 = CreateMultiUserProfile(kUser2, GaiaId(kFakeGaia2));
+  const GaiaId kFakeGaia2("fakegaia2");
+  TestingProfile* profile2 = CreateMultiUserProfile(kUser2, kFakeGaia2);
   const AccountId account_id2(
       multi_user_util::GetAccountIdFromProfile(profile2));
   const AccountId account_id(
@@ -3221,8 +3216,8 @@ TEST_F(MultiProfileMultiBrowserShelfLayoutChromeShelfControllerTest,
 
   // First create an app when the user is active.
   constexpr char kUser2[] = "user2@example.com";
-  constexpr char kFakeGaia2[] = "fakegaia2";
-  TestingProfile* profile2 = CreateMultiUserProfile(kUser2, GaiaId(kFakeGaia2));
+  const GaiaId kFakeGaia2("fakegaia2");
+  TestingProfile* profile2 = CreateMultiUserProfile(kUser2, kFakeGaia2);
   const AccountId account_id(
       multi_user_util::GetAccountIdFromProfile(profile()));
   const AccountId account_id2(
@@ -3258,8 +3253,8 @@ TEST_F(MultiProfileMultiBrowserShelfLayoutChromeShelfControllerTest,
 
   // First test: Create an app when the user is not active.
   constexpr char kUser2[] = "user2@example.com";
-  constexpr char kFakeGaia2[] = "fakegaia2";
-  TestingProfile* profile2 = CreateMultiUserProfile(kUser2, GaiaId(kFakeGaia2));
+  const GaiaId kFakeGaia2("fakegaia2");
+  TestingProfile* profile2 = CreateMultiUserProfile(kUser2, kFakeGaia2);
   const AccountId account_id(
       multi_user_util::GetAccountIdFromProfile(profile()));
   const AccountId account_id2(
@@ -3336,8 +3331,8 @@ TEST_F(MultiProfileMultiBrowserShelfLayoutChromeShelfControllerTest,
   InitShelfController();
 
   constexpr char kUser2[] = "user2@example.com";
-  constexpr char kFakeGaia2[] = "fakegaia2";
-  TestingProfile* profile2 = CreateMultiUserProfile(kUser2, GaiaId(kFakeGaia2));
+  const GaiaId kFakeGaia2("fakegaia2");
+  TestingProfile* profile2 = CreateMultiUserProfile(kUser2, kFakeGaia2);
   const AccountId account_id(
       multi_user_util::GetAccountIdFromProfile(profile()));
   const AccountId account_id2(
@@ -3996,8 +3991,8 @@ TEST_F(MultiProfileMultiBrowserShelfLayoutChromeShelfControllerTest,
   // Create a browser for another user and check that it is not included in the
   // users running browser list.
   constexpr char kUser2[] = "user2@example.com";
-  constexpr char kFakeGaia2[] = "fakegaia2";
-  TestingProfile* profile2 = CreateMultiUserProfile(kUser2, GaiaId(kFakeGaia2));
+  const GaiaId kFakeGaia2("fakegaia2");
+  TestingProfile* profile2 = CreateMultiUserProfile(kUser2, kFakeGaia2);
   const AccountId account_id2(
       multi_user_util::GetAccountIdFromProfile(profile2));
   std::unique_ptr<Browser> browser2(
@@ -4115,8 +4110,8 @@ TEST_F(MultiProfileMultiBrowserShelfLayoutChromeShelfControllerTest,
 
   // Create a second profile and switch to that user.
   constexpr char kUser2[] = "user2@example.com";
-  constexpr char kFakeGaia2[] = "fakegaia2";
-  TestingProfile* profile2 = CreateMultiUserProfile(kUser2, GaiaId(kFakeGaia2));
+  const GaiaId kFakeGaia2("fakegaia2");
+  TestingProfile* profile2 = CreateMultiUserProfile(kUser2, kFakeGaia2);
   const AccountId account_id2(
       multi_user_util::GetAccountIdFromProfile(profile2));
   SwitchActiveUserByAccountId(account_id2);
@@ -4436,9 +4431,8 @@ TEST_F(MultiProfileMultiBrowserShelfLayoutChromeShelfControllerTest,
   const AccountId account_id(
       multi_user_util::GetAccountIdFromProfile(profile()));
   constexpr char kUser2[] = "user2@example.com";
-  constexpr char kFakeGaia2[] = "fakegaia2";
-  const TestingProfile* profile2 =
-      CreateMultiUserProfile(kUser2, GaiaId(kFakeGaia2));
+  const GaiaId kFakeGaia2("fakegaia2");
+  const TestingProfile* profile2 = CreateMultiUserProfile(kUser2, kFakeGaia2);
   const AccountId account_id2(
       multi_user_util::GetAccountIdFromProfile(profile2));
 
@@ -4479,9 +4473,8 @@ TEST_F(MultiProfileMultiBrowserShelfLayoutChromeShelfControllerTest,
   const AccountId account_id(
       multi_user_util::GetAccountIdFromProfile(profile()));
   constexpr char kUser2[] = "user2@example.com";
-  constexpr char kFakeGaia2[] = "fakegaia2";
-  const TestingProfile* profile2 =
-      CreateMultiUserProfile(kUser2, GaiaId(kFakeGaia2));
+  const GaiaId kFakeGaia2("fakegaia2");
+  const TestingProfile* profile2 = CreateMultiUserProfile(kUser2, kFakeGaia2);
   const AccountId account_id2(
       multi_user_util::GetAccountIdFromProfile(profile2));
 

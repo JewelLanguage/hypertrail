@@ -231,6 +231,10 @@ bool HEVCDecoderConfigurationRecord::ParseInternal(BufferReader* reader,
   // Parse the color space and hdr metadata.
   std::vector<uint8_t> param_sets;
   HEVC::ConvertConfigToAnnexB(*this, &param_sets);
+  if (param_sets.empty()) {
+    // No parameters, nothing to parse below.
+    return true;
+  }
   H265Parser parser;
   H265NALU nalu;
   parser.SetStream(param_sets.data(), param_sets.size());
@@ -427,7 +431,6 @@ BitstreamConverter::AnalysisResult HEVC::AnalyzeAnnexB(
     size_t size,
     const std::vector<SubsampleEntry>& subsamples) {
   DVLOG(3) << __func__;
-  DCHECK(buffer);
 
   BitstreamConverter::AnalysisResult result;
   result.is_conformant = false;  // Will change if needed before return.

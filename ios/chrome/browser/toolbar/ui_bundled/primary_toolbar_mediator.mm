@@ -5,6 +5,8 @@
 #import "ios/chrome/browser/toolbar/ui_bundled/primary_toolbar_mediator.h"
 
 #import "ios/chrome/browser/banner_promo/model/default_browser_banner_promo_app_agent.h"
+#import "ios/chrome/browser/default_browser/model/promo_source.h"
+#import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/primary_toolbar_consumer.h"
 
 @interface PrimaryToolbarMediator () <DefaultBrowserBannerAppAgentObserver>
@@ -29,6 +31,14 @@
   [_defaultBrowserBannerAppAgent removeObserver:self];
 }
 
+- (void)setConsumer:(id<PrimaryToolbarConsumer>)consumer {
+  _consumer = consumer;
+
+  if (_defaultBrowserBannerAppAgent.promoCurrentlyShown) {
+    [self.consumer showBannerPromo];
+  }
+}
+
 #pragma mark - DefaultBrowserBannerAppAgentObserver
 
 - (void)displayPromoFromAppAgent:(DefaultBrowserBannerPromoAppAgent*)appAgent {
@@ -37,6 +47,21 @@
 
 - (void)hidePromoFromAppAgent:(DefaultBrowserBannerPromoAppAgent*)appAgent {
   [self.consumer hideBannerPromo];
+}
+
+#pragma mark - BannerPromoViewDelegate
+
+- (void)bannerPromoWasTapped:(BannerPromoView*)bannerPromoView {
+  [self.settingsHandler
+      showDefaultBrowserSettingsFromViewController:nil
+                                      sourceForUMA:
+                                          DefaultBrowserSettingsPageSource::
+                                              kBannerPromo];
+  [_defaultBrowserBannerAppAgent promoTapped];
+}
+
+- (void)bannerPromoCloseButtonWasTapped:(BannerPromoView*)bannerPromoView {
+  [_defaultBrowserBannerAppAgent promoCloseButtonTapped];
 }
 
 @end

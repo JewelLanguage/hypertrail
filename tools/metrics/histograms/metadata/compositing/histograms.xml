@@ -98,22 +98,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Compositing.Browser.LayerTreeImpl.CalculateDrawPropertiesUs"
-    units="microseconds" expires_after="2023-03-19">
-  <owner>pdr@chromium.org</owner>
-  <owner>paint-dev@chromium.org</owner>
-  <summary>
-    Time spent updating layer draw properties, in microseconds. Recorded when a
-    LayerTreeImpl's draw properties are updated (in a browser process).
-
-    Warning: This metric may include reports from clients with low-resolution
-    clocks (i.e. on Windows, ref. |TimeTicks::IsHighResolution()|). Such reports
-    will cause this metric to have an abnormal distribution. When considering
-    revising this histogram, see UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES for the
-    solution.
-  </summary>
-</histogram>
-
 <histogram name="Compositing.BufferQueue.TimeUntilBuffersRecreatedMs"
     units="ms" expires_after="2025-07-01">
   <owner>petermcneeley@chromium.org</owner>
@@ -138,7 +122,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Compositing.DecodeLCPCandidateImage.{DecodeMethod}"
-    enum="Boolean" expires_after="2025-06-08">
+    enum="Boolean" expires_after="2025-08-10">
   <owner>mmocny@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -160,18 +144,6 @@ chromium-metrics-reviews@google.com.
                  that has not completed."/>
     <variant name="Software" summary="software image decode task completion."/>
   </token>
-</histogram>
-
-<histogram name="Compositing.DidMainThreadBlockDuringCommit" enum="Boolean"
-    expires_after="2025-07-13">
-  <owner>szager@chromium.org</owner>
-  <owner>paint-dev@chromium.org</owner>
-  <owner>sky@chromium.org</owner>
-  <summary>
-    Recorded on every commit. Indicates whether the renderer's main thread was
-    blocked waiting for the impl thread to commit. True indicates the main
-    thread did block.
-  </summary>
 </histogram>
 
 <histogram name="Compositing.DirectRenderer.DrawnRectAssignmentType"
@@ -244,7 +216,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Compositing.DirectRenderer.PartialSwap.TotalDamage" units="%"
-    expires_after="2025-06-08">
+    expires_after="2025-08-10">
   <owner>vasilyt@chromium.org</owner>
   <owner>petermcneeley@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@chromium.org</owner>
@@ -259,7 +231,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Compositing.DirectRenderer.RenderPassDrawnRectMatch"
-    enum="Boolean" expires_after="2025-06-09">
+    enum="Boolean" expires_after="2025-08-10">
   <owner>petermcneeley@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@chromium.org</owner>
   <summary>
@@ -291,7 +263,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Compositing.DirectRenderer.{FocusType}" units="pixels"
-    expires_after="2025-06-09">
+    expires_after="2025-08-10">
   <owner>petermcneeley@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@chromium.org</owner>
   <summary>
@@ -321,7 +293,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Compositing.Display.Draw.AverageOverdraw2" units="units"
-    expires_after="2025-06-08">
+    expires_after="2025-08-10">
   <owner>zoraiznaeem@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@chromium.org</owner>
   <summary>
@@ -689,38 +661,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Compositing.MainThreadBlockedDuringCommitTime"
-    units="microseconds" expires_after="2025-01-05">
-  <owner>szager@chromium.org</owner>
-  <owner>paint-dev@chromium.org</owner>
-  <owner>sky@chromium.org</owner>
-  <summary>
-    The time that the renderer's main thread blocked waiting for the impl thread
-    to commit. This is only reported if the main thread blocked.
-
-    Drops reports on clients with low-resolution clocks, biasing to a portion of
-    the population on Windows. See Windows.HasHighResolutionTimeTicks for the
-    affected sample.
-  </summary>
-</histogram>
-
-<histogram
-    name="Compositing.MainThreadBlockedDuringCommitTime.ApplyCompositorChanges"
-    units="microseconds" expires_after="2023-10-08">
-  <owner>szager@chromium.org</owner>
-  <owner>pdr@chromium.org</owner>
-  <owner>paint-dev@chromium.org</owner>
-  <summary>
-    The time that ApplyCompositorChanges is blocked waiting for the impl thread
-    to commit. This is a subset of the total time spent in
-    Compositing.MainThreadBlockedDuringCommitTime.
-
-    Drops reports on clients with low-resolution clocks, biasing to a portion of
-    the population on Windows. See Windows.HasHighResolutionTimeTicks for the
-    affected sample.
-  </summary>
-</histogram>
-
 <histogram name="Compositing.Renderer.CALayerResult" enum="CALayerResult"
     expires_after="2025-07-13">
   <owner>ccameron@chromium.org</owner>
@@ -749,7 +689,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Compositing.Renderer.LCDTextDisallowedReasonKPixels2.{DPI}"
-    enum="LCDTextDisallowedReason" expires_after="2025-06-08">
+    enum="LCDTextDisallowedReason" expires_after="2025-08-10">
   <owner>wangxianzhu@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -807,7 +747,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Compositing.SurfaceAggregator.AggregateUs"
-    units="microseconds" expires_after="2025-06-01">
+    units="microseconds" expires_after="2025-08-03">
   <owner>kylechar@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@chromium.org</owner>
   <summary>
@@ -833,7 +773,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Compositing.SurfaceAggregator.CopyUs" units="microseconds"
-    expires_after="2025-06-01">
+    expires_after="2025-08-03">
   <owner>kylechar@chromium.org</owner>
   <owner>jonross@chromium.org</owner>
   <summary>
@@ -883,7 +823,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Compositing.SurfaceAggregator.PrewalkUs" units="microseconds"
-    expires_after="2025-06-01">
+    expires_after="2025-08-03">
   <owner>kylechar@chromium.org</owner>
   <owner>jonross@chromium.org</owner>
   <summary>
@@ -945,7 +885,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Compositing.TileManager.TileInvalidationArea" units="%"
-    expires_after="2025-06-09">
+    expires_after="2025-08-10">
   <owner>petermcneeley@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@chromium.org</owner>
   <summary>
@@ -982,7 +922,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="CompositorLatency.CompositorOnlyFrame{InteractionType}.{StageType}"
-    units="microseconds" expires_after="2025-06-08">
+    units="microseconds" expires_after="2025-08-10">
   <owner>jonross@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@chromium.org</owner>
   <summary>
@@ -1098,7 +1038,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="CompositorLatency{ReportType}{InteractionType}.{StageType}"
-    units="microseconds" expires_after="2025-06-01">
+    units="microseconds" expires_after="2025-08-03">
   <owner>jonross@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@chromium.org</owner>
   <summary>
@@ -1246,7 +1186,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Graphics.Smoothness.CheckerboardingNeedRaster4.AllSequences"
-    units="%" expires_after="2025-06-08">
+    units="%" expires_after="2025-08-10">
   <owner>wangxianzhu@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@chromium.org</owner>
   <summary>
@@ -1270,7 +1210,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Graphics.Smoothness.CheckerboardingNeedRecord4.AllSequences"
-    units="%" expires_after="2025-06-01">
+    units="%" expires_after="2025-08-03">
   <owner>wangxianzhu@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@chromium.org</owner>
   <summary>
@@ -1294,7 +1234,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Graphics.Smoothness.Checkerboarding{Version}.AllSequences"
-    units="%" expires_after="2025-06-08">
+    units="%" expires_after="2025-08-10">
   <owner>jonross@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@chromium.org</owner>
   <summary>
@@ -1318,7 +1258,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Graphics.Smoothness.Checkerboarding{Version}.{Sequence}"
-    units="%" expires_after="2025-06-01">
+    units="%" expires_after="2025-08-03">
   <owner>jonross@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@chromium.org</owner>
   <summary>
@@ -1342,7 +1282,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Graphics.Smoothness.Checkerboarding{Version}.{Thread}{Sequence}"
-    units="%" expires_after="2025-06-08">
+    units="%" expires_after="2025-08-10">
   <owner>jonross@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@chromium.org</owner>
   <summary>
@@ -1482,7 +1422,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Graphics.Smoothness.PercentDroppedFrames3.{Sequence}"
-    units="%" expires_after="2025-06-01">
+    units="%" expires_after="2025-08-03">
   <owner>jonross@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@chromium.org</owner>
   <summary>
@@ -1508,7 +1448,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Graphics.Smoothness.PercentDroppedFrames3.{Sequence}.1MinAfterResume"
-    units="%" expires_after="2025-06-08">
+    units="%" expires_after="2025-08-10">
   <owner>kawasin@google.com</owner>
   <owner>baseos-perf@google.com</owner>
   <summary>
@@ -1534,7 +1474,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Graphics.Smoothness.PercentDroppedFrames3.{Thread}{Sequence}"
-    units="%" expires_after="2025-06-01">
+    units="%" expires_after="2025-08-03">
   <owner>jonross@chromium.org</owner>
   <owner>chrome-gpu-metric-alerts@chromium.org</owner>
   <summary>

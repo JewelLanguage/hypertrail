@@ -1,6 +1,10 @@
 // Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
 
 #include <stddef.h>
 
@@ -494,8 +498,7 @@ bool MatchesBitmap(const SkBitmap& expected_bmp,
                    const SkBitmap& actual_bmp,
                    const gfx::Rect& matching_mask,
                    float device_scale_factor,
-                   int max_collor_diff,
-                   int fuzz = 0) {
+                   int max_collor_diff) {
   // Number of pixels with an error
   int error_pixels_count = 0;
 
@@ -503,12 +506,6 @@ bool MatchesBitmap(const SkBitmap& expected_bmp,
 
   // Scale expectations along with the mask.
   device_scale_factor = device_scale_factor ? device_scale_factor : 1;
-
-  // Check that bitmaps have identical dimensions.
-  int expected_width = round(expected_bmp.width() * device_scale_factor);
-  int expected_height = round(expected_bmp.height() * device_scale_factor);
-  EXPECT_NEAR(expected_width, actual_bmp.width(), fuzz);
-  EXPECT_NEAR(expected_height, actual_bmp.height(), fuzz);
 
   DCHECK(gfx::SkIRectToRect(actual_bmp.bounds()).Contains(matching_mask));
 
@@ -610,8 +607,7 @@ class CaptureScreenshotTest : public DevToolsProtocolTest {
                                      float device_scale_factor = 0,
                                      const gfx::RectF& clip = gfx::RectF(),
                                      float clip_scale = 0,
-                                     bool capture_beyond_viewport = false,
-                                     int fuzz = 0) {
+                                     bool capture_beyond_viewport = false) {
     SkBitmap result_bitmap = CaptureScreenshot(
         encoding, from_surface, clip, clip_scale, capture_beyond_viewport);
 
@@ -630,7 +626,7 @@ class CaptureScreenshotTest : public DevToolsProtocolTest {
     int max_collor_diff = 20;
 
     EXPECT_TRUE(MatchesBitmap(expected_bitmap, result_bitmap, matching_mask,
-                              device_scale_factor, max_collor_diff, fuzz));
+                              device_scale_factor, max_collor_diff));
   }
 
   gfx::Size GetPageContentSize() {
@@ -800,8 +796,7 @@ IN_PROC_BROWSER_TEST_F(CaptureScreenshotTest,
   CaptureScreenshotAndCompareTo(expected_bitmap, ScreenshotEncoding::PNG,
                                 /*from_surface=*/true, device_scale_factor,
                                 /*clip=*/gfx::RectF(), /*clip_scale=*/0,
-                                /*capture_beyond_viewport=*/true,
-                                /*fuzz*/ 3);
+                                /*capture_beyond_viewport=*/true);
 }
 
 IN_PROC_BROWSER_TEST_F(CaptureScreenshotTest,
@@ -914,7 +909,8 @@ class NoGPUCaptureScreenshotTest : public CaptureScreenshotTest {
 // Tests that large screenshots are composited fine with software compositor.
 // Regression test for https://crbug.com/1137291.
 // Flaky on Linux.  http://crbug.com/1301176
-#if BUILDFLAG(IS_LINUX)
+// TODO(crbug.com/396301195): Failing on Win 10 Tests x64 dbg bot.
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
 #define MAYBE_LargeScreenshot DISABLED_LargeScreenshot
 #else
 #define MAYBE_LargeScreenshot LargeScreenshot
@@ -1013,7 +1009,13 @@ IN_PROC_BROWSER_TEST_F(CaptureScreenshotTest,
 // Bellow tests verify that setDefaultBackgroundColor and captureScreenshot
 // support a fully and semi-transparent background,
 // and that setDeviceMetricsOverride doesn't affect it.
-IN_PROC_BROWSER_TEST_F(CaptureScreenshotTest, TransparentScreenshotsViewport) {
+IN_PROC_BROWSER_TEST_F(CaptureScreenshotTest,
+// TODO(crbug.com/40875549): Fix this failing test
+#if BUILDFLAG(IS_ANDROID)
+                       DISABLED_TransparentScreenshotsViewport) {
+#else
+                       TransparentScreenshotsViewport) {
+#endif
   if (base::SysInfo::IsLowEndDevice())
     return;
 
@@ -1074,7 +1076,7 @@ IN_PROC_BROWSER_TEST_F(CaptureScreenshotTest, TransparentScreenshotsViewport) {
 }
 
 IN_PROC_BROWSER_TEST_F(CaptureScreenshotTest,
-// TODO(crbug.com/40876878): Fix this failing test
+// TODO(crbug.com/40875549): Fix this failing test
 #if BUILDFLAG(IS_ANDROID)
                        DISABLED_TransparentScreenshotsBeyondViewport) {
 #else

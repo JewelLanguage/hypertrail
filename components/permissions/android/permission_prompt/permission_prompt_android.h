@@ -55,7 +55,11 @@ class PermissionPromptAndroid : public PermissionPrompt {
   virtual void Closing();
   virtual void Accept();
   virtual void AcceptThisTime();
+  virtual void Acknowledge() {}
   virtual void Deny();
+  virtual void Resumed() {}
+  virtual void SystemSettingsShown() {}
+  virtual void SystemPermissionResolved(bool accepted) {}
   void SetManageClicked();
   void SetLearnMoreClicked();
   virtual bool ShouldCurrentRequestUseQuietUI();
@@ -92,6 +96,8 @@ class PermissionPromptAndroid : public PermissionPrompt {
       JNIEnv* env) const;
   base::android::ScopedJavaLocalRef<jintArray> GetBoldRanges(JNIEnv* env) const;
   bool IsOneTimePermissionRequest() const;
+
+  bool IsShowing() const { return this == delegate()->GetCurrentPrompt(); }
 
  protected:
   Delegate* delegate() const { return delegate_; }

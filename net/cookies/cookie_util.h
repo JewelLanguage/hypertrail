@@ -48,7 +48,7 @@ enum class StorageAccessResult {
   ACCESS_BLOCKED = 0,
   ACCESS_ALLOWED = 1,
   ACCESS_ALLOWED_STORAGE_ACCESS_GRANT = 2,
-  OBSOLETE_ACCESS_ALLOWED_FORCED = 3 /*(DEPRECATED)*/,
+  // OBSOLETE_ACCESS_ALLOWED_FORCED = 3 /*(DEPRECATED)*/,
   ACCESS_ALLOWED_TOP_LEVEL_STORAGE_ACCESS_GRANT = 4,
   ACCESS_ALLOWED_3PCD_TRIAL = 5,
   ACCESS_ALLOWED_3PCD_METADATA_GRANT = 6,
@@ -56,7 +56,8 @@ enum class StorageAccessResult {
   // ACCESS_ALLOWED_CORS_EXCEPTION = 8,  // Deprecated
   ACCESS_ALLOWED_TOP_LEVEL_3PCD_TRIAL = 9,
   ACCESS_ALLOWED_SCHEME = 10,
-  kMaxValue = ACCESS_ALLOWED_SCHEME,
+  ACCESS_ALLOWED_SANDBOX_VALUE = 11,
+  kMaxValue = ACCESS_ALLOWED_SANDBOX_VALUE,
 };
 
 // This enum's values correspond to the values of the HTTP request header
@@ -399,11 +400,6 @@ ComputeSameSiteContextForSubresource(const GURL& url,
 NET_EXPORT bool IsPortBoundCookiesEnabled();
 
 NET_EXPORT bool IsSchemeBoundCookiesEnabled();
-
-// Takes the feature state and CookieScopeSemantics semantics into account to
-// determine if the behavior should be applied.
-NET_EXPORT bool IsSchemeBoundCookiesBehaviorActive(
-    CookieScopeSemantics scope_semantics);
 
 // Returns true if either portion of OBC is enabled.
 NET_EXPORT bool IsOriginBoundCookiesPartiallyEnabled();

@@ -4,6 +4,7 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
@@ -12,7 +13,6 @@
 #include "base/containers/flat_map.h"
 #include "base/containers/span.h"
 #include "base/feature_list.h"
-#include "base/ranges/algorithm.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
@@ -164,6 +164,14 @@ class FormFillerTest : public testing::Test {
                                            /*removed_forms=*/{});
   }
 
+  FormData FormSeen(test::FormDescription form_description) {
+    FormData form = test::GetFormData(form_description);
+    browser_autofill_manager_->AddSeenForm(
+        form, test::GetHeuristicTypes(form_description),
+        test::GetServerTypes(form_description));
+    return form;
+  }
+
   FormFiller& form_filler() {
     return test_api(*browser_autofill_manager_).form_filler();
   }
@@ -196,14 +204,14 @@ class FormFillerTest : public testing::Test {
     EXPECT_CALL(autofill_driver_, ApplyFormAction)
         .WillOnce(
             DoAll(SaveArgElementsTo<2>(&filled_fields), Return(global_ids)));
-    form_filler().FillOrPreviewForm(
-        mojom::ActionPersistence::kFill, form, filling_payload,
-        *GetFormStructure(form), *GetAutofillField(form, trigger_field),
-        /*ignorable_skip_reasons=*/{}, trigger_source);
+    form_filler().FillOrPreviewForm(mojom::ActionPersistence::kFill, form,
+                                    filling_payload, *GetFormStructure(form),
+                                    *GetAutofillField(form, trigger_field),
+                                    trigger_source);
     // Copy the filled data into the form.
     for (FormFieldData& field : test_api(form).fields()) {
-      if (auto it = base::ranges::find(filled_fields, field.global_id(),
-                                       &FormFieldData::global_id);
+      if (auto it = std::ranges::find(filled_fields, field.global_id(),
+                                      &FormFieldData::global_id);
           it != filled_fields.end()) {
         field = *it;
       }
@@ -219,10 +227,10 @@ class FormFillerTest : public testing::Test {
     EXPECT_CALL(autofill_driver_, ApplyFormAction)
         .WillOnce((DoAll(SaveArgElementsTo<2>(&filled_fields),
                          Return(std::vector<FieldGlobalId>{}))));
-    form_filler().FillOrPreviewForm(
-        mojom::ActionPersistence::kPreview, form, &virtual_card,
-        *GetFormStructure(form), *GetAutofillField(form, field),
-        /*ignorable_skip_reasons=*/{}, AutofillTriggerSource::kPopup);
+    form_filler().FillOrPreviewForm(mojom::ActionPersistence::kPreview, form,
+                                    &virtual_card, *GetFormStructure(form),
+                                    *GetAutofillField(form, field),
+                                    AutofillTriggerSource::kPopup);
     return filled_fields;
   }
 
@@ -295,7 +303,7 @@ TEST_F(FormFillerTest, DoNotFillIfFormChanged) {
   form_filler().FillOrPreviewForm(
       mojom::ActionPersistence::kFill, form, &profile, *GetFormStructure(form),
       *GetAutofillField(form, form.fields().front()),
-      /*ignorable_skip_reasons=*/{}, AutofillTriggerSource::kPopup);
+      AutofillTriggerSource::kPopup);
 }
 
 TEST_F(FormFillerTest, SkipFillIfFieldIsMeaningfullyPreFilled) {
@@ -400,10 +408,35 @@ TEST_F(FormFillerTest, UndoSavesFormFillingData) {
   form_filler().FillOrPreviewForm(
       mojom::ActionPersistence::kFill, form, &profile, *GetFormStructure(form),
       *GetAutofillField(form, form.fields().front()),
-      /*ignorable_skip_reasons=*/{}, AutofillTriggerSource::kPopup);
+      AutofillTriggerSource::kPopup);
   // Undo early returns if it has no filling history for the trigger field,
   // which is initially empty, therefore calling the driver is proof that data
   // was successfully stored.
+  browser_autofill_manager_->UndoAutofill(mojom::ActionPersistence::kFill, form,
+                                          form.fields().front());
+}
+
+TEST_F(FormFillerTest, UndoSavesFormFillingDataForAutofillAi) {
+  FormData form = FormSeen(
+      {.fields = {{.role = PASSPORT_NAME_TAG, .heuristic_type = NAME_FIRST},
+                  {.role = PASSPORT_NAME_TAG, .heuristic_type = NAME_LAST},
+                  {.role = PASSPORT_NUMBER},
+                  {.role = IBAN_VALUE, .heuristic_type = IBAN_VALUE},
+                  {.role = UNKNOWN_TYPE, .heuristic_type = UNKNOWN_TYPE}}});
+
+  auto safe_fields = base::MakeFlatSet<FieldGlobalId>(
+      form.fields(), {}, &FormFieldData::global_id);
+  EXPECT_CALL(autofill_driver_, ApplyFormAction)
+      .Times(2)
+      .WillRepeatedly(Return(safe_fields));
+
+  AutofillProfile profile = test::GetFullProfile();
+  browser_autofill_manager_->FillOrPreviewFormWithAutofillAiData(
+      mojom::ActionPersistence::kFill, form, form.fields()[0],
+      /*values_to_fill=*/
+      {{form.fields()[0].global_id(), u"John"},
+       {form.fields()[1].global_id(), u"Doe"},
+       {form.fields()[2].global_id(), u"123"}});
   browser_autofill_manager_->UndoAutofill(mojom::ActionPersistence::kFill, form,
                                           form.fields().front());
 }
@@ -1639,24 +1672,23 @@ TEST_F(FormFillerTest, PreFilledCCFieldInAddressFormDoesNotCauseCrash) {
 }
 
 TEST_F(FormFillerTest, FillOrPreviewFormWithAutofillAi) {
-  test::FormDescription form_description = {
-      .fields = {{.role = NAME_FIRST, .heuristic_type = NAME_FIRST},
-                 {.role = NAME_LAST, .heuristic_type = NAME_LAST},
-                 {.role = IBAN_VALUE, .heuristic_type = IBAN_VALUE},
-                 {.role = UNKNOWN_TYPE, .heuristic_type = UNKNOWN_TYPE}}};
-  FormData form = test::GetFormData(form_description);
-  browser_autofill_manager_->AddSeenForm(
-      form, test::GetHeuristicTypes(form_description), /*server_types=*/{});
-  FormsSeen({form});
+  FormData form = FormSeen(
+      {.fields = {{.role = PASSPORT_NAME_TAG, .heuristic_type = NAME_FIRST},
+                  {.role = PASSPORT_NAME_TAG, .heuristic_type = NAME_LAST},
+                  {.role = PASSPORT_NUMBER},
+                  {.role = IBAN_VALUE, .heuristic_type = IBAN_VALUE},
+                  {.role = UNKNOWN_TYPE, .heuristic_type = UNKNOWN_TYPE}}});
   base::flat_map<FieldGlobalId, std::u16string> values_to_fill = {
       // Not filled because the value to fill is empty.
       {form.fields()[0].global_id(), u""},
       // Filled.
       {form.fields()[1].global_id(), u"Doe"},
+      // Filled.
+      {form.fields()[2].global_id(), u"123"},
       // Not filled because IBANs aren't among the supported types.
-      {form.fields()[2].global_id(), u"DE01234567890123456789"},
-      // Filled because unclassified fields are supported
-      {form.fields()[3].global_id(), u"100 John Doe Rd"}};
+      {form.fields()[3].global_id(), u"DE01234567890123456789"},
+      // Not filled because unclassified fields are not supported.
+      {form.fields()[4].global_id(), u"Hello!"}};
   std::vector<FormFieldData> filled_fields;
   EXPECT_CALL(autofill_driver_, ApplyFormAction)
       .WillOnce(DoAll(SaveArgElementsTo<2>(&filled_fields),
@@ -1664,10 +1696,10 @@ TEST_F(FormFillerTest, FillOrPreviewFormWithAutofillAi) {
   form_filler().FillOrPreviewForm(
       mojom::ActionPersistence::kFill, form, values_to_fill,
       *GetFormStructure(form), *GetAutofillField(form, form.fields().front()),
-      /*ignorable_skip_reasons=*/{}, AutofillTriggerSource::kAutofillAi);
+      AutofillTriggerSource::kAutofillAi);
   ASSERT_EQ(filled_fields.size(), 2u);
   EXPECT_EQ(filled_fields[0].value(), u"Doe");
-  EXPECT_EQ(filled_fields[1].value(), u"100 John Doe Rd");
+  EXPECT_EQ(filled_fields[1].value(), u"123");
 }
 
 // The following Refill Tests ensure that Autofill can handle the situation

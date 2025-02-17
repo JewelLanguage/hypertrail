@@ -10,7 +10,6 @@
 #include <string>
 #include <string_view>
 
-#include "ash/components/arc/arc_util.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
@@ -51,6 +50,7 @@
 #include "chrome/browser/ash/login/test/test_predicate_waiter.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
+#include "chrome/browser/ash/policy/enrollment/auto_enrollment_type_checker.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_status.h"
 #include "chrome/browser/chrome_browser_main.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
@@ -75,6 +75,7 @@
 #include "chromeos/ash/components/network/network_state_handler.h"
 #include "chromeos/ash/components/system/fake_statistics_provider.h"
 #include "chromeos/ash/components/system/statistics_provider.h"
+#include "chromeos/ash/experiences/arc/arc_util.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "components/component_updater/ash/fake_component_manager_ash.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_store.h"
@@ -435,6 +436,13 @@ class DemoSetupArcSupportedTest : public DemoSetupTestBase {
     command_line->AppendSwitchASCII(switches::kArcAvailability,
                                     "officially-supported");
     ASSERT_TRUE(arc::IsArcAvailable());
+
+    // We want enrollment state determination to return "No enrollment".
+    // TODO(crbug.com/375564225) Remove `kUnifiedStateDeterminationNever` to
+    // make tests more realistic.
+    command_line->AppendSwitchASCII(
+        switches::kEnterpriseEnableUnifiedStateDetermination,
+        policy::AutoEnrollmentTypeChecker::kUnifiedStateDeterminationNever);
   }
 
   void WaitForConsolidatedConsentScreen() {
@@ -1012,12 +1020,7 @@ IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, BackOnErrorScreen) {
 }
 
 // TODO(crbug.com/40249751): Flaky on ChromeOS.
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#define MAYBE_RetryOnErrorScreen DISABLED_RetryOnErrorScreen
-#else
-#define MAYBE_RetryOnErrorScreen RetryOnErrorScreen
-#endif
-IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, MAYBE_RetryOnErrorScreen) {
+IN_PROC_BROWSER_TEST_F(DemoSetupArcSupportedTest, DISABLED_RetryOnErrorScreen) {
   // Simulate online setup failure.
   enrollment_helper_.ExpectEnrollmentMode(
       policy::EnrollmentConfig::MODE_ATTESTATION);

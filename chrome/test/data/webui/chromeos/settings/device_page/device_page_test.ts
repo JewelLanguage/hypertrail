@@ -5,8 +5,9 @@
 import 'chrome://os-settings/os_settings.js';
 import 'chrome://os-settings/lazy_load.js';
 
-import {SettingsAudioElement, SettingsPerDeviceKeyboardElement} from 'chrome://os-settings/lazy_load.js';
-import {ControlledRadioButtonElement, CrIconButtonElement, crosAudioConfigMojom, CrSliderElement, CrToggleElement, DevicePageBrowserProxyImpl, fakeCrosAudioConfig, fakeGraphicsTablets, FakeInputDeviceSettingsProvider, fakeKeyboards, fakeMice, fakePointingSticks, fakeTouchpads, Route, Router, routes, setCrosAudioConfigForTesting, setDisplayApiForTesting, setInputDeviceSettingsProviderForTesting, SettingsDevicePageElement, SettingsRadioGroupElement, SettingsToggleButtonElement} from 'chrome://os-settings/os_settings.js';
+import type {SettingsAudioElement, SettingsPerDeviceKeyboardElement} from 'chrome://os-settings/lazy_load.js';
+import type {ControlledRadioButtonElement, CrIconButtonElement, CrSliderElement, CrToggleElement, Route, SettingsDevicePageElement, SettingsRadioGroupElement, SettingsToggleButtonElement} from 'chrome://os-settings/os_settings.js';
+import {crosAudioConfigMojom, DevicePageBrowserProxyImpl, fakeCrosAudioConfig, fakeGraphicsTablets, FakeInputDeviceSettingsProvider, fakeKeyboards, fakeMice, fakePointingSticks, fakeTouchpads, Router, routes, setCrosAudioConfigForTesting, setDisplayApiForTesting, setInputDeviceSettingsProviderForTesting} from 'chrome://os-settings/os_settings.js';
 import {webUIListenerCallback} from 'chrome://resources/js/cr.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
@@ -38,7 +39,7 @@ suite('<settings-device-page>', () => {
     return page;
   }
 
-  setup(async () => {
+  setup(() => {
     fakeSystemDisplay = new FakeSystemDisplay();
     setDisplayApiForTesting(fakeSystemDisplay);
 
@@ -987,8 +988,8 @@ suite('<settings-device-page>', () => {
     suite('voice isolation', () => {
       let voiceIsolationToggleSection: SettingsToggleButtonElement;
 
-      setup(async () => {
-        let toggleSection =
+      setup(() => {
+        const toggleSection =
             audioPage.shadowRoot!.querySelector<SettingsToggleButtonElement>(
                 '#audioInputVoiceIsolationToggleSection');
         assertTrue(!!toggleSection);
@@ -1017,19 +1018,19 @@ suite('<settings-device-page>', () => {
         return radioButton;
       }
 
-      test('section visibility - style transfer', async () => {
+      test('section visibility - style transfer', () => {
         assertVoiceIsolationVisibilityForSystemProperties(
             effectStyleTransferAudioSystemProperties, /*visible*/ true);
       });
-      test('section visibility - beamforming', async () => {
+      test('section visibility - beamforming', () => {
         assertVoiceIsolationVisibilityForSystemProperties(
             effectBeamformingAudioSystemProperties, /*visible*/ true);
       });
-      test('section visibility - noise cancellation', async () => {
+      test('section visibility - noise cancellation', () => {
         assertVoiceIsolationVisibilityForSystemProperties(
             effectNoiseCancellationAudioSystemProperties, /*visible*/ true);
       });
-      test('section visibility - no effects', async () => {
+      test('section visibility - no effects', () => {
         assertVoiceIsolationVisibilityForSystemProperties(
             effectNoneAudioSystemProperties, /*visible*/ false);
       });
@@ -1119,7 +1120,7 @@ suite('<settings-device-page>', () => {
             effectModeOptionsAudioSystemProperties);
         await flushTasks();
         await voiceIsolationToggleSection.click();
-        let effectModeSection = getEffectModeSection();
+        const effectModeSection = getEffectModeSection();
         assertTrue(!!effectModeSection);
         assertTrue(isVisible(effectModeSection));
 
@@ -1139,7 +1140,7 @@ suite('<settings-device-page>', () => {
             String(crosAudioConfigMojom.AudioEffectType.kStyleTransfer));
 
         // Click Beamforming radio button.
-        let beamformingRadioButton =
+        const beamformingRadioButton =
             getEffectModeRadioButton('#voiceIsolationEffectModeBeamforming');
         await beamformingRadioButton.click();
         assertEquals(
@@ -1147,7 +1148,7 @@ suite('<settings-device-page>', () => {
                 .value,
             crosAudioConfigMojom.AudioEffectType.kBeamforming);
         // Click Style Transfer radio button.
-        let styleTransferRadioButton =
+        const styleTransferRadioButton =
             getEffectModeRadioButton('#voiceIsolationEffectModeStyleTransfer');
         await styleTransferRadioButton.click();
         assertEquals(
@@ -1167,7 +1168,7 @@ suite('<settings-device-page>', () => {
         await flushTasks();
 
         const fallbackMessageSection =
-            audioPage.shadowRoot!.querySelector<HTMLDivElement>(
+            audioPage.shadowRoot!.querySelector<HTMLElement>(
                 '#voiceIsolationEffectFallbackMessageSection');
         assertTrue(!!fallbackMessageSection);
 
@@ -1191,7 +1192,7 @@ suite('<settings-device-page>', () => {
       });
     });
 
-    test('simulate hfp mic sr with unsupported state', async () => {
+    test('simulate hfp mic sr with unsupported state', () => {
       const audioHfpMicSrSubsection =
           audioPage.shadowRoot!.querySelector<HTMLElement>(
               '#audioInputHfpMicSrSubsection');
@@ -1556,12 +1557,12 @@ suite('<settings-device-page>', () => {
           activeDevice.spatialAudioState);
     });
 
-    test('simulate click row switch spatial audio', async () => {
+    test('simulate click row switch spatial audio', () => {
       crosAudioConfig.setAudioSystemProperties(
           spatialAudioSupportedAudioSystemProperties);
 
       const spatialAudioSubsection =
-          audioPage.shadowRoot!.querySelector<HTMLDivElement>(
+          audioPage.shadowRoot!.querySelector<HTMLElement>(
               '#audioOutputSpatialAudioSubsection');
       const activeDevice = crosAudioConfig.getDeviceByIdForTesting(
           fakeCrosAudioConfig.fakeSpeakerActive.id);
@@ -1586,7 +1587,7 @@ suite('<settings-device-page>', () => {
           spatialAudioSupportedAudioSystemProperties);
 
       const spatialAudioSubsection =
-          audioPage.shadowRoot!.querySelector<HTMLDivElement>(
+          audioPage.shadowRoot!.querySelector<HTMLElement>(
               '#audioOutputSpatialAudioSubsection');
       const spatialAudioToggle =
           audioPage.shadowRoot!.querySelector<CrToggleElement>(

@@ -55,7 +55,8 @@
 
 namespace blink {
 
-class IdentityDigest;
+class FeatureContext;
+class UnencodedDigest;
 class ResourceLoadTiming;
 class ServiceWorkerRouterInfo;
 class UseCounter;
@@ -174,7 +175,7 @@ class PLATFORM_EXPORT ResourceResponse final {
   std::optional<base::Time> LastModified(UseCounter&) const;
   // Will always return values >= 0.
   base::TimeDelta CacheControlStaleWhileRevalidate() const;
-  std::optional<IdentityDigest> IdentityDigest() const;
+  std::optional<UnencodedDigest> UnencodedDigest(const FeatureContext*) const;
 
   unsigned ConnectionID() const;
   void SetConnectionID(unsigned);

@@ -42,6 +42,11 @@ BASE_FEATURE_PARAM(int,
                    "ad-auction-signals-max-size-bytes",
                    10000);
 
+// Avoids copying ResourceRequest::TrustedParams when possible.
+BASE_FEATURE(kAvoidTrustedParamsCopies,
+             "AvoidTrustedParamsCopies",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // See https://github.com/WICG/turtledove/blob/main/FLEDGE.md
 // Changes default Permissions Policy for features join-ad-interest-group and
 // run-ad-auction to a more restricted EnableForSelf.
@@ -144,9 +149,10 @@ BASE_FEATURE(kAvoidForcedLayoutOnInitialEmptyDocumentInSubframe,
              "AvoidForcedLayoutOnInitialEmptyDocumentInSubframe",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// TODO(https://crbug.com/327075943): Delete this.
 BASE_FEATURE(kBFCacheOpenBroadcastChannel,
              "BFCacheOpenBroadcastChannel",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kBackForwardCacheDWCOnJavaScriptExecution,
              "BackForwardCacheDWCOnJavaScriptExecution",
@@ -513,8 +519,6 @@ BASE_FEATURE(kCorrectFloatExtensionTestForWebGL,
              "CorrectFloatExtensionTestForWebGL",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kCrabbyAvif, "CrabbyAvif", base::FEATURE_ENABLED_BY_DEFAULT);
-
 // When enabled, add a new option, {imageOrientation: 'none'}, to
 // createImageBitmap, which ignores the image orientation metadata of the source
 // and renders the image as encoded.
@@ -589,7 +593,7 @@ const base::FeatureParam<DelayAsyncScriptTarget>::Option
 BASE_FEATURE_ENUM_PARAM(DelayAsyncScriptTarget,
                         kDelayAsyncScriptTargetParam,
                         &kDelayAsyncScriptExecution,
-                        "delay_async_exec_target",
+                        "delay_async_exec_target_site",
                         DelayAsyncScriptTarget::kAll,
                         &delay_async_script_target_types);
 
@@ -641,9 +645,25 @@ const base::FeatureParam<AsyncScriptExperimentalSchedulingTarget>::Option
 BASE_FEATURE_ENUM_PARAM(AsyncScriptExperimentalSchedulingTarget,
                         kDelayAsyncScriptExecutionTargetParam,
                         &kDelayAsyncScriptExecution,
-                        "delay_async_exec_target",
+                        "delay_async_exec_target_script_category",
                         AsyncScriptExperimentalSchedulingTarget::kBoth,
                         &async_script_experimental_scheduling_targets);
+
+// If true, kDelayAsyncScriptExecution will not change the script
+// evaluation timing for the non parser inserted script.
+BASE_FEATURE_PARAM(bool,
+                   kDelayAsyncExecExcludeNonParserInsertedParam,
+                   &kDelayAsyncScriptExecution,
+                   "delay_async_exec_exclude_non_parser_inserted",
+                   false);
+
+// If true, kDelayAsyncScriptExecution will not change the script
+// evaluation timing for the scripts that were added via document.write().
+BASE_FEATURE_PARAM(bool,
+                   kDelayAsyncExecExcludeDocumentWriteParam,
+                   &kDelayAsyncScriptExecution,
+                   "delay_async_exec_exclude_document_write",
+                   false);
 
 BASE_FEATURE_PARAM(bool,
                    kDelayAsyncScriptExecutionOptOutLowFetchPriorityHintParam,
@@ -699,21 +719,9 @@ BASE_FEATURE(kDisableThirdPartyStoragePartitioning3DeprecationTrial,
              "DisableThirdPartyStoragePartitioning3DeprecationTrial",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Drop input events before user sees first paint https://crbug.com/1255485
-BASE_FEATURE(kDropInputEventsBeforeFirstPaint,
-             "DropInputEventsBeforeFirstPaint",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kEstablishGpuChannelAsync,
              "EstablishGpuChannelAsync",
-#if BUILDFLAG(IS_ANDROID)
-             base::FEATURE_ENABLED_BY_DEFAULT
-#else
-             // TODO(crbug.com/1278147): Experiment with this more on desktop to
-             // see if it can help.
-             base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables unload handler deprecation via Permissions-Policy.
 // https://crbug.com/1324111
@@ -798,7 +806,7 @@ BASE_FEATURE_PARAM(bool,
                    kSmallScrollersUseMinCullRect,
                    &kExpandCompositedCullRect,
                    "small_scroller_opt",
-                   false);
+                   true);
 
 // Enable the <fencedframe> element; see crbug.com/1123606. Note that enabling
 // this feature does not automatically expose this element to the web, it only
@@ -925,6 +933,20 @@ BASE_FEATURE_PARAM(int,
                    &kFledgeLimitSelectableBuyerAndSellerReportingIds,
                    "SelectableBuyerAndSellerReportingIdsHardLimit",
                    -1);
+
+BASE_FEATURE(kFledgeMaxGroupLifetimeFeature,
+             "FledgeMaxGroupLifetimeFeature",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE_PARAM(base::TimeDelta,
+                   kFledgeMaxGroupLifetime,
+                   &kFledgeMaxGroupLifetimeFeature,
+                   "fledge_max_group_lifetime",
+                   base::Days(30));
+BASE_FEATURE_PARAM(base::TimeDelta,
+                   kFledgeMaxGroupLifetimeForMetadata,
+                   &kFledgeMaxGroupLifetimeFeature,
+                   "fledge_max_group_lifetime_for_metadata",
+                   base::Days(30));
 
 BASE_FEATURE(kFledgeSampleDebugReports,
              "FledgeSampleDebugReports",
@@ -1248,6 +1270,12 @@ BASE_FEATURE_PARAM(bool,
                    "lcpp_adjust_image_load_priority_override_first_n_boost",
                    false);
 
+BASE_FEATURE_PARAM(double,
+                   kLcppAdjustImageLoadPriorityConfidenceThreshold,
+                   &kLCPCriticalPathPredictor,
+                   "lcpp_adjust_image_load_priority_confidence_threshold",
+                   0);
+
 const base::FeatureParam<LcppRecordedLcpElementTypes>::Option
     lcpp_recorded_element_types[] = {
         {LcppRecordedLcpElementTypes::kAll, "all"},
@@ -1517,7 +1545,7 @@ BASE_FEATURE_PARAM(int,
 
 BASE_FEATURE(kLCPPMultipleKey,
              "LCPPMultipleKey",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE_PARAM(size_t,
                    kLCPPMultipleKeyMaxPathLength,
@@ -1535,7 +1563,7 @@ BASE_FEATURE_ENUM_PARAM(LcppMultipleKeyTypes,
                         kLcppMultipleKeyType,
                         &kLCPPMultipleKey,
                         "lcpp_multiple_key_type",
-                        LcppMultipleKeyTypes::kDefault,
+                        LcppMultipleKeyTypes::kLcppKeyStat,
                         &lcpp_multiple_key_types);
 
 BASE_FEATURE_PARAM(int,
@@ -1761,7 +1789,7 @@ BASE_FEATURE_PARAM(
     bool,
     kLowPriorityAsyncScriptExecutionOptOutLowFetchPriorityHintParam,
     &kLowPriorityAsyncScriptExecution,
-    "low_pri_async_exec__opt_out_low_fetch_priority_hint",
+    "low_pri_async_exec_opt_out_low_fetch_priority_hint",
     false);
 // kLowPriorityAsyncScriptExecution will be opted-out when FetchPriorityHint is
 // auto.
@@ -1992,6 +2020,12 @@ BASE_FEATURE(kPreloadingViewportHeuristics,
 BASE_FEATURE(kPrerender2InNewTab,
              "Prerender2InNewTab",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Firing pagehide events for intended prerender cancellation. See
+// crbug.com/353628449 for more details.
+BASE_FEATURE(kPageHideEventForPrerender2,
+             "PageHideEventForPrerender2",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kPrerender2MainFrameNavigation,
              "Prerender2MainFrameNavigation",
@@ -2297,11 +2331,11 @@ BASE_FEATURE(kSetLowPriorityForBeacon,
              "SetLowPriorityForBeacon",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// If enabled, the setTimeout(..., 0) will not clamp to 1ms.
+// If enabled, calling setInterval(..., 0) will not clamp to 1ms.
 // Tracking bug: https://crbug.com/402694.
-BASE_FEATURE(kSetTimeoutWithoutClamp,
-             "SetTimeoutWithoutClamp",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kSetIntervalWithoutClamp,
+             "SetIntervalWithoutClamp",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enable the shared storage API. Note that enabling this feature does not
 // automatically expose this API to the web, it only allows the element to be
@@ -2380,7 +2414,7 @@ BASE_FEATURE(kSharedStorageWorkletSharedBackingThreadImplementation,
 
 BASE_FEATURE(kSharedStorageCreateWorkletCustomDataOrigin,
              "SharedStorageCreateWorkletCustomDataOrigin",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kSharedStorageSelectURLSavedQueries,
              "SharedStorageSelectURLSavedQueries",
@@ -2593,10 +2627,6 @@ BASE_FEATURE(kEmulateLoadStartedForInspectorOncePerResource,
              "kEmulateLoadStartedForInspectorOncePerResource",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kBlinkSchedulerDiscreteInputMatchesResponsivenessMetrics,
-             "BlinkSchedulerDiscreteInputMatchesResponsivenessMetrics",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kThreadedScrollPreventRenderingStarvation,
              "ThreadedScrollPreventRenderingStarvation",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -2606,13 +2636,6 @@ BASE_FEATURE(kThreadedScrollPreventRenderingStarvation,
 BASE_FEATURE(kUnloadBlocklisted,
              "UnloadBlocklisted",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Whether to use 'TexImage2D' instead of 'TexStorage2DEXT' when creating a
-// staging texture for |DrawingBuffer|. This is a killswitch; remove when
-// launched.
-BASE_FEATURE(kUseImageInsteadOfStorageForStagingBuffer,
-             "UseImageInsteadOfStorageForStagingBuffer",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Uses page viewport instead of frame viewport in the Largest Contentful Paint
 // heuristic where images occupying the full viewport are ignored.
@@ -2779,7 +2802,7 @@ BASE_FEATURE(kWebSQLAccess, "kWebSQLAccess", base::FEATURE_DISABLED_BY_DEFAULT);
 // Allow access to WebSQL on Android WebView.
 BASE_FEATURE(kWebSQLWebViewAccess,
              "WebSQLWebViewAccess",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Kill switch for https://crbug.com/338955051.
 BASE_FEATURE(kWebUSBTransferSizeLimit,
@@ -2829,8 +2852,8 @@ bool IsParkableImagesToDiskEnabled() {
   return base::FeatureList::IsEnabled(kParkableImagesToDisk);
 }
 
-bool IsSetTimeoutWithoutClampEnabled() {
-  return base::FeatureList::IsEnabled(features::kSetTimeoutWithoutClamp);
+bool IsSetIntervalWithoutClampEnabled() {
+  return base::FeatureList::IsEnabled(features::kSetIntervalWithoutClamp);
 }
 
 bool IsUnloadBlocklisted() {

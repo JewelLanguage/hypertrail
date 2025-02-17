@@ -92,6 +92,11 @@ void EmptyDataSharingService::LeaveGroup(
     const GroupId& group_id,
     base::OnceCallback<void(PeopleGroupActionOutcome)> callback) {}
 
+bool EmptyDataSharingService::IsLeavingOrDeletingGroup(
+    const GroupId& group_id) {
+  return false;
+}
+
 std::vector<GroupEvent> EmptyDataSharingService::GetGroupEventsSinceStartup() {
   return {};
 }

@@ -15,7 +15,6 @@
 #include "net/base/net_error_details.h"
 #include "net/base/net_errors.h"
 #include "net/base/net_export.h"
-#include "net/base/port_util.h"
 #include "net/dns/public/resolve_error_info.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_stream_pool.h"
@@ -104,7 +103,18 @@ HttpStreamPool::Job::~Job() {
     }
   }
 
-  job_net_log_.EndEvent(NetLogEventType::HTTP_STREAM_POOL_JOB_ALIVE);
+  job_net_log_.EndEvent(NetLogEventType::HTTP_STREAM_POOL_JOB_ALIVE, [&] {
+    base::Value::Dict dict;
+    if (result_.has_value()) {
+      // Use "net_error" for the result as the NetLog viewer converts the value
+      // to a human-readable string.
+      dict.Set("net_error", *result_);
+    }
+    if (negotiated_protocol_.has_value()) {
+      dict.Set("negotiated_protocol", NextProtoToString(*negotiated_protocol_));
+    }
+    return dict;
+  });
 
   // `group_` may be deleted after this call.
   group_.ExtractAsDangling()->OnJobComplete(this);
@@ -114,6 +124,10 @@ void HttpStreamPool::Job::Start() {
   CHECK(group_);
 
   if (!group_->CanStartJob(this)) {
+    job_net_log_.BeginEvent(NetLogEventType::HTTP_STREAM_POOL_JOB_PAUSED);
+    group_->net_log().AddEventReferencingSource(
+        NetLogEventType::HTTP_STREAM_POOL_GROUP_JOB_PAUSED,
+        job_net_log_.source());
     return;
   }
 
@@ -122,6 +136,16 @@ void HttpStreamPool::Job::Start() {
 
 void HttpStreamPool::Job::Resume() {
   resume_time_ = base::TimeTicks::Now();
+  job_net_log_.EndEvent(NetLogEventType::HTTP_STREAM_POOL_JOB_PAUSED);
+  group_->net_log().AddEvent(
+      NetLogEventType::HTTP_STREAM_POOL_GROUP_JOB_RESUMED, [&] {
+        base::Value::Dict dict;
+        base::TimeDelta elapsed = resume_time_ - create_time_;
+        dict.Set("elapsed_ms", elapsed.InMillisecondsF());
+        job_net_log_.source().AddToEventParameters(dict);
+        return dict;
+      });
+
   StartInternal();
 }
 
@@ -149,6 +173,7 @@ void HttpStreamPool::Job::OnStreamReady(std::unique_ptr<HttpStream> stream,
                                         NextProto negotiated_protocol) {
   CHECK(delegate_);
   CHECK(!result_.has_value());
+  CHECK(!negotiated_protocol_);
 
   int result = OK;
   if (!allowed_alpns_.Has(negotiated_protocol)) {
@@ -168,6 +193,7 @@ void HttpStreamPool::Job::OnStreamReady(std::unique_ptr<HttpStream> stream,
   }
 
   result_ = OK;
+  negotiated_protocol_ = negotiated_protocol;
   group_->http_network_session()->proxy_resolution_service()->ReportSuccess(
       delegate_->proxy_info());
   delegate_->OnStreamReady(this, std::move(stream), negotiated_protocol);
@@ -214,15 +240,6 @@ HttpStreamPool::AttemptManager* HttpStreamPool::Job::attempt_manager() const {
 void HttpStreamPool::Job::StartInternal() {
   CHECK(attempt_manager());
   CHECK(!attempt_manager()->is_failing());
-
-  const url::SchemeHostPort& destination = group_->stream_key().destination();
-  if (!IsPortAllowedForScheme(destination.port(), destination.scheme())) {
-    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE,
-        base::BindOnce(&Job::OnStreamFailed, weak_ptr_factory_.GetWeakPtr(),
-                       ERR_UNSAFE_PORT, NetErrorDetails(), ResolveErrorInfo()));
-    return;
-  }
 
   attempt_manager()->StartJob(this, priority(), delegate_->allowed_bad_certs(),
                               quic_version_, request_net_log_,

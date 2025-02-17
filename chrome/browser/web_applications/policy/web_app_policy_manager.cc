@@ -4,13 +4,13 @@
 
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "ash/constants/web_app_id_constants.h"
 #include "base/check_deref.h"
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
@@ -21,7 +21,6 @@
 #include "base/functional/callback_helpers.h"
 #include "base/functional/concurrent_closures.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/syslog_logging.h"
 #include "base/values.h"
@@ -66,7 +65,9 @@
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
+#include "ash/constants/web_app_id_constants.h"
 #include "ash/edusumer/graduation_utils.h"
+#include "ash/webui/system_apps/public/system_web_app_type.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/web_applications/web_app_system_web_app_delegate_map_utils.h"
 #include "components/user_manager/user_manager.h"
@@ -157,7 +158,7 @@ void WebAppPolicyManager::ReinstallPlaceholderAppIfNecessary(
       pref_service_->GetList(prefs::kWebAppInstallForceList);
   const auto& web_apps_list = web_apps;
 
-  const auto it = base::ranges::find(
+  const auto it = std::ranges::find(
       web_apps_list, url.spec(), [](const base::Value& entry) {
         return CHECK_DEREF(entry.GetDict().FindString(kUrlKey));
       });
@@ -372,8 +373,8 @@ void WebAppPolicyManager::ParsePolicySettings() {
   default_settings_ = WebAppPolicyManager::WebAppSetting();
 
   // Read default policy, if provided.
-  const auto it = base::ranges::find(
-      web_apps_list, kWildcard, [](const base::Value& entry) {
+  const auto it =
+      std::ranges::find(web_apps_list, kWildcard, [](const base::Value& entry) {
         return CHECK_DEREF(entry.GetDict().FindString(kManifestId));
       });
 
@@ -487,8 +488,7 @@ WebAppPolicyManager::ParseInstallPolicyEntry(const base::Value::Dict& entry) {
   const std::string* fallback_app_name = entry.FindString(kFallbackAppNameKey);
   const base::Value::List* uninstall_and_replace =
       entry.FindList(kUninstallAndReplaceKey);
-  const std::optional<bool> install_as_shortcut =
-      entry.FindBool(kInstallAsShortcut);
+  const std::optional<bool> install_as_diy = entry.FindBool(kInstallAsShortcut);
 
   DCHECK(!default_launch_container ||
          (*default_launch_container == kDefaultLaunchContainerWindowValue) ||
@@ -536,7 +536,9 @@ WebAppPolicyManager::ParseInstallPolicyEntry(const base::Value::Dict& entry) {
     }
   }
 
-  install_options.install_as_shortcut = install_as_shortcut.value_or(false);
+  // Shortcut apps no longer exist in the web applications system and are
+  // treated as DIY apps now.
+  install_options.install_as_diy = install_as_diy.value_or(false);
 
   const std::string* custom_name = entry.FindString(kCustomNameKey);
   if (custom_name) {
@@ -855,6 +857,36 @@ void WebAppPolicyManager::PopulateDisabledWebAppsIdsLists() {
       case policy::SystemFeature::kRecorder:
         disabled_system_apps_.insert(ash::SystemWebAppType::RECORDER);
         break;
+      case policy::SystemFeature::kGmail:
+        disabled_web_apps_.insert(ash::kGmailAppId);
+        break;
+      case policy::SystemFeature::kGoogleDocs:
+        disabled_web_apps_.insert(ash::kGoogleDocsAppId);
+        break;
+      case policy::SystemFeature::kGoogleSlides:
+        disabled_web_apps_.insert(ash::kGoogleSlidesAppId);
+        break;
+      case policy::SystemFeature::kGoogleSheets:
+        disabled_web_apps_.insert(ash::kGoogleSheetsAppId);
+        break;
+      case policy::SystemFeature::kGoogleDrive:
+        disabled_web_apps_.insert(ash::kGoogleDriveAppId);
+        break;
+      case policy::SystemFeature::kGoogleKeep:
+        disabled_web_apps_.insert(ash::kGoogleKeepAppId);
+        break;
+      case policy::SystemFeature::kGoogleCalendar:
+        disabled_web_apps_.insert(ash::kGoogleCalendarAppId);
+        break;
+      case policy::SystemFeature::kGoogleChat:
+        disabled_web_apps_.insert(ash::kGoogleChatAppId);
+        break;
+      case policy::SystemFeature::kYoutube:
+        disabled_web_apps_.insert(ash::kYoutubeAppId);
+        break;
+      case policy::SystemFeature::kGoogleMaps:
+        disabled_web_apps_.insert(ash::kGoogleMapsAppId);
+        break;
 #else
       case policy::SystemFeature::kCamera:
       case policy::SystemFeature::kOsSettings:
@@ -866,6 +898,14 @@ void WebAppPolicyManager::PopulateDisabledWebAppsIdsLists() {
       case policy::SystemFeature::kPrintJobs:
       case policy::SystemFeature::kKeyShortcuts:
       case policy::SystemFeature::kRecorder:
+      case policy::SystemFeature::kGmail:
+      case policy::SystemFeature::kGoogleDocs:
+      case policy::SystemFeature::kGoogleSlides:
+      case policy::SystemFeature::kGoogleSheets:
+      case policy::SystemFeature::kGoogleDrive:
+      case policy::SystemFeature::kGoogleKeep:
+      case policy::SystemFeature::kGoogleCalendar:
+      case policy::SystemFeature::kGoogleChat:
         break;
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
       case policy::SystemFeature::kUnknownSystemFeature:

@@ -73,9 +73,12 @@ NSString* const kOpenCommandSourceCredentialsExtension =
 NSString* const kOpenCommandSourceOpenExtension = @"ChromeOpenExtension";
 
 NSString* const kSuggestedItems = @"SuggestedItems";
-
 NSString* const kSuggestedItemsLastModificationDate =
     @"SuggestedItemsLastModificationDate";
+
+NSString* const kSuggestedItemsForMultiprofile = @"SuggestedItemsForMIM";
+NSString* const kSuggestedItemsLastModificationDateForMultiprofile =
+    @"SuggestedItemsLastModificationDateForMIM";
 
 NSString* const kOpenExtensionOutcomes = @"ChromeOpenExtensionOutcomes";
 
@@ -124,8 +127,9 @@ NSUserDefaults* GetCommonGroupUserDefaults() {
   if (applicationGroup) {
     NSUserDefaults* defaults =
         [[NSUserDefaults alloc] initWithSuiteName:applicationGroup];
-    if (defaults)
+    if (defaults) {
       return defaults;
+    }
   }
 
   // On a device, the entitlements should always provide an application group to
@@ -151,8 +155,8 @@ NSURL* ExternalCommandsItemsFolder() {
   NSURL* groupURL = [[NSFileManager defaultManager]
       containerURLForSecurityApplicationGroupIdentifier:
           CommonApplicationGroup()];
-  NSURL* chromeURL =
-      [groupURL URLByAppendingPathComponent:@"Chrome" isDirectory:YES];
+  NSURL* chromeURL = [groupURL URLByAppendingPathComponent:@"Chrome"
+                                               isDirectory:YES];
   NSURL* externalCommandsURL =
       [chromeURL URLByAppendingPathComponent:@"ExternalCommands"
                                  isDirectory:YES];

@@ -54,12 +54,6 @@ const base::FeatureParam<base::TimeDelta>
         &kPerformanceControlsBatteryPerformanceSurvey, "battery_lookback",
         base::Days(8)};
 
-#if BUILDFLAG(IS_WIN)
-BASE_FEATURE(kPrefetchVirtualMemoryPolicy,
-             "PrefetchVirtualMemoryPolicy",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-#endif
-
 BASE_FEATURE(kPerformanceInterventionUI,
              "PerformanceInterventionUI",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -185,6 +179,10 @@ BASE_FEATURE(kFreezingFollowsDiscardOptOut,
              "FreezingFollowsDiscardOptOut",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kRecordFreezingEligibilityUKM,
+             "RecordFreezingEligibilityUKM",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kResourceAttributionIncludeOrigins,
              "ResourceAttributionIncludeOrigins",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -199,6 +197,10 @@ BASE_FEATURE(kUnimportantFramesPriority,
 
 BASE_FEATURE(kThrottleUnimportantFrameRate,
              "ThrottleUnimportantFrameRate",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kKeepDefaultSearchEngineRendererAlive,
+             "KeepDefaultSearchEngineRendererAlive",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace performance_manager::features

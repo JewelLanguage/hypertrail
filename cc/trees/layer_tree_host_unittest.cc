@@ -70,6 +70,7 @@
 #include "cc/trees/layer_tree_host_impl.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/paint_holding_reason.h"
+#include "cc/trees/property_tree_layer_tree_delegate.h"
 #include "cc/trees/scroll_node.h"
 #include "cc/trees/single_thread_proxy.h"
 #include "cc/trees/swap_promise.h"
@@ -77,6 +78,7 @@
 #include "cc/trees/transform_node.h"
 #include "cc/view_transition/view_transition_request.h"
 #include "components/ukm/test_ukm_recorder.h"
+#include "components/viz/client/client_resource_provider.h"
 #include "components/viz/common/features.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
@@ -4184,7 +4186,6 @@ class OnDrawLayerTreeFrameSink : public TestLayerTreeFrameSink {
   OnDrawLayerTreeFrameSink(
       scoped_refptr<viz::RasterContextProvider> compositor_context_provider,
       scoped_refptr<viz::RasterContextProvider> worker_context_provider,
-      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       const viz::RendererSettings& renderer_settings,
       const viz::DebugRendererSettings* const debug_settings,
       TaskRunnerProvider* task_runner_provider,
@@ -4194,7 +4195,6 @@ class OnDrawLayerTreeFrameSink : public TestLayerTreeFrameSink {
       : TestLayerTreeFrameSink(std::move(compositor_context_provider),
                                std::move(worker_context_provider),
                                /*shared_image_interface=*/nullptr,
-                               gpu_memory_buffer_manager,
                                renderer_settings,
                                debug_settings,
                                task_runner_provider,
@@ -4236,8 +4236,8 @@ class LayerTreeHostTestAbortedCommitDoesntStallSynchronousCompositor
         base::Unretained(this));
     auto frame_sink = std::make_unique<OnDrawLayerTreeFrameSink>(
         compositor_context_provider, std::move(worker_context_provider),
-        gpu_memory_buffer_manager(), renderer_settings, &debug_settings_,
-        task_runner_provider(), false /* synchronous_composite */, refresh_rate,
+        renderer_settings, &debug_settings_, task_runner_provider(),
+        false /* synchronous_composite */, refresh_rate,
         std::move(on_draw_callback));
     layer_tree_frame_sink_ = frame_sink.get();
     return std::move(frame_sink);
@@ -4278,8 +4278,7 @@ class LayerTreeHostTestSynchronousCompositorActivateWithoutDraw
     // Make |invalidate_callback| do nothing so there is no draw.
     auto frame_sink = std::make_unique<OnDrawLayerTreeFrameSink>(
         compositor_context_provider, std::move(worker_context_provider),
-        gpu_memory_buffer_manager(), renderer_settings, &debug_settings_,
-        task_runner_provider(),
+        renderer_settings, &debug_settings_, task_runner_provider(),
         /*synchronous_composite=*/false, refresh_rate,
         /*invalidate_callback=*/base::DoNothing());
     return std::move(frame_sink);
@@ -7052,9 +7051,9 @@ class LayerTreeHostTestSynchronousCompositeSwapPromise
         !layer_tree_host()->GetSettings().single_thread_proxy_scheduler;
     return std::make_unique<TestLayerTreeFrameSink>(
         compositor_context_provider, std::move(worker_context_provider),
-        /*shared_image_interface=*/nullptr, gpu_memory_buffer_manager(),
-        renderer_settings, &debug_settings_, task_runner_provider(),
-        synchronous_composite, disable_display_vsync, refresh_rate);
+        /*shared_image_interface=*/nullptr, renderer_settings, &debug_settings_,
+        task_runner_provider(), synchronous_composite, disable_display_vsync,
+        refresh_rate);
   }
 
   void BeginTest() override {
@@ -11069,6 +11068,46 @@ class LayerTreeHostTestSetMaxSafeAreaInsets : public LayerTreeHostTest {
 };
 
 MULTI_THREAD_TEST_F(LayerTreeHostTestSetMaxSafeAreaInsets);
+
+class LayerTreeHostTestCustomPropertyTreeDelegate : public LayerTreeHostTest {
+ public:
+  class TestPropertyTreeDelegate : public PropertyTreeLayerTreeDelegate {
+   public:
+    bool update_called() { return update_called_; }
+
+    void UpdatePropertyTreesIfNeeded() override {
+      update_called_ = true;
+      PropertyTreeLayerTreeDelegate::UpdatePropertyTreesIfNeeded();
+    }
+
+   private:
+    bool update_called_ = false;
+  };
+
+  void RunTest(CompositorMode mode) override {
+    owned_property_tree_delegate_ =
+        std::make_unique<TestPropertyTreeDelegate>();
+    SetPropertyTreeDelegate(owned_property_tree_delegate_.get());
+    LayerTreeHostTest::RunTest(mode);
+  }
+
+ protected:
+  void BeginTest() override { PostSetNeedsUpdateLayersToMainThread(); }
+
+  void DidBeginMainFrame() override { EndTest(); }
+
+  void AfterTest() override {
+    EXPECT_TRUE(owned_property_tree_delegate_->update_called());
+
+    // Prevent a dangling pointer error.
+    SetPropertyTreeDelegate(nullptr);
+  }
+
+ private:
+  std::unique_ptr<TestPropertyTreeDelegate> owned_property_tree_delegate_;
+};
+
+MULTI_THREAD_TEST_F(LayerTreeHostTestCustomPropertyTreeDelegate);
 
 }  // namespace
 }  // namespace cc

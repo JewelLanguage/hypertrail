@@ -44,9 +44,9 @@
 #include "third_party/blink/renderer/core/dom/container_node.h"
 #include "third_party/blink/renderer/core/dom/dom_high_res_time_stamp.h"
 #include "third_party/blink/renderer/core/dom/element_data.h"
+#include "third_party/blink/renderer/core/dom/element_rare_data_field.h"
 #include "third_party/blink/renderer/core/dom/events/simulated_click_options.h"
 #include "third_party/blink/renderer/core/dom/focusgroup_flags.h"
-#include "third_party/blink/renderer/core/dom/has_invalidation_flags.h"
 #include "third_party/blink/renderer/core/dom/names_map.h"
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/dom/whitespace_attacher.h"
@@ -103,6 +103,8 @@ class HTMLElement;
 class HTMLTemplateElement;
 class Image;
 class InputDeviceCapabilities;
+class InterestInvokerData;
+class InterestInvokerTargetData;
 class KURL;
 class Locale;
 class MutableCSSPropertyValueSet;
@@ -119,6 +121,7 @@ class CheckVisibilityOptions;
 class ScrollMarkerPseudoElement;
 class ScrollToOptions;
 class SetHTMLOptions;
+class SetHTMLUnsafeOptions;
 class ShadowRoot;
 class ShadowRootInit;
 class SpaceSplitString;
@@ -214,6 +217,7 @@ enum class CommandEventType {
   // Dialog
   kShowModal,
   kClose,
+  kRequestClose,
   // Details
   kToggle,
   kOpen,
@@ -258,13 +262,6 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
     kDontForce = 0,
     kForce = 1,
   };
-  // SanitizeHTML specifies whether the HTML parser should call into the HTML
-  // sanitizer API, and if so whether in safe or unsafe mode.
-  enum class SanitizeHtml {
-    kDont,
-    kSanitizeSafe,
-    kSanitizeUnsafe,
-  };
 
   // Animatable implementation.
   Element* GetAnimationTarget() override;
@@ -291,6 +288,11 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // has already been validated.
   void SetAttributeWithoutValidation(const QualifiedName&,
                                      const AtomicString& value);
+
+  void SetAttributeWithoutValidation(const QualifiedName& name,
+                                     const String& value) {
+    SetAttributeWithoutValidation(name, AtomicString(value));
+  }
 
   // Set an attribute with Trusted Type validation. Passing g_null_atom
   // is the same as removing the attribute.
@@ -326,11 +328,11 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // nested layers of shadow roots, returns the innermost target element.
   Element* GetShadowReferenceTarget(const QualifiedName& name) const;
 
-  // Same as GetShadowReferenceTarget, but returns this element instead of
-  // nullptr in the case where there is no shadow root reference target.
+  // If this element hosts a shadow root with a referenceTarget, returns the
+  // target element inside the shadow root (recursively). If at any layer of
+  // shadow root, referenceTarget is specified but the ID is invalid, returns
+  // nullptr. In other cases, return this element.
   Element* GetShadowReferenceTargetOrSelf(const QualifiedName& name);
-  const Element* GetShadowReferenceTargetOrSelf(
-      const QualifiedName& name) const;
 
   // Returns true if |this| element has attr-associated elements that were set
   // via the IDL, rather than computed from the content attribute.
@@ -479,7 +481,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void scrollIntoView(const V8UnionBooleanOrScrollIntoViewOptions* arg);
   void scrollIntoView(bool align_to_top = true);
   void scrollIntoViewWithOptions(const ScrollIntoViewOptions*);
-  void ScrollIntoViewNoVisualUpdate(mojom::blink::ScrollIntoViewParamsPtr);
+  void ScrollIntoViewNoVisualUpdate(mojom::blink::ScrollIntoViewParamsPtr,
+                                    const Element* container = nullptr);
   void scrollIntoViewIfNeeded(bool center_if_needed = true);
 
   int OffsetLeft();
@@ -737,6 +740,33 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   bool HasEquivalentAttributes(const Element& other) const;
 
+  // Returns false if the element definitely does not have an attribute
+  // matching the given name. Is allowed to return false positives.
+  bool CouldHaveAttribute(const QualifiedName& attribute_name) const {
+    return CouldHaveAttributeWithPrecomputedFilter(
+        FilterForAttribute(attribute_name));
+  }
+
+  // A variant of CouldHaveAttribute() that allows you to compute
+  // the filter ahead-of-time; useful if you want to test many elements
+  // against the same attribute name.
+  static uint32_t FilterForAttribute(const QualifiedName& attribute_name) {
+    unsigned hash = attribute_name.LocalNameUpper().Hash();
+    uint32_t filter = 0;
+    // Build a 32-bit Bloom filter, with k=2. We extract the two
+    // (5-bit) hashes that we need from non-overlapping parts of the
+    // (24-bit) String hash, which should be independent.
+    filter |= 1u << (hash & 31);
+    filter |= 1u << ((hash >> 5) & 31);
+    return filter;
+  }
+  bool CouldHaveAttributeWithPrecomputedFilter(uint32_t filter) const {
+    return (attribute_bloom_ & filter) == filter;
+  }
+#if DCHECK_IS_ON()
+  uint32_t AttributeBloomFilterForDebug() const { return attribute_bloom_; }
+#endif
+
   // Step 5 of https://dom.spec.whatwg.org/#concept-node-clone
   virtual void CloneNonAttributePropertiesFrom(const Element&,
                                                NodeCloningData&) {}
@@ -969,9 +999,9 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void Focus(const FocusOptions*);
 
   virtual void SetFocused(bool received, mojom::blink::FocusType);
-  void SetHasFocusWithinUpToAncestor(bool,
-                                     Element* ancestor,
-                                     bool need_snap_container_search = false);
+  virtual void SetHasFocusWithinUpToAncestor(bool has_focus_within,
+                                             Element* ancestor,
+                                             bool need_snap_container_search);
   void FocusStateChanged();
   void FocusVisibleStateChanged();
   void FocusWithinStateChanged();
@@ -999,6 +1029,14 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
     // Don't update style and layout, and assert that layout is clean already.
     kAssertNoLayoutUpdates,
   };
+
+  // Whether the element is clickable. This checks for whether the node is
+  // a clickable control (e.g. form control elements) or has activation
+  // behavior. It also checks for whether the node has a click handler.
+  // Note: this should not be taken as a guarantee that the element is
+  // clickable; this is used as a heuristic to determine whether the element
+  // is likely to be clickable.
+  bool IsMaybeClickable();
 
   // Focusability logic:
   //   IsFocusable: true if the element can be focused via element.focus().
@@ -1071,10 +1109,20 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
     return false;
   }
 
-  // Implementation of the `interesttarget` feature.
-  void InterestGained();
-  void InterestLost();
+  // Implementation of the `interesttarget` feature. These are called on the
+  // element with the `interesttarget` attribute, and not on the target itself.
+  // These are called when interest is actually gained or lost on the element,
+  // e.g. after any hover-delays. They return true if the event was *not*
+  // cancelled, and the action was performed.
+  bool InterestGained(Element& interest_target);
+  bool InterestLost(Element& interest_target);
+  // Returns the target of the `interesttarget` attribute, if any, and only if
+  // the element supports this attribute. For example, `interesttarget` is not
+  // allowed on a `<div>`.
   virtual Element* interestTargetElement() { return nullptr; }
+  // Returns true if this element is an interest invoker that currently "has
+  // interest".
+  bool HasInterest();
 
   // The implementations of |innerText()| and |GetInnerTextWithoutUpdate()| are
   // found in "element_inner_text.cc".
@@ -1106,7 +1154,9 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // argument to set Sanitizer parameters.
   // See https://github.com/whatwg/html/pull/9538.
   void setHTMLUnsafe(const String& html, ExceptionState& = ASSERT_NO_EXCEPTION);
-  void setHTMLUnsafe(const String& html, SetHTMLOptions*, ExceptionState&);
+  void setHTMLUnsafe(const String& html,
+                     SetHTMLUnsafeOptions*,
+                     ExceptionState&);
   void setHTML(const String& html, SetHTMLOptions*, ExceptionState&);
 
   void setPointerCapture(PointerId poinetr_id, ExceptionState&);
@@ -1493,8 +1543,18 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   bool IsReplacedElementRespectingCSSOverflow() const;
 
   void RemovePopoverData();
-  PopoverData* EnsurePopoverData();
+  PopoverData& EnsurePopoverData();
   PopoverData* GetPopoverData() const;
+
+  void RemoveInterestInvokerData();
+  InterestInvokerData& EnsureInterestInvokerData();
+  InterestInvokerData* GetInterestInvokerData() const;
+
+  void RemoveInterestInvokerTargetData();
+  InterestInvokerTargetData& EnsureInterestInvokerTargetData();
+  InterestInvokerTargetData* GetInterestInvokerTargetData() const;
+
+  void DefaultEventHandler(Event&) override;
 
   // Retrieves the element pointed to by this element's 'anchor' content
   // attribute, if that element exists.
@@ -1715,7 +1775,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   enum class HighlightRecalc {
     // No highlight recalc is needed.
     kNone,
-    // The HighlightData from the old style can be re-used.
+    // The HighlightData from the old style can be reused.
     kReuse,
     // The HighlightData contains relative units and may need recalc.
     kOriginatingDependent,
@@ -1825,8 +1885,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
     DetachPseudoElement(kPseudoIdAfter, performing_reattach);
     DetachPseudoElement(kPseudoIdScrollButtonBlockStart, performing_reattach);
     DetachPseudoElement(kPseudoIdScrollButtonInlineStart, performing_reattach);
-    DetachPseudoElement(kPseudoIdScrollButtonBlockEnd, performing_reattach);
     DetachPseudoElement(kPseudoIdScrollButtonInlineEnd, performing_reattach);
+    DetachPseudoElement(kPseudoIdScrollButtonBlockEnd, performing_reattach);
     DetachPseudoElement(kPseudoIdScrollMarkerGroupAfter, performing_reattach);
     DetachPseudoElement(kPseudoIdBackdrop, performing_reattach);
     DetachPseudoElement(kPseudoIdFirstLetter, performing_reattach);
@@ -1958,8 +2018,6 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
       const String&,
       ParseDeclarativeShadowRoots parse_declarative_shadows,
       ForceHtml force_html_over_xml,
-      SanitizeHtml sanitize_html,
-      SetHTMLOptions* set_html_options,
       ExceptionState&);
 
   ElementRareDataVector* GetElementRareData() const;
@@ -1984,6 +2042,16 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   bool ShouldUpdateLastRememberedInlineSize() const;
 
   bool IsStyleAttributeChangeAllowed(const AtomicString& style_string);
+
+  // These schedule interest gained/lost events, for `interesttarget` invokers.
+  void ScheduleInterestGainedTask();
+  void ScheduleInterestLostTask();
+  // This returns the active interest invoker for which this element is the
+  // target.
+  Element* GetInterestInvoker() const;
+  static bool GainOrLoseInterest(Element* invoker,
+                                 Element* target,
+                                 bool interest_gained);
 
   // Highlight pseudos inherit all properties from the corresponding highlight
   // in the parent, but virtually all existing content uses universal rules
@@ -2026,6 +2094,12 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // performance reasons.
   subtle::UncompressedMember<const ComputedStyle> computed_style_;
   Member<ElementData> element_data_;
+
+  // A tiny Bloom filter for which attribute names we have; saves going to
+  // ElementData if the attribute doesn't exist. May have false positives,
+  // of course. We do not currently update this when attributes are removed,
+  // only when they are added. Attribute _values_ are not part of this filter.
+  uint32_t attribute_bloom_ = 0;
 };
 
 template <>
@@ -2153,29 +2227,6 @@ inline void Element::SetTagNameForCreateElementNS(
   DCHECK_EQ(tag_name.LocalName(), tag_name_.LocalName());
   DCHECK_EQ(tag_name.NamespaceURI(), tag_name_.NamespaceURI());
   tag_name_ = tag_name;
-}
-
-inline bool IsShadowHost(const Node* node) {
-  return node && node->GetShadowRoot();
-}
-
-inline bool IsShadowHost(const Node& node) {
-  return node.GetShadowRoot();
-}
-
-inline bool IsShadowHost(const Element* element) {
-  return element && element->GetShadowRoot();
-}
-
-inline bool IsShadowHost(const Element& element) {
-  return element.GetShadowRoot();
-}
-
-inline bool IsAtShadowBoundary(const Element* element) {
-  if (!element)
-    return false;
-  ContainerNode* parent_node = element->parentNode();
-  return parent_node && parent_node->IsShadowRoot();
 }
 
 }  // namespace blink

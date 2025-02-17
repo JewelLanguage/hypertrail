@@ -23,6 +23,7 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tasks.tab_management.TabBubbler;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiThemeUtil;
+import org.chromium.components.collaboration.CollaborationService;
 import org.chromium.components.data_sharing.DataSharingService;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.resources.dynamics.ViewResourceAdapter;
@@ -92,7 +93,7 @@ public class StripLayoutGroupTitle extends StripLayoutView {
     // Reorder background constants.
     public static final float REORDER_BACKGROUND_TOP_MARGIN = StripLayoutTab.TOP_MARGIN_DP;
     public static final float REORDER_BACKGROUND_BOTTOM_MARGIN =
-            ReorderDelegate.FOLIO_DETACHED_BOTTOM_MARGIN_DP;
+            StripLayoutUtils.FOLIO_DETACHED_BOTTOM_MARGIN_DP;
     public static final float REORDER_BACKGROUND_PADDING_START = 5.f;
     public static final float REORDER_BACKGROUND_PADDING_END = 10.f;
     public static final float REORDER_BACKGROUND_CORNER_RADIUS = 12.f;
@@ -339,6 +340,7 @@ public class StripLayoutGroupTitle extends StripLayoutView {
      *
      * @param collaborationId The id to identify a shared tab group.
      * @param dataSharingService Used to fetch and observe current share data.
+     * @param collaborationService Used to fetch collaboration group data.
      * @param registerAvatarResource A callback to register the avatar resource once it is captured.
      * @param updateGroupTitleBitmap A {@link Runnable} to update the group title bitmap after the
      *     avatar is captured.
@@ -346,6 +348,7 @@ public class StripLayoutGroupTitle extends StripLayoutView {
     public void updateSharedTabGroup(
             String collaborationId,
             DataSharingService dataSharingService,
+            CollaborationService collaborationService,
             Callback<ViewResourceAdapter> registerAvatarResource,
             Runnable updateGroupTitleBitmap) {
         // Mark the group as shared.
@@ -359,7 +362,8 @@ public class StripLayoutGroupTitle extends StripLayoutView {
                             SharedImageTilesType.SMALL,
                             new SharedImageTilesColor(
                                     SharedImageTilesColor.Style.TAB_GROUP, mColor),
-                            dataSharingService);
+                            dataSharingService,
+                            collaborationService);
         }
 
         // Update the collaboration ID and fetch group data from the data sharing service.
@@ -417,9 +421,12 @@ public class StripLayoutGroupTitle extends StripLayoutView {
 
     public void clearSharedTabGroup() {
         mIsShared = false;
-        mSharedImageTilesCoordinator = null;
         mAvatarResource = null;
         mAvatarWidthWithPadding = 0;
+        if (mSharedImageTilesCoordinator != null) {
+            mSharedImageTilesCoordinator.destroy();
+            mSharedImageTilesCoordinator = null;
+        }
     }
 
     /**
@@ -473,6 +480,16 @@ public class StripLayoutGroupTitle extends StripLayoutView {
     }
 
     /**
+     * @return Notification bubble drawX accounting for padding.
+     */
+    public float getBubbleDrawX() {
+        assert mShowBubble;
+        return LocalizationUtils.isLayoutRtl()
+                ? getPaddedX() + getTitleEndPadding()
+                : getPaddedX() + getPaddedWidth() - getTitleEndPadding() - getBubbleSize();
+    }
+
+    /**
      * @return The tint of the notification bubble.
      */
     public @ColorInt int getBubbleTint() {
@@ -484,6 +501,13 @@ public class StripLayoutGroupTitle extends StripLayoutView {
      */
     public float getBubbleSize() {
         return NOTIFICATION_BUBBLE_SIZE_DP;
+    }
+
+    /**
+     * @return The padding between title text end and bubble.
+     */
+    public float getBubblePadding() {
+        return NOTIFICATION_BUBBLE_PADDING_DP;
     }
 
     /**

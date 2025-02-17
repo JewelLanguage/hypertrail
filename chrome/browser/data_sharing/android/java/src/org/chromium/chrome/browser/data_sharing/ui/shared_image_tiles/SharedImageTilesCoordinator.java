@@ -16,10 +16,11 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
 import org.chromium.base.CallbackUtils;
+import org.chromium.components.collaboration.CollaborationService;
 import org.chromium.components.data_sharing.DataSharingService;
 import org.chromium.components.data_sharing.DataSharingUIDelegate;
+import org.chromium.components.data_sharing.GroupData;
 import org.chromium.components.data_sharing.GroupMember;
-import org.chromium.components.data_sharing.PeopleGroupActionFailure;
 import org.chromium.components.data_sharing.configs.DataSharingAvatarBitmapConfig;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
@@ -41,6 +42,7 @@ public class SharedImageTilesCoordinator {
     private final SharedImageTilesView mView;
     private final @SharedImageTilesType int mType;
     private final @NonNull DataSharingService mDataSharingService;
+    private final @NonNull CollaborationService mCollaborationService;
     private @NonNull String mCollaborationId;
     private int mAvailableMemberCount;
     private int mIconTilesCount;
@@ -53,21 +55,24 @@ public class SharedImageTilesCoordinator {
      * @param context The Android context used to inflate the views.
      * @param type The {@link SharedImageTilesType} of the SharedImageTiles.
      * @param color The {@link SharedImageTilesColor} of the SharedImageTiles.
-     * @param dataSharingService Used to fetch tab group data.
+     * @param dataSharingService Used to access UI delegate.
+     * @param collaborationService Used to fetch collaboration group data.
      */
     public SharedImageTilesCoordinator(
             Context context,
             @SharedImageTilesType int type,
             SharedImageTilesColor color,
-            @NonNull DataSharingService dataSharingService) {
+            @NonNull DataSharingService dataSharingService,
+            @NonNull CollaborationService collaborationService) {
         mModel =
                 new PropertyModel.Builder(SharedImageTilesProperties.ALL_KEYS)
                         .with(SharedImageTilesProperties.TYPE, type)
                         .with(SharedImageTilesProperties.COLOR_STYLE, color)
                         .build();
         mContext = context;
-        mDataSharingService = dataSharingService;
         mType = type;
+        mDataSharingService = dataSharingService;
+        mCollaborationService = collaborationService;
 
         mView =
                 (SharedImageTilesView)
@@ -87,7 +92,9 @@ public class SharedImageTilesCoordinator {
     }
 
     /** Cleans up any resources or observers this class used. */
-    public void destroy() {}
+    public void destroy() {
+        resetTracker();
+    }
 
     /**
      * Fetch new images given a collaboration ID. Should be called again if the members change.
@@ -107,25 +114,21 @@ public class SharedImageTilesCoordinator {
      */
     public void fetchImagesForCollaborationId(
             @Nullable String collaborationId, Callback<Boolean> finishedCallback) {
-        if (!updateCollaborationIdValid(collaborationId)) return;
+        if (!updateCollaborationIdValid(collaborationId)) {
+            resetTracker();
+            return;
+        }
 
         resetTracker();
 
-        // Fetch group information from DataSharingService.
-        // TODO(crbug.com/381138936): Migrate to cached readGroup.
-        mDataSharingService.readGroup(
-                mCollaborationId,
-                (result) -> {
-                    if (result.actionFailure != PeopleGroupActionFailure.UNKNOWN) {
-                        // Error occurred. Remove all view.
-                        updateMembersCount(0);
-                        finishedCallback.onResult(false);
-                        return;
-                    }
-
-                    assert result.groupData != null;
-                    onGroupMembersChangedInternal(result.groupData.members, finishedCallback);
-                });
+        GroupData groupData = mCollaborationService.getGroupData(mCollaborationId);
+        if (groupData == null) {
+            // Error occurred. Remove all view.
+            updateMembersCount(0);
+            finishedCallback.onResult(false);
+            return;
+        }
+        onGroupMembersChangedInternal(groupData.members, finishedCallback);
     }
 
     /**

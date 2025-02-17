@@ -28,16 +28,22 @@ namespace switches {
 
 #if BUILDFLAG(IS_ANDROID)
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
-BASE_DECLARE_FEATURE(kSkipCheckForAccountManagementOnSignin);
-
-COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kCctSignInPrompt);
 
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
-BASE_DECLARE_FEATURE(kUnoForAuto);
+BASE_DECLARE_FEATURE(kForceSupervisedSigninWithCapabilities);
 
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
-BASE_DECLARE_FEATURE(kForceSupervisedSigninWithCapabilities);
+BASE_DECLARE_FEATURE(kHistoryOptInEntryPoints);
+
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kHistoryOptInIph);
+
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kSkipCheckForAccountManagementOnSignin);
+
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kUnoForAuto);
 
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kUseHostedDomainForManagementCheckOnSignin);
@@ -78,6 +84,10 @@ COMPONENT_EXPORT(SIGNIN_SWITCHES)
 bool IsChromeRefreshTokenBindingEnabled(const PrefService* profile_prefs);
 #endif
 
+// Enables a separate account-scoped storage for preferences.
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kEnablePreferencesAccountStorage);
+
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kForceDisableExtendedSyncPromos);
 
@@ -116,11 +126,21 @@ BASE_DECLARE_FEATURE(kImprovedSettingsUIOnDesktop);
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 bool IsImprovedSettingsUIOnDesktopEnabled();
 
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kEnableSnackbarInSettings);
+
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kEnableImprovedGuestProfileMenu);
+
 #if BUILDFLAG(IS_IOS)
 
 // Features to enable identities in auth error (stale token).
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kEnableIdentityInAuthError);
+
+// Show the error badge on the identity disc in the NTP.
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kEnableErrorBadgeOnIdentityDisc);
 
 // Features to enable using the ASWebAuthenticationSession to add accounts to
 // device.
@@ -136,11 +156,8 @@ BASE_DECLARE_FEATURE(kBatchUploadDesktop);
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 bool IsBatchUploadDesktopEnabled();
 
-// Temporary flag to test Profile Picker Glic version.
-// TODO(crbug.com/390212241): Cleanup the flag when the code triggering the
-// Profile Picker Glic mode is hooked to the Glic view.
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
-BASE_DECLARE_FEATURE(kProfilePickerGlicTesting);
+BASE_DECLARE_FEATURE(kShowEnterpriseDialogForAllManagedAccountsSignin);
 
 }  // namespace switches
 

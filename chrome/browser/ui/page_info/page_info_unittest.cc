@@ -18,7 +18,6 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
 #include "chrome/browser/file_system_access/file_system_access_features.h"
@@ -79,10 +78,10 @@
 #include "media/base/media_switches.h"
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "components/user_manager/scoped_user_manager.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 using content::SSLStatus;
 using content_settings::SettingSource;
@@ -168,11 +167,11 @@ class PageInfoTest : public ChromeRenderViewHostTestHarness {
         net::ImportCertFromFile(net::GetTestCertsDirectory(), "ok_cert.pem");
     ASSERT_TRUE(cert_);
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     fake_user_manager_->AddUserWithAffiliation(
         AccountId::FromUserEmail(profile()->GetProfileUserName()),
         /*is_affiliated=*/true);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
     CreateWebContentsUserData(web_contents());
 
@@ -328,7 +327,7 @@ class PageInfoTest : public ChromeRenderViewHostTestHarness {
   ChromeLayoutProvider layout_provider_;
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   user_manager::TypedScopedUserManager<ash::FakeChromeUserManager>
       fake_user_manager_{std::make_unique<ash::FakeChromeUserManager>()};
 #endif
@@ -347,9 +346,9 @@ void ExpectPermissionInfoList(
     const PermissionInfoList& permissions,
     const base::Location& location = FROM_HERE) {
   std::set<ContentSettingsType> actual_types;
-  base::ranges::transform(permissions,
-                          std::inserter(actual_types, actual_types.end()),
-                          [](const auto& p) { return p.type; });
+  std::ranges::transform(permissions,
+                         std::inserter(actual_types, actual_types.end()),
+                         [](const auto& p) { return p.type; });
 
   EXPECT_THAT(actual_types, expected_types)
       << "(expected at " << location.ToString() << ")";
@@ -1191,27 +1190,6 @@ TEST_F(PageInfoTest, HTTPSConnectionError) {
   EXPECT_EQ(PageInfo::SITE_IDENTITY_STATUS_CERT,
             page_info()->site_identity_status());
 }
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-TEST_F(PageInfoTest, HTTPSPolicyCertConnection) {
-  security_level_ = security_state::SECURE_WITH_POLICY_INSTALLED_CERT;
-  visible_security_state_.url = GURL("https://scheme-is-cryptographic.test");
-  visible_security_state_.certificate = cert();
-  visible_security_state_.cert_status = 0;
-  int status = 0;
-  status = SetSSLVersion(status, net::SSL_CONNECTION_VERSION_TLS1);
-  status = SetSSLCipherSuite(status, CR_TLS_RSA_WITH_AES_256_CBC_SHA256);
-  visible_security_state_.connection_status = status;
-  visible_security_state_.connection_info_initialized = true;
-
-  SetDefaultUIExpectations(mock_ui());
-
-  EXPECT_EQ(PageInfo::SITE_CONNECTION_STATUS_ENCRYPTED,
-            page_info()->site_connection_status());
-  EXPECT_EQ(PageInfo::SITE_IDENTITY_STATUS_ADMIN_PROVIDED_CERT,
-            page_info()->site_identity_status());
-}
-#endif
 
 TEST_F(PageInfoTest, HTTPSSHA1) {
   SetCertToSHA1();

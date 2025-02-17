@@ -152,7 +152,7 @@ content::WebUIDataSource* CreateAndAddHistoryUIHTMLSource(Profile* profile) {
           l10n_util::GetStringUTF16(
               IDS_SETTINGS_CLEAR_DATA_MYACTIVITY_URL_IN_HISTORY)));
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   source->AddLocalizedString("turnOnSyncButton",
                              IDS_HISTORY_TURN_ON_SYNC_BUTTON);
 #else
@@ -162,8 +162,7 @@ content::WebUIDataSource* CreateAndAddHistoryUIHTMLSource(Profile* profile) {
       identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSignin);
   AccountInfo account_info =
       signin_ui_util::GetSingleAccountForPromos(identity_manager);
-  if (switches::IsExplicitBrowserSigninUIOnDesktopEnabled() &&
-      !has_primary_account && !account_info.IsEmpty()) {
+  if (!has_primary_account && !account_info.IsEmpty()) {
     source->AddString("turnOnSyncButton",
                       l10n_util::GetStringFUTF16(
                           IDS_PROFILES_DICE_WEB_ONLY_SIGNIN_BUTTON,
@@ -174,7 +173,7 @@ content::WebUIDataSource* CreateAndAddHistoryUIHTMLSource(Profile* profile) {
     source->AddLocalizedString("turnOnSyncButton",
                                IDS_HISTORY_TURN_ON_SYNC_BUTTON);
   }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   PrefService* prefs = profile->GetPrefs();
   bool allow_deleting_history =
@@ -290,11 +289,6 @@ HistoryUI::HistoryUI(content::WebUI* web_ui)
                                                  base::Unretained(this)));
 
   web_ui->AddMessageHandler(std::make_unique<webui::NavigationHandler>());
-  auto browsing_history_handler = std::make_unique<BrowsingHistoryHandler>();
-  BrowsingHistoryHandler* browsing_history_handler_ptr =
-      browsing_history_handler.get();
-  web_ui->AddMessageHandler(std::move(browsing_history_handler));
-  browsing_history_handler_ptr->StartQueryHistory();
   web_ui->AddMessageHandler(std::make_unique<MetricsHandler>());
 
   auto foreign_session_handler =
@@ -327,6 +321,13 @@ void HistoryUI::BindInterface(
       std::move(pending_page_handler),
       Profile::FromWebUI(web_ui())->GetWeakPtr(), web_ui(),
       /*for_side_panel=*/false);
+}
+
+void HistoryUI::BindInterface(
+    mojo::PendingReceiver<history::mojom::PageHandler> pending_page_handler) {
+  browsing_history_handler_ = std::make_unique<BrowsingHistoryHandler>(
+      std::move(pending_page_handler), Profile::FromWebUI(web_ui()),
+      web_ui()->GetWebContents());
 }
 
 void HistoryUI::BindInterface(

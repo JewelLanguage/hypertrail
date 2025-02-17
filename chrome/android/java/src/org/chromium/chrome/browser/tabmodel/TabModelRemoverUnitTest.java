@@ -46,11 +46,11 @@ import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncFeaturesJni;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncServiceFactory;
 import org.chromium.chrome.browser.tabmodel.TabModelRemover.TabModelRemoverFlowHandler;
 import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager;
+import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager.MaybeBlockingResult;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModel;
 import org.chromium.components.browser_ui.widget.ActionConfirmationResult;
 import org.chromium.components.collaboration.CollaborationService;
 import org.chromium.components.data_sharing.DataSharingService;
-import org.chromium.components.data_sharing.PeopleGroupActionOutcome;
 import org.chromium.components.data_sharing.member_role.MemberRole;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
@@ -87,8 +87,11 @@ public class TabModelRemoverUnitTest {
     @Mock private CollaborationService mCollaborationService;
     @Mock private TabGroupSyncService mTabGroupSyncService;
     @Mock private TabGroupSyncFeatures.Natives mTabGroupSyncFeaturesJniMock;
+    @Mock private Runnable mFinishBlocking;
 
     @Captor private ArgumentCaptor<Callback<Integer>> mOnResultCaptor;
+    @Captor private ArgumentCaptor<Callback<Boolean>> mOnDeleteGroupResultCaptor;
+    @Captor private ArgumentCaptor<Callback<MaybeBlockingResult>> mOnMaybeBlockingResultCaptor;
     @Captor private ArgumentCaptor<List<Tab>> mNewTabCreationCaptor;
 
     private MockTabModel mTabModel;
@@ -191,7 +194,9 @@ public class TabModelRemoverUnitTest {
         mHandlerInOrder
                 .verify(mHandler)
                 .showCollaborationKeepDialog(
-                        eq(MemberRole.OWNER), eq(TAB_GROUP_TITLE), mOnResultCaptor.capture());
+                        eq(MemberRole.OWNER),
+                        eq(TAB_GROUP_TITLE),
+                        mOnMaybeBlockingResultCaptor.capture());
         mHandlerInOrder.verify(mHandler).onPlaceholderTabsCreated(mNewTabCreationCaptor.capture());
         assertEquals(
                 groupsPendingDestroy.collaborationGroupsDestroyed.size(),
@@ -203,7 +208,11 @@ public class TabModelRemoverUnitTest {
 
         mHandlerInOrder.verify(mHandler).performAction();
 
-        mOnResultCaptor.getValue().onResult(ActionConfirmationResult.CONFIRMATION_POSITIVE);
+        mOnMaybeBlockingResultCaptor
+                .getValue()
+                .onResult(
+                        new MaybeBlockingResult(
+                                ActionConfirmationResult.CONFIRMATION_POSITIVE, null));
 
         verifyNoMoreInteractions(mHandler);
 
@@ -230,21 +239,29 @@ public class TabModelRemoverUnitTest {
         mHandlerInOrder
                 .verify(mHandler)
                 .showCollaborationKeepDialog(
-                        eq(MemberRole.OWNER), eq(TAB_GROUP_TITLE), mOnResultCaptor.capture());
+                        eq(MemberRole.OWNER),
+                        eq(TAB_GROUP_TITLE),
+                        mOnMaybeBlockingResultCaptor.capture());
         mHandlerInOrder.verify(mHandler).onPlaceholderTabsCreated(mNewTabCreationCaptor.capture());
         assertEquals(
                 groupsPendingDestroy.collaborationGroupsDestroyed.size(),
                 mNewTabCreationCaptor.getValue().size());
         mHandlerInOrder.verify(mHandler).performAction();
 
-        mOnResultCaptor.getValue().onResult(ActionConfirmationResult.CONFIRMATION_NEGATIVE);
+        mOnMaybeBlockingResultCaptor
+                .getValue()
+                .onResult(
+                        new MaybeBlockingResult(
+                                ActionConfirmationResult.CONFIRMATION_NEGATIVE, mFinishBlocking));
 
         verify(mTabModel).commitAllTabClosures();
 
-        verify(mDataSharingService).deleteGroup(eq(COLLABORATION_ID), mOnResultCaptor.capture());
+        verify(mCollaborationService)
+                .deleteGroup(eq(COLLABORATION_ID), mOnDeleteGroupResultCaptor.capture());
 
-        mOnResultCaptor.getValue().onResult(PeopleGroupActionOutcome.SUCCESS);
+        mOnDeleteGroupResultCaptor.getValue().onResult(true);
         verify(mModalDialogManager, never()).showDialog(any(), anyInt());
+        verify(mFinishBlocking).run();
 
         verifyNoMoreInteractions(mHandler);
     }
@@ -267,20 +284,28 @@ public class TabModelRemoverUnitTest {
         mHandlerInOrder
                 .verify(mHandler)
                 .showCollaborationKeepDialog(
-                        eq(MemberRole.MEMBER), eq(TAB_GROUP_TITLE), mOnResultCaptor.capture());
+                        eq(MemberRole.MEMBER),
+                        eq(TAB_GROUP_TITLE),
+                        mOnMaybeBlockingResultCaptor.capture());
         mHandlerInOrder.verify(mHandler).onPlaceholderTabsCreated(mNewTabCreationCaptor.capture());
         assertEquals(
                 groupsPendingDestroy.collaborationGroupsDestroyed.size(),
                 mNewTabCreationCaptor.getValue().size());
         mHandlerInOrder.verify(mHandler).performAction();
 
-        mOnResultCaptor.getValue().onResult(ActionConfirmationResult.CONFIRMATION_NEGATIVE);
+        mOnMaybeBlockingResultCaptor
+                .getValue()
+                .onResult(
+                        new MaybeBlockingResult(
+                                ActionConfirmationResult.CONFIRMATION_NEGATIVE, mFinishBlocking));
 
         verify(mTabModel).commitAllTabClosures();
-        verify(mDataSharingService).leaveGroup(eq(COLLABORATION_ID), mOnResultCaptor.capture());
+        verify(mCollaborationService)
+                .leaveGroup(eq(COLLABORATION_ID), mOnDeleteGroupResultCaptor.capture());
 
-        mOnResultCaptor.getValue().onResult(PeopleGroupActionOutcome.PERSISTENT_FAILURE);
+        mOnDeleteGroupResultCaptor.getValue().onResult(false);
         verify(mModalDialogManager).showDialog(any(), anyInt());
+        verify(mFinishBlocking).run();
 
         verifyNoMoreInteractions(mHandler);
     }

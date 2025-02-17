@@ -22,12 +22,12 @@
 
 #include "third_party/blink/renderer/core/html/html_plugin_element.h"
 
+#include <algorithm>
+
 #include "base/feature_list.h"
-#include "base/ranges/algorithm.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/loader/request_context_frame_type.mojom-blink.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink.h"
 #include "third_party/blink/public/mojom/permissions_policy/policy_value.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
@@ -110,13 +110,13 @@ void PluginParameters::AppendNameWithValue(const String& name,
 }
 
 void PluginParameters::MapDataParamToSrc() {
-  if (base::ranges::any_of(names_, [](auto name) {
+  if (std::ranges::any_of(names_, [](auto name) {
         return EqualIgnoringASCIICase(name, "src");
       })) {
     return;
   }
 
-  auto data = base::ranges::find_if(
+  auto data = std::ranges::find_if(
       names_, [](auto name) { return EqualIgnoringASCIICase(name, "data"); });
 
   if (data != names_.end()) {
@@ -260,9 +260,9 @@ void HTMLPlugInElement::AttachLayoutTree(AttachContext& context) {
   dispose_view_ = false;
 }
 
-void HTMLPlugInElement::IntrinsicSizingInfoChanged() {
+void HTMLPlugInElement::NaturalSizingInfoChanged() {
   if (auto* embedded_object = GetLayoutEmbeddedObject())
-    embedded_object->IntrinsicSizeChanged();
+    embedded_object->NaturalSizeChanged();
 }
 
 void HTMLPlugInElement::UpdatePlugin() {

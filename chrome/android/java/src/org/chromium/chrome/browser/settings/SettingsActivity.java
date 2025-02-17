@@ -54,7 +54,7 @@ import org.chromium.components.browser_ui.modaldialog.AppModalPresenter;
 import org.chromium.components.browser_ui.settings.EmbeddableSettingsPage;
 import org.chromium.components.browser_ui.util.TraceEventVectorDrawableCompat;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
-import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
+import org.chromium.components.browser_ui.widget.scrim.ScrimManager;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.DeviceFormFactor;
@@ -101,7 +101,7 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
 
     private boolean mStandalone;
     private Profile mProfile;
-    private ScrimCoordinator mScrim;
+    private ScrimManager mScrimManager;
     private ManagedBottomSheetController mManagedBottomSheetController;
     private final OneshotSupplierImpl<BottomSheetController> mBottomSheetControllerSupplier =
             new OneshotSupplierImpl<>();
@@ -235,16 +235,12 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
     /** Set up the bottom sheet for this activity. */
     private void initBottomSheet() {
         ViewGroup sheetContainer = findViewById(R.id.sheet_container);
-        // TODO: Implement scrim delegate if status bar needs to change color with the scrim.
-        mScrim =
-                new ScrimCoordinator(
-                        this,
-                        /* systemUiScrimDelegate= */ null,
-                        (ViewGroup) sheetContainer.getParent());
+        // TODO: Observe scrim changes if status bar needs to change color with the scrim.
+        mScrimManager = new ScrimManager(this, (ViewGroup) sheetContainer.getParent());
 
         mManagedBottomSheetController =
                 BottomSheetControllerFactory.createBottomSheetController(
-                        () -> mScrim,
+                        () -> mScrimManager,
                         CallbackUtils.emptyCallback(),
                         getWindow(),
                         KeyboardVisibilityDelegate.getInstance(),
@@ -347,7 +343,7 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
 
     @Override
     protected void onDestroy() {
-        mScrim.destroy();
+        mScrimManager.destroy();
         super.onDestroy();
     }
 

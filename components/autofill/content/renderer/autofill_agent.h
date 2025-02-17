@@ -205,11 +205,11 @@ class AutofillAgent : public content::RenderFrameObserver,
     return weak_ptr_factory_.GetWeakPtr();
   }
 
-  // TODO(crbug.com/40147954): Find a better name for this method.
-  // Invoked when form needs to be saved because of `reason`, `element` is
-  // valid if the callback caused by a reason other than
-  // SaveFormReason::kWillSendSubmitEvent, |form| is valid for the callback
-  // caused by SaveFormReason::kWillSendSubmitEvent.
+  // Called after updating the last interacted element in FormTracker because of
+  // `reason`. It is always the case that `form` or `element` are non-null. If
+  // `form_element` is non-null, then `element` (if non-null) is owned by
+  // `form_element`, otherwise `element` is unowned and is surely non-null.
+  // TODO(crbug.com/40281981): Remove.
   void OnProvisionallySaveForm(const blink::WebFormElement& form,
                                const blink::WebFormControlElement& element,
                                FormTracker::SaveFormReason reason);
@@ -318,8 +318,6 @@ class AutofillAgent : public content::RenderFrameObserver,
   void SelectFieldOptionsChanged(
       const blink::WebFormControlElement& element) override;
   void SelectControlSelectionChanged(
-      const blink::WebFormControlElement& element) override;
-  bool ShouldSuppressKeyboard(
       const blink::WebFormControlElement& element) override;
   void FormElementReset(const blink::WebFormElement& form) override;
   void PasswordFieldReset(const blink::WebInputElement& element) override;
@@ -477,7 +475,8 @@ class AutofillAgent : public content::RenderFrameObserver,
 
   // List of elements that are currently being previewed, along with their
   // autofill state before the preview.
-  std::vector<std::pair<FieldRef, blink::WebAutofillState>> previewed_elements_;
+  std::vector<std::pair<FieldRendererId, blink::WebAutofillState>>
+      previewed_elements_;
 
   // When dealing with an unowned form, we keep track of the unowned fields
   // the user has modified so we can determine when submission occurs.

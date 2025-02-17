@@ -26,6 +26,7 @@
 #import "components/reading_list/core/reading_list_model.h"
 #import "components/reading_list/ios/reading_list_model_bridge_observer.h"
 #import "components/search_engines/template_url_service.h"
+#import "components/send_tab_to_self/features.h"
 #import "components/supervised_user/core/common/features.h"
 #import "components/supervised_user/core/common/supervised_user_constants.h"
 #import "components/sync/service/sync_service.h"
@@ -239,6 +240,10 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
 
 @property(nonatomic, strong) OverflowMenuAction* editActionsAction;
 @property(nonatomic, strong) OverflowMenuAction* lensOverlayAction;
+
+@property(nonatomic, strong) OverflowMenuAction* AIPrototypeAction;
+
+@property(nonatomic, strong) OverflowMenuAction* setTabReminderAction;
 
 @end
 
@@ -456,8 +461,9 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
 }
 
 - (void)setWebContentAreaShowingOverlay:(BOOL)webContentAreaShowingOverlay {
-  if (_webContentAreaShowingOverlay == webContentAreaShowingOverlay)
+  if (_webContentAreaShowingOverlay == webContentAreaShowingOverlay) {
     return;
+  }
   _webContentAreaShowingOverlay = webContentAreaShowingOverlay;
   [self updateModel];
 }
@@ -666,7 +672,7 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
                          accessibilityID:kToolsMenuShareChromeId
                             hideItemText:nil
                                  handler:^{
-                                   [weakSelf shareChromeApp];
+                                   [weakSelf showShareSheetForChromeApp];
                                  }];
 
   self.editActionsAction = [self
@@ -683,6 +689,16 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   if (IsLensOverlayAvailable()) {
     self.lensOverlayAction = [self openLensOverlayAction];
   }
+
+  if (experimental_flags::EnableAIPrototypingMenu()) {
+    self.AIPrototypeAction = [self openAIPrototypeAction];
+  }
+
+  if (send_tab_to_self::
+          IsSendTabIOSPushNotificationsEnabledWithTabReminders()) {
+    self.setTabReminderAction = [self newSetTabReminderAction];
+  }
+
   self.editActionsAction.automaticallyUnhighlight = NO;
   self.editActionsAction.useButtonStyling = YES;
 
@@ -752,6 +768,8 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
 }
 
 - (OverflowMenuAction*)openLensOverlayAction {
+  NSString* hideItemText =
+      l10n_util::GetNSString(IDS_IOS_OVERFLOW_MENU_HIDE_ACTION_LENS_OVERLAY);
   __weak __typeof(self) weakSelf = self;
   return [self
       createOverflowMenuActionWithNameID:IDS_IOS_CONTENT_CONTEXT_OPENLENSOVERLAY
@@ -760,9 +778,24 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
                             systemSymbol:NO
                         monochromeSymbol:NO
                          accessibilityID:kToolsMenuOpenLensOverlay
-                            hideItemText:nil
+                            hideItemText:hideItemText
                                  handler:^{
                                    [weakSelf startLensOverlay];
+                                 }];
+}
+
+- (OverflowMenuAction*)openAIPrototypeAction {
+  __weak __typeof(self) weakSelf = self;
+  return [self
+      createOverflowMenuActionWithNameID:IDS_IOS_CONTENT_CONTEXT_OPENAIPROTOTYPE
+                              actionType:overflow_menu::ActionType::AIPrototype
+                              symbolName:kMagicStackSymbol
+                            systemSymbol:YES
+                        monochromeSymbol:NO
+                         accessibilityID:kToolsMenuOpenAIPrototype
+                            hideItemText:nil
+                                 handler:^{
+                                   [weakSelf startAIPrototype];
                                  }];
 }
 
@@ -782,6 +815,31 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
                                  handler:^{
                                    [weakSelf addToReadingList];
                                  }];
+}
+
+// Creates the "Set a Reminder" action for the overflow menu.
+// This action allows users to set a reminder for a tab.
+- (OverflowMenuAction*)newSetTabReminderAction {
+  CHECK(
+      send_tab_to_self::IsSendTabIOSPushNotificationsEnabledWithTabReminders());
+
+  NSString* hideItemText = l10n_util::GetNSString(
+      IDS_IOS_REMINDER_NOTIFICATIONS_HIDE_SET_A_REMINDER);
+
+  return
+      [self createOverflowMenuActionWithNameID:
+                IDS_IOS_REMINDER_NOTIFICATIONS_SET_A_REMINDER
+                                    actionType:overflow_menu::ActionType::
+                                                   SetTabReminder
+                                    symbolName:kBellBadgeSymbol
+                                  systemSymbol:YES
+                              monochromeSymbol:NO
+                               accessibilityID:kToolsMenuSetTabReminder
+                                  hideItemText:hideItemText
+                                       handler:^{
+                                           // TODO(crbug.com/389912106): Display
+                                           // the new 'Set a Reminder' UI.
+                                       }];
 }
 
 - (OverflowMenuAction*)newClearBrowsingDataAction {
@@ -1332,9 +1390,12 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
       IsIncognitoModeDisabled(self.profilePrefs);
 
   if (IsLensOverlayAvailable()) {
+    BOOL isPortrait = !IsCompactHeight(self.baseViewController.traitCollection);
+    BOOL isSupported =
+        search_engines::SupportsSearchImageWithLens(self.templateURLService);
+    BOOL portraitOverride = IsLensOverlayLandscapeOrientationEnabled();
     self.lensOverlayAction.enabled =
-        search_engines::SupportsSearchImageWithLens(self.templateURLService) &&
-        !IsCompactHeight(self.baseViewController.traitCollection);
+        isSupported && (isPortrait || portraitOverride);
   }
 }
 
@@ -1578,12 +1639,6 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   [self updateModel];
 }
 
-- (void)webState:(web::WebState*)webState
-    didChangeLoadingProgress:(double)progress {
-  DCHECK_EQ(_webState, webState);
-  [self updateModel];
-}
-
 - (void)webStateDidChangeBackForwardState:(web::WebState*)webState {
   DCHECK_EQ(_webState, webState);
   [self updateModel];
@@ -1623,6 +1678,9 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
 // If an added or removed bookmark is the same as the current url, update the
 // toolbar so the star highlight is kept in sync.
 - (void)didChangeChildrenForNode:(const bookmarks::BookmarkNode*)bookmarkNode {
+  if (self.bookmarkModel->IsDoingExtensiveChanges()) {
+    return;
+  }
   [self updateModel];
 }
 
@@ -1638,6 +1696,9 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
 }
 
 - (void)didChangeNode:(const bookmarks::BookmarkNode*)bookmarkNode {
+  if (self.bookmarkModel->IsDoingExtensiveChanges()) {
+    return;
+  }
   [self updateModel];
 }
 - (void)didMoveNode:(const bookmarks::BookmarkNode*)bookmarkNode
@@ -1647,6 +1708,10 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
 }
 - (void)didDeleteNode:(const bookmarks::BookmarkNode*)node
            fromFolder:(const bookmarks::BookmarkNode*)folder {
+  [self updateModel];
+}
+
+- (void)extensiveBookmarkChangesEnded {
   [self updateModel];
 }
 
@@ -1730,8 +1795,9 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
 #pragma mark - PrefObserverDelegate
 
 - (void)onPreferenceChanged:(const std::string&)preferenceName {
-  if (preferenceName == bookmarks::prefs::kEditBookmarksEnabled)
+  if (preferenceName == bookmarks::prefs::kEditBookmarksEnabled) {
     [self updateModel];
+  }
 }
 
 #pragma mark - IOSLanguageDetectionTabHelperObserving
@@ -1868,19 +1934,28 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
 #pragma mark - OverflowMenuActionProvider
 
 - (ActionRanking)basePageActions {
-  ActionRanking actions = {
-      overflow_menu::ActionType::Follow,
-      overflow_menu::ActionType::Bookmark,
-      overflow_menu::ActionType::ReadingList,
-      overflow_menu::ActionType::ClearBrowsingData,
-      overflow_menu::ActionType::Translate,
-      overflow_menu::ActionType::DesktopSite,
-      overflow_menu::ActionType::FindInPage,
-      overflow_menu::ActionType::TextZoom,
-  };
+  ActionRanking actions;
+
+  if (send_tab_to_self::
+          IsSendTabIOSPushNotificationsEnabledWithTabReminders()) {
+    actions.push_back(overflow_menu::ActionType::SetTabReminder);
+  }
+
+  actions.push_back(overflow_menu::ActionType::Follow);
+  actions.push_back(overflow_menu::ActionType::Bookmark);
+  actions.push_back(overflow_menu::ActionType::ReadingList);
+  actions.push_back(overflow_menu::ActionType::ClearBrowsingData);
+  actions.push_back(overflow_menu::ActionType::Translate);
+  actions.push_back(overflow_menu::ActionType::DesktopSite);
+  actions.push_back(overflow_menu::ActionType::FindInPage);
+  actions.push_back(overflow_menu::ActionType::TextZoom);
 
   if (IsLensOverlayAvailable()) {
     actions.push_back(overflow_menu::ActionType::LensOverlay);
+  }
+
+  if (experimental_flags::EnableAIPrototypingMenu()) {
+    actions.push_back(overflow_menu::ActionType::AIPrototype);
   }
 
   return actions;
@@ -1948,6 +2023,10 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
       return self.editActionsAction;
     case overflow_menu::ActionType::LensOverlay:
       return self.lensOverlayAction;
+    case overflow_menu::ActionType::AIPrototype:
+      return self.AIPrototypeAction;
+    case overflow_menu::ActionType::SetTabReminder:
+      return self.setTabReminderAction;
   }
 }
 
@@ -1986,6 +2065,10 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
       return [self newTextZoomAction];
     case overflow_menu::ActionType::LensOverlay:
       return [self openLensOverlayAction];
+    case overflow_menu::ActionType::AIPrototype:
+      return [self openAIPrototypeAction];
+    case overflow_menu::ActionType::SetTabReminder:
+      return [self newSetTabReminderAction];
   }
 }
 
@@ -2054,8 +2137,9 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
 - (void)followWebPage:(WebPageURLs*)webPage {
   // FollowBrowserAgent may be null after -disconnect has been called.
   FollowBrowserAgent* followBrowserAgent = self.followBrowserAgent;
-  if (followBrowserAgent)
+  if (followBrowserAgent) {
     followBrowserAgent->FollowWebSite(webPage, FollowSource::OverflowMenu);
+  }
   [self dismissMenu];
 }
 
@@ -2063,8 +2147,9 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
 - (void)unfollowWebPage:(WebPageURLs*)webPage {
   // FollowBrowserAgent may be null after -disconnect has been called.
   FollowBrowserAgent* followBrowserAgent = self.followBrowserAgent;
-  if (followBrowserAgent)
+  if (followBrowserAgent) {
     followBrowserAgent->UnfollowWebSite(webPage, FollowSource::OverflowMenu);
+  }
   [self dismissMenu];
 }
 
@@ -2079,7 +2164,7 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
   if (!currentWebState) {
     return;
   }
-  [self.bookmarksHandler bookmarkWithWebState:currentWebState];
+  [self.bookmarksHandler addBookmarkForWebState:currentWebState];
 }
 
 // Dismisses the menu and adds the current page to the reading list.
@@ -2198,6 +2283,12 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
                completion:nil];
 }
 
+// Creates and opens the AIPrototype UI.
+- (void)startAIPrototype {
+  [self dismissMenu];
+  [self.applicationHandler openAIMenu];
+}
+
 #pragma mark - Destinations Handlers
 
 // Dismisses the menu and opens bookmarks.
@@ -2207,9 +2298,9 @@ OverflowMenuFooter* CreateOverflowMenuManagedFooter(
 }
 
 // Dismisses the menu and opens share sheet to share Chrome's app store link
-- (void)shareChromeApp {
+- (void)showShareSheetForChromeApp {
   [self dismissMenu];
-  [self.activityServiceHandler shareChromeApp];
+  [self.activityServiceHandler showShareSheetForChromeApp];
 }
 
 // Dismisses the menu and opens history.

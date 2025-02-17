@@ -20,10 +20,14 @@ class AutofillErrorDialogController;
 class AutofillErrorDialogView;
 class AutofillProgressDialogController;
 class AutofillProgressDialogView;
+class BnplTosController;
+class BnplTosView;
 class CardUnmaskAuthenticationSelectionDialogController;
 class CardUnmaskAuthenticationSelectionDialog;
 class CardUnmaskOtpInputDialogController;
 class CardUnmaskOtpInputDialogView;
+class SaveAndFillDialogController;
+class SaveAndFillDialogView;
 
 namespace payments {
 class PaymentsWindowUserConsentDialogController;
@@ -71,6 +75,22 @@ CreateAndShowPaymentsWindowUserConsentDialog(
     content::WebContents* web_contents,
     base::OnceClosure accept_callback,
     base::OnceClosure cancel_callback);
+
+// Factory function for creating and showing the BNPL Terms of Service.
+std::unique_ptr<BnplTosView> CreateAndShowBnplTos(
+    base::WeakPtr<BnplTosController> controller,
+    content::WebContents* web_contents);
+
+#if !BUILDFLAG(IS_ANDROID)
+// Factory function for creating the "Save and Fill" dialog. This dialog
+// is triggered when the user has no saved credit cards and clicks on the
+// "Save and Fill" suggestion in the credit card dropdown menu. It presents
+// a centered modal dialog where the user can conveniently save a new
+// credit card and simultaneously fill it into the form with a single click.
+base::WeakPtr<SaveAndFillDialogView> CreateAndShowSaveAndFillDialog(
+    base::WeakPtr<SaveAndFillDialogController> controller,
+    content::WebContents* web_contents);
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 }  // namespace autofill
 

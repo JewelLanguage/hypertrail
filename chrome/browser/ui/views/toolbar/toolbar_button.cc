@@ -139,7 +139,7 @@ void ToolbarButton::SetHighlight(const std::u16string& highlight_text,
   SetText(highlight_text);
 }
 
-void ToolbarButton::SetText(const std::u16string& text) {
+void ToolbarButton::SetText(std::u16string_view text) {
   LabelButton::SetText(text);
   UpdateColorsAndInsets();
 }
@@ -518,11 +518,11 @@ void ToolbarButton::AfterPropertyChange(const void* key, int64_t old_value) {
     // TODO(crbug.com/40258442): Investigate if we should suppress tooltip for
     // all Buttons rather than just ToolbarButtons when IPH is on.
     if (has_in_product_help_promo_) {
-      suppressed_tooltip_text_ = GetCachedTooltipText();
-      SetCachedTooltipText(std::u16string());
+      suppressed_tooltip_text_ = GetTooltipText();
+      SetTooltipText(std::u16string());
     } else {
-      if (GetCachedTooltipText().empty()) {
-        SetCachedTooltipText(suppressed_tooltip_text_);
+      if (GetTooltipText().empty()) {
+        SetTooltipText(suppressed_tooltip_text_);
       }
       suppressed_tooltip_text_ = std::u16string();
     }

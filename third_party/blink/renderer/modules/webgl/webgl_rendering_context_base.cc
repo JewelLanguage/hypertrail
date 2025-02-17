@@ -23,6 +23,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.h"
 
 #include <memory>
@@ -827,12 +832,12 @@ scoped_refptr<StaticBitmapImage> WebGLRenderingContextBase::GetImage(
       CanvasResourceProvider::ShouldInitialize::kNo;
   std::unique_ptr<CanvasResourceProvider> resource_provider =
       CanvasResourceProvider::CreateSharedImageProvider(
-          size, GetSkColorType(), GetAlphaType(), GetColorSpace(),
+          size, GetSharedImageFormat(), GetAlphaType(), GetColorSpace(),
           kShouldInitialize, SharedGpuContext::ContextProviderWrapper(),
           RasterMode::kGPU, gpu::SHARED_IMAGE_USAGE_DISPLAY_READ);
   if (!resource_provider || !resource_provider->IsValid()) {
     resource_provider = CanvasResourceProvider::CreateBitmapProvider(
-        size, GetSkColorType(), GetAlphaType(), GetColorSpace(),
+        size, GetSharedImageFormat(), GetAlphaType(), GetColorSpace(),
         CanvasResourceProvider::ShouldInitialize::kNo);
   }
 
@@ -1787,6 +1792,31 @@ void WebGLRenderingContextBase::RestoreColorMask() {
                          color_mask_[3]);
 }
 
+void WebGLRenderingContextBase::RestoreVertexArrayObjectBinding() {
+  if (isContextLost()) {
+    return;
+  }
+
+  ContextGL()->BindVertexArrayOES(
+      ObjectOrZero(bound_vertex_array_object_.Get()));
+}
+
+void WebGLRenderingContextBase::RestoreProgram() {
+  if (isContextLost()) {
+    return;
+  }
+
+  ContextGL()->UseProgram(ObjectOrZero(current_program_.Get()));
+}
+
+void WebGLRenderingContextBase::RestoreActiveTexture() {
+  if (isContextLost()) {
+    return;
+  }
+
+  ContextGL()->ActiveTexture(active_texture_unit_ + GL_TEXTURE0);
+}
+
 void WebGLRenderingContextBase::MarkLayerComposited() {
   if (!isContextLost())
     GetDrawingBuffer()->SetBufferClearNeeded(true);
@@ -2674,32 +2704,22 @@ void WebGLRenderingContextBase::copyTexSubImage2D(GLenum target,
 }
 
 WebGLBuffer* WebGLRenderingContextBase::createBuffer() {
-  if (isContextLost())
-    return nullptr;
   return MakeGarbageCollected<WebGLBuffer>(this);
 }
 
 WebGLFramebuffer* WebGLRenderingContextBase::createFramebuffer() {
-  if (isContextLost())
-    return nullptr;
   return MakeGarbageCollected<WebGLFramebuffer>(this);
 }
 
 WebGLTexture* WebGLRenderingContextBase::createTexture() {
-  if (isContextLost())
-    return nullptr;
   return MakeGarbageCollected<WebGLTexture>(this);
 }
 
 WebGLProgram* WebGLRenderingContextBase::createProgram() {
-  if (isContextLost())
-    return nullptr;
   return MakeGarbageCollected<WebGLProgram>(this);
 }
 
 WebGLRenderbuffer* WebGLRenderingContextBase::createRenderbuffer() {
-  if (isContextLost())
-    return nullptr;
   return MakeGarbageCollected<WebGLRenderbuffer>(this);
 }
 
@@ -2712,8 +2732,6 @@ void WebGLRenderingContextBase::SetBoundVertexArrayObject(
 }
 
 WebGLShader* WebGLRenderingContextBase::createShader(GLenum type) {
-  if (isContextLost())
-    return nullptr;
   if (!ValidateShaderType("createShader", type)) {
     return nullptr;
   }
@@ -3705,9 +3723,6 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
       return GetIntParameter(script_state, pname);
     case GL_MAX_VIEWPORT_DIMS:
       return GetWebGLIntArrayParameter(script_state, pname);
-    case GL_NUM_SHADER_BINARY_FORMATS:
-      // FIXME: should we always return 0 for this?
-      return GetIntParameter(script_state, pname);
     case GL_PACK_ALIGNMENT:
       return GetIntParameter(script_state, pname);
     case GL_POLYGON_OFFSET_FACTOR:
@@ -5549,10 +5564,10 @@ scoped_refptr<Image> WebGLRenderingContextBase::DrawImageIntoBufferForTexImage(
   // TODO(https://crbug.com/1341235): The choice of color type should match the
   // format of the TexImage function. The choice of alpha type should opaque for
   // opaque images. The color space should match the unpack color space.
-  const auto resource_provider_info = SkImageInfo::Make(
-      width, height, kN32_SkColorType, kPremul_SkAlphaType, nullptr);
   CanvasResourceProvider* resource_provider =
-      generated_image_cache_.GetCanvasResourceProvider(resource_provider_info);
+      generated_image_cache_.GetCanvasResourceProvider(
+          {width, height}, GetN32FormatForCanvas(), kPremul_SkAlphaType,
+          gfx::ColorSpace::CreateSRGB());
   if (!resource_provider) {
     SynthesizeGLError(GL_OUT_OF_MEMORY, function_name, "out of memory");
     return nullptr;
@@ -5624,19 +5639,15 @@ SkAlphaType WebGLRenderingContextBase::GetAlphaType() const {
   return CreationAttributes().alpha ? kPremul_SkAlphaType : kOpaque_SkAlphaType;
 }
 
-SkColorType WebGLRenderingContextBase::GetSkColorType() const {
+viz::SharedImageFormat WebGLRenderingContextBase::GetSharedImageFormat() const {
   if (drawing_buffer_ && drawing_buffer_->StorageFormat() == GL_RGBA16F) {
-    return kRGBA_F16_SkColorType;
+    return viz::SinglePlaneFormat::kRGBA_F16;
   }
-  return kN32_SkColorType;
+  return GetN32FormatForCanvas();
 }
 
 gfx::ColorSpace WebGLRenderingContextBase::GetColorSpace() const {
   return PredefinedColorSpaceToGfxColorSpace(drawing_buffer_color_space_);
-}
-
-sk_sp<SkColorSpace> WebGLRenderingContextBase::GetSkColorSpace() const {
-  return GetColorSpace().ToSkColorSpace();
 }
 
 gfx::Rect WebGLRenderingContextBase::GetImageDataSize(ImageData* pixels) {
@@ -6344,21 +6355,22 @@ void WebGLRenderingContextBase::TexImageHelperMediaVideoFrame(
     dest_rect.Transpose();
   }
 
-  // TODO(https://crbug.com/1341235): The choice of color type will clamp
+  // TODO(https://crbug.com/1341235): The choice of format will clamp
   // higher precision sources to 8 bit per color.
-  const auto resource_provider_info = SkImageInfo::Make(
-      gfx::SizeToSkISize(dest_rect.size()), kN32_SkColorType,
-      media::IsOpaque(media_video_frame->format()) ? kOpaque_SkAlphaType
-                                                   : kPremul_SkAlphaType,
-      params.unpack_colorspace_conversion
-          ? media_video_frame->CompatRGBColorSpace().ToSkColorSpace()
-          : SkColorSpace::MakeSRGB());
+  viz::SharedImageFormat format = GetN32FormatForCanvas();
+  SkAlphaType alpha_type = media::IsOpaque(media_video_frame->format())
+                               ? kOpaque_SkAlphaType
+                               : kPremul_SkAlphaType;
+  gfx::ColorSpace color_space = params.unpack_colorspace_conversion
+                                    ? media_video_frame->CompatRGBColorSpace()
+                                    : gfx::ColorSpace::CreateSRGB();
 
   // Since TexImageStaticBitmapImage() and TexImageGPU() don't know how to
   // handle tagged orientation, we set |prefer_tagged_orientation| to false.
   scoped_refptr<StaticBitmapImage> image = CreateImageFromVideoFrame(
       std::move(media_video_frame), kAllowZeroCopyImages,
-      image_cache.GetCanvasResourceProvider(resource_provider_info),
+      image_cache.GetCanvasResourceProvider(dest_rect.size(), format,
+                                            alpha_type, color_space),
       video_renderer, dest_rect, /*prefer_tagged_orientation=*/false,
       /*reinterpret_video_as_srgb=*/!params.unpack_colorspace_conversion);
   if (!image)
@@ -6437,7 +6449,7 @@ void WebGLRenderingContextBase::TexImageHelperImageBitmap(
   // ignored. Set `adjusted_params` such that no conversions will be made using
   // that state.
   params.unpack_premultiply_alpha =
-      static_bitmap_image->GetSkColorInfo().alphaType() == kPremul_SkAlphaType;
+      static_bitmap_image->GetSkImageInfo().alphaType() == kPremul_SkAlphaType;
   params.unpack_flip_y = false;
   const bool image_has_flip_y = false;
   // TODO(kbr): make this work for sub-rectangles of ImageBitmaps.
@@ -7306,6 +7318,17 @@ void WebGLRenderingContextBase::DrawingBufferClientRestoreTexture2DBinding() {
   if (!ContextGL())
     return;
   RestoreCurrentTexture2D();
+}
+
+void WebGLRenderingContextBase::
+    DrawingBufferClientRestoreTexture2DArrayBinding() {
+  if (destruction_in_progress_) {
+    return;
+  }
+  if (!ContextGL()) {
+    return;
+  }
+  RestoreCurrentTexture2DArray();
 }
 
 void WebGLRenderingContextBase::
@@ -8594,23 +8617,21 @@ WebGLRenderingContextBase::LRUCanvasResourceProviderCache::
 
 CanvasResourceProvider* WebGLRenderingContextBase::
     LRUCanvasResourceProviderCache::GetCanvasResourceProvider(
-        const SkImageInfo& info) {
+        gfx::Size size,
+        viz::SharedImageFormat format,
+        SkAlphaType alpha_type,
+        const gfx::ColorSpace& color_space) {
   wtf_size_t i;
   for (i = 0; i < resource_providers_.size(); ++i) {
     CanvasResourceProvider* resource_provider = resource_providers_[i].get();
     if (!resource_provider)
       break;
-    if (resource_provider->GetSkImageInfo() != info) {
-      // Detect and allow for the case wherein the passed-info implicitly
-      // specifies sRGB via a null SkColorSpace whereas the resource provider is
-      // explicitly storing sRGB.
-      if (info.colorSpace()) {
-        continue;
-      }
-      if (resource_provider->GetSkImageInfo() !=
-          info.makeColorSpace(SkColorSpace::MakeSRGB())) {
-        continue;
-      }
+
+    if (resource_provider->Size() != size ||
+        resource_provider->GetSharedImageFormat() != format ||
+        resource_provider->GetAlphaType() != alpha_type ||
+        resource_provider->GetColorSpace() != color_space) {
+      continue;
     }
     BubbleToFront(i);
     return resource_provider;
@@ -8623,12 +8644,12 @@ CanvasResourceProvider* WebGLRenderingContextBase::
       raster_context_provider =
           wrapper->ContextProvider().RasterContextProvider();
     }
-    temp = CreateResourceProviderForVideoFrame(info, raster_context_provider);
+    temp = CreateResourceProviderForVideoFrame(
+        size, format, alpha_type, color_space, raster_context_provider);
   } else {
     // TODO(fserb): why is this a BITMAP?
     temp = CanvasResourceProvider::CreateBitmapProvider(
-        gfx::Size(info.width(), info.height()), info.colorType(),
-        info.alphaType(), SkColorSpaceToGfxColorSpace(info.refColorSpace()),
+        size, format, alpha_type, color_space,
         CanvasResourceProvider::ShouldInitialize::kNo);  // TODO: should this
                                                          // use the canvas's
   }
@@ -8791,6 +8812,13 @@ void WebGLRenderingContextBase::RestoreCurrentFramebuffer() {
 void WebGLRenderingContextBase::RestoreCurrentTexture2D() {
   bindTexture(GL_TEXTURE_2D,
               texture_units_[active_texture_unit_].texture2d_binding_.Get());
+}
+
+void WebGLRenderingContextBase::RestoreCurrentTexture2DArray() {
+  CHECK(IsWebGL2());
+  bindTexture(
+      GL_TEXTURE_2D_ARRAY,
+      texture_units_[active_texture_unit_].texture2d_array_binding_.Get());
 }
 
 void WebGLRenderingContextBase::RestoreCurrentTextureCubeMap() {

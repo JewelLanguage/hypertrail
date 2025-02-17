@@ -133,8 +133,11 @@ class PdfInkModule {
 
   bool enabled() const { return enabled_; }
 
-  // Draws `strokes_` and `inputs_` into `canvas`. Here, `canvas` covers the
-  // visible content area, so this only draws strokes for visible pages.
+  // Determines if there are any `drawing_stroke_state().inputs` to be drawn.
+  bool HasInputsToDraw() const;
+
+  // Draws `drawing_stroke_state().inputs` into `canvas`.  Must be in a drawing
+  // stroke state with non-empty `drawing_stroke_state().inputs`.
   void Draw(SkCanvas& canvas);
 
   // Draws `strokes_` for `page_index` into `canvas`. Here, `canvas` only covers
@@ -318,6 +321,14 @@ class PdfInkModule {
   // not.
   bool EraseHelper(const gfx::PointF& position, int page_index);
 
+  // Sets `using_stylus_instead_of_touch_` to true if `tool_type` is
+  // `ink::StrokeInput::ToolType::kStylus`. Otherwise do nothing.
+  void MaybeRecordPenInput(ink::StrokeInput::ToolType tool_type);
+
+  // Returns true if `using_stylus_instead_of_touch_` is set, and `tool_type` is
+  // `ink::StrokeInput::ToolType::kTouch`.
+  bool ShouldIgnoreTouchInput(ink::StrokeInput::ToolType tool_type);
+
   void HandleAnnotationRedoMessage(const base::Value::Dict& message);
   void HandleAnnotationUndoMessage(const base::Value::Dict& message);
   void HandleGetAnnotationBrushMessage(const base::Value::Dict& message);
@@ -384,6 +395,8 @@ class PdfInkModule {
   const raw_ref<PdfInkModuleClient> client_;
 
   bool enabled_ = false;
+
+  bool using_stylus_instead_of_touch_ = false;
 
   bool loaded_data_from_pdf_ = false;
 

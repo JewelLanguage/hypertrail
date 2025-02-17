@@ -12,11 +12,13 @@ import static androidx.test.espresso.matcher.ViewMatchers.withParent;
 
 import static org.hamcrest.CoreMatchers.allOf;
 import static org.hamcrest.CoreMatchers.instanceOf;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import static org.chromium.base.test.transit.ViewSpec.viewSpec;
 
 import android.view.View;
+import android.view.ViewGroup;
 
 import org.hamcrest.Matcher;
 
@@ -26,6 +28,7 @@ import org.chromium.base.test.transit.Transition;
 import org.chromium.base.test.transit.ViewElement;
 import org.chromium.base.test.transit.ViewSpec;
 import org.chromium.base.test.util.ViewActionOnDescendant;
+import org.chromium.chrome.browser.hub.HubToolbarMediator;
 import org.chromium.chrome.browser.hub.HubToolbarView;
 import org.chromium.chrome.browser.hub.PaneId;
 import org.chromium.chrome.browser.tabmodel.TabModel;
@@ -35,6 +38,7 @@ import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.transit.page.PageStation;
 import org.chromium.chrome.test.transit.tabmodel.TabCountChangedCondition;
 import org.chromium.chrome.test.util.TabBinningUtil;
+import org.chromium.components.omnibox.OmniboxFeatures;
 
 import java.util.List;
 
@@ -43,11 +47,11 @@ public abstract class TabSwitcherStation extends HubBaseStation {
     public static final ViewSpec TAB_LIST_RECYCLER_VIEW =
             HUB_PANE_HOST.descendant(withId(R.id.tab_list_recycler_view));
 
+    public static final ViewSpec TOOLBAR = viewSpec(instanceOf(HubToolbarView.class));
     public static final ViewSpec TOOLBAR_NEW_TAB_BUTTON =
-            viewSpec(
-                    allOf(
-                            withId(R.id.toolbar_action_button),
-                            isDescendantOfA(instanceOf(HubToolbarView.class))));
+            TOOLBAR.descendant(withId(R.id.toolbar_action_button));
+    public static final ViewSpec SEARCH_BOX = viewSpec(withId(R.id.search_box));
+    public static final ViewSpec SEARCH_LOUPE = TOOLBAR.descendant(withId(R.id.search_loupe));
     public static final ViewSpec TAB_GROUP_COLOR_ICON_VIEW =
             viewSpec(
                     allOf(
@@ -85,6 +89,19 @@ public abstract class TabSwitcherStation extends HubBaseStation {
         super.declareElements(elements);
 
         elements.declareView(getNewTabButtonViewSpec());
+        if (OmniboxFeatures.sAndroidHubSearch.isEnabled()) {
+            elements.declareElementFactory(
+                    mActivityElement,
+                    delayedElements -> {
+                        if (shouldHubSearchBoxBeVisible()) {
+                            delayedElements.declareNoView(SEARCH_BOX);
+                            delayedElements.declareView(SEARCH_LOUPE);
+                        } else {
+                            delayedElements.declareNoView(SEARCH_LOUPE);
+                            delayedElements.declareView(SEARCH_BOX);
+                        }
+                    });
+        }
         mRecyclerViewElement = elements.declareView(TAB_LIST_RECYCLER_VIEW);
     }
 
@@ -217,7 +234,26 @@ public abstract class TabSwitcherStation extends HubBaseStation {
                 /* trigger= */ null);
     }
 
+    /** Verify the tab switcher card count. */
+    public void verifyTabSwitcherCardCount(int count) {
+        assertEquals(((ViewGroup) mRecyclerViewElement.get()).getChildCount(), count);
+    }
+
     public ViewElement getRecyclerViewElement() {
         return mRecyclerViewElement;
+    }
+
+    public TabSwitcherSearchStation openTabSwitcherSearch() {
+        TabSwitcherSearchStation searchStation = new TabSwitcherSearchStation(mIsIncognito);
+        travelToSync(
+                searchStation,
+                shouldHubSearchBoxBeVisible() ? SEARCH_LOUPE::click : SEARCH_BOX::click);
+        searchStation.focusAndDropSoftKeyboard();
+        return searchStation;
+    }
+
+    private boolean shouldHubSearchBoxBeVisible() {
+        return HubToolbarMediator.isScreenWidthTablet(
+                mActivityElement.get().getResources().getConfiguration().screenWidthDp);
     }
 }

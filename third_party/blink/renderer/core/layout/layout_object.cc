@@ -32,6 +32,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/auto_reset.h"
 #include "partition_alloc/partition_alloc.h"
 #include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom-blink.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
@@ -389,11 +390,6 @@ LayoutObject* LayoutObject::CreateObject(Element* element,
       return MakeGarbageCollected<LayoutTableCaption>(element);
     case EDisplay::kWebkitBox:
     case EDisplay::kWebkitInlineBox:
-      if (!RuntimeEnabledFeatures::
-              CSSLineClampWebkitBoxBlockificationEnabled() &&
-          style.IsDeprecatedWebkitBoxWithVerticalLineClamp()) {
-        return MakeGarbageCollected<LayoutBlockFlow>(element);
-      }
       UseCounter::Count(element->GetDocument(),
                         WebFeature::kWebkitBoxWithoutWebkitLineClamp);
       return MakeGarbageCollected<LayoutFlexibleBox>(element);
@@ -1728,8 +1724,8 @@ void LayoutObject::ClearIntrinsicLogicalWidthsDirty() {
 
 bool LayoutObject::IsFontFallbackValid() const {
   NOT_DESTROYED();
-  return StyleRef().GetFont().IsFallbackValid() &&
-         FirstLineStyle()->GetFont().IsFallbackValid();
+  return StyleRef().GetFont()->IsFallbackValid() &&
+         FirstLineStyle()->GetFont()->IsFallbackValid();
 }
 
 void LayoutObject::InvalidateSubtreeLayoutForFontUpdates() {
@@ -2379,8 +2375,7 @@ bool LayoutObject::MapToVisualRectInAncestorSpaceInternal(
     VisualRectFlags visual_rect_flags) const {
   NOT_DESTROYED();
   // For any layout object that doesn't override this method (the main example
-  // is LayoutText), the rect is assumed to be in the parent's coordinate space,
-  // except for container flip.
+  // is LayoutText), the rect is assumed to be in the parent's coordinate space.
 
   if (ancestor == this)
     return true;
@@ -2675,7 +2670,7 @@ StyleDifference LayoutObject::AdjustStyleDifference(
   // TODO(1088373): Pixel_WebGLHighToLowPower fails without this. This isn't the
   // right way to ensure GPU switching. Investigate and do it in the right way.
   if (!diff.NeedsNormalPaintInvalidation() && IsLayoutView() && Style() &&
-      !Style()->GetFont().IsFallbackValid()) {
+      !Style()->GetFont()->IsFallbackValid()) {
     diff.SetNeedsNormalPaintInvalidation();
   }
 
@@ -2708,8 +2703,8 @@ void LayoutObject::SetPseudoElementStyle(const LayoutObject& owner,
          pseudo_style->StyleType() == kPseudoIdScrollMarker ||
          pseudo_style->StyleType() == kPseudoIdScrollButtonBlockStart ||
          pseudo_style->StyleType() == kPseudoIdScrollButtonInlineStart ||
-         pseudo_style->StyleType() == kPseudoIdScrollButtonBlockEnd ||
-         pseudo_style->StyleType() == kPseudoIdScrollButtonInlineEnd);
+         pseudo_style->StyleType() == kPseudoIdScrollButtonInlineEnd ||
+         pseudo_style->StyleType() == kPseudoIdScrollButtonBlockEnd);
 
   InheritIsInDetachedNonDomTree(owner);
 
@@ -3335,7 +3330,7 @@ void LayoutObject::StyleDidChange(StyleDifference diff,
     ClearAncestorScrollAnchors(this);
   }
 
-  if (RuntimeEnabledFeatures::HitTestOpaquenessEnabled() && old_style &&
+  if (old_style &&
       old_style->UsedPointerEvents() != StyleRef().UsedPointerEvents()) {
     // UsedPointerEvents affects hit test opacity.
     SetShouldInvalidatePaintForHitTest();
@@ -3758,35 +3753,32 @@ bool LayoutObject::OffsetForContainerDependsOnPoint(
           container->IsBox());
 }
 
-PhysicalOffset LayoutObject::OffsetFromContainer(
-    const LayoutObject* o,
-    MapCoordinatesFlags mode) const {
-  NOT_DESTROYED();
-  return OffsetFromContainerInternal(o, mode);
-}
-
 PhysicalOffset LayoutObject::OffsetFromContainerInternal(
     const LayoutObject* o,
     MapCoordinatesFlags mode) const {
   NOT_DESTROYED();
   DCHECK_EQ(o, Container());
-  return o->IsScrollContainer()
-             ? OffsetFromScrollableContainer(o, mode & kIgnoreScrollOffset)
-             : PhysicalOffset();
+  return o->IsScrollContainer() ? OffsetFromScrollableContainer(o, mode)
+                                : PhysicalOffset();
 }
 
 PhysicalOffset LayoutObject::OffsetFromScrollableContainer(
     const LayoutObject* container,
-    bool ignore_scroll_offset) const {
+    MapCoordinatesFlags mode) const {
   NOT_DESTROYED();
   DCHECK(container->IsScrollContainer());
 
   if (IsFixedPositioned() && container->IsLayoutView())
     return PhysicalOffset();
 
+  if (mode & kIgnoreScrollOriginAndOffset) {
+    return PhysicalOffset();
+  }
+
   const auto* box = To<LayoutBox>(container);
-  if (!ignore_scroll_offset)
+  if (!(mode & kIgnoreScrollOffset)) {
     return -box->ScrolledContentOffset();
+  }
 
   // ScrollOrigin accounts for other writing modes whose content's origin is not
   // at the top-left.
@@ -4219,7 +4211,7 @@ Node* LayoutObject::NodeForHitTest() const {
   // actually hit the generated content so walk up to the PseudoElement.
   if (const LayoutObject* parent = Parent()) {
     if (parent->IsBeforeOrAfterContent() || parent->IsMarkerContent() ||
-        parent->IsScrollMarker() ||
+        parent->IsScrollButtonOrMarkerContent() ||
         parent->StyleRef().StyleType() == kPseudoIdFirstLetter) {
       for (; parent; parent = parent->Parent()) {
         if (Node* node = parent->GetNode())
@@ -4736,7 +4728,6 @@ void LayoutObject::SetShouldDoFullPaintInvalidationWithoutLayoutChangeInternal(
 
 void LayoutObject::SetShouldInvalidatePaintForHitTest() {
   NOT_DESTROYED();
-  DCHECK(RuntimeEnabledFeatures::HitTestOpaquenessEnabled());
   if (PaintInvalidationReasonForPrePaint() <
       PaintInvalidationReason::kHitTest) {
     SetShouldCheckForPaintInvalidationWithoutLayoutChange();
@@ -5157,21 +5148,6 @@ void LayoutObject::SetModifiedStyleOutsideStyleRecalc(
   if (auto* element = DynamicTo<Element>(GetNode())) {
     element->SetComputedStyle(style);
   }
-}
-
-LayoutUnit LayoutObject::FlipForWritingModeInternal(
-    LayoutUnit position,
-    LayoutUnit width,
-    const LayoutBox* box_for_flipping) const {
-  NOT_DESTROYED();
-  DCHECK(!IsBox());
-  DCHECK(HasFlippedBlocksWritingMode());
-  DCHECK(!box_for_flipping || box_for_flipping == ContainingBlock());
-  // For now, block flipping doesn't apply for non-box SVG objects.
-  if (IsSVG())
-    return position;
-  return (box_for_flipping ? box_for_flipping : ContainingBlock())
-      ->FlipForWritingMode(position, width);
 }
 
 bool LayoutObject::SelfPaintingLayerNeedsVisualOverflowRecalc() const {

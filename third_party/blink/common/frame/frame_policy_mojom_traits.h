@@ -8,6 +8,7 @@
 #include "services/network/public/mojom/web_sandbox_flags.mojom-shared.h"
 #include "third_party/blink/common/permissions_policy/permissions_policy_mojom_traits.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
+#include "third_party/blink/public/common/permissions_policy/permissions_policy_declaration.h"
 #include "third_party/blink/public/mojom/fenced_frame/fenced_frame.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/frame_policy.mojom-shared.h"
 
@@ -30,6 +31,11 @@ class BLINK_COMMON_EXPORT
   static const blink::DocumentPolicyFeatureState& required_document_policy(
       const blink::FramePolicy& frame_policy) {
     return frame_policy.required_document_policy;
+  }
+
+  static const blink::mojom::DeferredFetchPolicy& deferred_fetch_policy(
+      const blink::FramePolicy& frame_policy) {
+    return frame_policy.deferred_fetch_policy;
   }
 
   static bool Read(blink::mojom::FramePolicyDataView in,

@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <utility>
 #include <vector>
 
 #include "base/containers/circular_deque.h"
@@ -186,11 +187,22 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
   void SetWantsBeginFrameAcks();
   void SetAutoNeedsBeginFrame();
   void DidNotProduceFrame(const BeginFrameAck& ack);
+  virtual void SubmitCompositorFrame(
+      const LocalSurfaceId& local_surface_id,
+      CompositorFrame frame,
+      std::optional<HitTestRegionList> hit_test_region_list,
+      uint64_t submit_time);
+  void SubmitCompositorFrame(const LocalSurfaceId& local_surface_id,
+                             CompositorFrame frame) {
+    SubmitCompositorFrame(local_surface_id, std::move(frame), std::nullopt, 0);
+  }
   void SubmitCompositorFrame(
       const LocalSurfaceId& local_surface_id,
       CompositorFrame frame,
-      std::optional<HitTestRegionList> hit_test_region_list = std::nullopt,
-      uint64_t submit_time = 0);
+      std::optional<HitTestRegionList> hit_test_region_list) {
+    SubmitCompositorFrame(local_surface_id, std::move(frame),
+                          std::move(hit_test_region_list), 0);
+  }
 
   // Mark |id| and all surfaces with smaller ids for destruction. Note that |id|
   // doesn't have to exist at the time of calling.
@@ -271,6 +283,9 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
 
   // Subscribes or unsubscribes `layer_context_` to subsequent BeginFrames.
   void SetLayerContextWantsBeginFrames(bool wants_begin_frames);
+
+  void RegisterSurfaceAnimationManagerNotification(
+      base::OnceCallback<void()> callback);
 
  private:
   friend class CompositorFrameSinkSupportTestBase;
@@ -573,6 +588,10 @@ class VIZ_SERVICE_EXPORT CompositorFrameSinkSupport
   // submitted compositor frames directly to `this`.
   std::unique_ptr<LayerContextImpl> layer_context_;
   bool layer_context_wants_begin_frames_ = false;
+
+  // If exists, then we need to notify this callback when we have a
+  // SurfaceAnimationManager.
+  base::OnceCallback<void()> surface_animation_manager_callback_;
 
   base::WeakPtrFactory<CompositorFrameSinkSupport> weak_factory_{this};
 };

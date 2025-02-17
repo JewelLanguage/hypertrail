@@ -131,9 +131,9 @@ void ComputeAndRecordBudgetValidity(
 }
 
 google::protobuf::RepeatedPtrField<proto::PrivateAggregationBudgetEntry>*
-GetBudgetEntries(PrivateAggregationCallerApi api,
+GetBudgetEntries(PrivateAggregationCallerApi caller_api,
                  proto::PrivateAggregationBudgets& budgets) {
-  switch (api) {
+  switch (caller_api) {
     case PrivateAggregationCallerApi::kProtectedAudience:
       return budgets.mutable_protected_audience_budgets();
     case PrivateAggregationCallerApi::kSharedStorage:
@@ -454,7 +454,7 @@ void PrivateAggregationBudgeter::ConsumeBudgetImpl(
           current_window_start, kLargerScopeValues.budget_scope_duration);
 
   google::protobuf::RepeatedPtrField<proto::PrivateAggregationBudgetEntry>*
-      budget_entries = GetBudgetEntries(budget_key.api(), budgets);
+      budget_entries = GetBudgetEntries(budget_key.caller_api(), budgets);
 
   ComputeAndRecordBudgetValidity(budget_entries,
                                  earliest_window_in_larger_scope_start,
@@ -509,7 +509,7 @@ void PrivateAggregationBudgeter::ConsumeBudgetImpl(
     std::string reporting_origin_serialized = budget_key.origin().Serialize();
     proto::ReportingOrigin* reporting_origin_entry = nullptr;
 
-    auto reporting_origin_entry_it = base::ranges::find_if(
+    auto reporting_origin_entry_it = std::ranges::find_if(
         *reporting_origins_for_deletion,
         [&reporting_origin_serialized](const proto::ReportingOrigin& elem) {
           return elem.origin() == reporting_origin_serialized;
@@ -625,9 +625,9 @@ void PrivateAggregationBudgeter::ClearDataImpl(
     proto::PrivateAggregationBudgets budgets;
     storage_->budgets_data()->TryGetData(site_key, &budgets);
 
-    for (PrivateAggregationCallerApi api : kAllApis) {
+    for (PrivateAggregationCallerApi caller_api : kAllApis) {
       google::protobuf::RepeatedPtrField<proto::PrivateAggregationBudgetEntry>*
-          budget_entries = GetBudgetEntries(api, budgets);
+          budget_entries = GetBudgetEntries(caller_api, budgets);
       CHECK(budget_entries);
 
       auto to_remove = std::ranges::remove_if(
@@ -718,9 +718,9 @@ void PrivateAggregationBudgeter::CleanUpStaleData() {
 
     bool was_modified = false;
 
-    for (PrivateAggregationCallerApi api : kAllApis) {
+    for (PrivateAggregationCallerApi caller_api : kAllApis) {
       google::protobuf::RepeatedPtrField<proto::PrivateAggregationBudgetEntry>*
-          budget_entries = GetBudgetEntries(api, budgets);
+          budget_entries = GetBudgetEntries(caller_api, budgets);
       CHECK(budget_entries);
 
       was_modified |= CleanUpStaleBudgetEntries(

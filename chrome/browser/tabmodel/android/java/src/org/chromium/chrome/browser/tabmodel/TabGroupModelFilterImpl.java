@@ -216,13 +216,13 @@ public class TabGroupModelFilterImpl implements TabGroupModelFilterInternal, Tab
     }
 
     @Override
-    public void createSingleTabGroup(int tabId, boolean notify) {
-        createSingleTabGroup(getTabModel().getTabById(tabId), notify);
+    public void createSingleTabGroup(int tabId) {
+        createSingleTabGroup(getTabModel().getTabById(tabId));
     }
 
     @Override
-    public void createSingleTabGroup(Tab tab, boolean notify) {
-        createSingleTabGroupInternal(tab, Token.createRandom(), notify);
+    public void createSingleTabGroup(Tab tab) {
+        createSingleTabGroupInternal(tab, Token.createRandom());
     }
 
     @Override
@@ -230,14 +230,14 @@ public class TabGroupModelFilterImpl implements TabGroupModelFilterInternal, Tab
         if (tabs.isEmpty()) return;
 
         Tab rootTab = tabs.get(0);
-        createSingleTabGroupInternal(rootTab, tabGroupId, /* notify= */ false);
+        createSingleTabGroupInternal(rootTab, tabGroupId);
 
         if (tabs.size() == 1) return;
 
         mergeListOfTabsToGroup(tabs, rootTab, /* notify= */ false);
     }
 
-    private void createSingleTabGroupInternal(Tab tab, @NonNull Token tabGroupId, boolean notify) {
+    private void createSingleTabGroupInternal(Tab tab, @NonNull Token tabGroupId) {
         assert tab.getTabGroupId() == null;
 
         for (TabGroupModelFilterObserver observer : mGroupFilterObserver) {
@@ -246,31 +246,12 @@ public class TabGroupModelFilterImpl implements TabGroupModelFilterInternal, Tab
 
         tab.setTabGroupId(tabGroupId);
 
-        // If this is a new tab group creation that will show a dialog, do not trigger a snackbar.
-        if (!TabGroupFeatureUtils.shouldSkipGroupCreationDialog()) {
-            notify = false;
-        }
-
         for (TabGroupModelFilterObserver observer : mGroupFilterObserver) {
             observer.didCreateNewGroup(tab, this);
         }
 
         for (TabGroupModelFilterObserver observer : mGroupFilterObserver) {
             observer.didMergeTabToGroup(tab);
-        }
-
-        if (notify) {
-            int index = TabModelUtils.getTabIndexById(getTabModel(), tab.getId());
-            for (TabGroupModelFilterObserver observer : mGroupFilterObserver) {
-                observer.didCreateGroup(
-                    Collections.singletonList(tab),
-                    Collections.singletonList(index),
-                    Collections.singletonList(tab.getRootId()),
-                    Collections.singletonList(null),
-                    null,
-                    TabGroupColorUtils.INVALID_COLOR_ID,
-                    /* destinationGroupTitleCollapsed= */ false);
-            }
         }
     }
 
@@ -364,11 +345,8 @@ public class TabGroupModelFilterImpl implements TabGroupModelFilterInternal, Tab
                 if (willMergingCreateNewGroup) {
                     observer.didCreateNewGroup(destinationTab, this);
 
-                    // If this is a new tab group creation that will show a dialog, do not trigger a
-                    // snackbar.
-                    if (!TabGroupFeatureUtils.shouldSkipGroupCreationDialog()) {
-                        continue;
-                    }
+                    // New tab group creations will show a dialog, so do not trigger a snackbar.
+                    continue;
                 }
 
                 // Since the undo group merge logic is unsupported when called from the tab strip,
@@ -501,12 +479,8 @@ public class TabGroupModelFilterImpl implements TabGroupModelFilterInternal, Tab
                 observer.didCreateNewGroup(destinationTab, this);
             }
 
-            // If this is a new tab group creation that will show a dialog, do not trigger a
-            // snackbar.
-            boolean skipSnackbarForCreation =
-                    willMergingCreateNewGroup
-                            && !TabGroupFeatureUtils.shouldSkipGroupCreationDialog();
-            if (notify && !skipSnackbarForCreation) {
+            // Do not show a snackbar for new tab group creations as they launch a dialog.
+            if (notify && !willMergingCreateNewGroup) {
                 observer.didCreateGroup(
                         mergedTabs,
                         originalIndexes,
@@ -1413,6 +1387,14 @@ public class TabGroupModelFilterImpl implements TabGroupModelFilterInternal, Tab
     }
 
     @Override
+    public int getGroupLastShownTabId(@Nullable Token tabGroupId) {
+        if (tabGroupId == null) return Tab.INVALID_TAB_ID;
+
+        int rootId = getRootIdFromStableId(tabGroupId);
+        return getGroupLastShownTabId(rootId);
+    }
+
+    @Override
     public int getGroupLastShownTabId(int rootId) {
         TabGroup group = mRootIdToGroupMap.get(rootId);
         return group == null ? Tab.INVALID_TAB_ID : group.getLastShownTabId();
@@ -1526,10 +1508,11 @@ public class TabGroupModelFilterImpl implements TabGroupModelFilterInternal, Tab
     }
 
     @Override
-    public int getRootIdFromStableId(@NonNull Token stableId) {
+    public int getRootIdFromStableId(@Nullable Token stableId) {
+        if (stableId == null) return Tab.INVALID_TAB_ID;
         for (int i = 0; i < getTabModel().getCount(); i++) {
             Tab tab = getTabModel().getTabAt(i);
-            if (stableId.equals(tab.getTabGroupId())) return tab.getRootId();
+            if (Objects.equals(stableId, tab.getTabGroupId())) return tab.getRootId();
         }
         return Tab.INVALID_TAB_ID;
     }
@@ -1611,7 +1594,7 @@ public class TabGroupModelFilterImpl implements TabGroupModelFilterInternal, Tab
         }
         Set<Token> processedTabGroups = new HashSet<>();
         LazyOneshotSupplier<Set<Token>> tabGroupIdsInComprehensiveModel =
-                getLazyAllTabGroupIdsInComprehensiveModel(tabs);
+                getLazyAllTabGroupIds(tabs, /* includePendingClosures= */ true);
         for (Tab tab : tabs) {
             @Nullable Token tabGroupId = tab.getTabGroupId();
             if (tabGroupId == null) continue;
@@ -1631,13 +1614,14 @@ public class TabGroupModelFilterImpl implements TabGroupModelFilterInternal, Tab
     }
 
     @Override
-    public LazyOneshotSupplier<Set<Token>> getLazyAllTabGroupIdsInComprehensiveModel(
-            List<Tab> tabsToExclude) {
+    public LazyOneshotSupplier<Set<Token>> getLazyAllTabGroupIds(
+            List<Tab> tabsToExclude, boolean includePendingClosures) {
         return LazyOneshotSupplier.fromSupplier(
                 () -> {
                     Set<Token> tabGroupIds = new HashSet<>();
-                    forEachTabInComprehensiveModelExcept(
+                    forEachTabInTabListExcept(
                             tabsToExclude,
+                            includePendingClosures,
                             tab -> {
                                 @Nullable Token tabGroupId = tab.getTabGroupId();
                                 if (tabGroupId != null) {
@@ -1649,13 +1633,14 @@ public class TabGroupModelFilterImpl implements TabGroupModelFilterInternal, Tab
     }
 
     @Override
-    public LazyOneshotSupplier<Set<Integer>> getLazyAllRootIdsInComprehensiveModel(
-            List<Tab> tabsToExclude) {
+    public LazyOneshotSupplier<Set<Integer>> getLazyAllRootIds(
+            List<Tab> tabsToExclude, boolean includePendingClosures) {
         return LazyOneshotSupplier.fromSupplier(
                 () -> {
                     Set<Integer> rootIds = new HashSet<>();
-                    forEachTabInComprehensiveModelExcept(
+                    forEachTabInTabListExcept(
                             tabsToExclude,
+                            includePendingClosures,
                             tab -> {
                                 rootIds.add(tab.getRootId());
                             });
@@ -1663,10 +1648,11 @@ public class TabGroupModelFilterImpl implements TabGroupModelFilterInternal, Tab
                 });
     }
 
-    private void forEachTabInComprehensiveModelExcept(
-            List<Tab> tabsToExclude, Callback<Tab> callback) {
+    private void forEachTabInTabListExcept(
+            List<Tab> tabsToExclude, boolean includePendingClosures, Callback<Tab> callback) {
         Set<Tab> tabsToExcludeSet = new HashSet<>(tabsToExclude);
-        TabList tabList = getTabModel().getComprehensiveModel();
+        TabList tabList =
+                includePendingClosures ? getTabModel().getComprehensiveModel() : getTabModel();
         for (int i = 0; i < tabList.getCount(); i++) {
             Tab tab = tabList.getTabAt(i);
             if (tabsToExcludeSet.contains(tab)) continue;

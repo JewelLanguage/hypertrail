@@ -341,7 +341,7 @@ suite('SettingsSectionTest', function() {
     assertTrue(!!settings.shadowRoot!.querySelector('passwords-exporter'));
   });
 
-  test('trustedVaultBannerVisibilityChangesWithState', async function() {
+  test('trustedVaultBannerVisibilityChangesWithState', function() {
     const settings = document.createElement('settings-section');
     document.body.appendChild(settings);
     webUIListenerCallback(
@@ -793,25 +793,11 @@ suite('SettingsSectionTest', function() {
         section.$.toast.textContent!.trim());
   });
 
-  test('enableWebAuthnGpmPin shows full-data-reset row', async function() {
-    loadTimeData.overrideValues({enableWebAuthnGpmPin: true});
-
+  test('shows full-data-reset row', async function() {
     const section = document.createElement('settings-section');
     document.body.appendChild(section);
     await flushTasks();
 
     assertTrue(isVisible($$(section, 'full-data-reset')));
   });
-
-  test(
-      'disabled enableWebAuthnGpmPin hides full-data-reset row',
-      async function() {
-        loadTimeData.overrideValues({enableWebAuthnGpmPin: false});
-
-        const section = document.createElement('settings-section');
-        document.body.appendChild(section);
-        await flushTasks();
-
-        assertFalse(isVisible($$(section, 'full-data-reset')));
-      });
 });

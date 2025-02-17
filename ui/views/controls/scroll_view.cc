@@ -11,7 +11,6 @@
 #include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/raw_ptr.h"
-#include "base/ranges/algorithm.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -85,7 +84,7 @@ END_METADATA
 // Returns true if any descendants of |view| have a layer (not including
 // |view|).
 bool DoesDescendantHaveLayer(View* view) {
-  return base::ranges::any_of(view->children(), [](View* child) {
+  return std::ranges::any_of(view->children(), [](View* child) {
     return child->layer() || DoesDescendantHaveLayer(child);
   });
 }
@@ -1267,8 +1266,8 @@ void ScrollView::OnScrolled(const gfx::PointF& offset) {
 
   on_contents_scrolled_.Notify();
 
-  NotifyAccessibilityEvent(ax::mojom::Event::kScrollPositionChanged,
-                           /*send_native_event=*/true);
+  NotifyAccessibilityEventDeprecated(ax::mojom::Event::kScrollPositionChanged,
+                                     /*send_native_event=*/true);
 }
 
 void ScrollView::ScrollHeader() {

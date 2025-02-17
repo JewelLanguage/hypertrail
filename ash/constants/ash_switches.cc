@@ -797,9 +797,6 @@ const char kBrowserDataMigrationForUser[] = "browser-data-migration-for-user";
 const char kBrowserDataBackwardMigrationForUser[] =
     "browser-data-backward-migration-for-user";
 
-// Supply secret key for Coral feature.
-const char kCoralFeatureKey[] = "coral-feature-key";
-
 // Supply secret key for Mantis feature.
 const char kMantisFeatureKey[] = "mantis-feature-key";
 
@@ -965,6 +962,15 @@ const char kSealKey[] = "seal-key";
 // See `ShouldSkipRebootDueToGracePeriod` in scheduled_task_util.h.
 const char kScheduledRebootGracePeriodInSecondsForTesting[] =
     "scheduled-reboot-grace-period-in-seconds-for-testing";
+
+// Selects the scheduler configuration specified in the parameter.
+const char kSchedulerConfiguration[] = "scheduler-configuration";
+const char kSchedulerConfigurationConservative[] = "conservative";
+const char kSchedulerConfigurationPerformance[] = "performance";
+
+// Specifies what the default scheduler configuration value is if the user does
+// not set one.
+const char kSchedulerConfigurationDefault[] = "scheduler-configuration-default";
 
 // If true, the developer tool overlay will be shown for the login/lock screen.
 // This makes it easier to test layout logic.

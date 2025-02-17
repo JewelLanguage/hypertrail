@@ -5,13 +5,22 @@
 #ifndef CHROME_BROWSER_CONTEXTUAL_CUEING_CONTEXTUAL_CUEING_HELPER_H_
 #define CHROME_BROWSER_CONTEXTUAL_CUEING_CONTEXTUAL_CUEING_HELPER_H_
 
+#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "components/optimization_guide/core/optimization_guide_decision.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
 class OptimizationGuideKeyedService;
 
+namespace tabs {
+class GlicNudgeController;
+}  // namespace tabs
+
 namespace contextual_cueing {
+
+class ContextualCueingService;
+class ScopedNudgeDecisionRecorder;
 
 class ContextualCueingHelper
     : public content::WebContentsObserver,
@@ -25,22 +34,37 @@ class ContextualCueingHelper
   ContextualCueingHelper& operator=(const ContextualCueingHelper&) = delete;
   ~ContextualCueingHelper() override;
 
-  // content::WebContentsObserver
-  void DocumentOnLoadCompletedInPrimaryMainFrame() override;
+  // content::WebContentsObserver:
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
+  void PrimaryMainDocumentElementAvailable() override;
 
-  const std::string& last_navigation_cue_label() const {
-    return last_navigation_cue_label_;
-  }
+  tabs::GlicNudgeController* GetGlicNudgeController();
 
  private:
   ContextualCueingHelper(content::WebContents* contents,
-                         OptimizationGuideKeyedService* ogks);
+                         OptimizationGuideKeyedService* ogks,
+                         ContextualCueingService* ccs);
 
+  // Called when optimization guide metadata is received.
+  void OnOptimizationGuideCueingMetadata(
+      optimization_guide::OptimizationGuideDecision decision,
+      const optimization_guide::OptimizationMetadata& metadata);
+
+  void OnCueingDecision(
+      std::unique_ptr<ScopedNudgeDecisionRecorder> decision_recorder,
+      const std::string& cue_label);
+
+  bool IsBrowserBlockingNudges(ScopedNudgeDecisionRecorder* recorder);
+
+  // Not owned and guaranteed to outlive `this`.
   raw_ptr<OptimizationGuideKeyedService> optimization_guide_keyed_service_ =
       nullptr;
 
-  // Holds the cue label for the last navigation in `this`.
-  std::string last_navigation_cue_label_;
+  // Not owned and guaranteed to outlive `this`.
+  raw_ptr<ContextualCueingService> contextual_cueing_service_ = nullptr;
+
+  base::WeakPtrFactory<ContextualCueingHelper> weak_ptr_factory_{this};
 
   friend WebContentsUserData<ContextualCueingHelper>;
   WEB_CONTENTS_USER_DATA_KEY_DECL();

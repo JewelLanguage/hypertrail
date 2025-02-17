@@ -33,6 +33,11 @@
 #include "components/signin/internal/identity_manager/token_binding_helper.h"
 #endif  // BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
 
+#if BUILDFLAG(IS_IOS)
+#include "components/signin/public/identity_manager/access_token_fetcher.h"
+#include "components/signin/public/identity_manager/access_token_info.h"
+#endif
+
 namespace network {
 class SharedURLLoaderFactory;
 }
@@ -72,6 +77,13 @@ class ProfileOAuth2TokenServiceDelegate {
       OAuth2AccessTokenConsumer* consumer,
       const std::string& token_binding_challenge) = 0;
 
+#if BUILDFLAG(IS_IOS)
+  virtual void GetRefreshTokenFromDevice(
+      const CoreAccountId& account_id,
+      const OAuth2AccessTokenManager::ScopeSet& scopes,
+      signin::AccessTokenFetcher::TokenCallback callback) = 0;
+#endif
+
   // Returns |true| if a refresh token is available for |account_id|, and
   // |false| otherwise.
   // Note: Implementations must make sure that |RefreshTokenIsAvailable| returns
@@ -79,6 +91,15 @@ class ProfileOAuth2TokenServiceDelegate {
   // returned by |GetAccounts|.
   virtual bool RefreshTokenIsAvailable(
       const CoreAccountId& account_id) const = 0;
+
+#if BUILDFLAG(IS_IOS)
+  // Returns |true| if a refresh token is available for |account_id| on the
+  // device, and |false| otherwise. Note: Implementations must make sure that
+  // |RefreshTokenIsAvailable| returns |true| if and only if |account_id| is
+  // contained in the list of accounts returned by |GetAccountsOnDevice|.
+  virtual bool RefreshTokenIsAvailableOnDevice(
+      const CoreAccountId& account_id) const = 0;
+#endif  // BUILDFLAG(IS_IOS)
 
   virtual GoogleServiceAuthError GetAuthError(
       const CoreAccountId& account_id) const;
@@ -284,6 +305,7 @@ class ProfileOAuth2TokenServiceDelegate {
                             const GoogleServiceAuthError& error);
 #if BUILDFLAG(IS_IOS)
   void FireAccountsOnDeviceChanged();
+  void FireAccountOnDeviceUpdated(const AccountInfo& account_info);
 #endif
 
   // Helper class to scope batch changes.

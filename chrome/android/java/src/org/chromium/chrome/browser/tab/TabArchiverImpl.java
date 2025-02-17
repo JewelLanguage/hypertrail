@@ -16,6 +16,8 @@ import org.chromium.base.Token;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplierImpl;
+import org.chromium.base.task.PostTask;
+import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.tab.TabArchiver.Observer;
 import org.chromium.chrome.browser.tab.state.ArchivePersistedTabData;
@@ -30,6 +32,7 @@ import org.chromium.url.GURL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /** Responsible for moving tabs to/from the archived {@link TabModel}. */
@@ -85,6 +88,7 @@ public class TabArchiverImpl implements TabArchiver {
     public void doArchivePass(TabModelSelector selectorToArchive) {
         ThreadUtils.assertOnUiThread();
         if (!mTabArchiveSettings.getArchiveEnabled()) return;
+        long startTimeMs = mClock.currentTimeMillis();
 
         // Wait for the declutter pass to complete, then do follow-up tasks.
         addObserver(
@@ -92,47 +96,111 @@ public class TabArchiverImpl implements TabArchiver {
                     @Override
                     public void onDeclutterPassCompleted() {
                         removeObserver(this);
-                        // Trigger auto-deletion after archiving tabs.
-                        doAutodeletePass();
                         ensureArchivedTabsHaveCorrectFields();
                     }
                 });
 
-        TabModelUtils.runOnTabStateInitialized(
-                selectorToArchive,
-                mCallbackController.makeCancelable(this::archiveEligibleTabsFromTabModelSelector));
+        TabGroupModelFilter regularTabGroupModelFilter =
+                selectorToArchive.getTabGroupModelFilterProvider().getCurrentTabGroupModelFilter();
+        TabModel model = regularTabGroupModelFilter.getTabModel();
+
+        // Get the tabs to archive, which moves them to the archived TabModel.
+        List<Tab> tabsToArchive = getTabsToArchive(regularTabGroupModelFilter);
+        // Get the tabs which exist in both the regular & archived TabModel.
+        List<Tab> tabsToClose = getTabsWithExistingArchivedTabs(regularTabGroupModelFilter);
+
+        if (tabsToArchive.size() > 0) {
+            archiveAndRemoveTabs(model, tabsToArchive);
+        }
+
+        if (tabsToClose.size() > 0) {
+            model.getTabRemover()
+                    .closeTabs(
+                            TabClosureParams.closeTabs(tabsToClose).allowUndo(false).build(),
+                            /* allowDialog= */ false);
+        }
+
+        RecordHistogram.recordCount1000Histogram(
+                "Tabs.TabArchived.FoundDuplicateInRegularModel", tabsToClose.size());
+        RecordHistogram.recordTimesHistogram(
+                "Tabs.ArchivePass.DurationMs", mClock.currentTimeMillis() - startTimeMs);
+
+        broadcastDeclutterComplete();
+    }
+
+    private List<Tab> getTabsToArchive(TabGroupModelFilter regularTabGroupModelFilter) {
+        TabModel model = regularTabGroupModelFilter.getTabModel();
+        int activeTabId = TabModelUtils.getCurrentTabId(model);
+
+        List<Tab> tabsToArchive = new ArrayList<>();
+        // Maps unique URLs to their MRU timestamp, used to declutter duplicate tabs.
+        Map<GURL, Long> tabUrlToLastActiveTimestampMap = createUrlToMruTimestampMap(model);
+        // Maps unique tab group tokens to the eligibility of that group.
+        Map<Token, Boolean> tabGroupIdToArchiveEligibilityMap = new HashMap<>();
+
+        int maxSimultaneousArchives =
+                ChromeFeatureList.sAndroidTabDeclutterMaxSimultaneousArchives.getValue();
+        for (int i = 0; i < model.getCount(); i++) {
+            // TODO(crbug.com/369845089): Investigate a more graceful fix to
+            // batch these so all relevant tabs still get archived in the same
+            // session.
+            if (tabsToArchive.size() >= maxSimultaneousArchives) {
+                RecordHistogram.recordCount100000Histogram(
+                        "Tabs.ArchivedTabs.MaxLimitReachedAt", maxSimultaneousArchives);
+                break;
+            }
+
+            Tab tab = model.getTabAt(i);
+            // The active tab is never archived.
+            if (activeTabId == tab.getId()) {
+                continue;
+            }
+
+            // Handle regular tabs and tab groups separately.
+            if (tab.getTabGroupId() == null
+                    && isTabEligibleForArchive(tabUrlToLastActiveTimestampMap, tab)) {
+                tabsToArchive.add(tab);
+            } else if (tab.getTabGroupId() != null
+                    && isGroupTabEligibleForArchive(
+                            regularTabGroupModelFilter,
+                            tabGroupIdToArchiveEligibilityMap,
+                            tabUrlToLastActiveTimestampMap,
+                            tab)) {
+                tabsToArchive.add(tab);
+            }
+        }
+
+        return tabsToArchive;
+    }
+
+    private List<Tab> getTabsWithExistingArchivedTabs(
+            TabGroupModelFilter regularTabGroupModelFilter) {
+        TabModel model = regularTabGroupModelFilter.getTabModel();
+        List<Tab> tabsToClose = new ArrayList<>();
+
+        for (int i = 0; i < model.getCount(); i++) {
+            Tab tab = model.getTabAt(i);
+            Tab archivedTab = mArchivedTabGroupModelFilter.getTabModel().getTabById(tab.getId());
+            if (archivedTab != null) {
+                tabsToClose.add(tab);
+            }
+        }
+
+        return tabsToClose;
     }
 
     @Override
     public void doAutodeletePass() {
         ThreadUtils.assertOnUiThread();
         if (!mTabArchiveSettings.isAutoDeleteEnabled()) return;
+        long startTimeMs = mClock.currentTimeMillis();
 
         List<Tab> tabs = new ArrayList<>();
         for (int i = 0; i < mArchivedTabGroupModelFilter.getTabModel().getCount(); i++) {
             tabs.add(mArchivedTabGroupModelFilter.getTabModel().getTabAt(i));
         }
 
-        for (Tab tab : tabs) {
-            ArchivePersistedTabData.from(
-                    tab,
-                    (archivePersistedTabData) -> {
-                        if (isArchivedTabEligibleForDeletion(archivePersistedTabData)) {
-                            int tabAgeDays =
-                                    timestampMillisToDays(
-                                            archivePersistedTabData.getArchivedTimeMs());
-                            mArchivedTabGroupModelFilter
-                                    .getTabModel()
-                                    .getTabRemover()
-                                    .closeTabs(
-                                            TabClosureParams.closeTab(tab).allowUndo(false).build(),
-                                            /* allowDialog= */ false);
-                            RecordHistogram.recordCount1000Histogram(
-                                    "Tabs.TabAutoDeleted.AfterNDays", tabAgeDays);
-                            RecordUserAction.record("Tabs.ArchivedTabAutoDeleted");
-                        }
-                    });
-        }
+        deleteArchivedTabsIfEligibleAsync(tabs, startTimeMs);
     }
 
     @Override
@@ -154,15 +222,9 @@ public class TabArchiverImpl implements TabArchiver {
                 .closeTabs(
                         TabClosureParams.closeTabs(tabs).allowUndo(false).build(),
                         /* allowDialog= */ false);
-        RecordHistogram.recordCount1000Histogram("Tabs.TabArchived.TabCount", tabCount);
 
-        for (Tab archivedTab : archivedTabs) {
-            // Post initializing the tab data to prevent more work in an already heavy function.
-            ThreadUtils.postOnUiThread(
-                    () -> {
-                        initializePersistedTabData(archivedTab);
-                    });
-        }
+        RecordHistogram.recordCount1000Histogram("Tabs.TabArchived.TabCount", tabCount);
+        initializePersistedTabDataAsync(archivedTabs);
     }
 
     @Override
@@ -210,100 +272,94 @@ public class TabArchiverImpl implements TabArchiver {
     // Private functions.
 
     @VisibleForTesting
-    void initializePersistedTabData(Tab archivedTab) {
-        ArchivePersistedTabData.from(
-                archivedTab,
-                (archivePersistedTabData) -> {
-                    if (archivePersistedTabData == null) {
-                        return;
-                    }
-                    // Persisted tab data requires a true supplier before saving to disk.
-                    archivePersistedTabData.registerIsTabSaveEnabledSupplier(
-                            new ObservableSupplierImpl<>(true));
-                    archivePersistedTabData.setArchivedTimeMs(mClock.currentTimeMillis());
-                });
+    void initializePersistedTabDataAsync(List<Tab> archivedTabs) {
+        PostTask.postTask(
+                TaskTraits.UI_DEFAULT,
+                mCallbackController.makeCancelable(
+                        () ->
+                                initializePersistedTabDataAsyncImpl(
+                                        archivedTabs,
+                                        /* currentIndex= */ 0,
+                                        mClock.currentTimeMillis())));
     }
 
-    private void archiveEligibleTabsFromTabModelSelector(TabModelSelector selector) {
-        ThreadUtils.postOnUiThread(
+    void initializePersistedTabDataAsyncImpl(
+            List<Tab> archivedTabs, int currentIndex, long startTimeMs) {
+        if (currentIndex >= archivedTabs.size()) {
+            RecordHistogram.recordTimesHistogram(
+                    "Tabs.InitializePTD.DurationMs", mClock.currentTimeMillis() - startTimeMs);
+            broadcastPersistedTabDataCreated();
+            return;
+        }
+
+        ArchivePersistedTabData.from(
+                archivedTabs.get(currentIndex),
                 mCallbackController.makeCancelable(
-                        () -> {
-                            TabGroupModelFilter regularTabGroupModelFilter =
-                                    selector.getTabGroupModelFilterProvider()
-                                            .getCurrentTabGroupModelFilter();
-                            TabModel model = regularTabGroupModelFilter.getTabModel();
-                            int activeTabId = TabModelUtils.getCurrentTabId(model);
-                            List<Tab> tabsToClose = new ArrayList<>();
-                            List<Tab> tabsToArchive = new ArrayList<>();
-                            HashMap<Token, Boolean> groupIdToArchiveEligibilityMap =
-                                    new HashMap<>();
-                            HashMap<GURL, Long> tabUrlToLastActiveTimestampMap = new HashMap<>();
-                            if (mTabArchiveSettings.isArchiveDuplicateTabsEnabled()) {
-                                recordTabUrlLastActiveTimestamps(
-                                        tabUrlToLastActiveTimestampMap, model);
+                        (archivePersistedTabData) -> {
+                            if (archivePersistedTabData != null) {
+                                // Persisted tab data requires a true supplier before saving to
+                                // disk.
+                                archivePersistedTabData.registerIsTabSaveEnabledSupplier(
+                                        new ObservableSupplierImpl<>(true));
+                                archivePersistedTabData.setArchivedTimeMs(
+                                        mClock.currentTimeMillis());
                             }
 
-                            int maxSimultaneousArchives =
-                                    ChromeFeatureList.sAndroidTabDeclutterMaxSimultaneousArchives
-                                            .getValue();
-                            for (int i = 0; i < model.getCount(); i++) {
-                                // Limit the amount of simultaneous archives to prevent overloading
-                                // delayed tasks (crbug.com/369845089).
-                                // TODO(crbug.com/369845089): Investigate a more graceful fix to
-                                // batch these so all relevant tabs still get archived in the same
-                                // session.
-                                if (tabsToArchive.size() >= maxSimultaneousArchives) {
-                                    RecordHistogram.recordCount100000Histogram(
-                                            "Tabs.ArchivedTabs.MaxLimitReachedAt",
-                                            maxSimultaneousArchives);
-                                    break;
-                                }
-                                Tab tab = model.getTabAt(i);
-                                // If there's an existing archived tab for the tab id, then we've
-                                // run into a case where the tab metadata file wasn't updated after
-                                // an archive or restore pass. Remove the tab from the regular tab
-                                // model since the tab was already archived.
-                                Tab archivedTab =
-                                        mArchivedTabGroupModelFilter
-                                                .getTabModel()
-                                                .getTabById(tab.getId());
-                                if (archivedTab != null) {
-                                    tabsToClose.add(tab);
-                                } else if (activeTabId != tab.getId()) {
-                                    // If the tab is not part of a tab group or the flag is not
-                                    // enabled, bypass this for the original check on a single tab.
-                                    boolean isTabOrGroupTabEligibleForArchive =
-                                            tab.getTabGroupId() != null
-                                                    ? isGroupTabEligibleForArchive(
-                                                            regularTabGroupModelFilter,
-                                                            groupIdToArchiveEligibilityMap,
-                                                            tabUrlToLastActiveTimestampMap,
-                                                            tab)
-                                                    : isTabEligibleForArchive(
-                                                            tabUrlToLastActiveTimestampMap, tab);
-                                    if (isTabOrGroupTabEligibleForArchive) {
-                                        tabsToArchive.add(tab);
-                                    }
-                                }
-                            }
-                            if (tabsToClose.size() > 0) {
-                                model.getTabRemover()
+                            PostTask.postTask(
+                                    TaskTraits.UI_DEFAULT,
+                                    mCallbackController.makeCancelable(
+                                            () ->
+                                                    initializePersistedTabDataAsyncImpl(
+                                                            archivedTabs,
+                                                            currentIndex + 1,
+                                                            startTimeMs)));
+                        }));
+    }
+
+    void deleteArchivedTabsIfEligibleAsync(List<Tab> tabs, long startTimeMs) {
+        PostTask.postTask(
+                TaskTraits.UI_DEFAULT,
+                mCallbackController.makeCancelable(
+                        () ->
+                                deleteArchivedTabsIfEligibleAsyncImpl(
+                                        tabs, /* currentIndex= */ 0, startTimeMs)));
+    }
+
+    void deleteArchivedTabsIfEligibleAsyncImpl(List<Tab> tabs, int currentIndex, long startTimeMs) {
+        if (currentIndex >= tabs.size()) {
+            RecordHistogram.recordTimesHistogram(
+                    "Tabs.DeleteWithPTD.DurationMs", mClock.currentTimeMillis() - startTimeMs);
+            broadcastAutodeletePassComplete();
+            return;
+        }
+
+        Tab tab = tabs.get(currentIndex);
+        ArchivePersistedTabData.from(
+                tab,
+                mCallbackController.makeCancelable(
+                        (archivePersistedTabData) -> {
+                            if (isArchivedTabEligibleForDeletion(archivePersistedTabData)) {
+                                int tabAgeDays =
+                                        timestampMillisToDays(
+                                                archivePersistedTabData.getArchivedTimeMs());
+                                mArchivedTabGroupModelFilter
+                                        .getTabModel()
+                                        .getTabRemover()
                                         .closeTabs(
-                                                TabClosureParams.closeTabs(tabsToClose)
+                                                TabClosureParams.closeTab(tab)
                                                         .allowUndo(false)
                                                         .build(),
                                                 /* allowDialog= */ false);
+                                RecordHistogram.recordCount1000Histogram(
+                                        "Tabs.TabAutoDeleted.AfterNDays", tabAgeDays);
+                                RecordUserAction.record("Tabs.ArchivedTabAutoDeleted");
                             }
-                            if (tabsToArchive.size() > 0) {
-                                archiveAndRemoveTabs(model, tabsToArchive);
-                            }
-                            RecordHistogram.recordCount1000Histogram(
-                                    "Tabs.TabArchived.FoundDuplicateInRegularModel",
-                                    tabsToClose.size());
-
-                            for (Observer obs : mObservers) {
-                                obs.onDeclutterPassCompleted();
-                            }
+                            PostTask.postTask(
+                                    TaskTraits.UI_DEFAULT,
+                                    mCallbackController.makeCancelable(
+                                            () ->
+                                                    deleteArchivedTabsIfEligibleAsyncImpl(
+                                                            tabs, currentIndex + 1, startTimeMs)));
                         }));
     }
 
@@ -311,8 +367,8 @@ public class TabArchiverImpl implements TabArchiver {
     // group pass archiving eligibility criteria.
     private boolean isGroupTabEligibleForArchive(
             TabGroupModelFilter regularTabGroupModelFilter,
-            HashMap<Token, Boolean> groupIdToArchiveEligibilityMap,
-            HashMap<GURL, Long> tabUrlToLastActiveTimestampMap,
+            Map<Token, Boolean> groupIdToArchiveEligibilityMap,
+            Map<GURL, Long> tabUrlToLastActiveTimestampMap,
             Tab tab) {
         if (ChromeFeatureList.sAndroidTabDeclutterArchiveTabGroups.isEnabled()) {
             // Create a map between group id tokens and their archive eligibility. If a group has
@@ -335,7 +391,7 @@ public class TabArchiverImpl implements TabArchiver {
 
     private boolean isTabGroupEligibleForArchive(
             TabGroupModelFilter regularTabGroupModelFilter,
-            HashMap<GURL, Long> tabUrlToLastActiveTimestampMap,
+            Map<GURL, Long> tabUrlToLastActiveTimestampMap,
             Tab tab) {
         List<Tab> relatedTabList =
                 regularTabGroupModelFilter.getRelatedTabListForRootId(tab.getRootId());
@@ -348,7 +404,7 @@ public class TabArchiverImpl implements TabArchiver {
     }
 
     private boolean isTabEligibleForArchive(
-            HashMap<GURL, Long> tabUrlToLastActiveTimestampMap, Tab tab) {
+            Map<GURL, Long> tabUrlToLastActiveTimestampMap, Tab tab) {
         TabState tabState = TabStateExtractor.from(tab);
         if (tabState.contentsState == null) return false;
 
@@ -385,7 +441,7 @@ public class TabArchiverImpl implements TabArchiver {
 
     // A tab is marked as a duplicate tab if its last active timestamp is not the same as the stored
     // last active timestamp in the model wide hashmap.
-    private boolean isDuplicateTab(HashMap<GURL, Long> tabUrlToLastActiveTimestampMap, Tab tab) {
+    private boolean isDuplicateTab(Map<GURL, Long> tabUrlToLastActiveTimestampMap, Tab tab) {
         GURL url = tab.getUrl();
 
         // If the tab URL does not exist in the map or the tab is part of a group, no op.
@@ -400,8 +456,11 @@ public class TabArchiverImpl implements TabArchiver {
     }
 
     // Check all tabs in the tab model and record unique URLs and the latest last active timestamp.
-    private void recordTabUrlLastActiveTimestamps(
-            HashMap<GURL, Long> tabUrlToLastActiveTimestampMap, TabModel model) {
+    private Map<GURL, Long> createUrlToMruTimestampMap(TabModel model) {
+        Map<GURL, Long> urlToTimestampMap = new HashMap<>();
+        if (!mTabArchiveSettings.isArchiveDuplicateTabsEnabled()) {
+            return urlToTimestampMap;
+        }
         for (int i = 0; i < model.getCount(); i++) {
             Tab tab = model.getTabAt(i);
             GURL url = tab.getUrl();
@@ -409,15 +468,16 @@ public class TabArchiverImpl implements TabArchiver {
 
             // Only record tabs that are not part of a tab group to avoid deduplicating them.
             if (tab.getTabGroupId() == null) {
-                if (tabUrlToLastActiveTimestampMap.containsKey(url)) {
-                    long currentUrlLastActiveTimestamp = tabUrlToLastActiveTimestampMap.get(url);
+                if (urlToTimestampMap.containsKey(url)) {
+                    long currentUrlLastActiveTimestamp = urlToTimestampMap.get(url);
                     if (tabLastActiveTimestamp <= currentUrlLastActiveTimestamp) {
                         continue;
                     }
                 }
-                tabUrlToLastActiveTimestampMap.put(url, tabLastActiveTimestamp);
+                urlToTimestampMap.put(url, tabLastActiveTimestamp);
             }
         }
+        return urlToTimestampMap;
     }
 
     private boolean isTimestampWithinTargetHours(long timestampMillis, int targetHours) {
@@ -452,6 +512,24 @@ public class TabArchiverImpl implements TabArchiver {
             // landing. Fix those fields so that they're corrected in the tab state file.
             archivedTab.setRootId(archivedTab.getId());
             archivedTab.setParentId(Tab.INVALID_TAB_ID);
+        }
+    }
+
+    private void broadcastDeclutterComplete() {
+        for (Observer obs : mObservers) {
+            PostTask.postTask(TaskTraits.UI_DEFAULT, obs::onDeclutterPassCompleted);
+        }
+    }
+
+    private void broadcastPersistedTabDataCreated() {
+        for (Observer obs : mObservers) {
+            PostTask.postTask(TaskTraits.UI_DEFAULT, obs::onArchivePersistedTabDataCreated);
+        }
+    }
+
+    private void broadcastAutodeletePassComplete() {
+        for (Observer obs : mObservers) {
+            PostTask.postTask(TaskTraits.UI_DEFAULT, obs::onAutodeletePassCompleted);
         }
     }
 

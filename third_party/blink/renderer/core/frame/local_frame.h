@@ -30,6 +30,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_FRAME_LOCAL_FRAME_H_
 
 #include <memory>
+#include <vector>
 
 #include "base/gtest_prod_util.h"
 #include "base/time/default_tick_clock.h"
@@ -68,7 +69,6 @@
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_background_resource_fetch_assets.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
-#include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/web_print_params.h"
 #include "third_party/blink/public/web/web_script_execution_callback.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -155,7 +155,6 @@ class WebLinkPreviewTriggerer;
 class PluginData;
 class PolicyContainer;
 class ScrollSnapshotClient;
-class SmoothScrollSequencer;
 class SpellChecker;
 class StorageKey;
 class SystemClipboard;
@@ -439,12 +438,12 @@ class CORE_EXPORT LocalFrame final
   // media query value changed.
   void MediaQueryAffectingValueChangedForLocalSubtree(MediaValueChange);
 
-  void ViewportSegmentsChanged(const WebVector<gfx::Rect>& viewport_segments);
+  void ViewportSegmentsChanged(const std::vector<gfx::Rect>& viewport_segments);
   void UpdateViewportSegmentCSSEnvironmentVariables(
-      const WebVector<gfx::Rect>& viewport_segments);
+      const std::vector<gfx::Rect>& viewport_segments);
   void UpdateViewportSegmentCSSEnvironmentVariables(
       StyleEnvironmentVariables& vars,
-      const WebVector<gfx::Rect>& viewport_segments);
+      const std::vector<gfx::Rect>& viewport_segments);
 
   void OverrideDevicePostureForEmulation(
       mojom::blink::DevicePostureType device_posture_param);
@@ -650,15 +649,6 @@ class CORE_EXPORT LocalFrame final
   ClientHintsPreferences& GetClientHintsPreferences() {
     return client_hints_preferences_;
   }
-
-  // Creates a new scroll sequencer in preparation for starting a new scroll
-  // sequence. Returns the current scroll sequencer which can be reinstated if
-  // the new sequence shouldn't clobber it.
-  SmoothScrollSequencer* CreateNewSmoothScrollSequence();
-  void ReinstateSmoothScrollSequence(SmoothScrollSequencer*);
-  void FinishedScrollSequence();
-
-  SmoothScrollSequencer* GetSmoothScrollSequencer() const;
 
   mojom::blink::ReportingServiceProxy* GetReportingService();
   mojom::blink::DevicePostureProvider* GetDevicePostureProvider();
@@ -1102,9 +1092,6 @@ class CORE_EXPORT LocalFrame final
   Member<AttributionSrcLoader> attribution_src_loader_;
   Member<InspectorIssueReporter> inspector_issue_reporter_;
   Member<InspectorTraceEvents> inspector_trace_events_;
-  // SmoothScrollSequencer is only populated for local roots; all local frames
-  // use the instance owned by their local root.
-  Member<SmoothScrollSequencer> smooth_scroll_sequencer_;
   // Access content_capture_manager_ through GetOrResetContentCaptureManager()
   // because WebContentCaptureClient might already stop the capture.
   Member<ContentCaptureManager> content_capture_manager_;

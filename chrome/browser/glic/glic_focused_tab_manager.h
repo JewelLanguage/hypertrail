@@ -8,25 +8,36 @@
 #include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observation.h"
+#include "base/timer/timer.h"
+#include "chrome/browser/glic/glic.mojom.h"
+#include "chrome/browser/glic/glic_tab_data.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "glic_window_controller.h"
+#include "ui/views/widget/widget_observer.h"
 
 namespace content {
 class Page;
 class WebContents;
 }  // namespace content
 
+namespace views {
+class Widget;
+}  // namespace views
+
 class BrowserWindowInterface;
 
 namespace glic {
+class GlicWindowController;
+
 // Responsible for managing which tab is considered "focused" and for accessing
 // its WebContents. This is an implementation detail of GlicKeyedService and
 // others should rely on the interface that GlicKeyedService exposes for
 // observing state changes.
 class GlicFocusedTabManager : public BrowserListObserver,
-                              public content::WebContentsObserver {
+                              public content::WebContentsObserver,
+                              public views::WidgetObserver {
  public:
   explicit GlicFocusedTabManager(Profile* profile,
                                  GlicWindowController& window_controller);
@@ -35,8 +46,10 @@ class GlicFocusedTabManager : public BrowserListObserver,
   GlicFocusedTabManager(const GlicFocusedTabManager&) = delete;
   GlicFocusedTabManager& operator=(const GlicFocusedTabManager&) = delete;
 
-  // Returns the currently focused tab or nullptr if nothing is focused.
-  content::WebContents* GetWebContentsForFocusedTab();
+  // Returns the currently focused tab data or an error reason stating why one
+  // was not available. This may also contain a tab candidate along with details
+  // as to why it cannot be focused. Virtual for testing.
+  virtual FocusedTabData GetFocusedTabData();
 
   // BrowserListObserver
   void OnBrowserSetLastActive(Browser* browser) override;
@@ -45,37 +58,68 @@ class GlicFocusedTabManager : public BrowserListObserver,
   // content::WebContentsObserver
   void PrimaryPageChanged(content::Page& page) override;
 
-  // Callback for changes to focused tab. The web contents pointer can be null
-  // if no tab is in focus.
+  // Callback for changes to focused tab. If no tab is in focus an error reason
+  // is returned indicating why and maybe a tab candidate with details as to
+  // why it cannot be focused.
   using FocusedTabChangedCallback =
-      base::RepeatingCallback<void(const content::WebContents*)>;
+      base::RepeatingCallback<void(FocusedTabData)>;
   base::CallbackListSubscription AddFocusedTabChangedCallback(
       FocusedTabChangedCallback callback);
 
  private:
-  // True if |browser| is valid for Glic focus.
-  bool IsValidBrowser(BrowserWindowInterface* browser_interface);
+  // True if the immutable attributes of `browser` are valid for Glic focus.
+  // Invalid browsers are never observed.
+  bool IsBrowserValid(Browser* browser);
 
-  // True if |web_contents| is allowed to be focused.
-  bool IsValidFocusable(content::WebContents* web_contents);
+  // True if the mutable attributes of `browser` are valid for Glic focus.
+  // Active browsers with invalid state are observed for state changes.
+  bool IsBrowserStateValid(Browser* browser);
 
-  // Updates focused tab if a new one is computed. Notifies if updated or if
-  // |force_notify| is true.
+  // Returns nullopt if `web_contents` is considered a valid focus
+  // candidate. Otherwise returns a NoCandidateTabError specifying why it is
+  // not.
+  std::optional<glic::mojom::NoCandidateTabError> IsValidCandidate(
+      content::WebContents* web_contents);
+
+  // Returns nullopt if `web_contents` is a valid candidate AND is valid for
+  // focus. Otherwise returns an InvalidCandidateError specifying why it is not.
+  std::optional<glic::mojom::InvalidCandidateError> IsValidFocusable(
+      content::WebContents* web_contents);
+
+  // Updates focused tab if a new one is computed. Notifies after debounce
+  // threshold if updated or if `force_notify` is true for any call within the
+  // duration of the debouncing.
   void MaybeUpdateFocusedTab(bool force_notify = false);
 
+  // Updates focused tab if a new one is computed without debouncing. Prefer
+  // `MaybeUpdateFocusedTab` unless debouncing must specifically be avoided.
+  void PerformMaybeUpdateFocusedTab(bool force_notify = false);
+
   // Computes the currently focused tab.
-  content::WebContents* ComputeFocusedTab();
+  FocusedTabData ComputeFocusedTabData();
 
   // Computes the currently focusable tab for a given browser.
-  content::WebContents* ComputeFocusableTabForBrowser(
-      BrowserWindowInterface* browser_interface);
+  FocusedTabData ComputeFocusableTabDataForBrowser(Browser* browser);
 
   // Calls all registered focused tab changed callbacks.
   void NotifyFocusedTabChanged();
 
+  // Callback for active tab changes from BrowserWindowInterface.
+  void OnActiveTabChanged(BrowserWindowInterface* browser_interface);
+
+  // Callback for Glic Window activation changes.
+  void OnGlicWindowActivationChanged(bool active);
+
+  // Callback for browser window minimization changes. Required because on Mac
+  // OS minimization status defaults to changing after browser's active state
+  // because of animation.
+  void OnWidgetShowStateChanged(views::Widget* widget) override;
+
+  // Callback for browser window widget being destroyed.
+  void OnWidgetDestroyed(views::Widget* widget) override;
+
   // List of callbacks to be notified when focused tab changed.
-  base::RepeatingCallbackList<void(const content::WebContents*)>
-      focused_callback_list_;
+  base::RepeatingCallbackList<void(FocusedTabData)> focused_callback_list_;
 
   // The profile for which to manage focused tabs.
   raw_ptr<Profile> profile_;
@@ -83,21 +127,28 @@ class GlicFocusedTabManager : public BrowserListObserver,
   // The Glic window controller.
   raw_ref<GlicWindowController> window_controller_;
 
-  // The currently focused tab (or nullptr if no tab is focused).
-  base::WeakPtr<content::WebContents> focused_web_contents_;
+  // The currently focused tab data.
+  FocusedTabData focused_tab_data_ =
+      FocusedTabData(nullptr, std::nullopt, std::nullopt);
 
   // Callback subscription for listening to changes to active tab for a browser.
   base::CallbackListSubscription browser_subscription_;
-
-  // Callback for active tab changes from BrowserWindowInterface.
-  void OnActiveTabChanged(BrowserWindowInterface* browser_interface);
 
   // Callback subscription for listening to changes to the Glic window
   // activation changes.
   base::CallbackListSubscription window_activation_subscription_;
 
-  // Callback for Glic Window activation changes.
-  void OnGlicWindowActivationChanged(bool active);
+  // WidgetObserver for triggering window minimization/maximization changes.
+  base::ScopedObservation<views::Widget, views::WidgetObserver>
+      widget_observation_{this};
+
+  // One shot time used to debounce focus notifications.
+  base::OneShotTimer debouncer_;
+
+  // Cached force_notify state for carrying over across debounces. If any call
+  // to MaybeUpdateFocusedTab has a forced notify, this will be set to true
+  // until debouncing resolves.
+  bool cached_force_notify_ = false;
 };
 
 }  // namespace glic

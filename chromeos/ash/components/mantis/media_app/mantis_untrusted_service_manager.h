@@ -44,12 +44,14 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_MANTIS_MEDIA_APP)
                    base::OnceCallback<void(bool)> callback);
   void Create(
       mojo::PendingRemote<media_app_ui::mojom::MantisUntrustedPage> page,
+      const std::optional<base::Uuid>& dlc_uuid,
       CreateCallback callback);
 
  private:
   mojo::PendingRemote<mantis::mojom::PlatformModelProgressObserver>
   CreateProgressObserver(
       mojo::PendingRemote<media_app_ui::mojom::MantisUntrustedPage> page);
+  void ResetService();
   void OnQueryDone(
       base::OnceCallback<void(bool)> callback,
       chromeos::mojo_service_manager::mojom::ErrorOrServiceStatePtr result);

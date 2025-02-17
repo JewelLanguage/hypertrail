@@ -80,13 +80,6 @@ class EmbeddedPermissionPrompt
     kDismiss,
   };
 
-  void PrecalculateVariantsForMetrics();
-
-  void RecordOsMetrics(permissions::OsScreenAction action);
-
-  void RecordPermissionActionUKM(
-      permissions::ElementAnchoredBubbleAction action);
-
   void PromptForOsPermission();
 
   void OnRequestSystemPermissionResponse(
@@ -104,26 +97,14 @@ class EmbeddedPermissionPrompt
     return prompt_model_->prompt_variant();
   }
 
-  // Store precalculated OS variants for metrics
-  permissions::EmbeddedPermissionPromptFlowModel::Variant os_prompt_variant_ =
-      permissions::EmbeddedPermissionPromptFlowModel::Variant::kUninitialized;
-  permissions::EmbeddedPermissionPromptFlowModel::Variant
-      os_system_settings_variant_ = permissions::
-          EmbeddedPermissionPromptFlowModel::Variant::kUninitialized;
-
   std::unique_ptr<views::Widget> content_scrim_widget_;
   views::ViewTracker prompt_view_tracker_;
-
-  base::Time current_variant_first_display_time_;
 
   raw_ptr<permissions::PermissionPrompt::Delegate> delegate_;
 
   std::set<ContentSettingsType> prompt_types_;
   std::vector<raw_ptr<permissions::PermissionRequest, VectorExperimental>>
       requests_;
-  int prompt_screen_counter_for_metrics_ = 0;
-
-  std::optional<Action> sent_action_ = std::nullopt;
 
   std::unique_ptr<permissions::EmbeddedPermissionPromptFlowModel> prompt_model_;
   base::WeakPtrFactory<EmbeddedPermissionPrompt> weak_factory_{this};

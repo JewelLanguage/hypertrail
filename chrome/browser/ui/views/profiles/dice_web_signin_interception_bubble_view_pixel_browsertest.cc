@@ -4,6 +4,7 @@
 
 #include <string>
 
+#include "base/scoped_environment_variable_override.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/enterprise/browser_management/management_service_factory.h"
@@ -78,13 +79,14 @@ struct TestParam {
   bool use_dark_theme = false;
   SkColor4f intercepted_profile_color = SkColors::kLtGray;
   SkColor4f primary_profile_color = SkColors::kBlue;
-  bool with_explicit_browser_signin_design = false;
   NameFormat name_format = NameFormat::Regular;
+  bool use_right_to_left_language = false;
 };
 
 // To be passed as 4th argument to `INSTANTIATE_TEST_SUITE_P()`, allows the test
-// to be named like `All/<TestClassName>.InvokeUi_default/<TestSuffix>` instead
-// of using the index of the param in `kTestParam` as suffix.
+// to be named like
+// `All/DiceWebSigninInterceptionBubblePixelTest.InvokeUi_default/<TestSuffix>`
+// instead of using the index of the param in `kTestParam` as suffix.
 std::string ParamToTestSuffix(const ::testing::TestParamInfo<TestParam>& info) {
   return info.param.test_suffix;
 }
@@ -94,19 +96,10 @@ const TestParam kTestParams[] = {
     // Common consumer user case: regular account signing in to a profile having
     // a regular account on a non-managed device.
     {
-        .test_suffix = "ConsumerSimple",
-        .interception_type =
-            WebSigninInterceptor::SigninInterceptionType::kMultiUser,
-        .intercepted_profile_color = SkColors::kMagenta,
-    },
-
-    // Ditto, with explicit browser signin.
-    {
         .test_suffix = "ConsumerSimpleExplicitBrowserSignin",
         .interception_type =
             WebSigninInterceptor::SigninInterceptionType::kMultiUser,
         .intercepted_profile_color = SkColors::kMagenta,
-        .with_explicit_browser_signin_design = true,
     },
 
     // Ditto, with a different color scheme
@@ -190,17 +183,9 @@ const TestParam kTestParams[] = {
     // Profile switch bubble: the account used for signing in is already
     // associated with another profile.
     {
-        .test_suffix = "ProfileSwitch",
-        .interception_type =
-            WebSigninInterceptor::SigninInterceptionType::kProfileSwitch,
-    },
-
-    // Ditto, with explicit browser signin.
-    {
         .test_suffix = "ProfileSwitchExplicitBrowserSignin",
         .interception_type =
             WebSigninInterceptor::SigninInterceptionType::kProfileSwitch,
-        .with_explicit_browser_signin_design = true,
     },
 
     // Supervised user sign-in intercept bubble, no accounts in chrome.
@@ -213,20 +198,11 @@ const TestParam kTestParams[] = {
     },
     // Profile switch for supervised user.
     {
-        .test_suffix = "SupervisedUserProfileSwitch",
-        .interception_type =
-            WebSigninInterceptor::SigninInterceptionType::kProfileSwitch,
-        .intercepted_account_management_state =
-            ManagedAccountState::kSupervisedAccount,
-    },
-    // Profile switch for supervised user with explicit browser signin.
-    {
         .test_suffix = "SupervisedUserProfileSwitchExplicitBrowserSignin",
         .interception_type =
             WebSigninInterceptor::SigninInterceptionType::kProfileSwitch,
         .intercepted_account_management_state =
             ManagedAccountState::kSupervisedAccount,
-        .with_explicit_browser_signin_design = true,
     },
 
     // Chrome Signin bubble: no accounts in chrome, and signing triggers this
@@ -256,6 +232,22 @@ const TestParam kTestParams[] = {
             WebSigninInterceptor::SigninInterceptionType::kChromeSignin,
         .name_format = NameFormat::LongNameSingleWord,
     },
+
+    {
+        .test_suffix = "ChromeSigninRTL",
+        .interception_type =
+            WebSigninInterceptor::SigninInterceptionType::kChromeSignin,
+        .use_right_to_left_language = true,
+    },
+
+    {
+        .test_suffix = "ChromeSigninSupervisedUserRTL",
+        .interception_type =
+            WebSigninInterceptor::SigninInterceptionType::kChromeSignin,
+        .intercepted_account_management_state =
+            ManagedAccountState::kSupervisedAccount,
+        .use_right_to_left_language = true,
+    },
 };
 
 }  // namespace
@@ -266,9 +258,7 @@ class DiceWebSigninInterceptionBubblePixelTest
  public:
   DiceWebSigninInterceptionBubblePixelTest() {
     std::vector<base::test::FeatureRef> enabled_features;
-    if (GetParam().with_explicit_browser_signin_design) {
-      enabled_features.push_back(switches::kExplicitBrowserSigninUIOnDesktop);
-    }
+
     enabled_features.push_back(
         supervised_user::kCustomProfileStringsForSupervisedUsers);
     enabled_features.push_back(supervised_user::kShowKiteForSupervisedUsers);
@@ -280,6 +270,17 @@ class DiceWebSigninInterceptionBubblePixelTest
   void SetUpCommandLine(base::CommandLine* command_line) override {
     if (GetParam().use_dark_theme) {
       command_line->AppendSwitch(switches::kForceDarkMode);
+    }
+
+    if (GetParam().use_right_to_left_language) {
+      const std::string language = "ar-XB";
+      command_line->AppendSwitchASCII(switches::kLang, language);
+
+      // On Linux the command line switch has no effect, we need to use
+      // environment variables to change the language.
+      scoped_env_override_ =
+          std::make_unique<base::ScopedEnvironmentVariableOverride>("LANGUAGE",
+                                                                    language);
     }
   }
 
@@ -386,6 +387,7 @@ class DiceWebSigninInterceptionBubblePixelTest
 
   base::test::ScopedFeatureList scoped_feature_list_;
   std::unique_ptr<ScopedWebSigninInterceptionBubbleHandle> bubble_handle_;
+  std::unique_ptr<base::ScopedEnvironmentVariableOverride> scoped_env_override_;
 };
 
 IN_PROC_BROWSER_TEST_P(DiceWebSigninInterceptionBubblePixelTest,

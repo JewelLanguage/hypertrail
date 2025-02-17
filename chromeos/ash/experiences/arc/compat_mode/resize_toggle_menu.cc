@@ -166,7 +166,7 @@ void ResizeToggleMenu::MenuButtonView::UpdateColors() {
   const auto icon_color =
       is_selected_ ? color_provider->GetColor(cros_tokens::kCrosSysOnPrimary)
                    : color_provider->GetColor(cros_tokens::kCrosSysOnSurface);
-  icon_view_->SetImage(gfx::CreateVectorIcon(*icon_, icon_color));
+  icon_view_->SetImage(ui::ImageModel::FromVectorIcon(*icon_, icon_color));
 
   const auto text_color =
       is_selected_ ? color_provider->GetColor(cros_tokens::kCrosSysOnPrimary)
@@ -302,7 +302,7 @@ ResizeToggleMenu::MakeBubbleDelegateView(
   delegate_view->SetAccessibleWindowRole(ax::mojom::Role::kMenu);
   // Clear root view's background color. We use the color in
   // `background_view`.
-  delegate_view->set_color(SK_ColorTRANSPARENT);
+  delegate_view->set_background_color(SK_ColorTRANSPARENT);
 
   // Setup view.
   delegate_view->SetUseDefaultFillLayout(true);

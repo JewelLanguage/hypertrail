@@ -15,10 +15,10 @@
 #include "components/regional_capabilities/regional_capabilities_utils.h"
 
 #if BUILDFLAG(IS_ANDROID)
-#include "base/android/jni_android.h"
-#include "base/android/jni_string.h"
-#include "base/memory/ptr_util.h"
-#include "components/regional_capabilities/android/jni_headers/RegionalCapabilitiesServiceClientAndroid_jni.h"
+#include "base/android/scoped_java_ref.h"
+
+// Must come after all headers that specialize FromJniType() / ToJniType().
+#include "components/regional_capabilities/android/jni_headers/RegionalCapabilitiesService_jni.h"
 #endif
 
 namespace regional_capabilities {
@@ -38,60 +38,6 @@ enum class UnknownCountryIdStored {
 
 }  // namespace
 
-// --- RegionalCapabilitiesService::Client ------------------------------------
-
-RegionalCapabilitiesService::Client::~Client() = default;
-
-#if !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_LINUX)
-void RegionalCapabilitiesService::Client::FetchCountryId(
-    CountryIdCallback on_country_id_fetched) {
-#if BUILDFLAG(IS_ANDROID)
-  // On Android get it from a device API in Java.
-  // Usage of `WeakPtr` is crucial here, as `RegionalCapabilitiesService` is
-  // not guaranteed to be alive when the response from Java arrives.
-  auto heap_callback =
-      std::make_unique<CountryIdCallback>(std::move(on_country_id_fetched));
-  // The ownership of the callback on the heap is passed to Java. It will be
-  // deleted by JNI_RegionalCapabilitiesService_ProcessDeviceCountryResponse.
-  Java_RegionalCapabilitiesServiceClientAndroid_requestDeviceCountry(
-      base::android::AttachCurrentThread(),
-      reinterpret_cast<intptr_t>(heap_callback.release()));
-#else
-  // On other platforms, `GetCurrentCountryID()` already returns a reliable
-  // value.
-  std::move(on_country_id_fetched).Run(country_codes::GetCurrentCountryID());
-#endif
-}
-#endif
-
-#if BUILDFLAG(IS_ANDROID)
-void JNI_RegionalCapabilitiesServiceClientAndroid_ProcessDeviceCountryResponse(
-    JNIEnv* env,
-    jlong ptr_to_native_callback,
-    const base::android::JavaParamRef<jstring>& j_device_country) {
-  // Using base::WrapUnique ensures that the callback is deleted when this goes
-  // out of scope.
-  using CountryIdCallback =
-      RegionalCapabilitiesService::Client::CountryIdCallback;
-  std::unique_ptr<CountryIdCallback> heap_callback = base::WrapUnique(
-      reinterpret_cast<CountryIdCallback*>(ptr_to_native_callback));
-  CHECK(heap_callback);
-  if (!j_device_country) {
-    return;
-  }
-  std::string device_country =
-      base::android::ConvertJavaStringToUTF8(env, j_device_country);
-  int device_country_id =
-      country_codes::CountryStringToCountryID(device_country);
-  if (device_country_id == country_codes::kCountryIDUnknown) {
-    return;
-  }
-  std::move(*heap_callback).Run(device_country_id);
-}
-#endif
-
-// --- RegionalCapabilitiesService --------------------------------------------
-
 RegionalCapabilitiesService::RegionalCapabilitiesService(
     PrefService& profile_prefs,
     std::unique_ptr<Client> regional_capabilities_client)
@@ -100,7 +46,11 @@ RegionalCapabilitiesService::RegionalCapabilitiesService(
   CHECK(client_);
 }
 
-RegionalCapabilitiesService::~RegionalCapabilitiesService() = default;
+RegionalCapabilitiesService::~RegionalCapabilitiesService() {
+#if BUILDFLAG(IS_ANDROID)
+  DestroyJavaObject();
+#endif
+}
 
 int RegionalCapabilitiesService::GetCountryId() {
   std::optional<SearchEngineCountryOverride> country_override =
@@ -119,9 +69,13 @@ int RegionalCapabilitiesService::GetCountryId() {
   return country_id_cache_.value();
 }
 
+bool RegionalCapabilitiesService::IsInEeaCountry() {
+  return IsEeaCountry(GetCountryId());
+}
+
 void RegionalCapabilitiesService::InitializeCountryIdCache() {
-  // TODO(b:328040066): Move `kCountryIDAtInstall` pref declaration in this
-  // class.
+  // TODO(crbug.com/328040066): Move `kCountryIDAtInstall` pref declaration in
+  // this file / package.
   std::optional<int> country_id;
 
   // Check the validity of the initially persisted value, if present.
@@ -134,14 +88,16 @@ void RegionalCapabilitiesService::InitializeCountryIdCache() {
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
       if (base::FeatureList::IsEnabled(switches::kClearPrefForUnknownCountry)) {
         profile_prefs_->ClearPref(country_codes::kCountryIDAtInstall);
+        country_id.reset();
         base::UmaHistogramEnumeration(kUnknownCountryIdStored,
                                       UnknownCountryIdStored::kClearedPref);
-        country_id.reset();
-      }
+      } else
 #endif
-      base::UmaHistogramEnumeration(
-          kUnknownCountryIdStored,
-          UnknownCountryIdStored::kDontClearInvalidCountry);
+      {
+        base::UmaHistogramEnumeration(
+            kUnknownCountryIdStored,
+            UnknownCountryIdStored::kDontClearInvalidCountry);
+      }
     }
   }
 
@@ -159,11 +115,10 @@ void RegionalCapabilitiesService::InitializeCountryIdCache() {
       country_id =
           profile_prefs_->GetInteger(country_codes::kCountryIDAtInstall);
     } else {
-      // The initialization failed or did not complete synchronously. Fall
-      // back to `country_codes::GetCurrentCountryID()` without persisting it.
-      // If the fetch completes later, the country will be picked up at the
-      // next startup.
-      country_id = country_codes::GetCurrentCountryID();
+      // The initialization failed or did not complete synchronously. Use the
+      // fallback value and don't persist it. If the fetch completes later, the
+      // country will be picked up at the next startup.
+      country_id = client_->GetFallbackCountryId();
     }
   }
 
@@ -174,5 +129,28 @@ void RegionalCapabilitiesService::ClearCountryIdCacheForTesting() {
   CHECK_IS_TEST();
   country_id_cache_.reset();
 }
+
+#if BUILDFLAG(IS_ANDROID)
+base::android::ScopedJavaLocalRef<jobject>
+RegionalCapabilitiesService::GetJavaObject() {
+  if (!java_ref_) {
+    java_ref_.Reset(Java_RegionalCapabilitiesService_Constructor(
+        jni_zero::AttachCurrentThread(), reinterpret_cast<intptr_t>(this)));
+  }
+  return base::android::ScopedJavaLocalRef<jobject>(java_ref_);
+}
+
+void RegionalCapabilitiesService::DestroyJavaObject() {
+  if (java_ref_) {
+    Java_RegionalCapabilitiesService_destroy(jni_zero::AttachCurrentThread(),
+                                             java_ref_);
+    java_ref_.Reset();
+  }
+}
+
+jboolean RegionalCapabilitiesService::IsInEeaCountry(JNIEnv* env) {
+  return IsInEeaCountry();
+}
+#endif
 
 }  // namespace regional_capabilities

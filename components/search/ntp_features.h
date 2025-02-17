@@ -76,6 +76,7 @@ BASE_DECLARE_FEATURE(kNtpWallpaperSearchButtonAnimationShownThreshold);
 BASE_DECLARE_FEATURE(kNtpMobilePromo);
 BASE_DECLARE_FEATURE(kNtpMicrosoftAuthenticationModule);
 BASE_DECLARE_FEATURE(kNtpOneGoogleBarAsyncBarParts);
+BASE_DECLARE_FEATURE(kNtpFooter);
 
 // Parameter for controlling the luminosity difference for NTP elements on light
 // backgrounds.
@@ -181,6 +182,13 @@ extern const base::FeatureParam<base::TimeDelta>
 // window.
 extern const base::FeatureParam<base::TimeDelta>
     kNtpCalendarModuleWindowStartDeltaParam;
+// Parameter determining whether the existence of Outlook attachment pages
+// should be checked.
+extern const base::FeatureParam<bool>
+    kNtpOutlookCalendarModuleAttachmentCheckParam;
+// Parameter determining whether attachments should be disabled.
+extern const base::FeatureParam<bool>
+    kNtpOutlookCalendarModuleDisableAttachmentsParam;
 // Parameter determining the max number of events to display on the Outlook
 // Calendar module.
 extern const base::FeatureParam<int> kNtpOutlookCalendarModuleMaxEventsParam;
@@ -198,6 +206,13 @@ extern const base::FeatureParam<int> kNtpMobilePromoImpressionLimit;
 // Parameter determining the type of data to render.
 extern const base::FeatureParam<NtpSharepointModuleDataType>
     kNtpSharepointModuleDataParam;
+// Parameter determining the max number of files to display on the Microsoft
+// files module.
+extern const base::FeatureParam<int> kNtpMicrosoftFilesModuleMaxFilesParam;
+// Parameter determining whether the tab resumption module should filter visits
+// that are associated with local tabs.
+extern const base::FeatureParam<bool>
+    kNtpMostRelevantTabResumptionModuleFilterLocalTabsParam;
 
 // Returns the timeout after which the load of a module should be aborted.
 base::TimeDelta GetModulesLoadTimeout();

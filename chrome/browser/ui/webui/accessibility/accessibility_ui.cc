@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/webui/accessibility/accessibility_ui.h"
 
+#include <algorithm>
 #include <map>
 #include <memory>
 #include <optional>
@@ -18,14 +19,12 @@
 #include "base/json/json_writer.h"
 #include "base/memory/raw_ref.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/escape.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/webui_url_constants.h"
@@ -92,7 +91,7 @@ static const char kUrlField[] = "url";
 static const char kValueField[] = "value";
 static const char kApiTypeField[] = "apiType";
 
-#if defined(USE_AURA) && !BUILDFLAG(IS_CHROMEOS_ASH)
+#if defined(USE_AURA) && !BUILDFLAG(IS_CHROMEOS)
 static const char kWidget[] = "widget";
 #endif
 
@@ -429,7 +428,7 @@ class AccessibilityUiModes
     saved_process_mode_ = process_accessibility_mode_->mode();
     process_accessibility_mode_.reset();
 
-    base::ranges::for_each(
+    std::ranges::for_each(
         page_accessibility_modes_,
         [](PageAccessibilityMode& page_mode) { page_mode.Save(); },
         &std::map<void*, PageAccessibilityMode>::value_type::second);
@@ -445,7 +444,7 @@ class AccessibilityUiModes
         browser_accessibility_state.CreateScopedModeForProcess(
             std::exchange(saved_process_mode_, ui::AXMode()));
 
-    base::ranges::for_each(
+    std::ranges::for_each(
         page_accessibility_modes_,
         [&browser_accessibility_state](PageAccessibilityMode& page_mode) {
           page_mode.Restore(browser_accessibility_state);
@@ -623,7 +622,7 @@ void AccessibilityUIMessageHandler::RegisterMessages() {
       base::BindRepeating(&AccessibilityUIMessageHandler::RequestNativeUITree,
                           base::Unretained(this)));
 
-#if defined(USE_AURA) && !BUILDFLAG(IS_CHROMEOS_ASH)
+#if defined(USE_AURA) && !BUILDFLAG(IS_CHROMEOS)
   web_ui()->RegisterMessageCallback(
       "requestWidgetsTree",
       base::BindRepeating(&AccessibilityUIMessageHandler::RequestWidgetsTree,
@@ -866,7 +865,7 @@ void AccessibilityUIMessageHandler::RequestNativeUITree(
 
 void AccessibilityUIMessageHandler::RequestWidgetsTree(
     const base::Value::List& args) {
-#if defined(USE_AURA) && !BUILDFLAG(IS_CHROMEOS_ASH)
+#if defined(USE_AURA) && !BUILDFLAG(IS_CHROMEOS)
   const base::Value::Dict& data = args[0].GetDict();
 
   std::string request_type, allow, allow_empty, deny;
@@ -883,7 +882,7 @@ void AccessibilityUIMessageHandler::RequestWidgetsTree(
   result.Set(kErrorField, "Window no longer exists.");
   AllowJavascript();
   FireWebUIListener(request_type, result);
-#endif  // defined(USE_AURA) && !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // defined(USE_AURA) && !BUILDFLAG(IS_CHROMEOS)
 }
 
 void AccessibilityUIMessageHandler::Callback(const std::string& str) {

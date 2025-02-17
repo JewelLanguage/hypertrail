@@ -992,15 +992,15 @@ fyi_mac_builder(
             "mac_13_x64",
         ],
         per_test_modifications = {
-            "headless_shell_wpt_tests_include_all": targets.mixin(
+            "headless_shell_wpt_tests_inverted": targets.mixin(
                 args = [
                     "--test-type",
                     "testharness",
                     "reftest",
                     "crashtest",
                     "print-reftest",
-                    "--exit-after-n-crashes-or-timeouts=10000",
-                    "--exit-after-n-failures=10000",
+                    "--exit-after-n-crashes-or-timeouts=1000",
+                    "--exit-after-n-failures=1000",
                 ],
                 experiment_percentage = 100,
             ),
@@ -1052,20 +1052,17 @@ ci.builder(
             "linux-jammy",
         ],
         per_test_modifications = {
-            "headless_shell_wpt_tests_include_all": targets.mixin(
+            "headless_shell_wpt_tests_inverted": targets.mixin(
                 args = [
                     "--test-type",
                     "testharness",
                     "reftest",
                     "crashtest",
                     "print-reftest",
-                    "--exit-after-n-crashes-or-timeouts=10000",
-                    "--exit-after-n-failures=10000",
+                    "--exit-after-n-crashes-or-timeouts=1000",
+                    "--exit-after-n-failures=1000",
                 ],
                 experiment_percentage = 100,
-                swarming = targets.swarming(
-                    shards = 15,
-                ),
             ),
         },
     ),
@@ -1173,7 +1170,7 @@ ci.builder(
         per_test_modifications = {
             "browser_tests": targets.mixin(
                 swarming = targets.swarming(
-                    shards = 30,
+                    shards = 35,
                 ),
             ),
             # TODO(crbug.com/40794640): dyld was rebuilt for macOS 12, which
@@ -1378,7 +1375,7 @@ ci.builder(
             ),
             "blink_wpt_tests": targets.mixin(
                 swarming = targets.swarming(
-                    shards = 18,
+                    shards = 6,
                 ),
             ),
             "browser_tests": targets.mixin(
@@ -2199,14 +2196,17 @@ fyi_ios_builder(
         mixins = [
             "expand-as-isolated-script",
             "has_native_resultdb_integration",
-            "mac_default_arm64",
+            "mac_15_arm64",
             "mac_toolchain",
             "out_dir_arg",
             "xcode_16_beta",
             "xctest",
         ],
     ),
-    os = os.MAC_DEFAULT,
+    # TODO(crbug.com/393136335): changing to MAC_BETA to validate Mac-15 prior
+    # to upgrading the rest of the waterfall. Reset to MAC_DEFAULT once the
+    # rest of the waterfall is Mac-15.
+    os = os.MAC_BETA,
     cpu = cpu.ARM64,
     console_view_entry = [
         consoles.console_view_entry(
@@ -2254,6 +2254,7 @@ fyi_ios_builder(
             "all",
         ],
     ),
+    os = os.MAC_BETA,
     cpu = cpu.ARM64,
     console_view_entry = [
         consoles.console_view_entry(
@@ -2300,13 +2301,14 @@ fyi_ios_builder(
         mixins = [
             "expand-as-isolated-script",
             "has_native_resultdb_integration",
-            "mac_14_arm64",
+            "mac_15_arm64",
             "mac_toolchain",
             "out_dir_arg",
             "xcode_16_beta",
             "xctest",
         ],
     ),
+    os = os.MAC_BETA,
     cpu = cpu.ARM64,
     console_view_entry = [
         consoles.console_view_entry(
@@ -2358,14 +2360,17 @@ fyi_ios_builder(
         mixins = [
             "expand-as-isolated-script",
             "has_native_resultdb_integration",
-            "mac_14_beta_arm64",
+            "mac_15_arm64",
             "mac_toolchain",
             "out_dir_arg",
             "xcode_16_beta",
             "xctest",
         ],
     ),
-    os = os.MAC_DEFAULT,
+    # TODO(crbug.com/393136335): changing to MAC_BETA to validate Mac-15 prior
+    # to upgrading the rest of the waterfall. Reset to MAC_DEFAULT once the
+    # rest of the waterfall is Mac-15.
+    os = os.MAC_BETA,
     cpu = cpu.ARM64,
     console_view_entry = consoles.console_view_entry(
         category = "iOS|iOS18",
@@ -2414,13 +2419,14 @@ fyi_ios_builder(
         mixins = [
             "expand-as-isolated-script",
             "has_native_resultdb_integration",
-            "mac_14_beta_arm64",
+            "mac_15_arm64",
             "mac_toolchain",
             "out_dir_arg",
             "xcode_16_beta",
             "xctest",
         ],
     ),
+    os = os.MAC_BETA,
     cpu = cpu.ARM64,
     console_view_entry = consoles.console_view_entry(
         category = "iOS|iOS18",
@@ -2475,7 +2481,7 @@ fyi_mac_builder(
         per_test_modifications = {
             "browser_tests": targets.mixin(
                 swarming = targets.swarming(
-                    shards = 20,  # crbug.com/1419045
+                    shards = 25,  # crbug.com/1419045
                 ),
             ),
             # TODO(crbug.com/40794640): dyld was rebuilt for macOS 12, which
@@ -2628,15 +2634,15 @@ ci.builder(
             "isolate_profile_data",
         ],
         per_test_modifications = {
-            "headless_shell_wpt_tests_include_all": targets.mixin(
+            "headless_shell_wpt_tests_inverted": targets.mixin(
                 args = [
                     "--test-type",
                     "testharness",
                     "reftest",
                     "crashtest",
                     "print-reftest",
-                    "--exit-after-n-crashes-or-timeouts=10000",
-                    "--exit-after-n-failures=10000",
+                    "--exit-after-n-crashes-or-timeouts=1000",
+                    "--exit-after-n-failures=1000",
                 ],
                 experiment_percentage = 100,
             ),

@@ -86,6 +86,7 @@ source_set("ip_protection_core_impl_unittest") {
     ":masked_domain_list_manager",
     "//base",
     "//base/test:test_support",
+    "//components/privacy_sandbox/masked_domain_list:masked_domain_list_proto",
     "//net",
     "//testing/gtest",
   ]
@@ -334,11 +335,13 @@ source_set("ip_protection_proxy_delegate_unittest") {
     ":masked_domain_list_manager",
     "//base",
     "//base/test:test_support",
+    "//components/privacy_sandbox/masked_domain_list:masked_domain_list_proto",
     "//net",
     "//net:gtest_util",
     "//net:test_support",
     "//net/traffic_annotation:test_support",
     "//services/network/public/cpp",
+    "//services/network/public/mojom",
     "//testing/gmock",
     "//testing/gtest",
   ]
@@ -541,10 +544,63 @@ source_set("url_matcher_with_bypass_unittest") {
   ]
 }
 
-source_set("ip_protection_crypter") {
+source_set("ip_protection_issuer_token_direct_fetcher") {
   sources = [
-    "ip_protection_crypter.cc",
-    "ip_protection_crypter.h",
+    "ip_protection_issuer_token_direct_fetcher.cc",
+    "ip_protection_issuer_token_direct_fetcher.h",
+  ]
+  public_deps = [
+    ":ip_protection_issuer_token_fetcher",
+    "//base",
+    "//services/network/public/cpp",
+    "//services/network/public/mojom",
+  ]
+  deps = [
+    ":ip_protection_issuer_token_crypter",
+    "//components/ip_protection:get_issuer_token_proto",
+    "//net",
+    "//third_party/abseil-cpp:absl",
+  ]
+}
+
+source_set("ip_protection_issuer_token_direct_fetcher_unittest") {
+  testonly = true
+  sources = [ "ip_protection_issuer_token_direct_fetcher_unittest.cc" ]
+  deps = [
+    ":ip_protection_issuer_token_crypter",
+    ":ip_protection_issuer_token_direct_fetcher",
+    "//base",
+    "//base/test:test_support",
+    "//components/ip_protection:get_issuer_token_proto",
+    "//net",
+    "//services/network:test_support",
+    "//services/network/public/cpp",
+    "//services/network/public/mojom",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/private-join-and-compute/src:ec_commutative_cipher",
+  ]
+}
+
+source_set("ip_protection_issuer_token_fetcher") {
+  sources = [
+    "ip_protection_issuer_token_fetcher.cc",
+    "ip_protection_issuer_token_fetcher.h",
+  ]
+  public_deps = [
+    ":ip_protection_data_types",
+    "//base",
+  ]
+}
+
+source_set("ip_protection_issuer_token_crypter") {
+  sources = [
+    "ip_protection_issuer_token_crypter.cc",
+    "ip_protection_issuer_token_crypter.h",
+  ]
+  public_deps = [
+    ":ip_protection_data_types",
+    "//third_party/abseil-cpp:absl",
   ]
   deps = [
     "//base",
@@ -552,15 +608,91 @@ source_set("ip_protection_crypter") {
   ]
 }
 
-source_set("ip_protection_crypter_unittest") {
+source_set("ip_protection_issuer_token_crypter_unittest") {
   testonly = true
-  sources = [ "ip_protection_crypter_unittest.cc" ]
+  sources = [ "ip_protection_issuer_token_crypter_unittest.cc" ]
   deps = [
-    ":ip_protection_crypter",
+    ":ip_protection_issuer_token_crypter",
     "//base",
     "//base/test:test_support",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/private-join-and-compute/src:ec_commutative_cipher",
   ]
+}
+
+source_set("ip_protection_probabilistic_reveal_token_manager") {
+  sources = [
+    "ip_protection_probabilistic_reveal_token_manager.cc",
+    "ip_protection_probabilistic_reveal_token_manager.h",
+  ]
+  public_deps = [ ":ip_protection_data_types" ]
+  deps = [
+    ":ip_protection_issuer_token_crypter",
+    ":ip_protection_issuer_token_fetcher",
+    "//base",
+  ]
+}
+
+source_set("ip_protection_probabilistic_reveal_token_manager_unittest") {
+  testonly = true
+  sources = [ "ip_protection_probabilistic_reveal_token_manager_unittest.cc" ]
+  deps = [
+    ":ip_protection_issuer_token_crypter",
+    ":ip_protection_issuer_token_fetcher",
+    ":ip_protection_probabilistic_reveal_token_manager",
+    "//base",
+    "//base/test:test_support",
+    "//net",
+    "//services/network:test_support",
+    "//services/network/public/cpp",
+    "//services/network/public/mojom",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/private-join-and-compute/src:ec_commutative_cipher",
+  ]
+}
+
+source_set("ip_protection_issuer_token_data_storage") {
+  sources = [
+    "ip_protection_issuer_token_data_storage.cc",
+    "ip_protection_issuer_token_data_storage.h",
+  ]
+  public_deps = [
+    "//base",
+    "//sql",
+  ]
+  deps = [
+    ":ip_protection_issuer_token_fetcher",
+    "//third_party/sqlite",
+  ]
+}
+
+source_set("ip_protection_issuer_token_data_storage_unittest") {
+  testonly = true
+  sources = [ "ip_protection_issuer_token_data_storage_unittest.cc" ]
+  deps = [
+    ":ip_protection_data_types",
+    ":ip_protection_issuer_token_data_storage",
+    ":ip_protection_issuer_token_fetcher",
+    ":tests_bundle_data",
+    "//base",
+    "//base/test:test_support",
+    "//sql",
+    "//sql:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}
+
+bundle_data("tests_bundle_data") {
+  visibility = [ ":ip_protection_issuer_token_data_storage_unittest" ]
+  testonly = true
+  sources = [
+    "//components/test/data/ip_protection/issuer_tokens_v0.too_old.sql",
+    "//components/test/data/ip_protection/issuer_tokens_v1.sql",
+    "//components/test/data/ip_protection/issuer_tokens_v2.too_new.sql",
+  ]
+  outputs = [ "{{bundle_resources_dir}}/" +
+              "{{source_root_relative_dir}}/{{source_file_part}}" ]
 }

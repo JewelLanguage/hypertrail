@@ -249,23 +249,23 @@ targets.mixin(
 )
 
 targets.mixin(
-    name = "14-desktop-x64-emulator",
+    name = "15-desktop-x64-emulator",
     generate_pyl_entry = False,
-    description = "Run with android_34_desktop_x64",
+    description = "Run with android_35_google_apis_tablet_x64",
     args = [
-        "--avd-config=../../tools/android/avd/proto/android_34_desktop_x64.textpb",
+        "--avd-config=../../tools/android/avd/proto/android_35_google_apis_tablet_x64_tablet_landscape.textpb",
     ],
     swarming = targets.swarming(
         # soft affinity so that bots with caches will be picked first
         optional_dimensions = {
             60: {
-                "caches": "android_34_desktop_x64",
+                "caches": "android_35_google_apis_tablet_x64",
             },
         },
         named_caches = [
             swarming.cache(
-                name = "android_34_desktop_x64",
-                path = ".android_emulator/android_34_desktop_x64",
+                name = "android_35_google_apis_tablet_x64",
+                path = ".android_emulator/android_35_google_apis_tablet_x64",
             ),
         ],
     ),
@@ -640,6 +640,7 @@ targets.mixin(
 
 targets.mixin(
     name = "dawn_end2end_gpu_test",
+    generate_pyl_entry = False,
     args = [
         "--use-gpu-in-tests",
         "--exclusive-device-type-preference=discrete,integrated",
@@ -806,6 +807,58 @@ targets.mixin(
 )
 
 targets.mixin(
+    name = "gpu_integration_test_expected_color_args",
+    args = [
+        "--dont-restore-color-profile-after-test",
+        "--test-machine-name",
+        "${buildername}",
+    ],
+    android_args = [
+        # TODO(crbug.com/40134877): Remove this once we fix the tests.
+        "--extra-browser-args=--force-online-connection-state-for-indicator",
+    ],
+)
+
+targets.mixin(
+    name = "gpu_integration_test_pixel_args",
+    args = [
+        "--dont-restore-color-profile-after-test",
+        "--test-machine-name",
+        "${buildername}",
+    ],
+    android_args = [
+        # TODO(crbug.com/40134877): Remove this once we fix the tests.
+        "--extra-browser-args=--force-online-connection-state-for-indicator",
+    ],
+)
+
+targets.mixin(
+    name = "gpu_integration_test_screenshot_sync_args",
+    args = [
+        "--dont-restore-color-profile-after-test",
+    ],
+    android_args = [
+        # TODO(crbug.com/40134877): Remove this once we fix the tests.
+        "--extra-browser-args=--force-online-connection-state-for-indicator",
+    ],
+)
+
+targets.mixin(
+    name = "gpu_integration_test_webgl1_args",
+    args = [
+        targets.magic_args.GPU_WEBGL_RUNTIME_FILE,
+    ],
+)
+
+targets.mixin(
+    name = "gpu_integration_test_webgl2_args",
+    args = [
+        "--webgl-conformance-version=2.0.1",
+        targets.magic_args.GPU_WEBGL_RUNTIME_FILE,
+    ],
+)
+
+targets.mixin(
     name = "gpu_nvidia_shield_tv_stable",
     # We always need this entry to be generated since it is used by
     # //content/test/gpu/find_bad_machines.py.
@@ -893,8 +946,8 @@ targets.mixin(
     swarming = targets.swarming(
         dimensions = {
             "os": "Android",
-            "device_type": "a23",
-            "device_os": "SP1A.210812.016",
+            "device_type": "a23xq",
+            "device_os": "TP1A.220624.014",
             "device_os_type": "user",
             "pool": "chromium.tests.gpu",
         },
@@ -947,6 +1000,107 @@ targets.mixin(
             "pool": "chromium.tests.gpu",
         },
     ),
+)
+
+targets.mixin(
+    name = "gpu_enable_metal_debug_layers",
+    args = [
+        "--enable-metal-debug-layers",
+    ],
+)
+
+targets.mixin(
+    name = "gpu_force_angle_d3d11",
+    args = [
+        "--extra-browser-args=--use-angle=d3d11",
+    ],
+)
+
+targets.mixin(
+    name = "gpu_force_angle_d3d9",
+    args = [
+        "--extra-browser-args=--use-angle=d3d9",
+    ],
+)
+
+targets.mixin(
+    name = "gpu_force_angle_gles",
+    args = [
+        "--extra-browser-args=--use-angle=gles",
+    ],
+)
+
+targets.mixin(
+    name = "gpu_force_angle_gl",
+    args = [
+        "--extra-browser-args=--use-angle=gl",
+    ],
+)
+
+targets.mixin(
+    name = "gpu_force_angle_metal",
+    args = [
+        "--extra-browser-args=--use-angle=metal",
+    ],
+)
+
+targets.mixin(
+    name = "gpu_force_angle_swiftshader",
+    args = [
+        "--extra-browser-args=--use-angle=swiftshader",
+    ],
+)
+
+targets.mixin(
+    name = "gpu_force_angle_vulkan",
+    args = [
+        "--extra-browser-args=--use-angle=vulkan",
+    ],
+)
+
+targets.mixin(
+    name = "gpu_force_command_decoder_validating",
+    args = [
+        "--extra-browser-args=--use-cmd-decoder=validating",
+    ],
+)
+
+targets.mixin(
+    name = "gpu_force_command_decoder_passthrough",
+    args = [
+        "--extra-browser-args=--use-cmd-decoder=passthrough --use-gl=angle",
+    ],
+)
+
+# On dual-GPU devices this forces high performance GPU to be used.
+targets.mixin(
+    name = "gpu_force_high_performance_gpu",
+    args = [
+        "--extra-browser-args=--force_high_performance_gpu",
+    ],
+)
+
+# On dual-GPU devices this forces high performance GPU to be used by WebGL
+# while everything else uses the low performance GPU. ANGLE/Metal only.
+targets.mixin(
+    name = "gpu_force_high_performance_gpu_for_webgl",
+    args = [
+        "--extra-browser-args=--enable-features=EGLDualGPURendering,ForceHighPerformanceGPUForWebGL",
+    ],
+)
+
+targets.mixin(
+    name = "gpu_force_skia_ganesh",
+    args = [
+        "--extra-browser-args=--disable-features=SkiaGraphite",
+    ],
+)
+
+targets.mixin(
+    name = "gpu_force_skia_graphite",
+    args = [
+        "--extra-browser-args=--enable-features=SkiaGraphite",
+    ],
 )
 
 # Use of this mixin signals to the recipe that the test uploads its results
@@ -1256,6 +1410,7 @@ targets.mixin(
 
 targets.mixin(
     name = "linux_vulkan",
+    generate_pyl_entry = False,
     linux_args = [
         "--extra-browser-args=--enable-features=Vulkan",
     ],
@@ -1348,7 +1503,7 @@ targets.mixin(
     swarming = targets.swarming(
         dimensions = {
             "cpu": "x86-64",
-            "os": "Mac-11|Mac-10.16",
+            "os": "Mac-11",
         },
     ),
 )
@@ -1947,6 +2102,7 @@ targets.mixin(
 
 targets.mixin(
     name = "timeout_30m",
+    generate_pyl_entry = False,
     swarming = targets.swarming(
         hard_timeout_sec = 1800,
         io_timeout_sec = 1800,
@@ -2056,6 +2212,7 @@ targets.mixin(
 
 targets.mixin(
     name = "webgpu_telemetry_cts",
+    generate_pyl_entry = False,
     args = [
         "--extra-browser-args=--force_high_performance_gpu",
         "--use-webgpu-power-preference=default-high-performance",
@@ -2070,7 +2227,7 @@ targets.mixin(
             targets.cipd_package(
                 package = "chromium/android_webview/tools/cts_archive",
                 location = "android_webview/tools/cts_archive/cipd",
-                revision = "UYQZhJpB3MWpJIAcesI-M1bqRoTghiKCYr_SD9tPDewC",
+                revision = "8BpUBTnmt5bH3GiqPKpmTWTP-Ie2X1TuUgf4F0IsgVgC",
             ),
         ],
     ),

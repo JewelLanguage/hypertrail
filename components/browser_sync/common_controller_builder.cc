@@ -57,6 +57,7 @@
 #include "components/send_tab_to_self/send_tab_to_self_sync_service.h"
 #include "components/sharing_message/sharing_message_bridge.h"
 #include "components/sharing_message/sharing_message_data_type_controller.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "components/sync/base/features.h"
 #include "components/sync/base/report_unrecoverable_error.h"
 #include "components/sync/model/forwarding_data_type_controller_delegate.h"
@@ -142,6 +143,7 @@ AutofillWalletOfferDelegateFromDataService(
       ->GetControllerDelegate();
 }
 
+#if !BUILDFLAG(IS_IOS)
 base::WeakPtr<syncer::DataTypeControllerDelegate>
 AutofillWalletUsageDataDelegateFromDataService(
     autofill::AutofillWebDataService* service) {
@@ -150,6 +152,7 @@ AutofillWalletUsageDataDelegateFromDataService(
       ->change_processor()
       ->GetControllerDelegate();
 }
+#endif
 
 base::WeakPtr<syncer::DataTypeControllerDelegate>
 ContactInfoDelegateFromDataService(autofill::AutofillWebDataService* service) {
@@ -176,22 +179,43 @@ base::WeakPtr<syncer::SyncableService> SyncableServiceForPrefs(
 // numeric values should never be reused.
 // LINT.IfChange(PaymentsAccountStorageUponConfiguration)
 enum class PaymentsAccountStorageUponConfiguration {
-  kSignedInImplicitlyWithInMemoryStorage = 0,
+  // kDeprecatedSignedInImplicitlyWithInMemoryStorage = 0,
   kSignedInExplicitlyWithOnDiskStorage = 1,
   kSignedInExplicitlyWithInMemoryStorage = 2,
-  kSignedInImplicitlyWithUnexpectedOnDiskStorage = 3,
-  kMaxValue = kSignedInImplicitlyWithUnexpectedOnDiskStorage
+  // kDeprecatedSignedInImplicitlyWithUnexpectedOnDiskStorage = 3,
+  kSignedInImplicitlyWithInMemoryStorage = 4,
+  kSignedInImplicitlyWithUnexpectedOnDiskStorage = 5,
+  // Account storage isn't normally configured if Sync-the-feature is enabled
+  // and therefore this metric isn't recorded. However this is not always the
+  // case, for example if the user went to settings during the sync flow and
+  // didn't complete the initial setup. Whether or not this case uses on-disk
+  // storage or not isn't particularly interesting.
+  kSignedInAndLegacySyncEnabledWithOnDiskStorage = 6,
+  kSignedInAndLegacySyncEnabledWithInMemoryStorage = 7,
+  kMaxValue = kSignedInAndLegacySyncEnabledWithInMemoryStorage
 };
 // LINT.ThenChange(/tools/metrics/histograms/metadata/sync/enums.xml:PaymentsAccountStorageUponConfiguration)
 
 PaymentsAccountStorageUponConfiguration
 DeterminePaymentsAccountStorageUponConfiguration(bool signed_in_explicitly,
+                                                 bool has_sync_consent,
                                                  bool uses_in_memory_database) {
   if (signed_in_explicitly) {
     return uses_in_memory_database ? PaymentsAccountStorageUponConfiguration::
                                          kSignedInExplicitlyWithInMemoryStorage
                                    : PaymentsAccountStorageUponConfiguration::
                                          kSignedInExplicitlyWithOnDiskStorage;
+  }
+
+  if (has_sync_consent) {
+    // This case should be rare when logging the metric at hands, recorded only
+    // during sync-the-transport configuration, but it is for example reachable
+    // by users that didn't complete the sync setup flow.
+    return uses_in_memory_database
+               ? PaymentsAccountStorageUponConfiguration::
+                     kSignedInAndLegacySyncEnabledWithInMemoryStorage
+               : PaymentsAccountStorageUponConfiguration::
+                     kSignedInAndLegacySyncEnabledWithOnDiskStorage;
   }
 
   return uses_in_memory_database
@@ -204,16 +228,30 @@ DeterminePaymentsAccountStorageUponConfiguration(bool signed_in_explicitly,
 
 void LogPaymentsAccountStorageOnDbSequence(
     const autofill::AutofillWebDataService* account_autofill_web_data_service,
-    bool signed_in_explicitly) {
+    bool signed_in_explicitly,
+    bool has_sync_consent) {
   // Don't even bother recording the metric on mobile platforms, because it is
   // known to always use kSignedInExplicitlyWithOnDiskStorage.
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   base::UmaHistogramEnumeration(
       "Sync.PaymentsAccountStorageUponSyncConfiguration",
       DeterminePaymentsAccountStorageUponConfiguration(
-          signed_in_explicitly,
+          signed_in_explicitly, has_sync_consent,
           account_autofill_web_data_service->UsesInMemoryDatabaseForMetrics()));
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+}
+
+bool ArePreferencesAllowedInTransportMode() {
+  if (!base::FeatureList::IsEnabled(
+          switches::kEnablePreferencesAccountStorage)) {
+    return false;
+  }
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+  return base::FeatureList::IsEnabled(
+      syncer::kReplaceSyncPromosWithSignInPromos);
+#else
+  return true;
+#endif
 }
 
 }  // namespace
@@ -490,14 +528,15 @@ CommonControllerBuilder::Build(syncer::DataTypeSet disabled_types,
     }
 
     // Wallet usage data sync depends on Wallet data sync.
-    if (base::FeatureList::IsEnabled(syncer::kSyncAutofillWalletUsageData) &&
-        !disabled_types.Has(syncer::AUTOFILL_WALLET_DATA) &&
+#if !BUILDFLAG(IS_IOS)
+    if (!disabled_types.Has(syncer::AUTOFILL_WALLET_DATA) &&
         !disabled_types.Has(syncer::AUTOFILL_WALLET_USAGE)) {
       controllers.push_back(CreateWalletDataTypeController(
           syncer::AUTOFILL_WALLET_USAGE,
           base::BindRepeating(&AutofillWalletUsageDataDelegateFromDataService),
           sync_service, /*with_transport_mode_support=*/true));
     }
+#endif
 
     // Wallet credential data sync depends on Wallet data sync.
     if (base::FeatureList::IsEnabled(
@@ -663,10 +702,6 @@ CommonControllerBuilder::Build(syncer::DataTypeSet disabled_types,
   }
 
   if (!disabled_types.Has(syncer::PREFERENCES)) {
-    bool allow_transport_mode =
-        base::FeatureList::IsEnabled(
-            syncer::kReplaceSyncPromosWithSignInPromos) &&
-        base::FeatureList::IsEnabled(syncer::kEnablePreferencesAccountStorage);
     controllers.push_back(
         std::make_unique<SyncableServiceBasedDataTypeController>(
             syncer::PREFERENCES,
@@ -674,7 +709,7 @@ CommonControllerBuilder::Build(syncer::DataTypeSet disabled_types,
             SyncableServiceForPrefs(pref_service_syncable_.value(),
                                     syncer::PREFERENCES),
             dump_stack,
-            allow_transport_mode
+            ArePreferencesAllowedInTransportMode()
                 ? SyncableServiceBasedDataTypeController::DelegateMode::
                       kTransportModeWithSingleModel
                 : SyncableServiceBasedDataTypeController::DelegateMode::
@@ -682,10 +717,6 @@ CommonControllerBuilder::Build(syncer::DataTypeSet disabled_types,
   }
 
   if (!disabled_types.Has(syncer::PRIORITY_PREFERENCES)) {
-    bool allow_transport_mode =
-        base::FeatureList::IsEnabled(
-            syncer::kReplaceSyncPromosWithSignInPromos) &&
-        base::FeatureList::IsEnabled(syncer::kEnablePreferencesAccountStorage);
     controllers.push_back(
         std::make_unique<SyncableServiceBasedDataTypeController>(
             syncer::PRIORITY_PREFERENCES,
@@ -693,7 +724,7 @@ CommonControllerBuilder::Build(syncer::DataTypeSet disabled_types,
             SyncableServiceForPrefs(pref_service_syncable_.value(),
                                     syncer::PRIORITY_PREFERENCES),
             dump_stack,
-            allow_transport_mode
+            ArePreferencesAllowedInTransportMode()
                 ? SyncableServiceBasedDataTypeController::DelegateMode::
                       kTransportModeWithSingleModel
                 : SyncableServiceBasedDataTypeController::DelegateMode::
@@ -785,8 +816,12 @@ CommonControllerBuilder::Build(syncer::DataTypeSet disabled_types,
             syncer::SEARCH_ENGINES,
             data_type_store_service_.value()->GetStoreFactory(),
             template_url_service_.value()->AsWeakPtr(), dump_stack,
-            syncer::SyncableServiceBasedDataTypeController::DelegateMode::
-                kLegacyFullSyncModeOnly));
+            base::FeatureList::IsEnabled(
+                syncer::kSeparateLocalAndAccountSearchEngines)
+                ? syncer::SyncableServiceBasedDataTypeController::DelegateMode::
+                      kTransportModeWithSingleModel
+                : syncer::SyncableServiceBasedDataTypeController::DelegateMode::
+                      kLegacyFullSyncModeOnly));
   }
 
   if (!disabled_types.Has(syncer::USER_EVENTS)) {
@@ -920,15 +955,17 @@ CommonControllerBuilder::CreateWalletDataTypeController(
   // metric when the model is loaded with `SyncMode::kTransportOnly`. Complex
   // plumbing is required to ensure that AutofillWebDataService is exercised on
   // the DB sequence.
-  base::RepeatingCallback<void(bool)> on_load_models_with_transport_only_cb =
-      (type == syncer::AUTOFILL_WALLET_DATA)
-          ? base::BindPostTask(
-                account_autofill_web_data_service_.value()->GetDBTaskRunner(),
-                base::BindRepeating(
-                    &LogPaymentsAccountStorageOnDbSequence,
-                    base::RetainedRef(
-                        account_autofill_web_data_service_.value())))
-          : base::DoNothing();
+  base::RepeatingCallback<void(bool, bool)>
+      on_load_models_with_transport_only_cb =
+          (type == syncer::AUTOFILL_WALLET_DATA)
+              ? base::BindPostTask(
+                    account_autofill_web_data_service_.value()
+                        ->GetDBTaskRunner(),
+                    base::BindRepeating(
+                        &LogPaymentsAccountStorageOnDbSequence,
+                        base::RetainedRef(
+                            account_autofill_web_data_service_.value())))
+              : base::DoNothing();
 
   return std::make_unique<AutofillWalletDataTypeController>(
       type, std::move(delegate_for_full_sync_mode),

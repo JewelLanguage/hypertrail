@@ -219,8 +219,9 @@ class MetricsSubSampler;
 //
 // WARNING: This is not the generator you are looking for. This has significant
 // caveats:
-//   - It is non-cryptographic, so easy to miuse
-//   - It is neither fork() nor clone()-safe.
+//   - It is non-cryptographic, so easy to misuse
+//   - It is neither fork() nor clone()-safe because both RNG's after the
+//     fork/clone will have the same state and produce the same number stream.
 //   - Synchronization is up to the client.
 //
 // Always prefer base::Rand*() above, unless you have a use case where its
@@ -246,15 +247,16 @@ class BASE_EXPORT InsecureRandomGenerator {
   // Never use outside testing, not enough entropy.
   void ReseedForTesting(uint64_t seed);
 
-  uint32_t RandUint32();
-  uint64_t RandUint64();
+  uint32_t RandUint32() const;
+  uint64_t RandUint64() const;
   // In [0, 1).
-  double RandDouble();
+  double RandDouble() const;
 
  private:
   InsecureRandomGenerator();
-  // State.
-  uint64_t a_ = 0, b_ = 0;
+  // State. These are mutable to allow Rand* functions to be declared as const.
+  // This, in turn, enables use of `MetricsSubSampler` in const contexts.
+  mutable uint64_t a_ = 0, b_ = 0;
 
   // Before adding a new friend class, make sure that the overhead of
   // base::Rand*() is too high, using something more representative than a
@@ -274,10 +276,19 @@ class BASE_EXPORT InsecureRandomGenerator {
   FRIEND_TEST_ALL_PREFIXES(RandUtilPerfTest, InsecureRandomRandUint64);
 };
 
+// Fast class to randomly sub-sample metrics that are logged in high frequency
+// code.
+//
+// WARNING: This uses InsecureRandomGenerator so all the caveats there apply.
+// In particular if a MetricsSubSampler object exists when fork()/clone() is
+// called, calls to ShouldSample() on both sides of the fork will return the
+// same values, possibly introducing metric bias.
 class BASE_EXPORT MetricsSubSampler {
  public:
   MetricsSubSampler();
-  bool ShouldSample(double probability);
+  bool ShouldSample(double probability) const;
+
+  void Reseed();
 
   // Make any call to ShouldSample for any instance of MetricsSubSampler
   // return true for testing. Cannot be used in conjunction with
@@ -300,6 +311,19 @@ class BASE_EXPORT MetricsSubSampler {
  private:
   InsecureRandomGenerator generator_;
 };
+
+// Returns true with `probability` using a pseudo-random number generator (or
+// always/never returns true if a `ScopedAlwaysSampleForTesting` or
+// `ScopedNeverSampleForTesting` is in scope).  This function is intended for
+// sub-sampled metric recording only. Do not use it for any other purpose,
+// especially where cryptographic randomness is required.
+// Uses a thread local MetricsSubSampler.
+BASE_EXPORT bool ShouldRecordSubsampledMetric(double probability);
+
+// Reseeds the MetricsSubsampler used by ShouldRecordSubsampledMetric. Used
+// after forking a zygote to avoid having multiple processes sharing initial
+// RNG state.
+BASE_EXPORT void ReseedSharedMetricsSubsampler();
 
 }  // namespace base
 

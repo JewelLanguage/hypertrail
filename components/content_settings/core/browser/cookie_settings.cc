@@ -114,16 +114,9 @@ void CookieSettings::SetCookieSetting(const GURL& primary_url,
 bool CookieSettings::IsAllowedByTpcdMetadataGrant(const GURL& url,
                                                   const GURL& first_party_url,
                                                   SettingInfo* out_info) const {
-  if (!ShouldConsider3pcdMetadataGrantsSettings(
-          first_party_url, net::CookieSettingOverrides())) {
-    return false;
-  }
   if (!tpcd_metadata_manager_) {
     return false;
   }
-
-  SCOPED_UMA_HISTOGRAM_TIMER_MICROS(
-      "ContentSettings.IsAllowedByTpcdMetadataGrant.Duration");
 
   return tpcd_metadata_manager_->IsAllowed(url, first_party_url, out_info);
 }
@@ -512,6 +505,20 @@ void CookieSettings::OnCookiePreferencesChanged() {
 }
 
 bool CookieSettings::ShouldBlockThirdPartyCookies() const {
+  return ShouldBlockThirdPartyCookies(std::nullopt,
+                                      net::CookieSettingOverrides());
+}
+
+bool CookieSettings::ShouldBlockThirdPartyCookies(
+    base::optional_ref<const url::Origin> top_frame_origin,
+    net::CookieSettingOverrides overrides) const {
+  if (Are3pcsForceDisabledByOverride(overrides)) {
+    return true;
+  }
+  if (top_frame_origin &&
+      IsBlockedByTopLevel3pcdOriginTrial(top_frame_origin->GetURL())) {
+    return true;
+  }
   base::AutoLock auto_lock(lock_);
   return block_third_party_cookies_;
 }

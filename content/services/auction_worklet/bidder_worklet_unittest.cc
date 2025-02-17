@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <optional>
@@ -18,7 +19,6 @@
 #include "base/functional/bind.h"
 #include "base/json/json_writer.h"
 #include "base/memory/raw_ptr.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -2198,6 +2198,80 @@ class PrivateModelTrainingEnabledTest : public BidderWorkletTest {
   base::test::ScopedFeatureList feature_list_;
 };
 
+// When an error happens within reportAggregateWin(), it should be within the
+// errors, but not disrupt the flow of the callback, in this case
+// sendReportTo().
+TEST_F(PrivateModelTrainingEnabledTest, ReportAggregateWinError) {
+  const char kScript[] = R"(
+    function reportWin() {
+        queueReportAggregateWin({
+          modelingSignalsConfig: {
+            destination: "https://example.test",
+            aggregationCoordinatorOrigin: "https://example.test",
+            payloadLength: -1,
+          }
+        });
+      sendReportTo("https://report-win.test/");
+    }
+
+    function reportAggregateWin() {
+      throw "reportAggregateWin error";
+    }
+  )";
+
+  RunReportWinWithJavascriptExpectingResult(
+      kScript, GURL("https://report-win.test/"), /*expected_ad_beacon_map=*/{},
+      /*expected_ad_macro_map=*/{}, /*expected_pa_requests=*/{},
+      /*expected_errors=*/
+      {"https://url.test/:14 Uncaught reportAggregateWin error."});
+}
+
+TEST_F(PrivateModelTrainingEnabledTest, ReportAggregateWinTimeout) {
+  const char kScript[] = R"(
+    function reportWin() {
+        queueReportAggregateWin({
+          modelingSignalsConfig: {
+            destination: "https://example.test",
+            aggregationCoordinatorOrigin: "https://example.test",
+            payloadLength: 256,
+          }
+        });
+      sendReportTo("https://report-win.test/");
+    }
+
+    function reportAggregateWin() {
+      while(true){};
+    }
+  )";
+
+  RunReportWinWithJavascriptExpectingResult(
+      kScript, GURL("https://report-win.test/"), /*expected_ad_beacon_map=*/{},
+      /*expected_ad_macro_map=*/{}, /*expected_pa_requests=*/{},
+      /*expected_errors=*/
+      {"https://url.test/ execution of `reportAggregateWin` timed out."});
+}
+
+TEST_F(PrivateModelTrainingEnabledTest, NoReportAggregateWinFunction) {
+  const char kScript[] = R"(
+    function reportWin() {
+        queueReportAggregateWin({
+          modelingSignalsConfig: {
+            destination: "https://example.test",
+            aggregationCoordinatorOrigin: "https://example.test",
+            payloadLength: 256,
+          }
+        });
+      sendReportTo("https://report-win.test/");
+    }
+  )";
+
+  RunReportWinWithJavascriptExpectingResult(
+      kScript, GURL("https://report-win.test/"), /*expected_ad_beacon_map=*/{},
+      /*expected_ad_macro_map=*/{}, /*expected_pa_requests=*/{},
+      /*expected_errors=*/
+      {"https://url.test/ `reportAggregateWin` is not a function."});
+}
+
 TEST_F(PrivateModelTrainingEnabledTest, GenerateBidAggregateWinSignals) {
   const std::string kGenerateBidBody =
       R"({bid:1, render:"https://response.test/",
@@ -2229,47 +2303,51 @@ TEST_F(PrivateModelTrainingEnabledTest, GenerateBidInvalidAggregateWinSignals) {
 TEST_F(PrivateModelTrainingEnabledTest,
        QueueAggregateReportWinModelingSignalsConfig) {
   // Valid case
-  RunReportWinWithFunctionBodyExpectingResult(
-      R"(
-        queueReportAggregateWin({
+  const char kScript[] = R"(
+    function reportWin() {
+      queueReportAggregateWin({
         modelingSignalsConfig: {
-          destination: "https://example.test",
-          aggregationCoordinatorOrigin: "https://example.test",
-          payloadLength: 256,
+        destination: "%s",
+        aggregationCoordinatorOrigin: "%s",
+        payloadLength: %d,
         }
       });
-      sendReportTo("https://foo.test"))",
+      sendReportTo("https://foo.test");
+    }
+
+    function reportAggregateWin() {}
+  )";
+  RunReportWinWithJavascriptExpectingResult(
+      base::StringPrintf(kScript, "https://example.test",
+                         "https://example.test", 256),
       GURL("https://foo.test/"));
 
   // A negative payload length will get through.
-  // Negative numbers are converted to large unsigned values due to Web IDL's
-  // modulo arithmetic.
-  RunReportWinWithFunctionBodyExpectingResult(
-      R"(
-          queueReportAggregateWin({
-          modelingSignalsConfig: {
-            destination: "https://example.test",
-            aggregationCoordinatorOrigin: "https://example.test",
-            payloadLength: -1,
-          }
-        });
-        sendReportTo("https://foo.test"))",
+  // Negative numbers are converted to large unsigned values due to Web
+  // IDL's modulo arithmetic.
+  RunReportWinWithJavascriptExpectingResult(
+      base::StringPrintf(kScript, "https://example.test",
+                         "https://example.test", -1),
       GURL("https://foo.test/"));
 
   // Payload length as a string
   // Non-numeric strings provided will be converted to 0 due to Web IDL's
   // conversion rules.
-  RunReportWinWithFunctionBodyExpectingResult(
-      R"(
-          queueReportAggregateWin({
-          modelingSignalsConfig: {
-            destination: "https://example.test",
-            aggregationCoordinatorOrigin: "https://example.test",
-            payloadLength: "invalid",
-          }
-        });
-        sendReportTo("https://foo.test"))",
-      GURL("https://foo.test/"));
+  RunReportWinWithJavascriptExpectingResult(R"(
+    function reportWin() {
+      queueReportAggregateWin({
+        modelingSignalsConfig: {
+          destination: "https://example.test",
+          aggregationCoordinatorOrigin: "https://example.test",
+          payloadLength: "invalid",
+        }
+      });
+      sendReportTo("https://foo.test");
+    }
+
+    function reportAggregateWin() {}
+  )",
+                                            GURL("https://foo.test/"));
 }
 
 TEST_F(PrivateModelTrainingEnabledTest,
@@ -2278,12 +2356,12 @@ TEST_F(PrivateModelTrainingEnabledTest,
   RunReportWinWithFunctionBodyExpectingResult(
       R"(
         queueReportAggregateWin({
-        modelingSignalsConfig: {
-          destination: "",
-          aggregationCoordinatorOrigin: "https://example.test",
-          payloadLength: 256,
-        }
-      });
+          modelingSignalsConfig: {
+            destination: "",
+            aggregationCoordinatorOrigin: "https://example.test",
+            payloadLength: 256,
+          }
+       });
       sendReportTo("https://foo.test"))",
       /*expected_report_url=*/std::nullopt,
       /*expected_ad_beacon_map=*/{},
@@ -2295,7 +2373,7 @@ TEST_F(PrivateModelTrainingEnabledTest,
   // Invalid aggregation coordinator origin
   RunReportWinWithFunctionBodyExpectingResult(
       R"(
-        queueReportAggregateWin({
+      queueReportAggregateWin({
         modelingSignalsConfig: {
           destination: "https://example.test",
           aggregationCoordinatorOrigin: 123,
@@ -2312,15 +2390,16 @@ TEST_F(PrivateModelTrainingEnabledTest,
        "valid HTTPS url."});
 
   // Error when called twice
-  RunReportWinWithFunctionBodyExpectingResult(
+  RunReportWinWithJavascriptExpectingResult(
       R"(
+    function reportWin() {
         queueReportAggregateWin({
-        modelingSignalsConfig: {
-          destination: "https://example.test",
-          aggregationCoordinatorOrigin: "https://example.test",
-          payloadLength: 256,
-        }
-      });
+          modelingSignalsConfig: {
+            destination: "https://example.test",
+            aggregationCoordinatorOrigin: "https://example.test",
+            payloadLength: 256,
+          }
+        });
       sendReportTo("https://foo.test");
       queueReportAggregateWin({
         modelingSignalsConfig: {
@@ -2329,12 +2408,15 @@ TEST_F(PrivateModelTrainingEnabledTest,
           payloadLength: 256,
         }
       });
-      )",
+    }
+
+    function reportAggregateWin() {}
+  )",
       /*expected_report_url=*/std::nullopt,
       /*expected_ad_beacon_map=*/{},
       /*expected_ad_macro_map=*/{},
       /*expected_pa_requests=*/{},
-      {"https://url.test/:20 Uncaught TypeError: queueReportAggregateWin() may "
+      {"https://url.test/:11 Uncaught TypeError: queueReportAggregateWin() may "
        "be called at most once."});
 }
 
@@ -2349,71 +2431,310 @@ TEST_F(PrivateModelTrainingEnabledTest,
       std::string(url::kMaxURLChars - almost_too_long_report_url.size(), '1');
   std::string too_long_report_url = almost_too_long_report_url + "2";
 
-  // Error when destination URL is too long
-  RunReportWinWithFunctionBodyExpectingResult(
-      base::StringPrintf(R"(
+  const char kScript[] = R"(
+    function reportWin() {
         queueReportAggregateWin({
+          modelingSignalsConfig: {
+            destination: "%s",
+            aggregationCoordinatorOrigin: "%s",
+            payloadLength: 256,
+          }
+        });
+      sendReportTo("https://foo.test");
+    }
+
+    function reportAggregateWin() {}
+  )";
+
+  // Error when destination URL is too long
+  RunReportWinWithJavascriptExpectingResult(
+      base::StringPrintf(kScript, too_long_report_url, "https://example.test"),
+      /*expected_report_url=*/std::nullopt,
+      /*expected_ad_beacon_map=*/{},
+      /*expected_ad_macro_map=*/{},
+      /*expected_pa_requests=*/{},
+      {"https://url.test/:3 Uncaught TypeError: modelingSignalsConfig's "
+       "destination exceeds the maximum URL length."});
+
+  // Valid when destination URL is almost too long
+  RunReportWinWithJavascriptExpectingResult(
+      base::StringPrintf(kScript, almost_too_long_report_url,
+                         "https://example.test"),
+      /*expected_report_url=*/GURL("https://foo.test/"));
+
+  // Error when aggregationCoordinatorOrigin URL is too long
+  RunReportWinWithJavascriptExpectingResult(
+      base::StringPrintf(kScript, "https://example.test", too_long_report_url),
+      /*expected_report_url=*/std::nullopt,
+      /*expected_ad_beacon_map=*/{},
+      /*expected_ad_macro_map=*/{},
+      /*expected_pa_requests=*/{},
+      {"https://url.test/:3 Uncaught TypeError: modelingSignalsConfig's "
+       "aggregationCoordinatorOrigin exceeds the maximum URL length."});
+
+  // Valid with aggregationCoordinatorOrigin having an almost too long URL
+  RunReportWinWithJavascriptExpectingResult(
+      base::StringPrintf(kScript, "https://example.test",
+                         almost_too_long_report_url),
+      /*expected_report_url=*/GURL("https://foo.test/"));
+}
+
+// Test that `sendEncryptedTo()` can be called within `reportAggregateWin()`
+// without any errors.
+TEST_F(PrivateModelTrainingEnabledTest, SendEncryptedTo) {
+  const char kScript[] = R"(
+    function reportWin() {
+      queueReportAggregateWin({
         modelingSignalsConfig: {
-          destination: "%s",
+          destination: "https://example.test",
           aggregationCoordinatorOrigin: "https://example.test",
           payloadLength: 256,
         }
       });
-      sendReportTo("https://foo.test"))",
-                         too_long_report_url),
+      sendReportTo("https://foo.test");
+    }
+
+    function reportAggregateWin() {
+      sendEncryptedTo(new ArrayBuffer(16));
+    }
+  )";
+
+  // Valid base case
+  RunReportWinWithJavascriptExpectingResult(kScript, GURL("https://foo.test/"));
+}
+
+// Test scenarios where `sendEncryptedTo()` is blocked from being used and
+// cannot be called within `reportAggregateWin()`.
+// `sendEncryptedTo()` should be undefined when:
+//  - browserSignals.joinCount is accessed.
+//  - browserSignals.recency is accessed.
+//  - browserSignals.modelingSignals are accessed.
+TEST_F(PrivateModelTrainingEnabledTest, SendEncryptedToBlocked) {
+  const char kScript[] = R"(
+    function reportWin(unusedAuctionSignals, unusedPerBuyerSignals,
+                       unusedSellerSignals, browserSignals,
+                       unusedDirectFromSellerSignals) {
+      let x = %s;
+      queueReportAggregateWin({
+        modelingSignalsConfig: {
+        destination: "https://example.test",
+        aggregationCoordinatorOrigin: "https://example.test",
+        payloadLength: 256,
+        }
+      });
+      sendReportTo("https://foo.test");
+    }
+
+    function reportAggregateWin() {
+      sendEncryptedTo(new ArrayBuffer(16));
+    }
+  )";
+
+  // Accessing joinCount does not allow `sendEncryptedTo()` to be used.
+  browser_signal_join_count_ = 7;
+  RunReportWinWithJavascriptExpectingResult(
+      base::StringPrintf(kScript, "browserSignals.joinCount"),
+      /*expected_report_url=*/GURL("https://foo.test/"),
+      /*expected_ad_beacon_map=*/{},
+      /*expected_ad_macro_map=*/{},
+      /*expected_pa_requests=*/{},
+      {/*expected_errors=*/"https://url.test/:17 Uncaught ReferenceError: "
+                           "sendEncryptedTo is not "
+                           "defined."});
+
+  // Accessing modelingSignals does not allow `sendEncryptedTo()` to be used.
+  browser_signal_modeling_signals_ = 7;
+  RunReportWinWithJavascriptExpectingResult(
+      base::StringPrintf(kScript, "browserSignals.modelingSignals"),
+      /*expected_report_url=*/GURL("https://foo.test/"),
+      /*expected_ad_beacon_map=*/{},
+      /*expected_ad_macro_map=*/{},
+      /*expected_pa_requests=*/{},
+      /*expected_errors=*/
+      {"https://url.test/:17 Uncaught ReferenceError: sendEncryptedTo is not "
+       "defined."});
+
+  // Accessing recency does not allow `sendEncryptedTo()` to be used.
+  browser_signal_recency_report_win_ = 7;
+  RunReportWinWithJavascriptExpectingResult(
+      base::StringPrintf(kScript, "browserSignals.recency"),
+      /*expected_report_url=*/GURL("https://foo.test/"),
+      /*expected_ad_beacon_map=*/{},
+      /*expected_ad_macro_map=*/{},
+      /*expected_pa_requests=*/{},
+      /*expected_errors=*/
+      {"https://url.test/:17 Uncaught ReferenceError: sendEncryptedTo is not "
+       "defined."});
+}
+
+// If `modelingSignals` is not defined, we do not block `sendEncryptedTo()`
+// when it's accessed within `reportWin()`.
+TEST_F(PrivateModelTrainingEnabledTest,
+       AccessingUndefinedModelingSignalsDoesNotBlockSendEncryptedTo) {
+  const char kScript[] = R"(
+    function reportWin(unusedAuctionSignals, unusedPerBuyerSignals,
+                       unusedSellerSignals, browserSignals,
+                       unusedDirectFromSellerSignals) {
+      let x = %s;
+      queueReportAggregateWin({
+        modelingSignalsConfig: {
+        destination: "https://example.test",
+        aggregationCoordinatorOrigin: "https://example.test",
+        payloadLength: 256,
+        }
+      });
+      sendReportTo("https://foo.test");
+    }
+
+    function reportAggregateWin() {
+      sendEncryptedTo(new ArrayBuffer(16));
+    }
+  )";
+
+  browser_signal_modeling_signals_ = std::nullopt;
+  RunReportWinWithJavascriptExpectingResult(
+      base::StringPrintf(kScript, "browserSignals.modelingSignals"),
+      GURL("https://foo.test/"));
+}
+
+// These test scenarios verify that `sendEncryptedTo()` remains functional,
+// does not become undefined and is not inadvertently blocked when specific
+// fields within browserSignals are accessed in `reportAggregateWin()`.  This
+// contrasts with the behavior in `reportWin()`. These fields include:
+//  - browserSignals.joinCount
+//  - browserSignals.recency
+//  - browserSignals.modelingSignals
+TEST_F(PrivateModelTrainingEnabledTest,
+       SendEncryptedToNotBlockedWhenAccessInReportAggregateWin) {
+  const char kScript[] = R"(
+    function reportWin() {
+      queueReportAggregateWin({
+        modelingSignalsConfig: {
+          destination: "https://example.test",
+          aggregationCoordinatorOrigin: "https://example.test",
+          payloadLength: 256,
+        }
+      });
+      sendReportTo("https://foo.test");
+    }
+
+    function reportAggregateWin(unusedAggregateWinSignals,
+                                unusedModelingSignalsConfig,
+                                unusedAuctionSignals, unusedPerBuyerSignals,
+                                unusedSellerSignals, browserSignals,
+                                unusedDirectFromSellerSignals
+                                ) {
+      let x = %s;
+      sendEncryptedTo(new ArrayBuffer(16));
+    }
+  )";
+
+  // Accessing joinCount within `reportAggregateWin()` allows
+  // `sendEncryptedTo()` to still be called.
+  browser_signal_join_count_ = 7;
+  RunReportWinWithJavascriptExpectingResult(
+      base::StringPrintf(kScript, "browserSignals.joinCount"),
+      GURL("https://foo.test/"));
+
+  // Accessing modelingSignals within `reportAggregateWin()` allows
+  // `sendEncryptedTo()` to still be called.
+  browser_signal_modeling_signals_ = 7;
+  RunReportWinWithJavascriptExpectingResult(
+      base::StringPrintf(kScript, "browserSignals.modelingSignals"),
+      GURL("https://foo.test/"));
+
+  // Accessing recency within `reportAggregateWin()` allows `sendEncryptedTo()`
+  // to still be called.
+  browser_signal_recency_report_win_ = 7;
+  RunReportWinWithJavascriptExpectingResult(
+      base::StringPrintf(kScript, "browserSignals.recency"),
+      GURL("https://foo.test/"));
+}
+
+// `sendEncryptedTo()` should throw an error when it's passed anything that is
+// not an ArrayBuffer
+TEST_F(PrivateModelTrainingEnabledTest,
+       SendEncryptedToErrorsWhenPassedNonArrayBufferInput) {
+  const char kScript[] = R"(
+    function reportWin() {
+      queueReportAggregateWin({
+        modelingSignalsConfig: {
+        destination: "https://example.test",
+        aggregationCoordinatorOrigin: "https://example.test",
+        payloadLength: 256,
+        }
+      });
+      sendReportTo("https://foo.test");
+    }
+
+    function reportAggregateWin() {
+      %s
+    }
+  )";
+
+  // Passing `sendEncryptedTo()` an int results in error.
+  RunReportWinWithJavascriptExpectingResult(
+      base::StringPrintf(kScript, R"(sendEncryptedTo(10);)"),
+      /*expected_report_url=*/GURL("https://foo.test/"),
+      /*expected_ad_beacon_map=*/{},
+      /*expected_ad_macro_map=*/{},
+      /*expected_pa_requests=*/{},
+      /*expected_errors=*/
+      {"https://url.test/:14 Uncaught TypeError: sendEncryptedTo() may only "
+       "take a ArrayBuffer."});
+
+  // Passing `sendEncryptedTo()` a string results in error.
+  RunReportWinWithJavascriptExpectingResult(
+      base::StringPrintf(kScript, R"(sendEncryptedTo("not-an-array-buffer");)"),
+      /*expected_report_url=*/GURL("https://foo.test/"),
+      /*expected_ad_beacon_map=*/{},
+      /*expected_ad_macro_map=*/{},
+      /*expected_pa_requests=*/{},
+      /*expected_errors=*/
+      {"https://url.test/:14 Uncaught TypeError: sendEncryptedTo() may only "
+       "take a ArrayBuffer."});
+
+  // Passing `sendEncryptedTo()` an array of ints results in error.
+  RunReportWinWithJavascriptExpectingResult(
+      base::StringPrintf(kScript, R"(sendEncryptedTo([1,2,3]);)"),
+      /*expected_report_url=*/GURL("https://foo.test/"),
+      /*expected_ad_beacon_map=*/{},
+      /*expected_ad_macro_map=*/{},
+      /*expected_pa_requests=*/{},
+      /*expected_errors=*/
+      {"https://url.test/:14 Uncaught TypeError: sendEncryptedTo() may only "
+       "take a ArrayBuffer."});
+}
+
+// Verify that we cannot call `sendEncryptedTo()` in `reportWin()`.
+TEST_F(PrivateModelTrainingEnabledTest, NoSendEncryptedToInReportWin) {
+  const char kScript[] = R"(
+    function reportWin() {
+      queueReportAggregateWin({
+        modelingSignalsConfig: {
+        destination: "https://example.test",
+        aggregationCoordinatorOrigin: "https://example.test",
+        payloadLength: 256,
+        }
+      });
+      sendEncryptedTo(new ArrayBuffer(16));
+      sendReportTo("https://foo.test");
+    }
+
+    function reportAggregateWin() {
+      sendEncryptedTo(new ArrayBuffer(16));
+    }
+  )";
+
+  RunReportWinWithJavascriptExpectingResult(
+      kScript,
       /*expected_report_url=*/std::nullopt,
       /*expected_ad_beacon_map=*/{},
       /*expected_ad_macro_map=*/{},
       /*expected_pa_requests=*/{},
-      {"https://url.test/:12 Uncaught TypeError: modelingSignalsConfig's "
-       "destination exceeds the maximum URL length."});
-
-  // Valid when destination URL is almost too long
-  RunReportWinWithFunctionBodyExpectingResult(
-      base::StringPrintf(R"(
-        queueReportAggregateWin({
-        modelingSignalsConfig: {
-          destination: "https://example.test",
-          aggregationCoordinatorOrigin: "%s",
-          payloadLength: 256,
-        }
-      });
-      sendReportTo("https://foo.test"))",
-                         almost_too_long_report_url),
-      GURL("https://foo.test/"));
-
-  // Error when aggregationCoordinatorOrigin URL is too long
-  RunReportWinWithFunctionBodyExpectingResult(
-      base::StringPrintf(R"(
-        queueReportAggregateWin({
-        modelingSignalsConfig: {
-          destination: "https://example.test",
-          aggregationCoordinatorOrigin: "%s",
-          payloadLength: 256,
-        }
-      });
-      sendReportTo("https://foo.test"))",
-                         too_long_report_url),
-      /*expected_report_url=*/std::nullopt,
-      /*expected_ad_beacon_map=*/{},
-      /*expected_ad_macro_map=*/{},
-      /*expected_pa_requests=*/{},
-      {"https://url.test/:12 Uncaught TypeError: modelingSignalsConfig's "
-       "aggregationCoordinatorOrigin exceeds the maximum URL length."});
-
-  // Valid with aggregationCoordinatorOrigin having an almost too long URL
-  RunReportWinWithFunctionBodyExpectingResult(
-      base::StringPrintf(R"(
-        queueReportAggregateWin({
-        modelingSignalsConfig: {
-          destination: "https://example.test",
-          aggregationCoordinatorOrigin: "%s",
-          payloadLength: 256,
-        }
-      });
-      sendReportTo("https://foo.test"))",
-                         almost_too_long_report_url),
-      GURL("https://foo.test/"));
+      /*expected_errors=*/
+      {"https://url.test/:10 Uncaught ReferenceError: sendEncryptedTo is not "
+       "defined."});
 }
 
 class PrivateModelTrainingDisabledTest : public BidderWorkletTest {
@@ -8649,7 +8970,7 @@ TEST_F(BidderWorkletTest, BasicV8Debug) {
 
   // Should not see scriptParsed before resume.
   std::list<TestChannel::Event> events1 = channel1->TakeAllEvents();
-  EXPECT_TRUE(base::ranges::none_of(events1, is_script_parsed));
+  EXPECT_TRUE(std::ranges::none_of(events1, is_script_parsed));
 
   // Unpause execution for #1.
   generate_bid_run_loop_ = std::make_unique<base::RunLoop>();
@@ -8673,7 +8994,7 @@ TEST_F(BidderWorkletTest, BasicV8Debug) {
 
   // There shouldn't be a parsed notification on channel 2, however.
   std::list<TestChannel::Event> events2 = channel2->TakeAllEvents();
-  EXPECT_TRUE(base::ranges::none_of(events2, is_script_parsed));
+  EXPECT_TRUE(std::ranges::none_of(events2, is_script_parsed));
 
   // Unpause execution for #2.
   generate_bid_run_loop_ = std::make_unique<base::RunLoop>();
@@ -8702,8 +9023,8 @@ TEST_F(BidderWorkletTest, BasicV8Debug) {
   // No other scriptParsed events should be on either channel.
   events1 = channel1->TakeAllEvents();
   events2 = channel2->TakeAllEvents();
-  EXPECT_TRUE(base::ranges::none_of(events1, is_script_parsed));
-  EXPECT_TRUE(base::ranges::none_of(events2, is_script_parsed));
+  EXPECT_TRUE(std::ranges::none_of(events1, is_script_parsed));
+  EXPECT_TRUE(std::ranges::none_of(events2, is_script_parsed));
 }
 
 TEST_F(BidderWorkletTwoThreadsTest, BasicV8Debug) {
@@ -8751,9 +9072,9 @@ TEST_F(BidderWorkletTwoThreadsTest, BasicV8Debug) {
 
   // Should not see scriptParsed before resume.
   std::list<TestChannel::Event> events0 = channel0->TakeAllEvents();
-  EXPECT_TRUE(base::ranges::none_of(events0, is_script_parsed));
+  EXPECT_TRUE(std::ranges::none_of(events0, is_script_parsed));
   std::list<TestChannel::Event> events1 = channel1->TakeAllEvents();
-  EXPECT_TRUE(base::ranges::none_of(events1, is_script_parsed));
+  EXPECT_TRUE(std::ranges::none_of(events1, is_script_parsed));
 
   // Unpause execution for #0. Expect that no bid is generated yet, as the
   // worklet is waiting on both V8 threads to resume.
@@ -8787,7 +9108,7 @@ TEST_F(BidderWorkletTwoThreadsTest, BasicV8Debug) {
 
   // There shouldn't be a parsed notification on channel1, however.
   events1 = channel1->TakeAllEvents();
-  EXPECT_TRUE(base::ranges::none_of(events1, is_script_parsed));
+  EXPECT_TRUE(std::ranges::none_of(events1, is_script_parsed));
 
   worklet.reset();
   task_environment_.RunUntilIdle();
@@ -8795,8 +9116,8 @@ TEST_F(BidderWorkletTwoThreadsTest, BasicV8Debug) {
   // No other scriptParsed events should be on either channel.
   events0 = channel0->TakeAllEvents();
   events1 = channel1->TakeAllEvents();
-  EXPECT_TRUE(base::ranges::none_of(events0, is_script_parsed));
-  EXPECT_TRUE(base::ranges::none_of(events1, is_script_parsed));
+  EXPECT_TRUE(std::ranges::none_of(events0, is_script_parsed));
+  EXPECT_TRUE(std::ranges::none_of(events1, is_script_parsed));
 }
 
 TEST_F(BidderWorkletTest, ParseErrorV8Debug) {
@@ -8875,20 +9196,14 @@ TEST_F(BidderWorkletTwoThreadsTest, ParseErrorV8Debug) {
   // Worklet should disconnect with an error message.
   EXPECT_FALSE(WaitForDisconnect().empty());
 
-  // Should have gotten a parse error notification for each channel.
+  // Should have gotten a parse error notification for the first channel because
+  // we compile on the first channel only.
   TestChannel::Event parse_error0 =
       channel0->WaitForMethodNotification("Debugger.scriptFailedToParse");
   const std::string* error_url0 =
       parse_error0.value.GetDict().FindStringByDottedPath("params.url");
   ASSERT_TRUE(error_url0);
   EXPECT_EQ(interest_group_bidding_url_.spec(), *error_url0);
-
-  TestChannel::Event parse_error1 =
-      channel1->WaitForMethodNotification("Debugger.scriptFailedToParse");
-  const std::string* error_url1 =
-      parse_error1.value.GetDict().FindStringByDottedPath("params.url");
-  ASSERT_TRUE(error_url1);
-  EXPECT_EQ(interest_group_bidding_url_.spec(), *error_url1);
 }
 
 TEST_F(BidderWorkletTest, BasicDevToolsDebug) {

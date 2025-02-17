@@ -17,6 +17,7 @@
 #include "components/supervised_user/core/browser/proto/parent_access_callback.pb.h"
 #include "components/supervised_user/core/common/supervised_user_constants.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
+#include "url/gurl.h"
 
 class GURL;
 class PrefService;
@@ -77,6 +78,7 @@ class ParentAccessCallbackParsedResult {
   GetCallback() const;
 
   // Decodes and parses the the base64 result provided by the PACP widget.
+  // See https://tools.ietf.org/html/rfc4648#section-5.
   static ParentAccessCallbackParsedResult ParseParentAccessCallbackResult(
       const std::string& encoded_parent_access_callback_proto);
 
@@ -86,6 +88,11 @@ class ParentAccessCallbackParsedResult {
       ParentAccessWidgetError>
       result_;
 };
+
+// Extracts a parent approval result from a url query parameter returned by the
+// PACP widget, if the provided url must contain a `result=` query param.
+// If not such query param value exists the method returns an empty optional.
+std::optional<std::string> MaybeGetPacpResultFromUrl(const GURL& url);
 
 // Converts FamilyRole enum to string format.
 std::string FamilyRoleToString(kidsmanagement::FamilyRole role);
@@ -117,6 +124,28 @@ class UrlFormatter {
   const raw_ref<const SupervisedUserURLFilter> supervised_user_url_filter_;
   const FilteringBehaviorReason filtering_behavior_reason_;
 };
+
+// Returns the URL of the PACP widget for the iOS local web approval flow.
+// `locale` is the display language (go/bcp47).
+// `blocked_url` is the url subject to approval that is shown in the PACP
+// widget.
+// `filtering_reason` is the reason for blocking the url, which is reflected
+// in the subtitle of the PACP widget.
+GURL GetParentAccessURLForIOS(
+    const std::string& locale,
+    const GURL& blocked_url,
+    supervised_user::FilteringBehaviorReason filtering_reason);
+
+// Returns the URL of the PACP widget for the Desktop local web approval flow.
+// `locale` is the display language (go/bcp47).
+// `blocked_url` is the url subject to approval that is shown in the PACP
+// widget.
+// `filtering_reason` is the reason for blocking the url, which is reflected
+// in the subtitle of the PACP widget.
+GURL GetParentAccessURLForDesktop(
+    const std::string& locale,
+    const GURL& blocked_url,
+    supervised_user::FilteringBehaviorReason filtering_reason);
 
 }  // namespace supervised_user
 

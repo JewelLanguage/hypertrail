@@ -891,6 +891,15 @@ chromium-metrics-reviews@google.com.
              management capabilities)"/>
 </enum>
 
+<enum name="EnterpriseObfuscationError">
+  <int value="0" label="Success"/>
+  <int value="1" label="Obfuscation process failed"/>
+  <int value="2" label="Deobfuscation process failed"/>
+  <int value="3" label="Error during file read/write operations"/>
+  <int value="4" label="Obfuscation/deobfuscation is not enabled"/>
+  <int value="5" label="Error with obfuscation scheme"/>
+</enum>
+
 <enum name="EnterprisePolicies">
 <!-- Generated from components/policy/resources/templates/policies.yaml -->
 
@@ -2193,6 +2202,10 @@ chromium-metrics-reviews@google.com.
   <int value="1329" label="ControlledFrameAllowedForUrls"/>
   <int value="1330" label="ControlledFrameBlockedForUrls"/>
   <int value="1331" label="ExternalStorageAllowlist"/>
+  <int value="1332" label="WebAuthenticationRemoteDesktopAllowedOrigins"/>
+  <int value="1333" label="ServiceWorkerToControlSrcdocIframeEnabled"/>
+  <int value="1334" label="ProvisionManagedClientCertificateForBrowser"/>
+  <int value="1335" label="GeminiSettings"/>
 </enum>
 
 <enum name="EnterprisePoliciesSources">
@@ -2387,6 +2400,7 @@ chromium-metrics-reviews@google.com.
   <int value="9" label="OneDrive authentication required"/>
   <int value="10" label="Generic move failed error"/>
   <int value="11" label="Cancelled"/>
+  <int value="12" label="NetworkError"/>
 </enum>
 
 <!-- LINT.ThenChange(//chrome/browser/ash/policy/skyvault/policy_utils.h:MigrationUploadError) -->
@@ -2491,6 +2505,7 @@ chromium-metrics-reviews@google.com.
   <int value="4" label="OIDC profile registration failure"/>
   <int value="5" label="Can't start enrollment from Guest or OTR profile"/>
   <int value="6" label="OIDC profile registration timeout"/>
+  <int value="7" label="No enrollment due to browser sign in being disabled"/>
 </enum>
 
 <enum name="OidcProfileCreationFunnelStep">

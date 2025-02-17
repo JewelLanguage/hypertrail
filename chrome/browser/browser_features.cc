@@ -71,6 +71,17 @@ BASE_FEATURE(kCertVerificationNetworkTime,
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
 
+// Uses the browser theme's color mode for web contents.
+// The theme can have three modes: light, dark, and device.
+// When the mode is light or dark, the browser theme's color mode will be
+// applied to web contents.
+// When the mode is device, web contents will use the device color mode.
+// Pages in incognito mode are not affected by this feature. They will continue
+// to follow the device color mode.
+BASE_FEATURE(kContentUsesBrowserThemeColorMode,
+             "ContentUsesBrowserThemeColorMode",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 #if BUILDFLAG(IS_LINUX)
 // Enables usage of os_crypt_async::SecretPortalKeyProvider.  Once
 // `kSecretPortalKeyProviderUseForEncryption` is enabled, this flag cannot be
@@ -83,7 +94,7 @@ BASE_FEATURE(kDbusSecretPortal,
 // compatible with the synchronous backend.
 BASE_FEATURE(kUseFreedesktopSecretKeyProvider,
              "UseFreedesktopSecretKeyProvider",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_LINUX)
 
 // Destroy profiles when their last browser window is closed, instead of when
@@ -112,14 +123,6 @@ BASE_FEATURE(kDoubleTapToZoomInTabletMode,
              "DoubleTapToZoomInTabletMode",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
-
-#if BUILDFLAG(IS_WIN)
-// When this feature is enabled, the App-Bound encryption provider is used as
-// the default encryption provider.
-BASE_FEATURE(kUseAppBoundEncryptionProviderForEncryption,
-             "UseAppBoundEncryptionProviderForEncryption",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#endif  // BUILDFLAG(IS_WIN)
 
 // Enables showing the email of the flex org admin that setup CBCM in the
 // management disclosures.
@@ -322,7 +325,7 @@ BASE_FEATURE(kNoPreReadMainDll,
 // Chrome DLL is on an SSD (i.e. pre-read only on spinning disk).
 BASE_FEATURE(kNoPreReadMainDllIfSsd,
              "NoPreReadMainDllIfSsd",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // When enabled, the browser process suppresses pre-read in child processes
 // shortly after browser startup, where "shortly after" is dictated by the

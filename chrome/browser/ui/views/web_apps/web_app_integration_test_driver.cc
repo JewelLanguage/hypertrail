@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "chrome/browser/ui/views/web_apps/web_app_integration_test_driver.h"
 
 #include <cstddef>
@@ -45,7 +50,6 @@
 #include "chrome/browser/apps/app_service/app_icon_source.h"
 #include "chrome/browser/apps/app_service/app_registry_cache_waiter.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
-#include "chrome/browser/apps/link_capturing/link_capturing_features.h"
 #include "chrome/browser/banners/test_app_banner_manager_desktop.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -92,6 +96,7 @@
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_install_source.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_trust_checker.h"
 #include "chrome/browser/web_applications/isolated_web_apps/test/test_signed_web_bundle_builder.h"
+#include "chrome/browser/web_applications/link_capturing_features.h"
 #include "chrome/browser/web_applications/manifest_update_manager.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/os_integration/web_app_file_handler_registration.h"
@@ -2086,7 +2091,7 @@ void WebAppIntegrationTestDriver::CheckAppSettingsAppState(
 }
 
 base::FilePath WebAppIntegrationTestDriver::GetResourceFile(
-    base::FilePath::StringPieceType relative_path) {
+    base::FilePath::StringViewType relative_path) {
   base::FilePath base_dir;
   if (!base::PathService::Get(chrome::DIR_TEST_DATA, &base_dir)) {
     return base::FilePath();
@@ -4732,13 +4737,10 @@ WebAppIntegrationTest::WebAppIntegrationTest() : helper_(this) {
   enabled_features.push_back(features::kPwaUpdateDialogForIcon);
   enabled_features.push_back(features::kRecordWebAppDebugInfo);
   enabled_features.push_back(features::kWebAppDontAddExistingAppsToSync);
-#if BUILDFLAG(IS_CHROMEOS)
-  // TODO(crbug.com/40236806): Update test driver to work with new UI.
-  enabled_features.push_back(apps::features::kLinkCapturingUiUpdate);
-#else
+#if !BUILDFLAG(IS_CHROMEOS)
   // TODO(b/313492499): Update test driver to work with new intent picker UI.
   enabled_features.push_back(features::kPwaNavigationCapturing);
-#endif  // BUILDFLAG(IS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
   scoped_feature_list_.InitWithFeatures(enabled_features, {});
 }
 

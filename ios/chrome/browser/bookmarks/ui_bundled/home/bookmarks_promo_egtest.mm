@@ -43,7 +43,6 @@ using chrome_test_util::BookmarksNavigationBarBackButton;
 using chrome_test_util::FakeAddAccountScreenCancelButton;
 using chrome_test_util::IdentityCellMatcherForEmail;
 using chrome_test_util::IdentityChooserScrim;
-using chrome_test_util::ManageSyncSettingsButton;
 using chrome_test_util::PrimarySignInButton;
 using chrome_test_util::SecondarySignInButton;
 using chrome_test_util::SettingsDoneButton;
@@ -276,26 +275,21 @@ using chrome_test_util::SettingsDoneButton;
       performAction:grey_tap()];
   // Set up a fake identity to add and sign-in with.
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
-  [SigninEarlGrey addFakeIdentityForSSOAuthAddAccountFlow:fakeIdentity];
-  [[EarlGrey
-      selectElementWithMatcher:grey_allOf(
-                                   grey_accessibilityID(
-                                       kFakeAuthAddAccountButtonIdentifier),
-                                   grey_sufficientlyVisible(), nil)]
-      performAction:grey_tap()];
-  // Make sure the fake SSO view controller is fully removed.
-  [ChromeEarlGreyUI waitForAppToIdle];
-
+  [SigninEarlGreyUI addFakeAccountInFakeAddAccountMenu:fakeIdentity];
   // Verify the user got signed in and the promo hidden.
   [SigninEarlGrey verifySignedInWithFakeIdentity:fakeIdentity];
   [SigninEarlGreyUI verifySigninPromoNotVisible];
 
-  // TODO(crbug.com/41493423): There should be log for SigninStartedAccessPoint,
-  // Signin.SignIn.Offered and Signin.SigninCompletedAccessPoint.NotDefault
+  // TODO(crbug.com/41493423): There should be log for
+  // Signin.SignIn.Offered.
   ExpectedSigninHistograms* expecteds = [[ExpectedSigninHistograms alloc]
-      initWithAccessPoint:signin_metrics::AccessPoint::
-                              ACCESS_POINT_BOOKMARK_MANAGER];
+      initWithAccessPoint:signin_metrics::AccessPoint::kBookmarkManager];
   expecteds.signinSignInStarted = 1;
+  expecteds.signinSignInOffered = 1;
+  expecteds.signinSignInOfferedNewAccountNoExistingAccount = 1;
+  expecteds.signinSigninStartedAccessPoint = 1;
+  expecteds.signinSignStartedAccessPointNewAccountNoExistingAccount = 1;
+  expecteds.signinSignInCompleted = 1;
   [SigninEarlGrey assertExpectedSigninHistograms:expecteds];
 }
 

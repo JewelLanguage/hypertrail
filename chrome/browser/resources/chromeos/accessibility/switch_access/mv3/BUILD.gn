@@ -11,7 +11,7 @@ import("//chrome/test/base/ash/js2gtest.gni")
 import("//testing/test.gni")
 import("//tools/typescript/ts_library.gni")
 
-assert(is_chromeos_ash)
+assert(is_chromeos)
 
 group("build") {
   deps = [ ":copied_files" ]
@@ -186,7 +186,6 @@ test_deps = [
   "//chrome/browser/ash/crosapi",
   "//chrome/browser/ash/system_web_apps",
   "//chrome/common",
-  "//chromeos",
 ]
 
 js2gtest("switch_access_mv3_extjs_tests") {

@@ -32,7 +32,6 @@
 #import "net/test/embedded_test_server/embedded_test_server.h"
 #import "ui/base/l10n/l10n_util.h"
 
-using chrome_test_util::GoogleSyncSettingsButton;
 using chrome_test_util::SettingsSignInRowMatcher;
 
 @interface SigninSettingsTestCase : ChromeTestCase
@@ -293,13 +292,7 @@ using chrome_test_util::SettingsSignInRowMatcher;
       performAction:grey_tap()];
   // Set up a fake identity to add and sign-in with.
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
-  [SigninEarlGrey addFakeIdentityForSSOAuthAddAccountFlow:fakeIdentity];
-  [[EarlGrey
-      selectElementWithMatcher:grey_allOf(
-                                   grey_accessibilityID(
-                                       kFakeAuthAddAccountButtonIdentifier),
-                                   grey_sufficientlyVisible(), nil)]
-      performAction:grey_tap()];
+  [SigninEarlGreyUI addFakeAccountInFakeAddAccountMenu:fakeIdentity];
   // Make sure the fake SSO view controller is fully removed.
   [ChromeEarlGreyUI waitForAppToIdle];
   // Verify that buttons of the History Sync screen have the expected colors.
@@ -335,10 +328,11 @@ using chrome_test_util::SettingsSignInRowMatcher;
       @"Tabs sync should be enabled.");
 
   ExpectedSigninHistograms* expecteds = [[ExpectedSigninHistograms alloc]
-      initWithAccessPoint:signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS];
-  // TODO(crbug.com/41493423): We should log that the signin was offered,
-  // completed and Signin.SigninStartedAccessPoint.
+      initWithAccessPoint:signin_metrics::AccessPoint::kSettings];
+  // TODO(crbug.com/41493423): We should log that the signin was offered.
   expecteds.signinSignInStarted = 1;
+  expecteds.signinSigninStartedAccessPoint = 1;
+  expecteds.signinSignInCompleted = 1;
   [SigninEarlGrey assertExpectedSigninHistograms:expecteds];
 }
 
@@ -354,14 +348,8 @@ using chrome_test_util::SettingsSignInRowMatcher;
       performAction:grey_tap()];
   // Set up a fake identity with unset capabilities to add and sign-in with.
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
-  [SigninEarlGrey addFakeIdentityForSSOAuthAddAccountFlow:fakeIdentity
-                                  withUnknownCapabilities:YES];
-  [[EarlGrey
-      selectElementWithMatcher:grey_allOf(
-                                   grey_accessibilityID(
-                                       kFakeAuthAddAccountButtonIdentifier),
-                                   grey_sufficientlyVisible(), nil)]
-      performAction:grey_tap()];
+  [SigninEarlGreyUI addFakeAccountInFakeAddAccountMenu:fakeIdentity
+                               withUnknownCapabilities:YES];
   // Make sure the fake SSO view controller is fully removed.
   [ChromeEarlGreyUI waitForAppToIdle];
   // Wait for the History Sync Opt-In screen.
@@ -406,10 +394,11 @@ using chrome_test_util::SettingsSignInRowMatcher;
       @"Tabs sync should be enabled.");
 
   ExpectedSigninHistograms* expecteds = [[ExpectedSigninHistograms alloc]
-      initWithAccessPoint:signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS];
-  // TODO(crbug.com/41493423): We should log that the signin was offered,
-  // completed and Signin.SigninStartedAccessPoint.
+      initWithAccessPoint:signin_metrics::AccessPoint::kSettings];
+  // TODO(crbug.com/41493423): We should log that the signin was offered.
   expecteds.signinSignInStarted = 1;
+  expecteds.signinSigninStartedAccessPoint = 1;
+  expecteds.signinSignInCompleted = 1;
   [SigninEarlGrey assertExpectedSigninHistograms:expecteds];
 }
 
@@ -455,10 +444,11 @@ using chrome_test_util::SettingsSignInRowMatcher;
       assertWithMatcher:grey_sufficientlyVisible()];
 
   ExpectedSigninHistograms* expecteds = [[ExpectedSigninHistograms alloc]
-      initWithAccessPoint:signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS];
+      initWithAccessPoint:signin_metrics::AccessPoint::kSettings];
   // TODO(crbug.com/41493423): We should log that the signin was offered,
-  // completed and Signin.SigninStartedAccessPoint.
+  // completed.
   expecteds.signinSignInStarted = 1;
+  expecteds.signinSigninStartedAccessPoint = 1;
   [SigninEarlGrey assertExpectedSigninHistograms:expecteds];
 }
 

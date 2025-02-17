@@ -127,6 +127,7 @@ inline constexpr char16_t kChromeUIFlagsURL16[] = u"chrome://flags/";
 inline constexpr char kChromeUIGCMInternalsHost[] = "gcm-internals";
 inline constexpr char kChromeUIGlicHost[] = "glic";
 inline constexpr char kChromeUIGlicURL[] = "chrome://glic/";
+inline constexpr char kChromeUIGlicFreURL[] = "chrome://glic/glic_fre/fre.html";
 inline constexpr char kChromeUIHangUIHost[] = "uithreadhang";
 inline constexpr char kChromeUIHelpHost[] = "help";
 inline constexpr char kChromeUIHelpURL[] = "chrome://help/";
@@ -186,6 +187,8 @@ inline constexpr char kChromeUIPasswordManagerSettingsURL[] =
     "chrome://password-manager/settings";
 inline constexpr char kChromeUIPasswordManagerURL[] =
     "chrome://password-manager";
+inline constexpr char kChromeUiPasswordChangeUrl[] =
+    "chrome://password-manager/settings/password-change";
 inline constexpr char kChromeUIPolicyHost[] = "policy";
 inline constexpr char kChromeUIPolicyTestURL[] = "chrome://policy/test";
 inline constexpr char kChromeUIPolicyURL[] = "chrome://policy/";
@@ -221,6 +224,8 @@ inline constexpr char kChromeUISafetyPixelbookURL[] =
     "https://g.co/Pixelbook/legal";
 inline constexpr char kChromeUISafetyPixelSlateURL[] =
     "https://g.co/PixelSlate/legal";
+inline constexpr char kChromeUISavedTabGroupsUnsupportedHost[] =
+    "saved-tab-groups-unsupported";
 inline constexpr char kChromeUISegmentationInternalsHost[] =
     "segmentation-internals";
 inline constexpr char kChromeUISensorInfoHost[] = "sensor-info";
@@ -235,6 +240,12 @@ inline constexpr char kChromeUISigninEmailConfirmationURL[] =
 inline constexpr char kChromeUISigninErrorHost[] = "signin-error";
 inline constexpr char kChromeUISigninErrorURL[] = "chrome://signin-error/";
 inline constexpr char kChromeUISignInInternalsHost[] = "signin-internals";
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+inline constexpr char kChromeUISignoutConfirmationHost[] =
+    "signout-confirmation";
+inline constexpr char kChromeUISignoutConfirmationURL[] =
+    "chrome://signout-confirmation";
+#endif
 inline constexpr char kChromeUISiteEngagementHost[] = "site-engagement";
 inline constexpr char kChromeUISuggestInternalsHost[] = "suggest-internals";
 inline constexpr char kChromeUISuggestInternalsURL[] =
@@ -262,6 +273,8 @@ inline constexpr char kChromeUIUntrustedDataSharingURL[] =
     "chrome-untrusted://data-sharing/";
 inline constexpr char kChromeUIUntrustedDataSharingAPIURL[] =
     "chrome-untrusted://data-sharing/data_sharing_api.html";
+inline constexpr char kChromeUIUntrustedFavicon2URL[] =
+    "chrome-untrusted://favicon2/";
 inline constexpr char kChromeUIUntrustedImageEditorURL[] =
     "chrome-untrusted://image-editor/";
 inline constexpr char kChromeUIUntrustedPrintURL[] =
@@ -273,6 +286,8 @@ inline constexpr char
         "privacy-policy";
 inline constexpr char kChromeUIUntrustedThemeURL[] =
     "chrome-untrusted://theme/";
+inline constexpr char kChromeUIUntrustedWebUITestURL[] =
+    "chrome-untrusted://webui-test/";
 inline constexpr char kChromeUIUsbInternalsHost[] = "usb-internals";
 inline constexpr char kChromeUIUserActionsHost[] = "user-actions";
 inline constexpr char kChromeUIUserEducationInternalsHost[] =
@@ -284,6 +299,7 @@ inline constexpr char kChromeUIVersionURL[] = "chrome://version/";
 inline constexpr char16_t kChromeUIVersionURL16[] = u"chrome://version/";
 inline constexpr char kChromeUIWebRtcLogsHost[] = "webrtc-logs";
 inline constexpr char kChromeUIWebuiGalleryHost[] = "webui-gallery";
+inline constexpr char kChromeUIWebUITestHost[] = "webui-test";
 
 #if BUILDFLAG(IS_ANDROID)
 inline constexpr char kChromeUIJavaCrashURL[] = "chrome://java-crash/";
@@ -337,12 +353,9 @@ inline constexpr char kChromeUIUntrustedReadAnythingSidePanelHost[] =
     "read-anything-side-panel.top-chrome";
 inline constexpr char kChromeUIUntrustedReadAnythingSidePanelURL[] =
     "chrome-untrusted://read-anything-side-panel.top-chrome/";
-inline constexpr char kChromeUIUntrustedWebUITestURL[] =
-    "chrome-untrusted://webui-test/";
 inline constexpr char kChromeUIWebAppInternalsHost[] = "web-app-internals";
 inline constexpr char kChromeUIWebUIJsErrorHost[] = "webuijserror";
 inline constexpr char kChromeUIWebUIJsErrorURL[] = "chrome://webuijserror/";
-inline constexpr char kChromeUIWebUITestHost[] = "webui-test";
 inline constexpr char kCookiesSubPagePath[] = "/cookies";
 inline constexpr char kTrackingProtectionSubPagePath[] = "/trackingProtection";
 #endif  // BUILDFLAG(IS_ANDROID)

@@ -52,13 +52,14 @@ import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelActionListener;
 import org.chromium.chrome.browser.tabmodel.TabModelActionListener.DialogType;
 import org.chromium.chrome.browser.tabmodel.TabRemover;
+import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager.MaybeBlockingResult;
 import org.chromium.components.browser_ui.widget.ActionConfirmationResult;
 import org.chromium.components.collaboration.CollaborationService;
 import org.chromium.components.data_sharing.DataSharingService;
 import org.chromium.components.data_sharing.GroupData;
 import org.chromium.components.data_sharing.GroupMember;
-import org.chromium.components.data_sharing.PeopleGroupActionOutcome;
 import org.chromium.components.data_sharing.SharedGroupTestHelper;
+import org.chromium.components.data_sharing.member_role.MemberRole;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.base.GaiaId;
 import org.chromium.components.signin.identitymanager.IdentityManager;
@@ -95,9 +96,10 @@ public class TabUiUtilsUnitTest {
     @Mock private CollaborationService mCollaborationService;
     @Mock private Callback<Boolean> mDidCloseTabsCallback;
     @Mock private Callback<Boolean> mContentSensitivitySetter;
+    @Mock private Runnable mFinishBlocking;
 
     @Captor private ArgumentCaptor<TabModelActionListener> mTabModelActionListenerCaptor;
-    @Captor private ArgumentCaptor<Callback<Integer>> mOutcomeCaptor;
+    @Captor private ArgumentCaptor<Callback<Boolean>> mOutcomeCaptor;
 
     private List<Tab> mTabsToClose;
     private SyncedGroupTestHelper mSyncedGroupTestHelper;
@@ -197,12 +199,17 @@ public class TabUiUtilsUnitTest {
 
     @Test
     public void testDeleteSharedTabGroup_Positive() {
-        runWithValue(1, ActionConfirmationResult.CONFIRMATION_POSITIVE)
+        runWithValue(
+                        1,
+                        new MaybeBlockingResult(
+                                ActionConfirmationResult.CONFIRMATION_POSITIVE, mFinishBlocking))
                 .when(mActionConfirmationManager)
                 .processDeleteSharedGroupAttempt(any(), any());
         mockIdentity(EMAIL1, GAIA_ID1);
         createSyncGroup(COLLABORATION_ID1);
         createSharedGroup(GROUP_MEMBER1, GROUP_MEMBER2);
+        when(mCollaborationService.getCurrentUserRoleForGroup(COLLABORATION_ID1))
+                .thenReturn(MemberRole.OWNER);
 
         TabUiUtils.exitSharedTabGroupWithDialog(
                 ApplicationProvider.getApplicationContext(),
@@ -211,20 +218,26 @@ public class TabUiUtilsUnitTest {
                 mModalDialogManager,
                 TAB_ID);
         verify(mActionConfirmationManager).processDeleteSharedGroupAttempt(eq(GROUP_TITLE), any());
-        verify(mDataSharingService).deleteGroup(eq(COLLABORATION_ID1), mOutcomeCaptor.capture());
+        verify(mCollaborationService).deleteGroup(eq(COLLABORATION_ID1), mOutcomeCaptor.capture());
 
-        mOutcomeCaptor.getValue().onResult(PeopleGroupActionOutcome.TRANSIENT_FAILURE);
+        mOutcomeCaptor.getValue().onResult(false);
         verify(mModalDialogManager).showDialog(any(), anyInt());
+        verify(mFinishBlocking).run();
     }
 
     @Test
     public void testDeleteSharedTabGroup_Negative() {
-        runWithValue(1, ActionConfirmationResult.CONFIRMATION_NEGATIVE)
+        runWithValue(
+                        1,
+                        new MaybeBlockingResult(
+                                ActionConfirmationResult.CONFIRMATION_NEGATIVE, null))
                 .when(mActionConfirmationManager)
                 .processDeleteSharedGroupAttempt(any(), any());
         mockIdentity(EMAIL1, GAIA_ID1);
         createSyncGroup(COLLABORATION_ID1);
         createSharedGroup(GROUP_MEMBER1, GROUP_MEMBER2);
+        when(mCollaborationService.getCurrentUserRoleForGroup(COLLABORATION_ID1))
+                .thenReturn(MemberRole.OWNER);
 
         TabUiUtils.exitSharedTabGroupWithDialog(
                 ApplicationProvider.getApplicationContext(),
@@ -233,12 +246,16 @@ public class TabUiUtilsUnitTest {
                 mModalDialogManager,
                 TAB_ID);
         verify(mActionConfirmationManager).processDeleteSharedGroupAttempt(eq(GROUP_TITLE), any());
-        verify(mDataSharingService, never()).deleteGroup(any(), any());
+        verify(mCollaborationService, never()).deleteGroup(any(), any());
+        verify(mFinishBlocking, never()).run();
     }
 
     @Test
     public void testDeleteSharedTabGroup_NullTab() {
-        runWithValue(1, ActionConfirmationResult.CONFIRMATION_POSITIVE)
+        runWithValue(
+                        1,
+                        new MaybeBlockingResult(
+                                ActionConfirmationResult.CONFIRMATION_POSITIVE, mFinishBlocking))
                 .when(mActionConfirmationManager)
                 .processDeleteSharedGroupAttempt(any(), any());
 
@@ -252,11 +269,15 @@ public class TabUiUtilsUnitTest {
                 mModalDialogManager,
                 TAB_ID);
         verify(mActionConfirmationManager, never()).processDeleteSharedGroupAttempt(any(), any());
+        verify(mFinishBlocking, never()).run();
     }
 
     @Test
     public void testDeleteSharedTabGroup_NullTabGroupId() {
-        runWithValue(1, ActionConfirmationResult.CONFIRMATION_POSITIVE)
+        runWithValue(
+                        1,
+                        new MaybeBlockingResult(
+                                ActionConfirmationResult.CONFIRMATION_POSITIVE, mFinishBlocking))
                 .when(mActionConfirmationManager)
                 .processDeleteSharedGroupAttempt(any(), any());
         when(mTab.getTabGroupId()).thenReturn(null);
@@ -269,11 +290,15 @@ public class TabUiUtilsUnitTest {
                 mModalDialogManager,
                 TAB_ID);
         verify(mActionConfirmationManager, never()).processDeleteSharedGroupAttempt(any(), any());
+        verify(mFinishBlocking, never()).run();
     }
 
     @Test
     public void testDeleteSharedTabGroup_NullSavedTabGroup() {
-        runWithValue(1, ActionConfirmationResult.CONFIRMATION_POSITIVE)
+        runWithValue(
+                        1,
+                        new MaybeBlockingResult(
+                                ActionConfirmationResult.CONFIRMATION_POSITIVE, mFinishBlocking))
                 .when(mActionConfirmationManager)
                 .processDeleteSharedGroupAttempt(any(), any());
 
@@ -284,11 +309,15 @@ public class TabUiUtilsUnitTest {
                 mModalDialogManager,
                 TAB_ID);
         verify(mActionConfirmationManager, never()).processDeleteSharedGroupAttempt(any(), any());
+        verify(mFinishBlocking, never()).run();
     }
 
     @Test
     public void testDeleteSharedTabGroup_NullCollaborationId() {
-        runWithValue(1, ActionConfirmationResult.CONFIRMATION_POSITIVE)
+        runWithValue(
+                        1,
+                        new MaybeBlockingResult(
+                                ActionConfirmationResult.CONFIRMATION_POSITIVE, mFinishBlocking))
                 .when(mActionConfirmationManager)
                 .processDeleteSharedGroupAttempt(any(), any());
         createSyncGroup(/* collaborationId= */ null);
@@ -300,16 +329,22 @@ public class TabUiUtilsUnitTest {
                 mModalDialogManager,
                 TAB_ID);
         verify(mActionConfirmationManager, never()).processDeleteSharedGroupAttempt(any(), any());
+        verify(mFinishBlocking, never()).run();
     }
 
     @Test
     public void testLeaveSharedTabGroup_Positive() {
-        runWithValue(1, ActionConfirmationResult.CONFIRMATION_POSITIVE)
+        runWithValue(
+                        1,
+                        new MaybeBlockingResult(
+                                ActionConfirmationResult.CONFIRMATION_POSITIVE, mFinishBlocking))
                 .when(mActionConfirmationManager)
                 .processLeaveGroupAttempt(any(), any());
         mockIdentity(EMAIL2, GAIA_ID2);
         createSyncGroup(COLLABORATION_ID1);
         createSharedGroup(GROUP_MEMBER1, GROUP_MEMBER2);
+        when(mCollaborationService.getCurrentUserRoleForGroup(COLLABORATION_ID1))
+                .thenReturn(MemberRole.MEMBER);
 
         TabUiUtils.exitSharedTabGroupWithDialog(
                 ApplicationProvider.getApplicationContext(),
@@ -318,15 +353,19 @@ public class TabUiUtilsUnitTest {
                 mModalDialogManager,
                 TAB_ID);
         verify(mActionConfirmationManager).processLeaveGroupAttempt(eq(GROUP_TITLE), any());
-        verify(mDataSharingService).leaveGroup(eq(COLLABORATION_ID1), mOutcomeCaptor.capture());
+        verify(mCollaborationService).leaveGroup(eq(COLLABORATION_ID1), mOutcomeCaptor.capture());
 
-        mOutcomeCaptor.getValue().onResult(PeopleGroupActionOutcome.TRANSIENT_FAILURE);
+        mOutcomeCaptor.getValue().onResult(false);
         verify(mModalDialogManager).showDialog(any(), anyInt());
+        verify(mFinishBlocking).run();
     }
 
     @Test
     public void testLeaveSharedTabGroup_Negative() {
-        runWithValue(1, ActionConfirmationResult.CONFIRMATION_NEGATIVE)
+        runWithValue(
+                        1,
+                        new MaybeBlockingResult(
+                                ActionConfirmationResult.CONFIRMATION_NEGATIVE, null))
                 .when(mActionConfirmationManager)
                 .processLeaveGroupAttempt(any(), any());
         mockIdentity(EMAIL2, GAIA_ID2);
@@ -334,6 +373,8 @@ public class TabUiUtilsUnitTest {
         group.title = null;
         when(mFilter.getTabGroupTitle(ROOT_ID)).thenReturn(null);
         createSharedGroup(GROUP_MEMBER1, GROUP_MEMBER2);
+        when(mCollaborationService.getCurrentUserRoleForGroup(COLLABORATION_ID1))
+                .thenReturn(MemberRole.MEMBER);
 
         TabUiUtils.exitSharedTabGroupWithDialog(
                 ApplicationProvider.getApplicationContext(),
@@ -343,11 +384,15 @@ public class TabUiUtilsUnitTest {
                 TAB_ID);
         verify(mActionConfirmationManager).processLeaveGroupAttempt(eq("1 tab"), any());
         verify(mDataSharingService, never()).removeMember(any(), any(), any());
+        verify(mFinishBlocking, never()).run();
     }
 
     @Test
     public void testLeaveSharedTabGroup_NullTab() {
-        runWithValue(1, ActionConfirmationResult.CONFIRMATION_POSITIVE)
+        runWithValue(
+                        1,
+                        new MaybeBlockingResult(
+                                ActionConfirmationResult.CONFIRMATION_POSITIVE, mFinishBlocking))
                 .when(mActionConfirmationManager)
                 .processLeaveGroupAttempt(any(), any());
         when(mTabModel.getTabById(anyInt())).thenReturn(null);
@@ -361,11 +406,15 @@ public class TabUiUtilsUnitTest {
                 mModalDialogManager,
                 TAB_ID);
         verify(mActionConfirmationManager, never()).processLeaveGroupAttempt(any(), any());
+        verify(mFinishBlocking, never()).run();
     }
 
     @Test
     public void testLeaveSharedTabGroup_NullSavedTabGroup() {
-        runWithValue(1, ActionConfirmationResult.CONFIRMATION_POSITIVE)
+        runWithValue(
+                        1,
+                        new MaybeBlockingResult(
+                                ActionConfirmationResult.CONFIRMATION_POSITIVE, mFinishBlocking))
                 .when(mActionConfirmationManager)
                 .processLeaveGroupAttempt(any(), any());
         mockIdentity(EMAIL1, GAIA_ID1);
@@ -378,11 +427,15 @@ public class TabUiUtilsUnitTest {
                 mModalDialogManager,
                 TAB_ID);
         verify(mActionConfirmationManager, never()).processLeaveGroupAttempt(any(), any());
+        verify(mFinishBlocking, never()).run();
     }
 
     @Test
     public void testLeaveSharedTabGroup_NullCoreAccountInfo() {
-        runWithValue(1, ActionConfirmationResult.CONFIRMATION_POSITIVE)
+        runWithValue(
+                        1,
+                        new MaybeBlockingResult(
+                                ActionConfirmationResult.CONFIRMATION_POSITIVE, mFinishBlocking))
                 .when(mActionConfirmationManager)
                 .processLeaveGroupAttempt(any(), any());
         createSyncGroup(COLLABORATION_ID1);
@@ -395,6 +448,7 @@ public class TabUiUtilsUnitTest {
                 mModalDialogManager,
                 TAB_ID);
         verify(mActionConfirmationManager, never()).processLeaveGroupAttempt(any(), any());
+        verify(mFinishBlocking, never()).run();
     }
 
     @Test
@@ -403,7 +457,7 @@ public class TabUiUtilsUnitTest {
         final String histogram = "SensitiveContent.TabSwitching.RegularTabSwitcherPane.Sensitivity";
 
         HistogramWatcher histogramWatcherForTrueBucket =
-                HistogramWatcher.newSingleRecordWatcher(histogram, /* contentIsSensitive= */ true);
+                HistogramWatcher.newSingleRecordWatcher(histogram, /* value= */ true);
         when(mTab.getTabHasSensitiveContent()).thenReturn(true);
         TabUiUtils.updateViewContentSensitivityForTabs(
                 tabList, mContentSensitivitySetter, histogram);
@@ -411,7 +465,7 @@ public class TabUiUtilsUnitTest {
         histogramWatcherForTrueBucket.assertExpected();
 
         HistogramWatcher histogramWatcherForFalseBucket =
-                HistogramWatcher.newSingleRecordWatcher(histogram, /* contentIsSensitive= */ false);
+                HistogramWatcher.newSingleRecordWatcher(histogram, /* value= */ false);
         when(mTab.getTabHasSensitiveContent()).thenReturn(false);
         TabUiUtils.updateViewContentSensitivityForTabs(
                 tabList, mContentSensitivitySetter, histogram);
@@ -427,7 +481,7 @@ public class TabUiUtilsUnitTest {
         when(mTabModel.getTabAt(0)).thenAnswer(invocation -> mTab);
 
         HistogramWatcher histogramWatcherForTrueBucket =
-                HistogramWatcher.newSingleRecordWatcher(histogram, /* contentIsSensitive= */ true);
+                HistogramWatcher.newSingleRecordWatcher(histogram, /* value= */ true);
         when(mTab.getTabHasSensitiveContent()).thenReturn(true);
         TabUiUtils.updateViewContentSensitivityForTabs(
                 mTabModel, mContentSensitivitySetter, histogram);
@@ -435,7 +489,7 @@ public class TabUiUtilsUnitTest {
         histogramWatcherForTrueBucket.assertExpected();
 
         HistogramWatcher histogramWatcherForFalseBucket =
-                HistogramWatcher.newSingleRecordWatcher(histogram, /* contentIsSensitive= */ false);
+                HistogramWatcher.newSingleRecordWatcher(histogram, /* value= */ false);
         when(mTab.getTabHasSensitiveContent()).thenReturn(false);
         TabUiUtils.updateViewContentSensitivityForTabs(
                 mTabModel, mContentSensitivitySetter, histogram);

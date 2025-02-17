@@ -88,7 +88,7 @@ DialogText GetPromptDialogTextFromStatus(
 void ShowSignInAndSyncUi(Profile* profile) {
   signin_ui_util::EnableSyncFromSingleAccountPromo(
       profile, GetAccountInfoFromProfile(profile),
-      signin_metrics::AccessPoint::ACCESS_POINT_COLLABORATION_TAB_GROUP);
+      signin_metrics::AccessPoint::kCollaborationTabGroup);
 }
 
 }  // namespace
@@ -118,26 +118,7 @@ void CollaborationControllerDelegateDesktop::ShowError(const ErrorInfo& error,
     return;
   }
 
-  if (error_dialog_widget_) {
-    return;
-  }
-
-  // TODO(crbug.com/366057481): Show more detail errors based on ErrorInfo.
-  std::unique_ptr<ui::DialogModel> dialog_model =
-      ui::DialogModel::Builder()
-          .SetTitle(l10n_util::GetStringUTF16(IDS_DATA_SHARING_SOMETHING_WRONG))
-          .AddParagraph(ui::DialogModelLabel(
-              l10n_util::GetStringUTF16(IDS_DATA_SHARING_SOMETHING_WRONG_BODY)))
-          .AddOkButton(
-              base::BindOnce(
-                  &CollaborationControllerDelegateDesktop::OnErrorDialogOk,
-                  weak_ptr_factory_.GetWeakPtr()),
-              ui::DialogModel::Button::Params()
-                  .SetLabel(l10n_util::GetStringUTF16(IDS_DATA_SHARING_GOT_IT))
-                  .SetEnabled(true))
-          .Build();
-  error_dialog_widget_ =
-      chrome::ShowBrowserModal(browser_, std::move(dialog_model));
+  ShowErrorDialog();
   error_ui_callback_ = std::move(result);
 }
 
@@ -168,20 +149,29 @@ void CollaborationControllerDelegateDesktop::ShowJoinDialog(
   controller->SetOnCloseCallback(base::BindOnce(
       &CollaborationControllerDelegateDesktop::OnJoinDialogClosing,
       weak_ptr_factory_.GetWeakPtr(), std::move(result)));
+  controller->SetShowErrorDialogCallback(
+      base::BindOnce(&CollaborationControllerDelegateDesktop::ShowErrorDialog,
+                     weak_ptr_factory_.GetWeakPtr()));
   controller->Show(token);
 }
 
 void CollaborationControllerDelegateDesktop::ShowShareDialog(
     const tab_groups::EitherGroupID& either_id,
-    ResultCallback result) {
+    ResultWithGroupTokenCallback result) {
   if (!browser_) {
     return;
   }
   CHECK(std::holds_alternative<tab_groups::LocalTabGroupID>(either_id));
   DataSharingBubbleController::GetOrCreateForBrowser(browser_)->Show(
       std::get<tab_groups::LocalTabGroupID>(either_id));
-  std::move(result).Run(CollaborationControllerDelegate::Outcome::kSuccess);
+  std::move(result).Run(CollaborationControllerDelegate::Outcome::kSuccess,
+                        std::nullopt);
 }
+
+void CollaborationControllerDelegateDesktop::OnUrlReadyToShare(
+    const data_sharing::GroupId& group_id,
+    const GURL& url,
+    ResultCallback result) {}
 
 void CollaborationControllerDelegateDesktop::ShowManageDialog(
     const tab_groups::EitherGroupID& either_id,
@@ -267,6 +257,30 @@ void CollaborationControllerDelegateDesktop::OnJoinDialogClosing(
   // TODO(crbug.org/380287432): Only cancel the flow if user doesn't join the
   // group.
   std::move(result).Run(CollaborationControllerDelegate::Outcome::kCancel);
+}
+
+void CollaborationControllerDelegateDesktop::ShowErrorDialog() {
+  if (error_dialog_widget_) {
+    return;
+  }
+
+  // TODO(crbug.com/366057481): Show more detail errors based on ErrorInfo.
+  std::unique_ptr<ui::DialogModel> dialog_model =
+      ui::DialogModel::Builder()
+          .SetTitle(l10n_util::GetStringUTF16(IDS_DATA_SHARING_SOMETHING_WRONG))
+          .AddParagraph(ui::DialogModelLabel(
+              l10n_util::GetStringUTF16(IDS_DATA_SHARING_SOMETHING_WRONG_BODY)))
+          .AddOkButton(
+              base::BindOnce(
+                  &CollaborationControllerDelegateDesktop::OnErrorDialogOk,
+                  weak_ptr_factory_.GetWeakPtr()),
+              ui::DialogModel::Button::Params()
+                  .SetLabel(l10n_util::GetStringUTF16(IDS_DATA_SHARING_GOT_IT))
+                  .SetEnabled(true)
+                  .SetId(kDataSharingErrorDialogOkButtonElementId))
+          .Build();
+  error_dialog_widget_ =
+      chrome::ShowBrowserModal(browser_, std::move(dialog_model));
 }
 
 void CollaborationControllerDelegateDesktop::MaybeShowSignInAndSyncUi() {

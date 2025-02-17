@@ -13,6 +13,7 @@
 
 #include <utility>
 
+#include "components/viz/common/resources/shared_image_format_utils.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
@@ -77,12 +78,12 @@ ImageOrientation GetSourceOrientation(
 // Return the oriented size of `source`.
 gfx::Size GetSourceSize(scoped_refptr<StaticBitmapImage> source,
                         const StaticBitmapImageTransform::Params& params) {
-  const auto source_info = source->GetSkImageInfo();
+  gfx::Size source_size = source->GetSize();
   const auto source_orientation = GetSourceOrientation(source, params);
 
   return source_orientation.UsesWidthAsHeight()
-             ? gfx::Size(source_info.height(), source_info.width())
-             : gfx::Size(source_info.width(), source_info.height());
+             ? gfx::TransposeSize(source_size)
+             : source_size;
 }
 
 void ComputeSubsetParameters(scoped_refptr<StaticBitmapImage> source,
@@ -253,7 +254,8 @@ scoped_refptr<StaticBitmapImage> StaticBitmapImageTransform::ApplyWithBlit(
         const gpu::SharedImageUsageSet shared_image_usage_flags =
             source->GetSharedImage()->usage();
         resource_provider = CanvasResourceProvider::CreateSharedImageProvider(
-            gfx::Size(dest_size.width(), dest_size.height()), dest_color_type,
+            gfx::Size(dest_size.width(), dest_size.height()),
+            viz::SkColorTypeToSinglePlaneSharedImageFormat(dest_color_type),
             dest_alpha_type, SkColorSpaceToGfxColorSpace(dest_color_space),
             kShouldInitialize, context_provider, RasterMode::kGPU,
             shared_image_usage_flags);
@@ -262,11 +264,15 @@ scoped_refptr<StaticBitmapImage> StaticBitmapImageTransform::ApplyWithBlit(
     // If not (or if the SharedImage provider fails), fall back to software.
     if (!resource_provider) {
       resource_provider = CanvasResourceProvider::CreateBitmapProvider(
-          gfx::Size(dest_size.width(), dest_size.height()), dest_color_type,
+          gfx::Size(dest_size.width(), dest_size.height()),
+          viz::SkColorTypeToSinglePlaneSharedImageFormat(dest_color_type),
           dest_alpha_type,
           SkColorSpaceToGfxColorSpace(std::move(dest_color_space)),
           kShouldInitialize);
     }
+  }
+  if (!resource_provider) {
+    return nullptr;
   }
 
   // Perform the blit and return the drawn resource.
@@ -321,7 +327,7 @@ scoped_refptr<StaticBitmapImage> StaticBitmapImageTransform::Apply(
                                 ? source_info.colorSpace()
                                 : SkColorSpace::MakeSRGB().get());
   const bool needs_alpha_change =
-      (source->GetSkImageInfo().alphaType() == kUnpremul_SkAlphaType) !=
+      (source->GetAlphaType() == kUnpremul_SkAlphaType) !=
       (!options.premultiply_alpha);
 
   // If we aren't doing anything (and this wasn't a forced copy), just return
@@ -349,11 +355,10 @@ scoped_refptr<StaticBitmapImage> StaticBitmapImageTransform::Clone(
   if (!source) {
     return nullptr;
   }
-  const auto info = source->GetSkImageInfo();
   StaticBitmapImageTransform::Params options;
   options.source_rect = gfx::Rect(GetSourceSize(source, options));
   options.dest_size = GetSourceSize(source, options);
-  options.premultiply_alpha = info.alphaType() != kUnpremul_SkAlphaType;
+  options.premultiply_alpha = source->GetAlphaType() != kUnpremul_SkAlphaType;
   options.force_copy = true;
   return Apply(flush_reason, source, options);
 }
@@ -372,7 +377,6 @@ StaticBitmapImageTransform::GetWithAlphaDisposition(
     case kDontChangeAlpha:
       return source;
   }
-  const auto info = source->GetSkImageInfo();
   StaticBitmapImageTransform::Params options;
   options.source_rect = gfx::Rect(GetSourceSize(source, options));
   options.dest_size = GetSourceSize(source, options);
@@ -385,11 +389,10 @@ StaticBitmapImageTransform::ConvertToColorSpace(
     FlushReason flush_reason,
     scoped_refptr<StaticBitmapImage> source,
     sk_sp<SkColorSpace> color_space) {
-  const auto info = source->GetSkImageInfo();
   StaticBitmapImageTransform::Params options;
   options.source_rect = gfx::Rect(GetSourceSize(source, options));
   options.dest_size = GetSourceSize(source, options);
-  options.premultiply_alpha = info.alphaType() != kUnpremul_SkAlphaType;
+  options.premultiply_alpha = source->GetAlphaType() != kUnpremul_SkAlphaType;
   options.force_copy = true;
   options.dest_color_space = color_space;
   return Apply(flush_reason, source, options);

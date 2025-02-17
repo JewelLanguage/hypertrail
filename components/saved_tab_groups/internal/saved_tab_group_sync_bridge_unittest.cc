@@ -215,7 +215,7 @@ std::unique_ptr<syncer::EntityChange> CreateEntityChange(
       return syncer::EntityChange::CreateUpdate(guid,
                                                 CreateEntityData(specific));
     case syncer::EntityChange::ACTION_DELETE:
-      return syncer::EntityChange::CreateDelete(guid);
+      return syncer::EntityChange::CreateDelete(guid, syncer::EntityData());
   }
 }
 
@@ -1015,11 +1015,11 @@ TEST_F(SavedTabGroupSyncBridgeTest, RemoveGroupLocally) {
   const std::vector<proto::SavedTabGroupData>& tabs_missing_groups =
       bridge_->GetTabsMissingGroupsForTesting();
 
-  auto it_1 = base::ranges::find_if(
+  auto it_1 = std::ranges::find_if(
       tabs_missing_groups, [&](proto::SavedTabGroupData data) {
         return data.specifics().guid() == tab_1_guid.AsLowercaseString();
       });
-  auto it_2 = base::ranges::find_if(
+  auto it_2 = std::ranges::find_if(
       tabs_missing_groups, [&](proto::SavedTabGroupData data) {
         return data.specifics().guid() == tab_2_guid.AsLowercaseString();
       });

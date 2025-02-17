@@ -4,6 +4,7 @@
 
 #include "chrome/browser/web_applications/web_app_utils.h"
 
+#include <algorithm>
 #include <iterator>
 #include <map>
 #include <optional>
@@ -21,7 +22,6 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -61,7 +61,6 @@
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
-#include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chromeos/ash/components/browser_context_helper/browser_context_types.h"
 #include "components/user_manager/user_manager.h"
@@ -464,7 +463,7 @@ std::vector<std::u16string> TransformFileExtensionsForDisplay(
     const std::set<std::string>& extensions) {
   std::vector<std::u16string> extensions_for_display;
   extensions_for_display.reserve(extensions.size());
-  base::ranges::transform(
+  std::ranges::transform(
       extensions, std::back_inserter(extensions_for_display),
       [](const std::string& extension) {
         return base::UTF8ToUTF16(base::ToUpperASCII(extension.substr(1)));
@@ -528,10 +527,10 @@ DisplayMode ResolveEffectiveDisplayMode(
           app_display_mode, app_display_mode_overrides, user_display_mode);
   // TODO(https://crbug.com/389919693): Remove this if display mode restrictions
   // are added to the WebAppProvider system.
-  if (is_isolated && (resolved_display_mode == DisplayMode::kBrowser ||
-                      resolved_display_mode == DisplayMode::kMinimalUi)) {
+  if (is_isolated && resolved_display_mode == DisplayMode::kMinimalUi) {
     return DisplayMode::kStandalone;
   }
+  CHECK(!(is_isolated && resolved_display_mode == DisplayMode::kBrowser));
 
   return resolved_display_mode;
 }

@@ -3,8 +3,11 @@
 // found in the LICENSE file.
 
 import {ClientDelegateFactory, getNetworkInfoMojomToUI, getSessionConfigMojomToUI, getStudentActivityMojomToUI} from 'chrome-untrusted://boca-app/app/client_delegate.js';
-import {CaptionConfig, Config, Course, Identity, OnTaskConfig, PageHandlerRemote, RemoveStudentError, SessionResult, SubmitAccessCodeError, UpdateSessionError, ViewStudentScreenError, Window} from 'chrome-untrusted://boca-app/mojom/boca.mojom-webui.js';
-import {Url} from 'chrome-untrusted://resources/mojo/url/mojom/url.mojom-webui.js';
+import type {Assignment, BocaValidPref, CaptionConfig, Config, Course, EndViewScreenSessionError, Identity, OnTaskConfig, Permission, PermissionSetting, RemoveStudentError, SessionResult, UpdateSessionError, ViewStudentScreenError, Window} from 'chrome-untrusted://boca-app/mojom/boca.mojom-webui.js';
+import {PageHandlerRemote, SubmitAccessCodeError} from 'chrome-untrusted://boca-app/mojom/boca.mojom-webui.js';
+import type {TimeDelta} from 'chrome-untrusted://resources/mojo/mojo/public/mojom/base/time.mojom-webui.js';
+import type {Value} from 'chrome-untrusted://resources/mojo/mojo/public/mojom/base/values.mojom-webui.js';
+import type {Url} from 'chrome-untrusted://resources/mojo/url/mojom/url.mojom-webui.js';
 import {assertDeepEquals, assertTrue} from 'chrome-untrusted://webui-test/chai_assert.js';
 
 class MockRemoteHandler extends PageHandlerRemote {
@@ -35,8 +38,8 @@ class MockRemoteHandler extends PageHandlerRemote {
     return Promise.resolve({
       courses: [
         {id: '1', name: 'course1', section: 'period1'},
-        {id: '2', name: 'course2', section: ''}
-      ]
+        {id: '2', name: 'course2', section: ''},
+      ],
     });
   }
   override listStudents(id: string): Promise<{students: Identity[]}> {
@@ -46,6 +49,34 @@ class MockRemoteHandler extends PageHandlerRemote {
       students: [
         {id: '1', name: 'cat', email: 'email1', photoUrl: {url: 'cdn1'}},
         {id: '2', name: 'dog', email: 'email2', photoUrl: {url: 'cdn2'}},
+      ],
+    });
+  }
+  override listAssignments(id: string): Promise<{assignments: Assignment[]}> {
+    // Dummy action get around with unused variable check.
+    id;
+    return Promise.resolve({
+      assignments: [
+        {
+          title: 'assignment-title1',
+          url: {url: 'url1'},
+          lastUpdateTime: new Date(1000000),
+          materials: [
+            {title: 'material-title-1', type: 0},
+            {title: 'material-title-2', type: 1},
+          ],
+          type: 0,
+        },
+        {
+          title: 'assignment-title2',
+          url: {url: 'url2'},
+          lastUpdateTime: new Date(2000000),
+          materials: [
+            {title: 'material-title-3', type: 2},
+            {title: 'material-title-4', type: 3},
+          ],
+          type: 1,
+        },
       ],
     });
   }
@@ -109,64 +140,67 @@ class MockRemoteHandler extends PageHandlerRemote {
   override getSession(): Promise<{result: SessionResult}> {
     return Promise.resolve({
       result: {
-        config: {
-          sessionDuration: {
-            microseconds: 120000000n,
-          },
-          sessionStartTime: new Date(1000000),
-          teacher: {
-            id: '0',
-            name: 'teacher',
-            email: 'teacher@gmail.com',
-            photoUrl: {url: 'cdn0'},
-          },
-          accessCode: 'testCode',
-          students: [
-            {
-              id: '1',
-              name: 'cat',
-              email: 'cat@gmail.com',
-              photoUrl: {url: 'cdn1'},
+        session: {
+          config: {
+            sessionDuration: {
+              microseconds: 120000000n,
             },
-            {
-              id: '2',
-              name: 'dog',
-              email: 'dog@gmail.com',
-              photoUrl: {url: 'cdn2'},
+            sessionStartTime: new Date(1000000),
+            teacher: {
+              id: '0',
+              name: 'teacher',
+              email: 'teacher@gmail.com',
+              photoUrl: {url: 'cdn0'},
             },
-          ],
-          studentsJoinViaCode: [{
-            id: '3',
-            name: 'cat1',
-            email: 'cat1@gmail.com',
-            photoUrl: {url: 'cdn3'},
-          }],
-          onTaskConfig: {
-            isLocked: true,
-            tabs: [
+            accessCode: 'testCode',
+            students: [
               {
-                tab: {
-                  url: {url: 'http://google.com/'},
-                  title: 'google',
-                  favicon: 'data/image',
-                },
-                navigationType: 0,
+                id: '1',
+                name: 'cat',
+                email: 'cat@gmail.com',
+                photoUrl: {url: 'cdn1'},
               },
               {
-                tab: {
-                  url: {url: 'http://youtube.com/'},
-                  title: 'youtube',
-                  favicon: 'data/image',
-                },
-                navigationType: 1,
+                id: '2',
+                name: 'dog',
+                email: 'dog@gmail.com',
+                photoUrl: {url: 'cdn2'},
               },
             ],
+            studentsJoinViaCode: [{
+              id: '3',
+              name: 'cat1',
+              email: 'cat1@gmail.com',
+              photoUrl: {url: 'cdn3'},
+            }],
+            onTaskConfig: {
+              isLocked: true,
+              tabs: [
+                {
+                  tab: {
+                    url: {url: 'http://google.com/'},
+                    title: 'google',
+                    favicon: 'data/image',
+                  },
+                  navigationType: 0,
+                },
+                {
+                  tab: {
+                    url: {url: 'http://youtube.com/'},
+                    title: 'youtube',
+                    favicon: 'data/image',
+                  },
+                  navigationType: 1,
+                },
+              ],
+            },
+            captionConfig: {
+              sessionCaptionEnabled: true,
+              localCaptionEnabled: true,
+              sessionTranslationEnabled: true,
+            },
           },
-          captionConfig: {
-            sessionCaptionEnabled: true,
-            localCaptionEnabled: true,
-            sessionTranslationEnabled: true,
-          },
+          activities: [],
         },
       },
     });
@@ -216,6 +250,12 @@ class MockRemoteHandler extends PageHandlerRemote {
     return Promise.resolve({error: null});
   }
 
+  override extendSessionDuration(duration: TimeDelta):
+      Promise<{error: UpdateSessionError | null}> {
+    assertDeepEquals({microseconds: 900000000n}, duration);
+    return Promise.resolve({error: null});
+  }
+
   override removeStudent(id: string):
       Promise<{error: RemoveStudentError | null}> {
     id;
@@ -238,7 +278,29 @@ class MockRemoteHandler extends PageHandlerRemote {
     id;
     return Promise.resolve({error: null});
   }
+  override endViewScreenSession(id: string):
+      Promise<{error: EndViewScreenSessionError | null}> {
+    id;
+    return Promise.resolve({error: null});
+  }
   override authenticateWebview() {
+    return Promise.resolve({success: true});
+  }
+  override getUserPref(pref: BocaValidPref): Promise<{value: Value}> {
+    pref;
+    return Promise.resolve({value: {stringValue: 'value'}});
+  }
+  override setUserPref(pref: BocaValidPref, value: Value) {
+    pref;
+    value;
+    return Promise.resolve();
+  }
+  override setSitePermission(
+      url: string, permission: Permission,
+      setting: PermissionSetting): Promise<{success: boolean}> {
+    url;
+    permission;
+    setting;
     return Promise.resolve({success: true});
   }
 }
@@ -306,6 +368,39 @@ suite('ClientDelegateTest', function() {
       });
 
   test(
+      'client delegate should properly translate mojom layer data for' +
+          'assignment list',
+      async () => {
+        const result =
+            await clientDelegateImpl.getInstance().getAssignmentList('1');
+
+        assertDeepEquals(
+            [
+              {
+                title: 'assignment-title1',
+                url: 'url1',
+                lastUpdateTime: new Date(1000000),
+                materials: [
+                  {title: 'material-title-1', type: 0},
+                  {title: 'material-title-2', type: 1},
+                ],
+                type: 0,
+              },
+              {
+                title: 'assignment-title2',
+                url: 'url2',
+                lastUpdateTime: new Date(2000000),
+                materials: [
+                  {title: 'material-title-3', type: 2},
+                  {title: 'material-title-4', type: 3},
+                ],
+                type: 1,
+              },
+            ],
+            result);
+      });
+
+  test(
       'client delegate should translate data for creating session',
       async () => {
         const result = await clientDelegateImpl.getInstance().createSession({
@@ -366,7 +461,12 @@ suite('ClientDelegateTest', function() {
               {id: '2', name: 'dog', email: 'dog@gmail.com', photoUrl: 'cdn2'},
             ],
             studentsJoinViaCode: [
-              {id: '3', name: 'cat1', email: 'cat1@gmail.com', photoUrl: 'cdn3'}
+              {
+                id: '3',
+                name: 'cat1',
+                email: 'cat1@gmail.com',
+                photoUrl: 'cdn3',
+              },
             ],
             accessCode: 'testCode',
             onTaskConfig: {
@@ -403,7 +503,7 @@ suite('ClientDelegateTest', function() {
 
   test(
       'client delegate should properly translate getSession with default value',
-      async () => {
+      () => {
         const session = {
           sessionDuration: {
             microseconds: 120000000n,
@@ -495,14 +595,21 @@ suite('ClientDelegateTest', function() {
     assertTrue(result);
   });
 
+  test(
+      'client delegate should translate data for extend session duration',
+      async () => {
+        const result =
+            await clientDelegateImpl.getInstance().extendSessionDuration(15);
+        assertTrue(result);
+      });
+
   test('client delegate should translate data for remove student', async () => {
     const result = await clientDelegateImpl.getInstance().removeStudent('1');
     assertTrue(result);
   });
 
   test(
-      'client delegate should translate data for student activity',
-      async () => {
+      'client delegate should translate data for student activity', () => {
         const activities = [
           {
             id: '1',
@@ -512,8 +619,8 @@ suite('ClientDelegateTest', function() {
               isCaptionEnabled: false,
               isHandRaised: false,
               joinMethod: 0,
-              viewScreenSessionCode: 'abcd'
-            }
+              viewScreenSessionCode: 'abcd',
+            },
           },
           {
             id: '2',
@@ -523,9 +630,9 @@ suite('ClientDelegateTest', function() {
               isCaptionEnabled: false,
               isHandRaised: false,
               joinMethod: 1,
-              viewScreenSessionCode: null
-            }
-          }
+              viewScreenSessionCode: null,
+            },
+          },
         ];
         const result = getStudentActivityMojomToUI(activities);
         assertDeepEquals(
@@ -538,8 +645,8 @@ suite('ClientDelegateTest', function() {
                   isCaptionEnabled: false,
                   isHandRaised: false,
                   joinMethod: 0,
-                  viewScreenSessionCode: 'abcd'
-                }
+                  viewScreenSessionCode: 'abcd',
+                },
               },
               {
                 id: '2',
@@ -549,9 +656,9 @@ suite('ClientDelegateTest', function() {
                   isCaptionEnabled: false,
                   isHandRaised: false,
                   joinMethod: 1,
-                  viewScreenSessionCode: undefined
-                }
-              }
+                  viewScreenSessionCode: undefined,
+                },
+              },
             ],
             result);
       });
@@ -577,10 +684,10 @@ suite('ClientDelegateTest', function() {
         assertDeepEquals(2, result);
       });
 
-  test('client delegate should translate data for network info', async () => {
+  test('client delegate should translate data for network info', () => {
     const networks = [
       {state: 0, type: 0, name: 'network1', signalStrength: 50},
-      {state: 1, type: 1, name: 'network2', signalStrength: 75}
+      {state: 1, type: 1, name: 'network2', signalStrength: 75},
     ];
     const result = getNetworkInfoMojomToUI(networks);
     assertDeepEquals(
@@ -589,14 +696,14 @@ suite('ClientDelegateTest', function() {
             networkState: 0,
             networkType: 0,
             name: 'network1',
-            signalStrength: 50
+            signalStrength: 50,
           },
           {
             networkState: 1,
             networkType: 1,
             name: 'network2',
-            signalStrength: 75
-          }
+            signalStrength: 75,
+          },
         ],
         result);
   });
@@ -610,10 +717,38 @@ suite('ClientDelegateTest', function() {
       });
 
   test(
+      'client delegate should translate data for ending a view screen session',
+      async () => {
+        const result =
+            await clientDelegateImpl.getInstance().endViewScreenSession('1');
+        assertTrue(result);
+      });
+
+  test(
       'client delegate should respond correctly for authenticateWebview',
       async () => {
         const result =
             await clientDelegateImpl.getInstance().authenticateWebview();
+        assertTrue(result);
+      });
+
+  test(
+      'client delegate should respond correctly for retrieve user pref',
+      async () => {
+        const result = await clientDelegateImpl.getInstance().getUserPref(0);
+        assertDeepEquals({stringValue: 'value'}, result);
+      });
+
+  test(
+      'client delegate should respond correctly for set user pref',
+      async () => {
+        await clientDelegateImpl.getInstance().setUserPref(1, {value: {}});
+      });
+  test(
+      'client delegate should respond correctly for set site permission',
+      async () => {
+        const result =
+            await clientDelegateImpl.getInstance().setSitePermission('1', 0, 0);
         assertTrue(result);
       });
 });

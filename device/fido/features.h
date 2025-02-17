@@ -9,7 +9,6 @@
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 
 namespace device {
 
@@ -23,21 +22,7 @@ COMPONENT_EXPORT(DEVICE_FIDO) BASE_DECLARE_FEATURE(kWebAuthUseNativeWinApi);
 COMPONENT_EXPORT(DEVICE_FIDO)
 BASE_DECLARE_FEATURE(kWebAuthCableExtensionAnywhere);
 
-// Feature flag for the Google-internal
-// `WebAuthenticationAllowGoogleCorpRemoteRequestProxying` enterprise policy.
-COMPONENT_EXPORT(DEVICE_FIDO)
-BASE_DECLARE_FEATURE(kWebAuthnGoogleCorpRemoteDesktopClientPrivilege);
-
 #if BUILDFLAG(IS_ANDROID)
-// Use the Android 14 Credential Manager API.
-COMPONENT_EXPORT(DEVICE_FIDO)
-BASE_DECLARE_FEATURE(kWebAuthnAndroidCredMan);
-
-// Use the Android 14 Credential Manager API for credentials stored in Gmscore.
-COMPONENT_EXPORT(DEVICE_FIDO)
-inline constexpr base::FeatureParam<bool> kWebAuthnAndroidGpmInCredMan{
-    &kWebAuthnAndroidCredMan, "gpm_in_cred_man", false};
-
 // Use the passkey cache service parallel to the FIDO2 module to retrieve
 // passkeys from GMSCore. This is for comparison only.
 COMPONENT_EXPORT(DEVICE_FIDO)
@@ -66,15 +51,6 @@ COMPONENT_EXPORT(DEVICE_FIDO)
 BASE_DECLARE_FEATURE(kWebAuthnICloudKeychainForInactiveWithDrive);
 COMPONENT_EXPORT(DEVICE_FIDO)
 BASE_DECLARE_FEATURE(kWebAuthnICloudKeychainForInactiveWithoutDrive);
-
-// Enable use of a cloud enclave authenticator service.
-COMPONENT_EXPORT(DEVICE_FIDO)
-BASE_DECLARE_FEATURE(kWebAuthnEnclaveAuthenticator);
-
-// Enable use of Google Password Manager PIN.
-const char kWebAuthnGpmPinFeatureParameterName[] = "WebAuthenticationGpmPin";
-COMPONENT_EXPORT(DEVICE_FIDO)
-extern const base::FeatureParam<bool> kWebAuthnGpmPin;
 
 // Use insecure software unexportable keys to authenticate to the enclave.
 // For development purposes only.
@@ -113,10 +89,6 @@ BASE_DECLARE_FEATURE(kWebAuthnPublishPrelinkingInfo);
 COMPONENT_EXPORT(DEVICE_FIDO)
 BASE_DECLARE_FEATURE(kWebAuthnUpdateLastUsed);
 
-// Enables the refreshed UI for QR codes and security keys.
-COMPONENT_EXPORT(DEVICE_FIDO)
-BASE_DECLARE_FEATURE(kWebAuthnSecurityKeyAndQrCodeUiRefresh);
-
 // Enables the WebAuthn Signal API for Windows Hello.
 COMPONENT_EXPORT(DEVICE_FIDO)
 BASE_DECLARE_FEATURE(kWebAuthnHelloSignal);
@@ -150,6 +122,23 @@ BASE_DECLARE_FEATURE(kWebAuthnEnclaveAttestation);
 // the page when a request is started.
 COMPONENT_EXPORT(DEVICE_FIDO)
 BASE_DECLARE_FEATURE(kWebAuthnNewBfCacheHandling);
+
+// Removes the timeout when downloading the account state for the enclave,
+// tweaking the UI:
+// * A loading screen is shown when the enclave is selected.
+// * The GPM error screen now has a "try another way" button.
+COMPONENT_EXPORT(DEVICE_FIDO)
+BASE_DECLARE_FEATURE(kWebAuthnNoAccountTimeout);
+
+// When enabled, a sync with the Security Domain Service is performed before a
+// GPM PIN renewal.
+COMPONENT_EXPORT(DEVICE_FIDO)
+BASE_DECLARE_FEATURE(kSyncSecurityDomainBeforePINRenewal);
+
+// Feature flag for the
+// `WebAuthenticationRemoteDesktopAllowedOrigins` enterprise policy.
+COMPONENT_EXPORT(DEVICE_FIDO)
+BASE_DECLARE_FEATURE(kWebAuthnRemoteDesktopAllowedOriginsPolicy);
 
 }  // namespace device
 

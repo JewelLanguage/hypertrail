@@ -16,6 +16,7 @@
 #import "components/web_resource/web_resource_pref_names.h"
 #import "google_apis/gaia/gaia_id.h"
 #import "ios/chrome/browser/authentication/ui_bundled/authentication_flow/authentication_flow.h"
+#import "ios/chrome/browser/authentication/ui_bundled/enterprise/enterprise_utils.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/logging/first_run_signin_logger.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/logging/user_signin_logger.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_utils.h"
@@ -110,14 +111,14 @@ enum class SigninScreenState {
     _prefService = prefService;
     _syncService = syncService;
 
-    if (AreSeparateProfilesForManagedAccountsEnabled()) {
+    if (IsUseAccountListFromIdentityManagerEnabled()) {
       _hadIdentitiesAtStartup =
           !_identityManager->GetAccountsOnDevice().empty();
     } else {
       _hadIdentitiesAtStartup = _accountManagerService->HasIdentities();
     }
 
-    if (accessPoint == signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE) {
+    if (accessPoint == signin_metrics::AccessPoint::kStartPage) {
       if (!_localPrefService->GetBoolean(prefs::kEulaAccepted)) {
         _screenState = SigninScreenState::kFirstRunAsFirstScreen;
       } else {
@@ -141,8 +142,8 @@ enum class SigninScreenState {
     }
 
     _ignoreDismissGesture =
-        accessPoint == signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE ||
-        accessPoint == signin_metrics::AccessPoint::ACCESS_POINT_FORCED_SIGNIN;
+        accessPoint == signin_metrics::AccessPoint::kStartPage ||
+        accessPoint == signin_metrics::AccessPoint::kForcedSignin;
 
     [_logger logSigninStarted];
   }
@@ -183,18 +184,19 @@ enum class SigninScreenState {
   [self.consumer setUIEnabled:NO];
   __weak __typeof(self) weakSelf = self;
   ProceduralBlock startSignInCompletion = ^() {
-    [authenticationFlow startSignInWithCompletion:^(
-                            SigninCoordinatorResult result) {
-      [weakSelf.consumer setUIEnabled:YES];
-      if (result != SigninCoordinatorResultSuccess) {
-        return;
-      }
-      [weakSelf.logger
-          logSigninCompletedWithResult:SigninCoordinatorResultSuccess
-                          addedAccount:weakSelf.addedAccount];
-      if (completion)
-        completion();
-    }];
+    [authenticationFlow
+        startSignInWithCompletion:^(SigninCoordinatorResult result) {
+          [weakSelf.consumer setUIEnabled:YES];
+          if (result != SigninCoordinatorResultSuccess) {
+            return;
+          }
+          [weakSelf.logger
+              logSigninCompletedWithResult:SigninCoordinatorResultSuccess
+                              addedAccount:weakSelf.addedAccount];
+          if (completion) {
+            completion();
+          }
+        }];
   };
   startSignInCompletion();
 }
@@ -309,7 +311,7 @@ enum class SigninScreenState {
     return;
   }
   // nil is allowed only if there is no other identity.
-  if (AreSeparateProfilesForManagedAccountsEnabled()) {
+  if (IsUseAccountListFromIdentityManagerEnabled()) {
     DCHECK(selectedIdentity || _identityManager->GetAccountsOnDevice().empty());
   } else {
     DCHECK(selectedIdentity || !_accountManagerService->HasIdentities());
@@ -322,7 +324,7 @@ enum class SigninScreenState {
 #pragma mark - Private
 
 - (bool)selectedIdentityIsValid {
-  if (AreSeparateProfilesForManagedAccountsEnabled()) {
+  if (IsUseAccountListFromIdentityManagerEnabled()) {
     if (self.selectedIdentity) {
       GaiaId gaia(self.selectedIdentity.gaiaID);
       return base::Contains(_identityManager->GetAccountsOnDevice(), gaia,
@@ -350,10 +352,13 @@ enum class SigninScreenState {
   } else {
     UIImage* avatar = _accountManagerService->GetIdentityAvatarWithIdentity(
         selectedIdentity, IdentityAvatarSize::Regular);
+
     [self.consumer setSelectedIdentityUserName:selectedIdentity.userFullName
                                          email:selectedIdentity.userEmail
                                      givenName:selectedIdentity.userGivenName
-                                        avatar:avatar];
+                                        avatar:avatar
+                                       managed:[self isIdentityKnownToBeManaged:
+                                                         selectedIdentity]];
   }
 }
 
@@ -370,10 +375,31 @@ enum class SigninScreenState {
   }
 }
 
+// Returns true if `identity` is known to be managed.
+// Returns false if the identity is known not to be managed or if the management
+// status is unknown. If the management status is unknown, it is fetched by
+// calling `FetchManagedStatusForIdentity`. `identityUpdated:` will be called
+// asynchronously when the management status if retrieved and the identity is
+// managed.
+- (BOOL)isIdentityKnownToBeManaged:(id<SystemIdentity>)identity {
+  if (std::optional<BOOL> managed = IsIdentityManaged(identity);
+      managed.has_value()) {
+    return managed.value();
+  }
+
+  __weak __typeof(self) weakSelf = self;
+  FetchManagedStatusForIdentity(identity, base::BindOnce(^(bool managed) {
+                                  if (managed) {
+                                    [weakSelf identityUpdated:identity];
+                                  }
+                                }));
+  return NO;
+}
+
 #pragma mark - ChromeAccountManagerServiceObserver
 
 - (void)identityListChanged {
-  if (AreSeparateProfilesForManagedAccountsEnabled()) {
+  if (IsUseAccountListFromIdentityManagerEnabled()) {
     // Listening to `onAccountsOnDeviceChanged` instead.
     return;
   }
@@ -381,7 +407,7 @@ enum class SigninScreenState {
 }
 
 - (void)identityUpdated:(id<SystemIdentity>)identity {
-  if (AreSeparateProfilesForManagedAccountsEnabled()) {
+  if (IsUseAccountListFromIdentityManagerEnabled()) {
     // Listening to `onExtendedAccountInfoUpdated` instead.
     return;
   }
@@ -397,7 +423,7 @@ enum class SigninScreenState {
 #pragma mark -  IdentityManagerObserver
 
 - (void)onAccountsOnDeviceChanged {
-  if (!AreSeparateProfilesForManagedAccountsEnabled()) {
+  if (!IsUseAccountListFromIdentityManagerEnabled()) {
     // Listening to `identityListChanged` instead.
     return;
   }
@@ -405,7 +431,7 @@ enum class SigninScreenState {
 }
 
 - (void)onExtendedAccountInfoUpdated:(const AccountInfo&)info {
-  if (!AreSeparateProfilesForManagedAccountsEnabled()) {
+  if (!IsUseAccountListFromIdentityManagerEnabled()) {
     // Listening to `identityUpdated` instead.
     return;
   }
@@ -413,5 +439,4 @@ enum class SigninScreenState {
       _accountManagerService->GetIdentityOnDeviceWithGaiaID(info.gaia);
   [self handleIdentityUpdated:identity];
 }
-
 @end

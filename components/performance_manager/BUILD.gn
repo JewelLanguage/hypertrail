@@ -15,6 +15,8 @@ static_library("performance_manager") {
     "browser_child_process_host_proxy.cc",
     "browser_child_process_watcher.cc",
     "browser_child_process_watcher.h",
+    "decorators/frame_input_state_decorator.cc",
+    "decorators/frame_input_state_decorator.h",
     "decorators/frame_visibility_decorator.cc",
     "decorators/frame_visibility_decorator.h",
     "decorators/important_frame_decorator.cc",
@@ -41,6 +43,7 @@ static_library("performance_manager") {
     "embedder/graph_features.h",
     "embedder/performance_manager_lifetime.h",
     "embedder/performance_manager_registry.h",
+    "embedder/scoped_global_scenario_memory.h",
     "execution_context/execution_context_impl.cc",
     "execution_context/execution_context_impl.h",
     "execution_context/execution_context_registry_impl.cc",
@@ -66,6 +69,7 @@ static_library("performance_manager") {
     "execution_context_priority/root_vote_observer.cc",
     "execution_context_priority/root_vote_observer.h",
     "features.cc",
+    "frame_node_source.h",
     "freezing/cannot_freeze_reason.cc",
     "freezing/cannot_freeze_reason.h",
     "freezing/freezer.cc",
@@ -137,8 +141,6 @@ static_library("performance_manager") {
     "performance_manager_tab_helper.cc",
     "performance_manager_tab_helper.h",
     "power/battery_level_provider_creator.cc",
-    "process_node_source.cc",
-    "process_node_source.h",
     "public/browser_child_process_host_id.h",
     "public/browser_child_process_host_proxy.h",
     "public/decorators/page_live_state_decorator.h",
@@ -192,7 +194,6 @@ static_library("performance_manager") {
     "public/resource_attribution/resource_types.h",
     "public/resource_attribution/type_helpers.h",
     "public/resource_attribution/worker_context.h",
-    "public/scenarios/performance_scenarios.h",
     "public/tracing_support.h",
     "public/user_tuning/prefs.h",
     "public/user_tuning/tab_revisit_tracker.h",
@@ -236,13 +237,17 @@ static_library("performance_manager") {
     "resource_attribution/worker_client_pages.cc",
     "resource_attribution/worker_client_pages.h",
     "resource_attribution/worker_context.cc",
+    "scenarios/browser_performance_scenarios.cc",
+    "scenarios/browser_performance_scenarios.h",
+    "scenarios/input_scenario_observer.cc",
+    "scenarios/input_scenario_observer.h",
     "scenarios/loading_scenario_data.cc",
     "scenarios/loading_scenario_data.h",
     "scenarios/loading_scenario_observer.cc",
     "scenarios/loading_scenario_observer.h",
     "scenarios/performance_scenario_data.cc",
     "scenarios/performance_scenario_data.h",
-    "scenarios/performance_scenarios.cc",
+    "scenarios/scoped_global_scenario_memory.cc",
     "service_worker_context_adapter.cc",
     "service_worker_context_adapter.h",
     "tab_helper_frame_node_source.cc",
@@ -273,6 +278,7 @@ static_library("performance_manager") {
     "//components/content_settings/core/common",
     "//components/guest_view/buildflags",
     "//components/metrics",
+    "//components/performance_manager/scenario_api",
     "//components/pref_registry:pref_registry",
     "//components/prefs:prefs",
     "//components/system_cpu:system_cpu",
@@ -348,13 +354,6 @@ static_library("performance_manager") {
       "power/dbus_power_manager_sampling_event_source.h",
     ]
   }
-
-  if (is_win) {
-    sources += [
-      "graph/policies/prefetch_virtual_memory_policy.cc",
-      "graph/policies/prefetch_virtual_memory_policy.h",
-    ]
-  }
 }
 
 source_set("unit_tests") {
@@ -420,8 +419,8 @@ source_set("unit_tests") {
     "resource_attribution/resource_contexts_unittest.cc",
     "resource_attribution/type_helpers_unittest.cc",
     "resource_attribution/worker_context_unittest.cc",
+    "scenarios/browser_performance_scenarios_unittest.cc",
     "scenarios/loading_scenario_observer_unittest.cc",
-    "scenarios/performance_scenarios_unittest.cc",
     "test_support/mock_graphs_unittest.cc",
     "user_tuning/prefs_unittest.cc",
     "user_tuning/tab_revisit_tracker_unittest.cc",
@@ -444,6 +443,7 @@ source_set("unit_tests") {
     "test_support:test_support_common",
     "//base/test:test_support",
     "//components/memory_pressure:test_support",
+    "//components/performance_manager/scenario_api",
     "//components/prefs:test_support",
     "//components/services/storage/public/cpp",
     "//components/ukm:test_support",

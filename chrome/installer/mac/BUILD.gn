@@ -66,6 +66,23 @@ copy("copy_signing") {
   outputs = [ "$_packaging_dir/signing/{{source_file_part}}" ]
 }
 
+copy("copy_empty_icon") {
+  visibility = [ ":copies" ]
+
+  sources = [ "packaging_resources/empty_icon.png" ]
+
+  outputs = [ "$_packaging_dir/{{source_file_part}}" ]
+}
+
+copy("copy_localized_dmg_label") {
+  visibility = [ ":copies" ]
+
+  sources = [ "packaging_resources/localized_dmg_label/.localized/en.strings" ]
+
+  outputs =
+      [ "$_packaging_dir/localized_dmg_label/.localized/{{source_file_part}}" ]
+}
+
 if (is_chrome_branded) {
   copy("copy_widevine_signing") {
     visibility = [ ":copies" ]
@@ -82,6 +99,8 @@ copy("copies") {
   visibility = [ ":mac" ]
 
   deps = [
+    ":copy_empty_icon",
+    ":copy_localized_dmg_label",
     ":copy_signing",
     "//chrome:entitlements",
     "//chrome/installer/mac/third_party/bsdiff:goobsdiff",
@@ -130,15 +149,11 @@ copy("copies") {
       "internal/chrome_dev_dmg_dsstore",
       "internal/chrome_dev_dmg_icon.icns",
       "internal/chrome_dmg_background.png",
+      "internal/chrome_dmg_background_alt.png",
       "internal/chrome_dmg_dsstore",
+      "internal/chrome_dmg_dsstore_alt",
       "internal/chrome_dmg_icon.icns",
       "keystone_install.sh",
-
-      # Provision profiles for staging signing.
-      "internal/Google_Chrome.39364a56fb7fe353d10e70d38db822e5182cc420.provisionprofile",
-      "internal/Google_Chrome_Beta.39364a56fb7fe353d10e70d38db822e5182cc420.provisionprofile",
-      "internal/Google_Chrome_Canary.39364a56fb7fe353d10e70d38db822e5182cc420.provisionprofile",
-      "internal/Google_Chrome_Dev.39364a56fb7fe353d10e70d38db822e5182cc420.provisionprofile",
     ]
   }
 

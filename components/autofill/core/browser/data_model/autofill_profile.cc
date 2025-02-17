@@ -24,7 +24,6 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversion_utils.h"
@@ -331,7 +330,7 @@ base::android::ScopedJavaLocalRef<jobject> AutofillProfile::CreateJavaObject(
       Java_AutofillProfile_Constructor(
           env, guid(), static_cast<jint>(record_type()), language_code());
 
-  for (FieldType type : GetDatabaseStoredTypesOfAutofillProfile()) {
+  for (FieldType type : AutofillProfile::kDatabaseStoredTypes) {
     auto status = static_cast<jint>(GetVerificationStatus(type));
     // TODO(crbug.com/40278253): Reconcile usage of GetInfo and GetRawInfo
     // below.
@@ -412,16 +411,13 @@ bool AutofillProfile::HasGreaterRankingThan(const AutofillProfile* other,
       score, other_score, other->usage_history().use_date());
 }
 
-void AutofillProfile::GetMatchingTypesWithProfileSources(
-    const std::u16string& text,
-    const std::string& app_locale,
-    FieldTypeSet* matching_types,
-    PossibleProfileValueSources* profile_value_sources) const {
+void AutofillProfile::GetMatchingTypes(const std::u16string& text,
+                                       const std::string& app_locale,
+                                       FieldTypeSet* matching_types) const {
   FieldTypeSet matching_types_in_this_profile;
   for (const auto* form_group : FormGroups()) {
-    form_group->GetMatchingTypesWithProfileSources(
-        text, app_locale, &matching_types_in_this_profile,
-        profile_value_sources);
+    form_group->GetMatchingTypes(text, app_locale,
+                                 &matching_types_in_this_profile);
   }
 
   for (auto type : matching_types_in_this_profile) {
@@ -446,10 +442,12 @@ void AutofillProfile::SetRawInfoWithVerificationStatus(
   }
 }
 
-void AutofillProfile::GetSupportedTypes(FieldTypeSet* supported_types) const {
-  for (const auto* form_group : FormGroups()) {
-    form_group->GetSupportedTypes(supported_types);
+FieldTypeSet AutofillProfile::GetSupportedTypes() const {
+  FieldTypeSet supported_types;
+  for (const FormGroup* form_group : FormGroups()) {
+    supported_types.insert_all(form_group->GetSupportedTypes());
   }
+  return supported_types;
 }
 
 FieldType AutofillProfile::GetStorableTypeOf(FieldType type) const {
@@ -557,7 +555,7 @@ int AutofillProfile::Compare(const AutofillProfile& profile) const {
 
   // When adding field types, ensure that they don't need to be added here and
   // update the last checked value.
-  static_assert(FieldType::MAX_VALID_FIELD_TYPE == 177,
+  static_assert(FieldType::MAX_VALID_FIELD_TYPE == 185,
                 "New field type needs to be reviewed for inclusion in the "
                 "profile comparison logic.");
 
@@ -614,7 +612,7 @@ bool AutofillProfile::operator==(const AutofillProfile& profile) const {
 bool AutofillProfile::IsSubsetOf(const AutofillProfileComparator& comparator,
                                  const AutofillProfile& profile) const {
   return IsSubsetOfForFieldSet(comparator, profile,
-                               GetDatabaseStoredTypesOfAutofillProfile());
+                               AutofillProfile::kDatabaseStoredTypes);
 }
 
 bool AutofillProfile::IsSubsetOfForFieldSet(
@@ -823,11 +821,9 @@ bool AutofillProfile::MergeDataFrom(const AutofillProfile& profile,
 void AutofillProfile::MergeFormGroupTokenQuality(
     const FormGroup& merged_group,
     const AutofillProfile& other_profile) {
-  FieldTypeSet supported_types;
-  merged_group.GetSupportedTypes(&supported_types);
-  for (FieldType type : supported_types) {
+  for (FieldType type : merged_group.GetSupportedTypes()) {
     const std::u16string& merged_value = merged_group.GetRawInfo(type);
-    if (!GetDatabaseStoredTypesOfAutofillProfile().contains(type) ||
+    if (!AutofillProfile::kDatabaseStoredTypes.contains(type) ||
         merged_value == GetRawInfo(type)) {
       // Quality information is only tracked for stored types. If the merged
       // value matches the existing value, its token quality is kept.
@@ -1032,7 +1028,7 @@ void AutofillProfile::LogVerificationStatuses() {
   AutofillMetrics::LogVerificationStatusOfAddressTokensOnProfileUsage(*this);
 }
 
-VerificationStatus AutofillProfile::GetVerificationStatusImpl(
+VerificationStatus AutofillProfile::GetVerificationStatus(
     const FieldType type) const {
   const FormGroup* form_group = FormGroupForType(type);
   if (!form_group)
@@ -1041,17 +1037,16 @@ VerificationStatus AutofillProfile::GetVerificationStatusImpl(
   return form_group->GetVerificationStatus(type);
 }
 
-std::u16string AutofillProfile::GetInfoImpl(
-    const AutofillType& type,
-    const std::string& app_locale) const {
+std::u16string AutofillProfile::GetInfo(const AutofillType& type,
+                                        const std::string& app_locale) const {
   const FormGroup* form_group = FormGroupForType(type.GetStorableType());
   if (!form_group) {
     return std::u16string();
   }
-  return form_group->GetInfoImpl(type, app_locale);
+  return form_group->GetInfo(type, app_locale);
 }
 
-bool AutofillProfile::SetInfoWithVerificationStatusImpl(
+bool AutofillProfile::SetInfoWithVerificationStatus(
     const AutofillType& type,
     const std::u16string& value,
     const std::string& app_locale,
@@ -1063,8 +1058,17 @@ bool AutofillProfile::SetInfoWithVerificationStatusImpl(
   std::u16string trimmed_value;
   base::TrimWhitespace(value, base::TRIM_ALL, &trimmed_value);
 
-  return form_group->SetInfoWithVerificationStatusImpl(type, trimmed_value,
-                                                       app_locale, status);
+  return form_group->SetInfoWithVerificationStatus(type, trimmed_value,
+                                                   app_locale, status);
+}
+
+bool AutofillProfile::SetInfoWithVerificationStatus(
+    FieldType type,
+    const std::u16string& value,
+    const std::string& app_locale,
+    VerificationStatus status) {
+  return SetInfoWithVerificationStatus(AutofillType(type), value, app_locale,
+                                       status);
 }
 
 // static
@@ -1214,17 +1218,10 @@ std::ostream& operator<<(std::ostream& os, const AutofillProfile& profile) {
      << profile.usage_history().use_date() << " " << profile.language_code()
      << std::endl;
 
-  // Lambda to print the value and verification status for |type|.
-  auto print_values_lambda = [&os, &profile](FieldType type) {
+  for (FieldType type : profile.GetSupportedTypes()) {
     os << FieldTypeToStringView(type) << ": " << profile.GetRawInfo(type) << "("
        << profile.GetVerificationStatus(type) << ")" << std::endl;
-  };
-
-  // Use a helper function to print the values of the stored types.
-  FieldTypeSet field_types_to_print;
-  profile.GetSupportedTypes(&field_types_to_print);
-
-  base::ranges::for_each(field_types_to_print, print_values_lambda);
+  }
 
   return os;
 }
@@ -1288,40 +1285,6 @@ void AutofillProfile::ClearFields(const FieldTypeSet& fields) {
     SetRawInfoWithVerificationStatus(field_type, u"",
                                      VerificationStatus::kNoStatus);
   }
-}
-
-AutofillType AutofillProfile::GetFillingType(AutofillType field_type) const {
-  if (HasInfo(field_type)) {
-    return field_type;
-  }
-  switch (field_type.group()) {
-    case FieldTypeGroup::kName:
-      return AutofillType(
-          GetNameInfo().GetStructuredName().GetFallbackTypeForType(
-              field_type.GetStorableType()));
-    case FieldTypeGroup::kAddress:
-      return AutofillType(GetAddress().GetRoot().GetFallbackTypeForType(
-          field_type.GetStorableType()));
-    case FieldTypeGroup::kEmail:
-    case FieldTypeGroup::kCompany:
-    case FieldTypeGroup::kPhone:
-      return field_type;
-    // For field-by-field filling in manual fallback autofill, the field's type
-    // will not be used but the type that generated the suggested value will.
-    // This means that this function will return at the `HasInfo` since we do
-    // not suggest filling empty values.
-    case FieldTypeGroup::kNoGroup:
-    case FieldTypeGroup::kCreditCard:
-    case FieldTypeGroup::kPasswordField:
-    case FieldTypeGroup::kTransaction:
-    case FieldTypeGroup::kUsernameField:
-    case FieldTypeGroup::kUnfillable:
-    case FieldTypeGroup::kIban:
-    case FieldTypeGroup::kStandaloneCvcField:
-    case FieldTypeGroup::kAutofillAi:
-      NOTREACHED();
-  }
-  NOTREACHED();
 }
 
 UsageHistoryInformation& AutofillProfile::usage_history() {

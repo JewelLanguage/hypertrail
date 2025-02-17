@@ -11,7 +11,9 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/metrics/user_action_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/simple_test_clock.h"
 #include "base/test/task_environment.h"
 #include "components/commerce/core/proto/merchant_trust.pb.h"
 #include "components/optimization_guide/core/mock_optimization_guide_decider.h"
@@ -21,6 +23,9 @@
 #include "components/optimization_guide/proto/common_types.pb.h"
 #include "components/page_info/core/features.h"
 #include "components/page_info/core/merchant_trust_validation.h"
+#include "components/page_info/core/pref_names.h"
+#include "components/prefs/pref_registry_simple.h"
+#include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -60,24 +65,42 @@ OptimizationMetadata BuildMerchantTrustResponse() {
 
 }  // namespace
 
+class MockMerchantTrustServiceDelegate : public MerchantTrustService::Delegate {
+ public:
+  MOCK_METHOD(void, ShowEvaluationSurvey, (), (override));
+  MOCK_METHOD(double, GetSiteEngagementScore, (const GURL url), (override));
+};
+
 class MockMerchantTrustService : public MerchantTrustService {
  public:
   explicit MockMerchantTrustService(
-      optimization_guide::OptimizationGuideDecider* optimization_guide_decider)
-      : MerchantTrustService(optimization_guide_decider,
+      optimization_guide::OptimizationGuideDecider* optimization_guide_decider,
+      std::unique_ptr<MockMerchantTrustServiceDelegate> delegate,
+      PrefService* prefs)
+      : MerchantTrustService(std::move(delegate),
+                             optimization_guide_decider,
                              /*is_off_the_record=*/false,
-                             nullptr) {}
+                             prefs) {}
 
   MOCK_METHOD(bool, IsOptimizationGuideAllowed, (), (const, override));
 };
 
 class MerchantTrustServiceTest : public ::testing::Test {
  public:
+  MerchantTrustServiceTest() {
+    page_info::MerchantTrustService::RegisterProfilePrefs(prefs()->registry());
+  }
+
   void SetUp() override {
-    service_ = std::make_unique<MockMerchantTrustService>(&opt_guide());
+    auto delegate = std::make_unique<MockMerchantTrustServiceDelegate>();
+    delegate_ = delegate.get();
+    service_ = std::make_unique<MockMerchantTrustService>(
+        &opt_guide(), std::move(delegate), prefs());
     SetOptimizationGuideAllowed(true);
     SetResponse(GURL("https://foo.com"), OptimizationGuideDecision::kUnknown,
                 BuildMerchantTrustResponse());
+    clock_.SetNow(base::Time::Now());
+    service_->SetClockForTesting(&clock_);
   }
 
   // Setup optimization guide to return the given decision and metadata for the
@@ -107,6 +130,11 @@ class MerchantTrustServiceTest : public ::testing::Test {
   optimization_guide::MockOptimizationGuideDecider& opt_guide() {
     return opt_guide_;
   }
+  MockMerchantTrustServiceDelegate* delegate() { return delegate_; }
+
+  sync_preferences::TestingPrefServiceSyncable* prefs() { return &prefs_; }
+
+  base::SimpleTestClock* clock() { return &clock_; }
 
  private:
   base::test::TaskEnvironment task_environment_{
@@ -114,6 +142,9 @@ class MerchantTrustServiceTest : public ::testing::Test {
   testing::NiceMock<optimization_guide::MockOptimizationGuideDecider>
       opt_guide_;
   std::unique_ptr<MockMerchantTrustService> service_;
+  raw_ptr<MockMerchantTrustServiceDelegate> delegate_;
+  sync_preferences::TestingPrefServiceSyncable prefs_;
+  base::SimpleTestClock clock_;
 };
 
 // Tests that proto are returned correctly when optimization guide decision is
@@ -191,7 +222,7 @@ TEST_F(MerchantTrustServiceTest, SampleData) {
             ASSERT_TRUE(info.has_value());
             ASSERT_EQ(info->page_url,
                       GURL("https://customerreviews.google.com/v/"
-                           "merchant?q=amazon.com&c=AE&v=19"));
+                           "merchant?q=amazon.com&c=US&gl=US"));
             run_loop->Quit();
           },
           &run_loop));
@@ -225,4 +256,135 @@ TEST_F(MerchantTrustServiceTest, InvalidProto) {
   t.ExpectUniqueSample("Security.PageInfo.MerchantTrustStatus",
                        MerchantTrustStatus::kMissingReviewsSummary, 1);
 }
+
+// Tests for control evaluation survey.
+TEST_F(MerchantTrustServiceTest, ControlSurvey) {
+  base::test::ScopedFeatureList feature_list;
+  EXPECT_CALL(*delegate(), ShowEvaluationSurvey()).Times(1);
+  feature_list.InitWithFeatureState(kMerchantTrustEvaluationControlSurvey,
+                                    true);
+
+  prefs()->SetTime(prefs::kMerchantTrustPageInfoLastOpenTime, clock()->Now());
+  clock()->Advance(kMerchantTrustEvaluationControlMinTimeToShowSurvey.Get());
+  service()->MaybeShowEvaluationSurvey();
+}
+
+TEST_F(MerchantTrustServiceTest, ControlSurveyInteractionTooEarly) {
+  base::test::ScopedFeatureList feature_list;
+  EXPECT_CALL(*delegate(), ShowEvaluationSurvey()).Times(0);
+  feature_list.InitWithFeatureState(kMerchantTrustEvaluationControlSurvey,
+                                    true);
+
+  prefs()->SetTime(prefs::kMerchantTrustPageInfoLastOpenTime, clock()->Now());
+  clock()->Advance(kMerchantTrustEvaluationControlMinTimeToShowSurvey.Get() -
+                   base::Seconds(1));
+  service()->MaybeShowEvaluationSurvey();
+}
+
+TEST_F(MerchantTrustServiceTest, ControlSurveyInteractionExpired) {
+  base::test::ScopedFeatureList feature_list;
+  EXPECT_CALL(*delegate(), ShowEvaluationSurvey()).Times(0);
+  feature_list.InitWithFeatureState(kMerchantTrustEvaluationControlSurvey,
+                                    true);
+
+  prefs()->SetTime(prefs::kMerchantTrustPageInfoLastOpenTime, clock()->Now());
+  clock()->Advance(kMerchantTrustEvaluationControlMaxTimeToShowSurvey.Get() +
+                   base::Seconds(1));
+  service()->MaybeShowEvaluationSurvey();
+}
+
+// Test for control evaluation survey disabled.
+TEST_F(MerchantTrustServiceTest, ControlSurveyDisabled) {
+  base::test::ScopedFeatureList feature_list;
+  EXPECT_CALL(*delegate(), ShowEvaluationSurvey()).Times(0);
+
+  feature_list.InitWithFeatureState(kMerchantTrustEvaluationControlSurvey,
+                                    false);
+  service()->MaybeShowEvaluationSurvey();
+}
+
+// Tests for experiment evaluation survey.
+TEST_F(MerchantTrustServiceTest, ExperimentSurvey) {
+  base::test::ScopedFeatureList feature_list;
+  EXPECT_CALL(*delegate(), ShowEvaluationSurvey()).Times(1);
+  feature_list.InitWithFeatureState(kMerchantTrustEvaluationExperimentSurvey,
+                                    true);
+
+  prefs()->SetTime(prefs::kMerchantTrustUiLastInteractionTime, clock()->Now());
+  clock()->Advance(kMerchantTrustEvaluationExperimentMinTimeToShowSurvey.Get());
+  service()->MaybeShowEvaluationSurvey();
+}
+
+TEST_F(MerchantTrustServiceTest, ExperimentSurveyInteractionTooEarly) {
+  base::test::ScopedFeatureList feature_list;
+  EXPECT_CALL(*delegate(), ShowEvaluationSurvey()).Times(0);
+  feature_list.InitWithFeatureState(kMerchantTrustEvaluationExperimentSurvey,
+                                    true);
+
+  prefs()->SetTime(prefs::kMerchantTrustUiLastInteractionTime, clock()->Now());
+  clock()->Advance(kMerchantTrustEvaluationExperimentMinTimeToShowSurvey.Get() -
+                   base::Seconds(1));
+  service()->MaybeShowEvaluationSurvey();
+}
+
+TEST_F(MerchantTrustServiceTest, ExperimentSurveyInteractionExpired) {
+  base::test::ScopedFeatureList feature_list;
+  EXPECT_CALL(*delegate(), ShowEvaluationSurvey()).Times(0);
+  feature_list.InitWithFeatureState(kMerchantTrustEvaluationExperimentSurvey,
+                                    true);
+
+  prefs()->SetTime(prefs::kMerchantTrustUiLastInteractionTime, clock()->Now());
+  clock()->Advance(kMerchantTrustEvaluationExperimentMaxTimeToShowSurvey.Get() +
+                   base::Seconds(1));
+  service()->MaybeShowEvaluationSurvey();
+}
+
+// Test for experiment evaluation survey disabled.
+TEST_F(MerchantTrustServiceTest, ExperimentSurveyDisabled) {
+  base::test::ScopedFeatureList feature_list;
+  EXPECT_CALL(*delegate(), ShowEvaluationSurvey()).Times(0);
+
+  feature_list.InitWithFeatureState(kMerchantTrustEvaluationExperimentSurvey,
+                                    false);
+  service()->MaybeShowEvaluationSurvey();
+}
+
+TEST_F(MerchantTrustServiceTest, RecordMerchantTrustInteractionFamiliarSite) {
+  base::HistogramTester t;
+  base::UserActionTester user_action_tester;
+
+  EXPECT_CALL(*delegate(), GetSiteEngagementScore(_))
+      .WillRepeatedly(Return(kMerchantFamiliarityThreshold));
+  service()->RecordMerchantTrustInteraction(
+      GURL("https://foo.com"), MerchantTrustInteraction::kPageInfoRowShown);
+
+  EXPECT_EQ(1, user_action_tester.GetActionCount(
+                   "MerchantTrust.PageInfoRowSeen.FamiliarSite"));
+  t.ExpectUniqueSample(
+      "Security.PageInfo.MerchantTrustInteraction.FamiliarSite",
+      MerchantTrustInteraction::kPageInfoRowShown, 1);
+  t.ExpectBucketCount(
+      "Security.PageInfo.MerchantTrustEngagement.PageInfoRowShown",
+      kMerchantFamiliarityThreshold, 1);
+}
+
+TEST_F(MerchantTrustServiceTest, RecordMerchantTrustInteractionUnfamiliarSite) {
+  base::HistogramTester t;
+  base::UserActionTester user_action_tester;
+
+  EXPECT_CALL(*delegate(), GetSiteEngagementScore(_))
+      .WillRepeatedly(Return(kMerchantFamiliarityThreshold - 0.1));
+  service()->RecordMerchantTrustInteraction(
+      GURL("https://foo.com"),
+      MerchantTrustInteraction::kBubbleOpenedFromPageInfo);
+
+  EXPECT_EQ(1, user_action_tester.GetActionCount(
+                   "MerchantTrust.BubbleOpenedFromPageInfo.UnfamiliarSite"));
+  t.ExpectUniqueSample(
+      "Security.PageInfo.MerchantTrustInteraction.UnfamiliarSite",
+      MerchantTrustInteraction::kBubbleOpenedFromPageInfo, 1);
+  t.ExpectBucketCount("Security.PageInfo.MerchantTrustEngagement.BubbleOpened",
+                      kMerchantFamiliarityThreshold - 1, 1);
+}
+
 }  // namespace page_info

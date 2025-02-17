@@ -8,12 +8,14 @@
 #include <array>
 #include <memory>
 #include <optional>
+#include <string_view>
 
 #include "base/functional/bind.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/color/color_id.h"
+#include "ui/color/color_variant.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/views/controls/button/button.h"
@@ -51,7 +53,7 @@ class VIEWS_EXPORT LabelButton : public Button,
   // determines the appearance of `text`.
   explicit LabelButton(
       PressedCallback callback = PressedCallback(),
-      const std::u16string& text = std::u16string(),
+      std::u16string_view text = {},
       int button_context = style::CONTEXT_BUTTON,
       std::unique_ptr<LabelButtonImageContainer> image_container =
           std::make_unique<SingleImageContainer>());
@@ -76,8 +78,8 @@ class VIEWS_EXPORT LabelButton : public Button,
   bool HasImage(ButtonState state) const;
 
   // Gets or sets the text shown on the button.
-  const std::u16string& GetText() const;
-  virtual void SetText(const std::u16string& text);
+  std::u16string_view GetText() const;
+  virtual void SetText(std::u16string_view text);
 
   // Set the text style of the label.
   void SetLabelStyle(views::style::TextStyle text_style);
@@ -242,7 +244,7 @@ class VIEWS_EXPORT LabelButton : public Button,
   void StateChanged(ButtonState old_state) override;
 
  private:
-  void SetTextInternal(const std::u16string& text);
+  void SetTextInternal(std::u16string_view text);
 
   void ClearTextIfShrunkDown();
 
@@ -290,8 +292,7 @@ class VIEWS_EXPORT LabelButton : public Button,
   // The image models and colors for each button state.
   std::array<std::optional<ui::ImageModel>, STATE_COUNT>
       button_state_image_models_;
-  std::array<absl::variant<SkColor, ui::ColorId>, STATE_COUNT>
-      button_state_colors_;
+  std::array<std::optional<ui::ColorVariant>, STATE_COUNT> button_state_colors_;
 
   // Used to track whether SetTextColor() has been invoked.
   std::array<bool, STATE_COUNT> explicitly_set_colors_ = {};
@@ -367,6 +368,7 @@ VIEW_BUILDER_PROPERTY(bool, IsDefault)
 VIEW_BUILDER_PROPERTY(int, ImageLabelSpacing)
 VIEW_BUILDER_PROPERTY(bool, ImageCentered)
 VIEW_BUILDER_METHOD(SetImageModel, Button::ButtonState, const ui::ImageModel&)
+VIEW_BUILDER_METHOD(SetTextColorId, Button::ButtonState, ui::ColorId)
 END_VIEW_BUILDER
 
 }  // namespace views

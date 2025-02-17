@@ -115,6 +115,8 @@ if (is_android) {
       "android/java/src/org/chromium/chrome/browser/data_sharing/ui/recent_activity/DescriptionAndTimestamp.java",
       "android/java/src/org/chromium/chrome/browser/data_sharing/ui/recent_activity/RecentActivityActionHandler.java",
       "android/java/src/org/chromium/chrome/browser/data_sharing/ui/recent_activity/RecentActivityBottomSheetContent.java",
+      "android/java/src/org/chromium/chrome/browser/data_sharing/ui/recent_activity/RecentActivityContainerProperties.java",
+      "android/java/src/org/chromium/chrome/browser/data_sharing/ui/recent_activity/RecentActivityContainerViewBinder.java",
       "android/java/src/org/chromium/chrome/browser/data_sharing/ui/recent_activity/RecentActivityListCoordinator.java",
       "android/java/src/org/chromium/chrome/browser/data_sharing/ui/recent_activity/RecentActivityListMediator.java",
       "android/java/src/org/chromium/chrome/browser/data_sharing/ui/recent_activity/RecentActivityListProperties.java",
@@ -146,6 +148,7 @@ if (is_android) {
     ]
 
     deps = [
+      ":java_resources",
       "//base:callback_java",
       "//base:supplier_java",
       "//base:tasks_java",
@@ -204,7 +207,6 @@ if (is_android) {
     resources_package = "org.chromium.chrome.browser.data_sharing"
     sources = [
       "android/java/src/org/chromium/chrome/browser/data_sharing/DataSharingImplFactory.java",
-      "android/java/src/org/chromium/chrome/browser/data_sharing/MemberPickerListenerImpl.java",
       "android/java/src/org/chromium/chrome/browser/data_sharing/NoOpDataSharingSDKDelegateImpl.java",
     ]
 
@@ -243,6 +245,7 @@ if (is_android) {
       "//base:callback_java",
       "//chrome/browser/ui/android/strings:ui_strings_grd",
       "//components/browser_ui/styles/android:java",
+      "//components/collaboration/public:core_java",
       "//components/data_sharing/public:public_java",
       "//third_party/androidx:androidx_annotation_annotation_java",
       "//ui/android:ui_no_recycler_view_java",

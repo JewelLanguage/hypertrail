@@ -348,10 +348,11 @@ void RemoteSuggestionsService::StopCreatingDocumentSuggestionsRequest() {
 
 void RemoteSuggestionsService::
     CreateEnterpriseSearchAggregatorSuggestionsRequest(
+        const std::u16string& query,
         const GURL& suggest_url,
-        const std::string& request_body,
         StartCallback start_callback,
-        CompletionCallback completion_callback) {
+        CompletionCallback completion_callback,
+        bool in_keyword_mode) {
   if (!enterprise_search_aggregator_suggestions_service_) {
     return;
   }
@@ -361,7 +362,7 @@ void RemoteSuggestionsService::
 
   enterprise_search_aggregator_suggestions_service_
       ->CreateEnterpriseSearchAggregatorSuggestionsRequest(
-          suggest_url, request_body,
+          query, suggest_url,
           base::BindOnce(&RemoteSuggestionsService::OnRequestCreated,
                          weak_ptr_factory_.GetWeakPtr(), request_id),
           base::BindOnce(&RemoteSuggestionsService::OnRequestStartedAsync,
@@ -370,7 +371,8 @@ void RemoteSuggestionsService::
                          std::move(start_callback)),
           base::BindOnce(&RemoteSuggestionsService::OnRequestCompleted,
                          weak_ptr_factory_.GetWeakPtr(), request_id,
-                         std::move(completion_callback)));
+                         std::move(completion_callback)),
+          in_keyword_mode);
 }
 
 std::unique_ptr<network::SimpleURLLoader>

@@ -4,11 +4,14 @@
 
 #include "components/account_manager_core/chromeos/account_manager.h"
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 
+#include "base/check.h"
+#include "base/check_op.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/important_file_writer.h"
@@ -22,7 +25,6 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/not_fatal_until.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
@@ -92,24 +94,17 @@ std::optional<::account_manager::AccountType> FromProtoAccountType(
               static_cast<int>(::account_manager::AccountType::kGaia),
           "Underlying enum values must match");
       return ::account_manager::AccountType::kGaia;
-    case internal::AccountType::ACCOUNT_TYPE_ACTIVE_DIRECTORY:
-      static_assert(static_cast<int>(
-                        internal::AccountType::ACCOUNT_TYPE_ACTIVE_DIRECTORY) ==
-                        static_cast<int>(
-                            ::account_manager::AccountType::kActiveDirectory),
-                    "Underlying enum values must match");
-      return ::account_manager::AccountType::kActiveDirectory;
   }
 }
 
 internal::AccountType ToProtoAccountType(
     const ::account_manager::AccountType& account_type) {
-  switch (account_type) {
-    case ::account_manager::AccountType::kGaia:
-      return internal::AccountType::ACCOUNT_TYPE_GAIA;
-    case ::account_manager::AccountType::kActiveDirectory:
-      return internal::AccountType::ACCOUNT_TYPE_ACTIVE_DIRECTORY;
-  }
+  // Currently, we only support `kGaia` account type. Should a new type be added
+  // in the future, consider removing the `CHECK_EQ()` below and handling the
+  // new type accordingly.
+  CHECK_EQ(account_type, account_manager::AccountType::kGaia);
+
+  return internal::AccountType::ACCOUNT_TYPE_GAIA;
 }
 
 // Returns a Base16 encoded SHA1 digest of `data`.
@@ -118,9 +113,6 @@ std::string Sha1Digest(const std::string& data) {
 }
 
 }  // namespace
-
-// static
-const char AccountManager::kActiveDirectoryDummyToken[] = "dummy_ad_token";
 
 // static
 const char* const AccountManager::kInvalidToken =
@@ -565,10 +557,10 @@ void AccountManager::UpdateToken(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_NE(init_state_, InitializationState::kNotStarted);
 
-  if (account_key.account_type() ==
-      ::account_manager::AccountType::kActiveDirectory) {
-    DCHECK_EQ(token, kActiveDirectoryDummyToken);
-  }
+  // Currently, we only support `kGaia` account type. Should a new type be added
+  // in the future, consider removing the `CHECK_EQ()` below and handling the
+  // new type accordingly.
+  CHECK_EQ(account_key.account_type(), account_manager::AccountType::kGaia);
 
   if (init_state_ != InitializationState::kInitialized) {
     base::OnceClosure closure =
@@ -724,8 +716,7 @@ bool AccountManager::IsTokenAvailable(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   auto it = accounts_.find(account_key);
-  return it != accounts_.end() && !it->second.token.empty() &&
-         it->second.token != kActiveDirectoryDummyToken;
+  return it != accounts_.end() && !it->second.token.empty();
 }
 
 void AccountManager::HasDummyGaiaToken(
@@ -823,8 +814,8 @@ void AccountManager::DeletePendingTokenRevocationRequest(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   auto it =
-      base::ranges::find(pending_token_revocation_requests_, request,
-                         &std::unique_ptr<GaiaTokenRevocationRequest>::get);
+      std::ranges::find(pending_token_revocation_requests_, request,
+                        &std::unique_ptr<GaiaTokenRevocationRequest>::get);
 
   if (it != pending_token_revocation_requests_.end()) {
     pending_token_revocation_requests_.erase(it);

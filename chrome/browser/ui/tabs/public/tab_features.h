@@ -19,6 +19,7 @@ class PinnedTranslateActionListener;
 class Profile;
 class ReadAnythingSidePanelController;
 class SidePanelRegistry;
+class TranslatePageActionController;
 
 namespace commerce {
 class CommerceUiTabHelper;
@@ -57,6 +58,10 @@ class PermissionIndicatorsTabData;
 namespace privacy_sandbox {
 class PrivacySandboxTabObserver;
 }  // namespace privacy_sandbox
+
+namespace metrics {
+class DwaWebContentsObserver;
+}  // namespace metrics
 
 namespace sync_sessions {
 class SyncSessionsRouterTabHelper;
@@ -139,12 +144,16 @@ class TabFeatures {
     return privacy_sandbox_tab_observer_.get();
   }
 
+  metrics::DwaWebContentsObserver* dwa_web_contents_observer() {
+    return dwa_web_contents_observer_.get();
+  }
+
   extensions::ExtensionSidePanelManager* extension_side_panel_manager() {
     return extension_side_panel_manager_.get();
   }
 
   tab_groups::SavedTabGroupWebContentsListener*
-  saved_tab_group_web_contents_listener() {
+  saved_tab_group_web_contents_listener() const {
     return saved_tab_group_web_contents_listener_.get();
   }
 
@@ -215,6 +224,9 @@ class TabFeatures {
   std::unique_ptr<privacy_sandbox::PrivacySandboxTabObserver>
       privacy_sandbox_tab_observer_;
 
+  std::unique_ptr<metrics::DwaWebContentsObserver>
+      dwa_web_contents_observer_;
+
   // The tab-scoped extension side-panel manager. There is a separate
   // window-scoped extension side-panel manager.
   std::unique_ptr<extensions::ExtensionSidePanelManager>
@@ -235,8 +247,13 @@ class TabFeatures {
   // Holds subscriptions for TabInterface callbacks.
   std::vector<base::CallbackListSubscription> tab_subscriptions_;
 
-  // Responsible for managing page actions of a tab.
+  // Responsible for managing all page actions of a tab. Other controllers
+  // interact with this to have their feature's page action shown.
   std::unique_ptr<page_actions::PageActionController> page_action_controller_;
+
+  // Responsible for managing the "Translate" page action.
+  std::unique_ptr<TranslatePageActionController>
+      translate_page_action_controller_;
 
   // Contains the recent collaboration message for a shared tab.
   std::unique_ptr<tab_groups::CollaborationMessagingTabData>
@@ -247,7 +264,6 @@ class TabFeatures {
 
   std::unique_ptr<DisconnectFileChooserOnBackgroundController>
       disconnect_file_chooser_on_background_controller_;
-
 #if BUILDFLAG(ENABLE_GLIC)
   std::unique_ptr<glic::GlicTabIndicatorHelper> glic_tab_indicator_helper_;
 #endif

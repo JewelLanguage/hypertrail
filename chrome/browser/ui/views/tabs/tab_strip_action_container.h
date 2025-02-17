@@ -101,10 +101,6 @@ class TabStripActionContainer : public views::View,
   }
 
   glic::GlicButton* GetGlicButton() { return glic_button_; }
-#if BUILDFLAG(ENABLE_GLIC)
-  // Ensures the Glic button's existence matches the current configuration.
-  void UpdateGlicButton();
-#endif
 
   ProductSpecificationsButton* GetProductSpecificationsButton() {
     return product_specifications_button_;
@@ -133,6 +129,11 @@ class TabStripActionContainer : public views::View,
   // the nudge.
   void SetLockedExpansionMode(LockedExpansionMode mode,
                               TabStripNudgeButton* button);
+
+#if BUILDFLAG(ENABLE_GLIC)
+  std::unique_ptr<glic::GlicButton> CreateGlicButton();
+  void OnGlicButtonClicked();
+#endif
 
   void OnTabDeclutterButtonClicked();
   void OnTabDeclutterButtonDismissed();
@@ -167,8 +168,10 @@ class TabStripActionContainer : public views::View,
 
   void OnAnimationSessionEnded();
 
+#if BUILDFLAG(ENABLE_GLIC)
   std::unique_ptr<TabStripNudgeButton> CreateGlicNudgeButton(
       TabStripController* tab_strip_controller);
+#endif  // BUILDFLAG(ENABLE_GLIC)
   std::unique_ptr<TabStripNudgeButton> CreateAutoTabGroupButton(
       TabStripController* tab_strip_controller);
   std::unique_ptr<TabStripNudgeButton> CreateTabDeclutterButton(
@@ -187,13 +190,10 @@ class TabStripActionContainer : public views::View,
   raw_ptr<tabs::TabDeclutterController> tab_declutter_controller_ = nullptr;
   raw_ptr<tabs::GlicNudgeController> glic_nudge_controller_ = nullptr;
 
-  raw_ptr<glic::GlicButton, DanglingUntriaged> glic_button_ = nullptr;
+  raw_ptr<glic::GlicButton> glic_button_ = nullptr;
 
   raw_ptr<const Browser> browser_;
 
-  // The TabStripController is removed as part of the TabStripRegionView's
-  // destructor before this class gets cleanup up. This pointer is valid except
-  // during destruction.
   const raw_ptr<TabStripController> tab_strip_controller_ = nullptr;
 
   // Timer for hiding tab_strip_nudge_button_ after show.

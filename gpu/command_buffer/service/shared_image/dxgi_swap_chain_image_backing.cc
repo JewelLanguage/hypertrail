@@ -103,9 +103,6 @@ std::unique_ptr<DXGISwapChainImageBacking> DXGISwapChainImageBacking::Create(
   if (FAILED(hr)) {
     DLOG(ERROR) << "CreateSwapChainForComposition failed: "
                 << logging::SystemErrorCodeToString(hr);
-    // Disable direct composition because SwapChain creation might fail again
-    // next time.
-    gl::SetDirectCompositionSwapChainFailed();
     return nullptr;
   }
 
@@ -342,8 +339,8 @@ DXGISwapChainImageBacking::ProduceSkiaGanesh(
     auto gl_format_desc = context_state->GetGLFormatCaps().ToGLFormatDesc(
         format(), /*plane_index=*/0);
     gl_texture_holder_ = D3DImageBacking::CreateGLTexture(
-        gl_format_desc, size(), color_space(), backbuffer_texture,
-        GL_TEXTURE_2D, /*array_slice=*/0, /*plane_index=*/0, dxgi_swap_chain_);
+        gl_format_desc, backbuffer_texture, GL_TEXTURE_2D, /*array_slice=*/0,
+        /*plane_index=*/0);
     if (!gl_texture_holder_) {
       LOG(ERROR) << "Failed to create GL texture.";
       return nullptr;

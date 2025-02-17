@@ -426,9 +426,19 @@ inline constexpr char kAddressesAndPaymentMethodsLearnMoreURL[] =
     "https://support.google.com/chrome?p=settings_autofill";
 #endif
 
+// The URL for the "Pay over time" support page.
+// TODO(crbug.com/395027230): Change URL once official support page is
+// finalized.
+inline constexpr char16_t kPayOverTimeLearnMoreUrl[] =
+    u"https://support.google.com/googlepay?p=bnpl_autofill_chrome";
+
 // Help URL for Autofill AI.
 inline constexpr char16_t kAutofillAiLearnMoreURL[] =
     u"https://support.google.com/chrome?p=autofill_ai";
+
+// "Learn more" URL for the autofill show card benefits setting.
+inline constexpr char16_t kCardBenefitsLearnMoreURL[] =
+    u"https://support.google.com/googlepay?p=card_benefits_chrome";
 
 // "Learn more" URL for the performance intervention notification setting.
 inline constexpr const char16_t kPerformanceInterventionLearnMoreUrl[] =
@@ -569,10 +579,6 @@ inline constexpr char16_t kHistorySearchV2SettingURL[] =
 inline constexpr char kWallpaperSearchLearnMorePageURL[] =
     "https://support.google.com/chrome?p=create_themes_with_ai";
 
-// The URL for the "Learn more" page for Wallpaper Search for managed users.
-inline constexpr char kWallpaperSearchLearnMorePageManagedURL[] =
-    "https://support.google.com/chrome/a?p=create_theme_settings";
-
 // The URL for the "Learn more" page for Tab Organization.
 inline constexpr char kTabOrganizationLearnMorePageURL[] =
     "https://support.google.com/chrome?p=auto_tab_group";
@@ -629,18 +635,9 @@ inline constexpr char kPrivacyPolicyURLChina[] =
 inline constexpr char kPrivacyPolicyOnlineURLPath[] =
     "https://policies.google.com/privacy/embedded";
 
-// The URL path to Google's Embedded Privacy Policy page - Dark Mode.
-inline constexpr char kPrivacyPolicyOnlineDarkModeURLPath[] =
-    "https://policies.google.com/privacy/embedded?color_scheme=dark";
-
 // The URL path to Google's Embedded Privacy Policy page for users in China.
 inline constexpr char kPrivacyPolicyEmbeddedURLPathChina[] =
     "https://policies.google.cn/privacy/embedded";
-
-// The URL path to Google's Embedded Privacy Policy page for users in China -
-// Dark Mode.
-inline constexpr char kPrivacyPolicyEmbeddedDarkModeURLPathChina[] =
-    "https://policies.google.cn/privacy/embedded?color_scheme=dark";
 
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS_ASH)
 // "Learn more" URL for the enhanced playback notification dialog.

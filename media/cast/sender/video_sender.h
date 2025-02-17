@@ -24,9 +24,7 @@ class Sender;
 }
 
 namespace media {
-class VideoEncoderMetricsProvider;
 class VideoFrame;
-class GpuVideoAcceleratorFactories;
 }  // namespace media
 
 namespace media::cast {
@@ -47,17 +45,13 @@ class VideoSender : public FrameSender::Client {
   // NOTE: Since the `Sender` instance is destroyed when renegotiation is
   // complete, `this` is also invalid and should be immediately torn down.
   VideoSender(
+      std::unique_ptr<VideoEncoder> video_encoder,
       scoped_refptr<CastEnvironment> cast_environment,
       const FrameSenderConfig& video_config,
-      StatusChangeCallback status_change_cb,
-      const CreateVideoEncodeAcceleratorCallback& create_vea_cb,
       std::unique_ptr<openscreen::cast::Sender> sender,
-      std::unique_ptr<media::VideoEncoderMetricsProvider>
-          encoder_metrics_provider,
-      PlayoutDelayChangeCB playout_delay_change_cb,
+      VideoSender::PlayoutDelayChangeCB playout_delay_change_cb,
       media::VideoCaptureFeedbackCB feedback_cb,
-      VideoBitrateSuggester::GetVideoNetworkBandwidthCB get_bandwidth_cb,
-      media::GpuVideoAcceleratorFactories* gpu_factories);
+      VideoBitrateSuggester::GetVideoNetworkBandwidthCB get_bandwidth_cb);
 
   VideoSender(const VideoSender&) = delete;
   VideoSender& operator=(const VideoSender&) = delete;
@@ -85,7 +79,9 @@ class VideoSender : public FrameSender::Client {
 
  private:
   // Called by the `video_encoder_` with the next EncodedFrame to send.
-  void OnEncodedVideoFrame(std::unique_ptr<SenderEncodedFrame> encoded_frame);
+  void OnEncodedVideoFrame(scoped_refptr<media::VideoFrame> video_frame,
+                           const base::TimeTicks reference_time,
+                           std::unique_ptr<SenderEncodedFrame> encoded_frame);
 
   // The backing frame sender implementation.
   std::unique_ptr<FrameSender> frame_sender_;

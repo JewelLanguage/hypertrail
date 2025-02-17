@@ -14,12 +14,12 @@ import static org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeUtils.isBott
 
 import androidx.annotation.NonNull;
 
-import org.chromium.cc.input.BrowserControlsOffsetTagsInfo;
 import org.chromium.chrome.browser.browser_controls.BottomControlsLayer;
 import org.chromium.chrome.browser.browser_controls.BottomControlsStacker;
 import org.chromium.chrome.browser.browser_controls.BottomControlsStacker.LayerScrollBehavior;
 import org.chromium.chrome.browser.browser_controls.BottomControlsStacker.LayerType;
 import org.chromium.chrome.browser.browser_controls.BottomControlsStacker.LayerVisibility;
+import org.chromium.chrome.browser.browser_controls.BrowserControlsOffsetTagsInfo;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
 import org.chromium.chrome.browser.layouts.LayoutManager;
@@ -67,6 +67,7 @@ class EdgeToEdgeBottomChinMediator
     private final @NonNull EdgeToEdgeController mEdgeToEdgeController;
     private final @NonNull BottomControlsStacker mBottomControlsStacker;
     private final @NonNull FullscreenManager mFullscreenManager;
+    private final boolean mIsConstraintChinScrollableWhenStacking;
 
     /**
      * Build a new mediator for the bottom chin component.
@@ -95,6 +96,8 @@ class EdgeToEdgeBottomChinMediator
         mEdgeToEdgeController = edgeToEdgeController;
         mBottomControlsStacker = bottomControlsStacker;
         mFullscreenManager = fullscreenManager;
+        mIsConstraintChinScrollableWhenStacking =
+                EdgeToEdgeUtils.isConstraintBottomChinScrollableWhenStacking();
 
         // Add observers.
         mKeyboardVisibilityDelegate.addKeyboardVisibilityListener(this);
@@ -241,9 +244,11 @@ class EdgeToEdgeBottomChinMediator
 
     @Override
     public int getScrollBehavior() {
-        return mHasSafeAreaConstraint
-                ? LayerScrollBehavior.NEVER_SCROLL_OFF
-                : LayerScrollBehavior.DEFAULT_SCROLL_OFF;
+        if (!mHasSafeAreaConstraint
+                || (mIsPagedOptedIntoEdgeToEdge && mIsConstraintChinScrollableWhenStacking)) {
+            return LayerScrollBehavior.DEFAULT_SCROLL_OFF;
+        }
+        return LayerScrollBehavior.NEVER_SCROLL_OFF;
     }
 
     @Override

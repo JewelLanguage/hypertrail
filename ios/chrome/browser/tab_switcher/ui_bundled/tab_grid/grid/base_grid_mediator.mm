@@ -33,6 +33,7 @@
 #import "ios/chrome/browser/saved_tab_groups/model/ios_tab_group_action_context.h"
 #import "ios/chrome/browser/saved_tab_groups/model/ios_tab_group_sync_util.h"
 #import "ios/chrome/browser/saved_tab_groups/model/tab_group_sync_service_factory.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_controller.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list.h"
@@ -88,6 +89,8 @@
 #import "net/base/apple/url_conversions.h"
 #import "ui/gfx/image/image.h"
 
+using PeopleGroupActionOutcome =
+    data_sharing::DataSharingService::PeopleGroupActionOutcome;
 using PinnedState = WebStateSearchCriteria::PinnedState;
 
 namespace {
@@ -476,6 +479,8 @@ void LogPriceDropMetrics(web::WebState* web_state) {
                      selectedItemIdentifier:nil];
   }
 
+  const WebStateList::ScopedBatchOperation batch =
+      groupWebStateList->StartBatchOperation();
   groupWebStateList->DeleteGroup(group);
 }
 
@@ -861,6 +866,8 @@ void LogPriceDropMetrics(web::WebState* web_state) {
 - (void)selectItemWithID:(web::WebStateID)itemID
                     pinned:(BOOL)pinned
     isFirstActionOnTabGrid:(BOOL)isFirstActionOnTabGrid {
+  Browser* itemBrowser = nil;
+
   WebStateSearchCriteria searchCriteria{
       .identifier = itemID,
       .pinned_state = pinned ? PinnedState::kPinned : PinnedState::kNonPinned,
@@ -912,6 +919,7 @@ void LogPriceDropMetrics(web::WebState* web_state) {
                                  error.localizedDescription);
                              NOTREACHED();
                            }];
+      itemBrowser = browser;
     }
   }
 
@@ -935,6 +943,12 @@ void LogPriceDropMetrics(web::WebState* web_state) {
     [self.consumer
         selectItemWithIdentifier:[GridItemIdentifier
                                      tabIdentifier:selectedWebState]];
+    // If the tab searched by the user is in another window and is the active
+    // tab in that window, we need to close the tab grid to display the current
+    // active tab, due to the early return.
+    if (itemBrowser != nil) {
+      [self exitTabGridOfBrowser:itemBrowser];
+    }
     return;
   } else {
     base::RecordAction(
@@ -961,6 +975,16 @@ void LogPriceDropMetrics(web::WebState* web_state) {
 
   // It should be safe to activate here.
   itemWebStateList->ActivateWebStateAt(index);
+
+  // This can happend when the selected tab have the following conditions:
+  // * from search tab result
+  // * from another window
+  // * Tab's window currently display the tab grid.
+  // In that case, activating the web state is not enough to actually open it,
+  // so force quit tab grid.
+  if (itemBrowser != nil) {
+    [self exitTabGridOfBrowser:itemBrowser];
+  }
 }
 
 - (void)selectTabGroup:(const TabGroup*)tabGroup {
@@ -1523,7 +1547,7 @@ void LogPriceDropMetrics(web::WebState* web_state) {
 
   NSArray<URLWithTitle*>* URLs = [self urlsWithTitleFromItemIDs:itemIDs];
 
-  [bookmarkHandler bookmarkWithFolderChooser:URLs];
+  [bookmarkHandler addBookmarksAndShowFolderChooser:URLs];
 }
 
 - (NSArray<URLWithTitle*>*)urlsWithTitleFromItemIDs:
@@ -1695,7 +1719,7 @@ void LogPriceDropMetrics(web::WebState* web_state) {
 }
 
 // Takes the corresponded action to `actionType` for the shared `group`.
-// Not handled TabGroupActionType: kUngroupTabGroup, kDeleteTabGroup.
+// TabGroupActionType must be kLeaveSharedTabGroup or kDeleteSharedTabGroup.
 - (void)takeActionForActionType:(TabGroupActionType)actionType
                  sharedTabGroup:(const TabGroup*)group {
   [self.tabGridIdleStatusHandler
@@ -1708,27 +1732,19 @@ void LogPriceDropMetrics(web::WebState* web_state) {
   CHECK(dataSharingService);
   CHECK(tabGroupSyncService);
 
-  const base::Uuid savedGroupId =
-      tabGroupSyncService->GetGroup(group->tab_group_id())->saved_guid();
   const tab_groups::CollaborationId collabId =
       tab_groups::utils::GetTabGroupCollabID(group, tabGroupSyncService);
   CHECK(!collabId->empty());
   const data_sharing::GroupId groupId = data_sharing::GroupId(collabId.value());
 
   __weak BaseGridMediator* weakSelf = self;
-  auto callback = base::BindOnce(^(
-      data_sharing::DataSharingService::PeopleGroupActionOutcome outcome) {
-    // If updating the group on the server failed, restore the tab group
-    // locally.
-    if (outcome !=
-        data_sharing::DataSharingService::PeopleGroupActionOutcome::kSuccess) {
-      [weakSelf restoreTabGroupAfterServerFailure:savedGroupId];
-    }
+  auto callback = base::BindOnce(^(PeopleGroupActionOutcome outcome) {
+    BOOL success = outcome == PeopleGroupActionOutcome::kSuccess;
+    [weakSelf handleTakeActionForActionTypeOutcome:success];
   });
 
-  // Close the group locally to make the delete animation appear faster.
-  tab_groups::utils::CloseTabGroupLocally(group, _webStateList,
-                                          tabGroupSyncService);
+  // TODO(crbug.com/393073658): Block the screen.
+
   // Asynchronously call on the server.
   switch (actionType) {
     case TabGroupActionType::kLeaveSharedTabGroup:
@@ -1739,19 +1755,41 @@ void LogPriceDropMetrics(web::WebState* web_state) {
       break;
     case TabGroupActionType::kUngroupTabGroup:
     case TabGroupActionType::kDeleteTabGroup:
+    case TabGroupActionType::kLeaveOrKeepSharedTabGroup:
+    case TabGroupActionType::kDeleteOrKeepSharedTabGroup:
       NOTREACHED();
   }
 }
 
-// Restores the tab group if an error occurred while attempting to leave or
-// delete it.
-- (void)restoreTabGroupAfterServerFailure:(const base::Uuid)savedGroupId {
-  tab_groups::TabGroupSyncService* tabGroupSyncService =
-      tab_groups::TabGroupSyncServiceFactory::GetForProfile(self.profile);
-  tabGroupSyncService->OpenTabGroup(
-      savedGroupId,
-      std::make_unique<tab_groups::IOSTabGroupActionContext>(self.browser));
-  // TODO(crbug.com/375587197): Show a snackbar here.
+// Called when `takeActionForActionType:forSharedTabGroup:` server's call
+// returned.
+- (void)handleTakeActionForActionTypeOutcome:(BOOL)success {
+  // TODO(crbug.com/393073658):
+  // - Unblock the screen.
+  // - Show an error if needed.
+}
+
+// Exits Tab grid of `itemBrowser`'s window.
+- (void)exitTabGridOfBrowser:(Browser*)itemBrowser {
+  if (!itemBrowser) {
+    return;
+  }
+  id<TabGridCommands> targetTabGridHandler =
+      HandlerForProtocol(itemBrowser->GetCommandDispatcher(), TabGridCommands);
+  TabGridPage pageToShow;
+  switch (itemBrowser->type()) {
+    case Browser::Type::kRegular:
+      pageToShow = TabGridPageRegularTabs;
+      break;
+    case Browser::Type::kIncognito:
+      pageToShow = TabGridPageIncognitoTabs;
+      break;
+    case Browser::Type::kInactive:
+    case Browser::Type::kTemporary:
+      NOTREACHED();
+  }
+  [targetTabGridHandler showPage:pageToShow animated:NO];
+  [targetTabGridHandler exitTabGrid];
 }
 
 #pragma mark - TabGridPageMutator

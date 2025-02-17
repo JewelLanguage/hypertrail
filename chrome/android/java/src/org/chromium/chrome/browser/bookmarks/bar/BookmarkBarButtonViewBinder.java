@@ -29,10 +29,11 @@ class BookmarkBarButtonViewBinder {
             @NonNull BookmarkBarButton view,
             @NonNull PropertyKey key) {
         if (key == BookmarkBarButtonProperties.CLICK_CALLBACK) {
-            final var callback = model.get(BookmarkBarButtonProperties.CLICK_CALLBACK);
-            view.setOnClickListener(callback != null ? (v) -> callback.run() : null);
-        } else if (key == BookmarkBarButtonProperties.ICON) {
-            view.setIcon(model.get(BookmarkBarButtonProperties.ICON));
+            view.setClickCallback(model.get(BookmarkBarButtonProperties.CLICK_CALLBACK));
+        } else if (key == BookmarkBarButtonProperties.ICON_SUPPLIER) {
+            view.setIconSupplier(model.get(BookmarkBarButtonProperties.ICON_SUPPLIER));
+        } else if (key == BookmarkBarButtonProperties.ICON_TINT_LIST_ID) {
+            view.setIconTintList(model.get(BookmarkBarButtonProperties.ICON_TINT_LIST_ID));
         } else if (key == BookmarkBarButtonProperties.TITLE) {
             view.setTitle(model.get(BookmarkBarButtonProperties.TITLE));
         }

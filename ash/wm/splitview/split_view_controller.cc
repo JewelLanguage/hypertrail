@@ -62,11 +62,11 @@
 #include "base/auto_reset.h"
 #include "base/containers/flat_map.h"
 #include "base/debug/crash_logging.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/time/time.h"
 #include "chromeos/ui/base/app_types.h"
 #include "chromeos/ui/base/window_properties.h"
@@ -160,10 +160,9 @@ bool InTabletMode() {
 bool IsExactlyOneRootInSplitView() {
   const aura::Window::Windows all_root_windows = Shell::GetAllRootWindows();
   return 1 ==
-         base::ranges::count_if(
-             all_root_windows, [](aura::Window* root_window) {
-               return SplitViewController::Get(root_window)->InSplitViewMode();
-             });
+         std::ranges::count_if(all_root_windows, [](aura::Window* root_window) {
+           return SplitViewController::Get(root_window)->InSplitViewMode();
+         });
 }
 
 ui::InputMethod* GetCurrentInputMethod() {

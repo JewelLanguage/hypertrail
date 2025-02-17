@@ -2,13 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/342213636): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "content/browser/interest_group/ad_auction_service_impl.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <map>
 #include <memory>
@@ -21,12 +17,12 @@
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/containers/contains.h"
+#include "base/containers/span.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/not_fatal_until.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -68,16 +64,17 @@
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/public/mojom/client_security_state.mojom.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/fenced_frame/fenced_frame_utils.h"
+#include "third_party/blink/public/common/interest_group/ad_auction_constants.h"
 #include "third_party/blink/public/common/interest_group/auction_config.h"
 #include "third_party/blink/public/common/interest_group/interest_group.h"
 #include "third_party/blink/public/common/permissions_policy/policy_helper_public.h"
 #include "third_party/blink/public/mojom/aggregation_service/aggregatable_report.mojom.h"
 #include "third_party/blink/public/mojom/interest_group/interest_group_types.mojom.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom.h"
 #include "third_party/blink/public/mojom/private_aggregation/private_aggregation_host.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -87,8 +84,6 @@
 namespace content {
 
 namespace {
-
-constexpr base::TimeDelta kMaxExpiry = base::Days(30);
 
 bool IsAdRequestValid(const blink::mojom::AdRequestConfig& config) {
   // The ad_request_url origin has to be HTTPS.
@@ -138,7 +133,7 @@ bool AreAllowedReportingOriginsAttested(
 // `feature` for the child frame's origin.
 bool ShouldWarnAboutPermissionPolicyDefault(
     RenderFrameHostImpl& frame,
-    blink::mojom::PermissionsPolicyFeature feature) {
+    network::mojom::PermissionsPolicyFeature feature) {
   RenderFrameHostImpl* parent = frame.GetParent();
   if (!parent) {
     return false;
@@ -229,6 +224,10 @@ void AdAuctionServiceImpl::JoinInterestGroup(
     const blink::InterestGroup& group,
     JoinInterestGroupCallback callback) {
   if (!JoinOrLeaveApiAllowedFromRenderer(group.owner, "joinAdInterestGroup")) {
+    // TODO(https://crbug.com/382786767): Remove this call once the issue has
+    // been fixed, since JoinOrLeaveApiAllowedFromRenderer() will then always
+    // delete `this` and closed the Mojo pipe when it returns false.
+    std::move(callback).Run(/*failed_well_known_check=*/true);
     return;
   }
 
@@ -262,7 +261,7 @@ void AdAuctionServiceImpl::JoinInterestGroup(
   }
 
   blink::InterestGroup updated_group = group;
-  base::Time max_expiry = base::Time::Now() + kMaxExpiry;
+  base::Time max_expiry = base::Time::Now() + blink::MaxInterestGroupLifetime();
   if (updated_group.expiry > max_expiry) {
     updated_group.expiry = max_expiry;
   }
@@ -292,6 +291,10 @@ void AdAuctionServiceImpl::LeaveInterestGroup(
     const std::string& name,
     LeaveInterestGroupCallback callback) {
   if (!JoinOrLeaveApiAllowedFromRenderer(owner, "leaveAdInterestGroup")) {
+    // TODO(https://crbug.com/382786767): Remove this call once the issue has
+    // been fixed, since JoinOrLeaveApiAllowedFromRenderer() will then always
+    // delete `this` and closed the Mojo pipe when it returns false.
+    std::move(callback).Run(/*failed_well_known_check=*/true);
     return;
   }
 
@@ -369,6 +372,10 @@ void AdAuctionServiceImpl::ClearOriginJoinedInterestGroups(
     ClearOriginJoinedInterestGroupsCallback callback) {
   if (!JoinOrLeaveApiAllowedFromRenderer(owner,
                                          "clearOriginJoinedAdInterestGroups")) {
+    // TODO(https://crbug.com/382786767): Remove this call once the issue has
+    // been fixed, since JoinOrLeaveApiAllowedFromRenderer() will then always
+    // delete `this` and closed the Mojo pipe when it returns false.
+    std::move(callback).Run(/*failed_well_known_check=*/true);
     return;
   }
 
@@ -390,9 +397,11 @@ void AdAuctionServiceImpl::UpdateAdInterestGroups() {
   // If the interest group API is not allowed for this context by Permissions
   // Policy, do nothing
   if (!IsPermissionPolicyEnabledAndWarnIfNeeded(
-          blink::mojom::PermissionsPolicyFeature::kJoinAdInterestGroup,
+          network::mojom::PermissionsPolicyFeature::kJoinAdInterestGroup,
           "updateAdInterestGroups")) {
-    ReportBadMessageAndDeleteThis("Unexpected request");
+    // TODO(https://crbug.com/382786767): Figure out why permission policy can
+    // be inconsistent between the browser and renderer policy, fix it, and then
+    // call ReportBadMessageAndDeleteThis() here.
     return;
   }
   // If the interest group API is not allowed for this origin do nothing.
@@ -425,9 +434,13 @@ void AdAuctionServiceImpl::RunAdAuction(
   // If the run ad auction API is not allowed for this context by Permissions
   // Policy, do nothing.
   if (!IsPermissionPolicyEnabledAndWarnIfNeeded(
-          blink::mojom::PermissionsPolicyFeature::kRunAdAuction,
+          network::mojom::PermissionsPolicyFeature::kRunAdAuction,
           "runAdAuction")) {
-    ReportBadMessageAndDeleteThis("Unexpected request");
+    // TODO(https://crbug.com/382786767): Figure out why permission policy can
+    // be inconsistent between the browser and renderer policy, fix it, and then
+    // call ReportBadMessageAndDeleteThis() here.
+    std::move(callback).Run(/*aborted_by_script=*/false,
+                            /*config=*/std::nullopt);
     return;
   }
 
@@ -617,14 +630,21 @@ void AdAuctionServiceImpl::GetInterestGroupAdAuctionData(
   }
 
   if (!IsPermissionPolicyEnabledAndWarnIfNeeded(
-          blink::mojom::PermissionsPolicyFeature::kRunAdAuction,
+          network::mojom::PermissionsPolicyFeature::kRunAdAuction,
           "getInterestGroupAdAuctionData")) {
-    ReportBadMessageAndDeleteThis("Unexpected request");
+    // TODO(https://crbug.com/382786767): Figure out why permission policy can
+    // be inconsistent between the browser and renderer policy, fix it, and then
+    // call ReportBadMessageAndDeleteThis() here.
+    std::vector<blink::mojom::AdAuctionPerSellerRequestPtr> requests;
+    for (const auto& [seller, ignored] : sellers) {
+      requests.emplace_back(blink::mojom::AdAuctionPerSellerRequest::New(
+          std::move(seller), blink::mojom::AdAuctionRequestOrError::NewError(
+                                 "API Blocked by permission policy")));
+    }
+    std::move(callback).Run(std::move(requests), std::nullopt);
     return;
   }
 
-  base::flat_map<url::Origin, std::optional<url::Origin>>
-      sellers_valid_and_allowed;
   // Sellers disallowed to use the API.
   std::set<url::Origin> sellers_disallowed;
   for (const auto& [seller, coordinator] : sellers) {
@@ -636,19 +656,6 @@ void AdAuctionServiceImpl::GetInterestGroupAdAuctionData(
       ReportBadMessageAndDeleteThis("Invalid Bidding and Auction Coordinator");
       return;
     }
-
-    // If the interest group API is not allowed for this origin, skip this
-    // origin.
-    bool api_allowed = IsInterestGroupAPIAllowed(
-        ContentBrowserClient::InterestGroupApiOperation::kSell, seller);
-    base::UmaHistogramBoolean(
-        "Ads.InterestGroup.ServerAuction.Request.APIAllowed", api_allowed);
-    if (api_allowed) {
-      sellers_valid_and_allowed.emplace(std::move(seller),
-                                        std::move(coordinator));
-    } else {
-      sellers_disallowed.insert(seller);
-    }
   }
 
   base::trace_event::EmitNamedTrigger(
@@ -656,15 +663,11 @@ void AdAuctionServiceImpl::GetInterestGroupAdAuctionData(
 
   BiddingAndAuctionDataConstructionState state;
   state.callback = std::move(callback);
-  state.sellers = std::move(sellers_valid_and_allowed);
+  state.sellers = sellers;  // must copy, mojo arg is const.
   state.timestamp = base::Time::Now();
   state.config = std::move(config);
 
   ba_data_callbacks_.push(std::move(state));
-  for (const auto& seller : sellers_disallowed) {
-    AddEmptyGetInterestGroupAdAuctionDataRequest(
-        seller, "API not allowed for this origin");
-  }
   // Only start this request if there isn't another request pending.
   if (ba_data_callbacks_.size() == 1) {
     LoadAuctionDataAndKeyForNextQueuedRequest();
@@ -862,11 +865,11 @@ bool AdAuctionServiceImpl::JoinOrLeaveApiAllowedFromRenderer(
   // If the interest group API is not allowed for this context by Permissions
   // Policy, do nothing.
   if (!IsPermissionPolicyEnabledAndWarnIfNeeded(
-          blink::mojom::PermissionsPolicyFeature::kJoinAdInterestGroup,
+          network::mojom::PermissionsPolicyFeature::kJoinAdInterestGroup,
           invoked_method)) {
-    ReportBadMessageAndDeleteThis(
-        "Unexpected request: Interest groups may only be joined or left when "
-        "feature join-ad-interest-group is enabled by Permissions Policy");
+    // TODO(https://crbug.com/382786767): Figure out why permission policy can
+    // be inconsistent between the browser and renderer policy, fix it, and then
+    // call ReportBadMessageAndDeleteThis() here.
     return false;
   }
 
@@ -874,7 +877,7 @@ bool AdAuctionServiceImpl::JoinOrLeaveApiAllowedFromRenderer(
 }
 
 bool AdAuctionServiceImpl::IsPermissionPolicyEnabledAndWarnIfNeeded(
-    blink::mojom::PermissionsPolicyFeature feature,
+    network::mojom::PermissionsPolicyFeature feature,
     const char* invoked_method) {
   if (!render_frame_host().IsFeatureEnabled(feature)) {
     return false;
@@ -1060,7 +1063,7 @@ void AdAuctionServiceImpl::MaybeLogPrivateAggregationFeatures(
   }
 
   if (!has_logged_private_aggregation_filtering_id_web_feature_ &&
-      base::ranges::any_of(
+      std::ranges::any_of(
           private_aggregation_requests, [](const auto& request) {
             auction_worklet::mojom::AggregatableReportContributionPtr&
                 contribution = request->contribution;
@@ -1079,10 +1082,10 @@ void AdAuctionServiceImpl::MaybeLogPrivateAggregationFeatures(
   }
 
   if (!has_logged_private_aggregation_enable_debug_mode_web_feature_ &&
-      base::ranges::any_of(private_aggregation_requests,
-                           [](const auto& request) {
-                             return request->debug_mode_details->is_enabled;
-                           })) {
+      std::ranges::any_of(private_aggregation_requests,
+                          [](const auto& request) {
+                            return request->debug_mode_details->is_enabled;
+                          })) {
     has_logged_private_aggregation_enable_debug_mode_web_feature_ = true;
     GetContentClient()->browser()->LogWebFeatureForCurrentPage(
         &render_frame_host(),
@@ -1090,7 +1093,7 @@ void AdAuctionServiceImpl::MaybeLogPrivateAggregationFeatures(
   }
 
   if (!has_logged_extended_private_aggregation_web_feature_ &&
-      base::ranges::any_of(
+      std::ranges::any_of(
           private_aggregation_requests, [](const auto& request) {
             return request->contribution->is_for_event_contribution();
           })) {
@@ -1166,13 +1169,25 @@ void AdAuctionServiceImpl::LoadAuctionDataAndKeyForNextQueuedRequest() {
                      weak_ptr_factory_.GetWeakPtr(), state.request_id));
 
   for (const auto& [seller, coordinator] : state.sellers) {
-    // GetBiddingAndAuctionServerKey can call its callback synchronously, so we
-    // need to call it last in case it invalidates `state`.
-    GetInterestGroupManager().GetBiddingAndAuctionServerKey(
-        coordinator,
-        base::BindOnce(
-            &AdAuctionServiceImpl::OnGotOneBiddingAndAuctionServerKey,
-            weak_ptr_factory_.GetWeakPtr(), state.request_id, seller));
+    // If the interest group API is not allowed for this origin, skip this
+    // origin.
+    bool api_allowed = IsInterestGroupAPIAllowed(
+        ContentBrowserClient::InterestGroupApiOperation::kSell, seller);
+    base::UmaHistogramBoolean(
+        "Ads.InterestGroup.ServerAuction.Request.APIAllowed", api_allowed);
+    if (api_allowed) {
+      // GetBiddingAndAuctionServerKey can call its callback synchronously, and
+      // during the last loop iteration the callback may invalidate `state`.
+      GetInterestGroupManager().GetBiddingAndAuctionServerKey(
+          coordinator,
+          base::BindOnce(
+              &AdAuctionServiceImpl::OnGotOneBiddingAndAuctionServerKey,
+              weak_ptr_factory_.GetWeakPtr(), state.request_id, seller));
+    } else {
+      // During the last loop iteration this call may invalidate `state`.
+      AddEmptyGetInterestGroupAdAuctionDataRequest(
+          seller, "API not allowed for this origin");
+    }
   }
 }
 
@@ -1292,7 +1307,9 @@ void AdAuctionServiceImpl::OnGotAuctionDataAndKey(
 
   // Write the request starting at `start_offset`
   CHECK_EQ(data.size() + start_offset, buf.size());
-  std::memcpy(&buf.data()[start_offset], data.data(), data.size());
+  base::span(buf)
+      .subspan(start_offset)
+      .copy_from_nonoverlapping(base::as_byte_span(data));
   state.requests.emplace_back(blink::mojom::AdAuctionPerSellerRequest::New(
       seller,
       blink::mojom::AdAuctionRequestOrError::NewRequest(std::move(buf))));

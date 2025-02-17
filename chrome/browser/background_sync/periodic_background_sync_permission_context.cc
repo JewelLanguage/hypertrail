@@ -15,7 +15,7 @@
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
 #include "content/public/browser/browser_thread.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom.h"
 #include "url/origin.h"
 
 #if BUILDFLAG(IS_ANDROID)
@@ -36,10 +36,10 @@ BASE_FEATURE(kPeriodicSyncPermissionForDefaultSearchEngine,
 PeriodicBackgroundSyncPermissionContext::
     PeriodicBackgroundSyncPermissionContext(
         content::BrowserContext* browser_context)
-    : PermissionContextBase(browser_context,
-                            ContentSettingsType::PERIODIC_BACKGROUND_SYNC,
-                            blink::mojom::PermissionsPolicyFeature::kNotFound) {
-}
+    : PermissionContextBase(
+          browser_context,
+          ContentSettingsType::PERIODIC_BACKGROUND_SYNC,
+          network::mojom::PermissionsPolicyFeature::kNotFound) {}
 
 PeriodicBackgroundSyncPermissionContext::
     ~PeriodicBackgroundSyncPermissionContext() = default;

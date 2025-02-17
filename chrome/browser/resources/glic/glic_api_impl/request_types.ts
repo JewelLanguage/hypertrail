@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type {ChromeVersion, DraggableArea, GetTabContextErrorReason, PanelState, PdfDocumentData, TabContextOptions, TabContextResult, TabData, UserProfileInfo} from '../glic_api/glic_api.js';
+import type {AnnotatedPageData, ChromeVersion, DraggableArea, ErrorReasonTypes, ErrorWithReason, FocusedTabCandidate, FocusedTabData, InvalidCandidateError, NoCandidateTabError, OpenPanelInfo, PanelState, PdfDocumentData, Screenshot, ScrollToParams, TabContextOptions, TabContextResult, TabData, UserProfileInfo} from '../glic_api/glic_api.js';
 
 /*
 This file defines messages sent over postMessage in-between the Glic WebUI
@@ -34,8 +34,10 @@ export declare interface HostRequestTypes {
       locationPermissionEnabled: boolean,
       tabContextPermissionEnabled: boolean,
       panelState: PanelState,
-      focusedTab: TabDataPrivate|undefined,
+      focusedTabData: FocusedTabDataPrivate,
       chromeVersion: ChromeVersion,
+      canAttach: boolean,
+      scrollToEnabled: boolean,
     },
   };
   // This message is sent after the client returns successfully from
@@ -45,7 +47,7 @@ export declare interface HostRequestTypes {
     response: void,
   };
 
-  // The messages that fullfill the GlicBrowserHost public API follow below.
+  // The messages that fulfil the GlicBrowserHost public API follow below.
 
   glicBrowserCreateTab: {
     request: {
@@ -65,28 +67,35 @@ export declare interface HostRequestTypes {
     request: {},
     response: void,
   };
+  glicBrowserShowProfilePicker: {
+    request: {},
+    response: void,
+  };
   glicBrowserGetContextFromFocusedTab: {
     request: {
       options: TabContextOptions,
     },
     response: {
-      // Present on success.
-      tabContextResult?: TabContextResultPrivate,
-      // The error reason. Should be present when `tabContextResult` is not, but
-      // might still be undefined for some older chrome versions.
-      error?: GetTabContextErrorReason,
+      tabContextResult: TabContextResultPrivate,
+    },
+  };
+  glicBrowserCaptureScreenshot: {
+    request: {},
+    response: {
+      screenshot: Screenshot,
     },
   };
   glicBrowserResizeWindow: {
     request: {
-      width: number,
-      height: number,
+      size: {
+        width: number,
+        height: number,
+      },
+      options?: {
+        durationMs?: number,
+      },
     },
-    response: {
-      // Not set on error.
-      actualWidth?: number,
-      actualHeight?: number,
-    },
+    response: void,
   };
   glicBrowserSetWindowDraggableAreas: {
     request: {
@@ -138,6 +147,40 @@ export declare interface HostRequestTypes {
     request: {},
     response: void,
   };
+  glicBrowserSetAudioDucking: {
+    request: {
+      enabled: boolean,
+    },
+    response: void,
+  };
+  glicBrowserOnUserInputSubmitted: {
+    request: {
+      mode: number,
+    },
+    response: void,
+  };
+  glicBrowserOnResponseStarted: {
+    request: {},
+    response: void,
+  };
+  glicBrowserOnResponseStopped: {
+    request: {},
+    response: void,
+  };
+  glicBrowserOnSessionTerminated: {
+    request: {},
+    response: void,
+  };
+  glicBrowserOnResponseRated: {
+    request: {
+      positive: boolean,
+    },
+    response: void,
+  };
+  glicBrowserScrollTo: {
+    request: {params: ScrollToParams},
+    response: void,
+  };
 }
 
 // Types of requests to the GlicWebClient.
@@ -146,7 +189,9 @@ export declare interface WebClientRequestTypes {
     request: {
       panelState: PanelState,
     },
-    response: void,
+    response: {
+      openPanelInfo?: OpenPanelInfo,
+    },
   };
   glicWebClientNotifyPanelWasClosed: {
     request: {},
@@ -165,6 +210,12 @@ export declare interface WebClientRequestTypes {
   glicWebClientPanelStateChanged: {
     request: {
       panelState: PanelState,
+    },
+    response: void,
+  };
+  glicWebClientCanAttachStateChanged: {
+    request: {
+      canAttach: boolean,
     },
     response: void,
   };
@@ -188,7 +239,7 @@ export declare interface WebClientRequestTypes {
   };
   glicWebClientNotifyFocusedTabChanged: {
     request: {
-      focusedTab: TabDataPrivate|undefined,
+      focusedTabDataPrivate: FocusedTabDataPrivate,
     },
     response: void,
   };
@@ -236,11 +287,27 @@ export enum ImageColorType {
   BGRA = 0,
 }
 
+// FocusedTabData data for postMessage transport.
+export declare interface FocusedTabDataPrivate extends Omit<
+    FocusedTabData, 'focusedTab'|'focusedTabCandidate'|'noCandidateTabError'> {
+  focusedTab?: TabDataPrivate;
+  focusedTabCandidate?: FocusedTabCandidatePrivate;
+  noCandidateTabError?: NoCandidateTabError;
+}
+
+// FocusedTabDataCandidate data for postMessage transport.
+export declare interface FocusedTabCandidatePrivate extends Omit<
+    FocusedTabCandidate, 'focusedTabCandidateData'|'invalidCandidateError'> {
+  focusedTabCandidateData?: TabDataPrivate;
+  invalidCandidateError?: InvalidCandidateError;
+}
+
 // TabContextResult data for postMessage transport.
 export declare interface TabContextResultPrivate extends
-    Omit<TabContextResult, 'tabData'|'pdfDocumentData'> {
+    Omit<TabContextResult, 'tabData'|'pdfDocumentData'|'annotatedPageData'> {
   tabData: TabDataPrivate;
   pdfDocumentData?: PdfDocumentDataPrivate;
+  annotatedPageData?: AnnotatedPageDataPrivate;
 }
 
 export declare interface UserProfileInfoPrivate extends
@@ -251,4 +318,21 @@ export declare interface UserProfileInfoPrivate extends
 export declare interface PdfDocumentDataPrivate extends
     Omit<PdfDocumentData, 'pdfData'> {
   pdfData?: ArrayBuffer;
+}
+
+export declare interface AnnotatedPageDataPrivate extends
+    Omit<AnnotatedPageData, 'annotatedPageContent'> {
+  annotatedPageContent?: ArrayBuffer;
+}
+
+
+export class ErrorWithReasonImpl<T extends keyof ErrorReasonTypes> extends Error
+    implements ErrorWithReason<T> {
+  constructor(
+      public reasonType: T,
+      public reason: ErrorReasonTypes[T],
+      message?: string,
+  ) {
+    super(message ?? `${reasonType} Error: ${reason}`);
+  }
 }

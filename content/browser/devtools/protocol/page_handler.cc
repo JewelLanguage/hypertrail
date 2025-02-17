@@ -18,7 +18,6 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/process/process_handle.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/to_string.h"
@@ -254,8 +253,8 @@ void GotManifest(std::optional<std::string> manifest_id,
       -> std::unique_ptr<Page::ImageResource> {
     auto icon = Page::ImageResource::Create();
     std::vector<std::string> size_strings;
-    base::ranges::transform(input_icon.sizes, std::back_inserter(size_strings),
-                            &gfx::Size::ToString);
+    std::ranges::transform(input_icon.sizes, std::back_inserter(size_strings),
+                           &gfx::Size::ToString);
     icon.SetSizes(base::JoinString(size_strings, " "));
     icon.SetType(base::UTF16ToUTF8(input_icon.type));
     return icon.SetUrl(input_icon.src.possibly_invalid_spec()).Build();
@@ -330,7 +329,7 @@ void GotManifest(std::optional<std::string> manifest_id,
     manifest.SetLaunchHandler(
         Page::LaunchHandler::Create()
             .SetClientMode(base::ToString(
-                input_manifest->launch_handler.value().client_mode))
+                input_manifest->launch_handler.value().parsed_client_mode()))
             .Build());
   }
   if (input_manifest->name) {
@@ -908,6 +907,57 @@ void PageHandler::DownloadWillBegin(FrameTreeNode* ftn,
 
   item->AddObserver(this);
   pending_downloads_.insert(item);
+}
+
+void PageHandler::DidStartNavigating(
+    FrameTreeNode& ftn,
+    const GURL& url,
+    const base::UnguessableToken& loader_id,
+    const blink::mojom::NavigationType& navigation_type) {
+  if (!enabled_) {
+    return;
+  }
+  std::string navigation_type_str;
+  switch (navigation_type) {
+    case blink::mojom::NavigationType::RELOAD:
+      navigation_type_str =
+          Page::FrameStartedNavigating::NavigationTypeEnum::Reload;
+      break;
+    case blink::mojom::NavigationType::RELOAD_BYPASSING_CACHE:
+      navigation_type_str = Page::FrameStartedNavigating::NavigationTypeEnum::
+          ReloadBypassingCache;
+      break;
+    case blink::mojom::NavigationType::RESTORE:
+      navigation_type_str =
+          Page::FrameStartedNavigating::NavigationTypeEnum::Restore;
+      break;
+    case blink::mojom::NavigationType::RESTORE_WITH_POST:
+      navigation_type_str =
+          Page::FrameStartedNavigating::NavigationTypeEnum::RestoreWithPost;
+      break;
+    case blink::mojom::NavigationType::HISTORY_SAME_DOCUMENT:
+      navigation_type_str =
+          Page::FrameStartedNavigating::NavigationTypeEnum::HistorySameDocument;
+      break;
+    case blink::mojom::NavigationType::HISTORY_DIFFERENT_DOCUMENT:
+      navigation_type_str = Page::FrameStartedNavigating::NavigationTypeEnum::
+          HistoryDifferentDocument;
+      break;
+    case blink::mojom::NavigationType::SAME_DOCUMENT:
+      navigation_type_str =
+          Page::FrameStartedNavigating::NavigationTypeEnum::SameDocument;
+      break;
+    case blink::mojom::NavigationType::DIFFERENT_DOCUMENT:
+      navigation_type_str =
+          Page::FrameStartedNavigating::NavigationTypeEnum::DifferentDocument;
+      break;
+    default:
+      NOTREACHED();
+  }
+
+  frontend_->FrameStartedNavigating(
+      ftn.current_frame_host()->devtools_frame_token().ToString(), url.spec(),
+      loader_id.ToString(), navigation_type_str);
 }
 
 void PageHandler::OnFrameDetached(const base::UnguessableToken& frame_id) {

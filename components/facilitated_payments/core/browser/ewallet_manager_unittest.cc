@@ -48,6 +48,12 @@ CoreAccountInfo CreateLoggedInAccountInfo() {
   return account;
 }
 
+SecurePayload CreateSecurePayload() {
+  SecurePayload secure_payload;
+  secure_payload.action_token = {'A', 'c', 't', 'i', 'o', 'n'};
+  return secure_payload;
+}
+
 }  // namespace
 
 class EwalletManagerTest : public testing::Test {
@@ -392,19 +398,6 @@ TEST_F(EwalletManagerTest,
       /*expected_bucket_count=*/1);
 }
 
-// If the user does not select an eWallet account in the payment prompt, request
-// for risk data is not made, and progress screen is not shown.
-TEST_F(
-    EwalletManagerTest,
-    EwalletPaymentPromptNotAccepted_LoadRiskDataNotTriggered_ProgressScreenNotShown) {
-  EXPECT_CALL(client_, LoadRiskData(testing::_)).Times(0);
-  EXPECT_CALL(client_, ShowProgressScreen()).Times(0);
-
-  test_api(*ewallet_manager_)
-      .OnEwalletPaymentPromptResult(/*is_prompt_accepted=*/false,
-                                    /*selected_instrument_id=*/0);
-}
-
 // If the user selects an eWallet account in the payment prompt, request for
 // risk data is made, and progress screen is shown.
 TEST_F(EwalletManagerTest,
@@ -428,8 +421,7 @@ TEST_F(EwalletManagerTest,
   EXPECT_CALL(client_, ShowProgressScreen());
 
   test_api(*ewallet_manager_)
-      .OnEwalletPaymentPromptResult(/*is_prompt_accepted=*/true,
-                                    /*selected_instrument_id=*/100L);
+      .OnEwalletAccountSelected(/*selected_instrument_id=*/100L);
 }
 
 TEST_F(EwalletManagerTest, DeviceIsBound) {
@@ -449,8 +441,7 @@ TEST_F(EwalletManagerTest, DeviceIsBound) {
       supported_payment_link, GURL("https://www.example.com"),
       ukm::UkmRecorder::GetNewSourceID());
   test_api(*ewallet_manager_)
-      .OnEwalletPaymentPromptResult(/*is_prompt_accepted=*/true,
-                                    /*selected_instrument_id=*/100L);
+      .OnEwalletAccountSelected(/*selected_instrument_id=*/100L);
 
   EXPECT_TRUE(test_api(*ewallet_manager_).is_device_bound());
 }
@@ -472,8 +463,7 @@ TEST_F(EwalletManagerTest, DeviceIsNotBound) {
       supported_payment_link, GURL("https://www.example.com"),
       ukm::UkmRecorder::GetNewSourceID());
   test_api(*ewallet_manager_)
-      .OnEwalletPaymentPromptResult(/*is_prompt_accepted=*/true,
-                                    /*selected_instrument_id=*/100L);
+      .OnEwalletAccountSelected(/*selected_instrument_id=*/100L);
 
   EXPECT_FALSE(test_api(*ewallet_manager_).is_device_bound());
 }
@@ -615,8 +605,7 @@ TEST_F(EwalletManagerTest,
 
   auto response_details =
       std::make_unique<FacilitatedPaymentsInitiatePaymentResponseDetails>();
-  response_details->secure_payload_.action_token =
-      std::vector<uint8_t>{'t', 'o', 'k', 'e', 'n'};
+  response_details->secure_payload_ = CreateSecurePayload();
   test_api(*ewallet_manager_)
       .OnInitiatePaymentResponseReceived(
           base::TimeTicks::Now() - base::Seconds(2),
@@ -694,8 +683,7 @@ TEST_F(EwalletManagerTest,
 
   auto response_details =
       std::make_unique<FacilitatedPaymentsInitiatePaymentResponseDetails>();
-  response_details->secure_payload_.action_token =
-      std::vector<uint8_t>{'t', 'o', 'k', 'e', 'n'};
+  response_details->secure_payload_ = CreateSecurePayload();
   test_api(*ewallet_manager_)
       .OnInitiatePaymentResponseReceived(
           base::TimeTicks::Now() - base::Seconds(2),
@@ -734,8 +722,7 @@ TEST_F(EwalletManagerTest,
 
   auto response_details =
       std::make_unique<FacilitatedPaymentsInitiatePaymentResponseDetails>();
-  response_details->secure_payload_.action_token =
-      std::vector<uint8_t>{'t', 'o', 'k', 'e', 'n'};
+  response_details->secure_payload_ = CreateSecurePayload();
   test_api(*ewallet_manager_)
       .OnInitiatePaymentResponseReceived(
           base::TimeTicks::Now() - base::Seconds(2),
@@ -763,8 +750,7 @@ TEST_F(EwalletManagerTest,
 
   auto response_details =
       std::make_unique<FacilitatedPaymentsInitiatePaymentResponseDetails>();
-  response_details->secure_payload_.action_token =
-      std::vector<uint8_t>{'t', 'o', 'k', 'e', 'n'};
+  response_details->secure_payload_ = CreateSecurePayload();
   test_api(*ewallet_manager_)
       .OnInitiatePaymentResponseReceived(
           base::TimeTicks::Now() - base::Seconds(2),
@@ -1196,7 +1182,7 @@ TEST_P(EwalletManagerOnTransactionResultLoggingTest,
 }
 
 TEST_F(EwalletManagerTest,
-       OnEwalletPaymentPromptResult_HistogramLogged_SingleBound) {
+       OnEwalletAccountSelected_HistogramLogged_SingleBound) {
   base::HistogramTester histogram_tester;
   payments_data_manager_.AddEwalletForTest(
       autofill::Ewallet(/*instrument_id=*/100, u"nickname",
@@ -1216,8 +1202,7 @@ TEST_F(EwalletManagerTest,
       supportedPaymentLink, GURL("https://www.example.com"),
       ukm::UkmRecorder::GetNewSourceID());
   test_api(*ewallet_manager_)
-      .OnEwalletPaymentPromptResult(/*is_prompt_accepted=*/true,
-                                    /*selected_instrument_id=*/100L);
+      .OnEwalletAccountSelected(/*selected_instrument_id=*/100L);
 
   histogram_tester.ExpectUniqueSample(
       "FacilitatedPayments.Ewallet.FopSelector.UserAction.SingleBoundEwallet",
@@ -1226,7 +1211,7 @@ TEST_F(EwalletManagerTest,
 }
 
 TEST_F(EwalletManagerTest,
-       OnEwalletPaymentPromptResult_HistogramLogged_SingleUnboundEwallet) {
+       OnEwalletAccountSelected_HistogramLogged_SingleUnboundEwallet) {
   base::HistogramTester histogram_tester;
   payments_data_manager_.AddEwalletForTest(
       autofill::Ewallet(/*instrument_id=*/100, u"nickname",
@@ -1246,8 +1231,7 @@ TEST_F(EwalletManagerTest,
       supportedPaymentLink, GURL("https://www.example.com"),
       ukm::UkmRecorder::GetNewSourceID());
   test_api(*ewallet_manager_)
-      .OnEwalletPaymentPromptResult(/*is_prompt_accepted=*/true,
-                                    /*selected_instrument_id=*/100L);
+      .OnEwalletAccountSelected(/*selected_instrument_id=*/100L);
 
   histogram_tester.ExpectUniqueSample(
       "FacilitatedPayments.Ewallet.FopSelector.UserAction.SingleUnboundEwallet",
@@ -1256,7 +1240,7 @@ TEST_F(EwalletManagerTest,
 }
 
 TEST_F(EwalletManagerTest,
-       OnEwalletPaymentPromptResult_HistogramLogged_MultipleEwallets) {
+       OnEwalletAccountSelected_HistogramLogged_MultipleEwallets) {
   base::HistogramTester histogram_tester;
   payments_data_manager_.AddEwalletForTest(
       autofill::Ewallet(/*instrument_id=*/100, u"nickname1",
@@ -1284,8 +1268,7 @@ TEST_F(EwalletManagerTest,
       supportedPaymentLink, GURL("https://www.example.com"),
       ukm::UkmRecorder::GetNewSourceID());
   test_api(*ewallet_manager_)
-      .OnEwalletPaymentPromptResult(/*is_prompt_accepted=*/true,
-                                    /*selected_instrument_id=*/100L);
+      .OnEwalletAccountSelected(/*selected_instrument_id=*/100L);
 
   histogram_tester.ExpectUniqueSample(
       "FacilitatedPayments.Ewallet.FopSelector.UserAction.MultipleEwallets",
@@ -1314,8 +1297,7 @@ TEST_F(EwalletManagerTest, OnPaymentPromptResult_FopSelectorAccepted) {
   EXPECT_CALL(client_, ShowProgressScreen());
 
   test_api(*ewallet_manager_)
-      .OnEwalletPaymentPromptResult(/*is_prompt_accepted=*/true,
-                                    /*selected_instrument_id=*/100L);
+      .OnEwalletAccountSelected(/*selected_instrument_id=*/100L);
 
   auto ukm_entries = ukm_recorder_.GetEntries(
       ukm::builders::FacilitatedPayments_Ewallet_FopSelectorResult::kEntryName,
@@ -1358,8 +1340,7 @@ TEST_F(EwalletManagerTest,
 
   auto response_details =
       std::make_unique<FacilitatedPaymentsInitiatePaymentResponseDetails>();
-  response_details->secure_payload_.action_token =
-      std::vector<uint8_t>{'t', 'o', 'k', 'e', 'n'};
+  response_details->secure_payload_ = CreateSecurePayload();
   test_api(*ewallet_manager_)
       .OnInitiatePaymentResponseReceived(
           base::TimeTicks::Now() - base::Seconds(2),
@@ -1386,8 +1367,7 @@ TEST_F(EwalletManagerTest,
 
   auto response_details =
       std::make_unique<FacilitatedPaymentsInitiatePaymentResponseDetails>();
-  response_details->secure_payload_.action_token =
-      std::vector<uint8_t>{'t', 'o', 'k', 'e', 'n'};
+  response_details->secure_payload_ = CreateSecurePayload();
   test_api(*ewallet_manager_)
       .OnInitiatePaymentResponseReceived(
           base::TimeTicks::Now() - base::Seconds(2),

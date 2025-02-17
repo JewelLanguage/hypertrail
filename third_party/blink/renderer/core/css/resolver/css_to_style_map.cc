@@ -314,7 +314,7 @@ Timing::Delay MapAnimationTimingDelay(const CSSLengthResolver& length_resolver,
                                       const CSSValue& value) {
   if (const auto* primitive = DynamicTo<CSSPrimitiveValue>(value)) {
     return Timing::Delay(
-        AnimationTimeDelta(primitive->ComputeSeconds(length_resolver)));
+        ANIMATION_TIME_DELTA_FROM_SECONDS(primitive->ComputeSeconds(length_resolver)));
   }
 
   return Timing::Delay();
@@ -793,6 +793,42 @@ void CSSToStyleMap::MapNinePieceImageRepeat(StyleResolverState&,
       break;
   }
   image.SetVerticalRule(vertical_rule);
+}
+
+EAnimationTriggerType CSSToStyleMap::MapAnimationTriggerType(
+    StyleResolverState&,
+    const CSSValue& value) {
+  return To<CSSIdentifierValue>(value).ConvertTo<EAnimationTriggerType>();
+}
+
+StyleTimeline CSSToStyleMap::MapAnimationTriggerTimeline(
+    StyleResolverState& state,
+    const CSSValue& value) {
+  return MapAnimationTimeline(state, value);
+}
+
+std::optional<TimelineOffset> CSSToStyleMap::MapAnimationTriggerRangeStart(
+    StyleResolverState& state,
+    const CSSValue& value) {
+  return MapAnimationRange(state, value, 0);
+}
+
+std::optional<TimelineOffset> CSSToStyleMap::MapAnimationTriggerRangeEnd(
+    StyleResolverState& state,
+    const CSSValue& value) {
+  return MapAnimationRange(state, value, 100);
+}
+
+std::optional<TimelineOffset> CSSToStyleMap::MapAnimationTriggerExitRangeStart(
+    StyleResolverState& state,
+    const CSSValue& value) {
+  return MapAnimationRange(state, value, 0);
+}
+
+std::optional<TimelineOffset> CSSToStyleMap::MapAnimationTriggerExitRangeEnd(
+    StyleResolverState& state,
+    const CSSValue& value) {
+  return MapAnimationRange(state, value, 100);
 }
 
 }  // namespace blink

@@ -85,16 +85,15 @@ committer is sufficient.
 
 The existing owners of a directory approve additions to the list. It is
 preferable to have many directories, each with a smaller number of specific
-owners rather than large directories with many owners. Owners should:
+owners rather than large directories with many owners. Owners must be
+[committers](https://www.chromium.org/getting-involved/become-a-committer/)
+with at least 3 months' tenure, and in addition should:
 
   * Demonstrate excellent judgment, teamwork and ability to uphold
     [Chromium development principles](contributing.md).
 
   * Be already acting as an owner, providing high-quality reviews and design
     feedback.
-
-  * Be a Chromium project member with full commit access of at least three
-    months tenure.
 
   * Have submitted a substantial number of non-trivial changes to the affected
     directory.
@@ -204,6 +203,11 @@ File globbing is supported using the
 [simple path expression](https://github.com/GerritCodeReview/plugins_code-owners/blob/master/resources/Documentation/path-expressions.md#simple-path-expressions)
 format.
 
+Owners annotated with `#{LAST_RESORT_SUGGESTION}` in their comment will be
+omitted when suggesting code owners, except if dropping these code owners would
+make the suggestion result empty or if these code owners are already reviewers
+of the change.
+
 ### Owners-Override
 
 Setting the `Owners-Override +1` label will bypass OWNERS enforcement. Active
@@ -247,10 +251,15 @@ file (and line) in the patch has been appropriately reviewed.
 For one-off CLs, API owners of `base`, `build`, `content`,
 `third_party/blink/public` and `url` can `Owners-Override +1` a change to their
 APIs to avoid waiting for rubberstamp +1s from affected directories' owners.
-This should only be used for mechanical updates to the affected directories.
+This should only be used for mechanical updates, but global approvers are free
+to use their judgement in determining which mechanical changes they understand
+well enough to approve (rather than limit strictly to calls into code
+they own).
 
-If you are making one-off CLs that touch many directories and cannot be
-handled by the global approvers, you can ask one of Chrome ATLs.
+For a change that impacts many directories but doesn't need area-specific
+expertise to review, please ask any global approver or Chrome ATL to
+approve the change rather than incur unnecessary review cost on a larger number
+of reviewers.
 
 ### Large Scale Changes
 You can use the [Large Scale Changes](process/lsc/large_scale_changes.md)

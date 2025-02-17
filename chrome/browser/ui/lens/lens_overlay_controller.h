@@ -21,6 +21,7 @@
 #include "chrome/browser/lens/core/mojom/lens_ghost_loader.mojom.h"
 #include "chrome/browser/lens/core/mojom/lens_side_panel.mojom.h"
 #include "chrome/browser/lens/core/mojom/overlay_object.mojom.h"
+#include "chrome/browser/lens/core/mojom/page_content_type.mojom.h"
 #include "chrome/browser/lens/core/mojom/text.mojom.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
@@ -41,6 +42,7 @@
 #include "components/lens/lens_overlay_dismissal_source.h"
 #include "components/lens/lens_overlay_first_interaction_type.h"
 #include "components/lens/lens_overlay_invocation_source.h"
+#include "components/lens/lens_overlay_metrics.h"
 #include "components/lens/lens_overlay_mime_type.h"
 #include "components/lens/lens_overlay_side_panel_result.h"
 #include "components/lens/proto/server/lens_overlay_response.pb.h"
@@ -385,6 +387,14 @@ class LensOverlayController : public LensSearchboxClient,
 
   // Sets whether the results frame should show its loading state.
   virtual void SetSidePanelIsLoadingResults(bool is_loading);
+
+  // Sets the URL to be used when opening the side panel in new tab.
+  void SetSidePanelNewTabUrl(const GURL& url);
+
+  // Gets the URL (with param modifications) to be used when opening the side
+  // panel in new tab.
+  GURL GetSidePanelNewTabUrl();
+
   // Sets whether the side panel should show a full error page. This is only
   // done if the side panel is not already in the state provided by the
   // parameters or on its first load.
@@ -427,8 +437,8 @@ class LensOverlayController : public LensSearchboxClient,
   // queued IPH.
   void MaybeShowDelayedTutorialIPH(const GURL& url);
 
-  // Updates the navigation time for the current page.
-  void UpdateNavigationTime();
+  // Updates the metrics related to navigations for the current page.
+  void UpdateNavigationMetrics();
 
   // Testing function to issue a Lens region selection request.
   void IssueLensRegionRequestForTesting(lens::mojom::CenterRotatedBoxPtr region,
@@ -770,8 +780,8 @@ class LensOverlayController : public LensSearchboxClient,
   // the tab contents view.
   void ShowOverlay();
 
-  // Backgrounds the UI by hiding the overlay.
-  void BackgroundUI();
+  // Hides the overlay view and restores input to the tab contents web view.
+  void HideOverlay();
 
   // Closes the overlay UI and sets state to kOff. This method is the final
   // cleanup of closing the overlay UI. This resets all state internal to the
@@ -1000,6 +1010,10 @@ class LensOverlayController : public LensSearchboxClient,
   void RecordTimeToFirstInteraction(
       lens::LensOverlayFirstInteractionType interaction_type);
 
+  // Records the UMA for the first time the contextual searchbox is focused
+  // after the page has been navigated.
+  void RecordContextualSearchboxTimeToFocusAfterNavigation();
+
   // Records the UMA for the first time the user interacts with the contextual
   // searchbox after the page has been navigated.
   void RecordContextualSearchboxTimeToInteractionAfterNavigation();
@@ -1015,6 +1029,11 @@ class LensOverlayController : public LensSearchboxClient,
   // the innerHtml and the innerText. If this is a PDF, records the byte size of
   // the PDF and the number of pages. `pdf_page_count` is only used for PDFs.
   void RecordDocumentMetrics(std::optional<uint32_t> pdf_page_count);
+
+  // Posts a task to the background thread to calculate the OCR DOM similarity
+  // and then records the result. Only records the similarity once per session.
+  // Only records the similarity if the OCR text and page content are available.
+  void TryCalculateAndRecordOcrDomSimilarity();
 
   // Callback to record the size of the innerText once it is fetched.
   void RecordInnerTextSize(
@@ -1038,6 +1057,13 @@ class LensOverlayController : public LensSearchboxClient,
   // Notifies the user education service that the overlay has been used.
   void NotifyUserEducationAboutOverlayUsed();
 
+  // Notifies the overlay or side panel that the page content type has changed.
+  void NotifyPageContentUpdated();
+
+  // Notifies the entry point controller to update the state of the entry
+  // points since the state of the overlay has changed.
+  void UpdateEntryPointsState();
+
   // Owns this class.
   raw_ptr<tabs::TabInterface> tab_;
 
@@ -1047,6 +1073,10 @@ class LensOverlayController : public LensSearchboxClient,
 
   // Tracks the internal state machine.
   State state_ = State::kOff;
+
+  // Tracks the state of the overlay when it is backgrounded. This is the state
+  // that the overlay will return to when the tab is foregrounded.
+  State backgrounded_state_ = State::kOff;
 
   // Controller for showing the page screenshot permission bubble.
   std::unique_ptr<lens::LensPermissionBubbleController>
@@ -1070,6 +1100,9 @@ class LensOverlayController : public LensSearchboxClient,
   // A pending thumbnail URI to be loaded in the side panel. Needed when the
   // side panel is not bound at the time of a region request.
   std::optional<std::string> pending_thumbnail_uri_ = std::nullopt;
+
+  // URL to load when command to open side panel in a new tab is executed.
+  GURL side_panel_new_tab_url_;
 
   // Whether the side panel should show the error page.
   bool side_panel_should_show_error_page_ = false;
@@ -1160,23 +1193,12 @@ class LensOverlayController : public LensSearchboxClient,
   // was performed.
   bool search_performed_in_session_ = false;
 
-  // Indicates whether contextual zero suggest was shown in a session.
-  bool contextual_zps_shown_in_session_ = false;
+  // Whether the OCR DOM similarity has been recorded in the current session.
+  bool ocr_dom_similarity_recorded_in_session_ = false;
 
-  // Indicates whether contextual zero suggest was used in a session.
-  bool contextual_zps_used_in_session_ = false;
-
-  // Indicates whether a contextual query was issued in a session.
-  bool contextual_query_issued_in_session_ = false;
-
-  // Indicates whether the contextual searchbox was focused in the current
-  // session. Used to record interaction rate, defined by whether or not a
-  // user focused the contextual searchbox in sessions in which it was shown.
-  // Set if contextual searchbox is shown.
-  bool contextual_searchbox_focused_in_session_ = false;
-
-  // Whether the contextual searchbox should be shown in the session.
-  bool contextual_searchbox_shown_in_session_ = false;
+  // Metrics for the contextual searchbox that will be recorded at the end of a
+  // session.
+  lens::ContextualSearchboxSessionEndMetrics csb_session_end_metrics_;
 
   // The type of the page content extracted from the page when the lens overlay
   // was initialized. This is used when recording contextual searchbox metrics
@@ -1205,6 +1227,10 @@ class LensOverlayController : public LensSearchboxClient,
   // flow. Used to compute timing metrics. Is empty if the user is not in the
   // contextual searchbox flow, or this navigation has already been recorded.
   std::optional<base::TimeTicks> last_navigation_time_;
+
+  // Whether the contextual searchbox has been focused since the last page
+  // navigation.
+  bool contextual_searchbox_focused_after_navigation_ = false;
 
   // Indicates whether a trigger for the HaTS survey has occurred in the current
   // session. Note that a trigger does not mean the survey will actually be

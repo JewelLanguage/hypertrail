@@ -98,53 +98,6 @@ using content::BrowserThread;
 
 namespace android_webview {
 
-class AwPrefetchRequestStatusListener
-    : public content::PrefetchRequestStatusListener {
- public:
-  AwPrefetchRequestStatusListener(
-      const base::android::ScopedJavaGlobalRef<jobject>
-          browser_context_java_object,
-      const base::android::JavaRef<jobject>& callback,
-      const base::android::JavaRef<jobject>& callback_executor)
-      : browser_context_java_object_(browser_context_java_object),
-        prefetch_java_callback_(callback),
-        prefetch_java_callback_executor_(callback_executor) {}
-  ~AwPrefetchRequestStatusListener() override = default;
-
-  void OnPrefetchStartFailed() override {
-    JNIEnv* env = base::android::AttachCurrentThread();
-    Java_AwBrowserContext_onPrefetchStartFailed(
-        env, browser_context_java_object_, prefetch_java_callback_,
-        prefetch_java_callback_executor_);
-  }
-
-  void OnPrefetchResponseCompleted() override {
-    JNIEnv* env = base::android::AttachCurrentThread();
-    Java_AwBrowserContext_onPrefetchResponseCompleted(
-        env, browser_context_java_object_, prefetch_java_callback_,
-        prefetch_java_callback_executor_);
-  }
-
-  void OnPrefetchResponseError() override {
-    JNIEnv* env = base::android::AttachCurrentThread();
-    Java_AwBrowserContext_onPrefetchResponseError(
-        env, browser_context_java_object_, prefetch_java_callback_,
-        prefetch_java_callback_executor_);
-  }
-
-  void OnPrefetchResponseServerError(int response_code) override {
-    JNIEnv* env = base::android::AttachCurrentThread();
-    Java_AwBrowserContext_onPrefetchResponseServerError(
-        env, browser_context_java_object_, prefetch_java_callback_,
-        prefetch_java_callback_executor_, response_code);
-  }
-
- private:
-  base::android::ScopedJavaGlobalRef<jobject> browser_context_java_object_;
-  base::android::ScopedJavaGlobalRef<jobject> prefetch_java_callback_;
-  base::android::ScopedJavaGlobalRef<jobject> prefetch_java_callback_executor_;
-};
-
 namespace {
 
 const void* const kDownloadManagerDelegateKey = &kDownloadManagerDelegateKey;
@@ -262,6 +215,7 @@ AwBrowserContext::AwBrowserContext(std::string name,
       std::make_unique<AwFormDatabaseService>(context_storage_path_);
 
   EnsureResourceContextInitialized();
+  prefetch_manager_ = std::make_unique<AwPrefetchManager>(this);
 }
 
 AwBrowserContext::~AwBrowserContext() {
@@ -594,11 +548,8 @@ void AwBrowserContext::ConfigureNetworkContextParams(
   context_params->user_agent = android_webview::GetUserAgent();
 
   // TODO(ntfschr): set this value to a proper value based on the user's
-  // preferred locales (http://crbug.com/898555). For now, set this to
-  // "en-US,en" instead of "en-us,en", since Android guarantees region codes
-  // will be uppercase.
-  context_params->accept_language =
-      net::HttpUtil::GenerateAcceptLanguageHeader("en-US,en");
+  // preferred locales (http://crbug.com/898555).
+  context_params->accept_language = GetDefaultAcceptLanguageHeader();
 
   // HTTP cache
   context_params->http_cache_enabled = true;
@@ -687,7 +638,8 @@ AwBrowserContext::GetJavaBrowserContext() {
     JNIEnv* env = base::android::AttachCurrentThread();
     obj_ = Java_AwBrowserContext_create(
         env, reinterpret_cast<intptr_t>(this), name_, relative_path_.value(),
-        GetCookieManager()->GetJavaCookieManager(), IsDefaultBrowserContext());
+        GetCookieManager()->GetJavaCookieManager(),
+        prefetch_manager_->GetJavaPrefetchManager(), IsDefaultBrowserContext());
   }
   return base::android::ScopedJavaLocalRef<jobject>(obj_);
 }
@@ -721,29 +673,14 @@ void AwBrowserContext::SetServiceWorkerIoThreadClient(
       base::android::ScopedJavaGlobalRef<jobject>(io_thread_client);
 }
 
-void AwBrowserContext::StartPrefetchRequest(
-    JNIEnv* env,
-    const std::string& url,
-    const base::android::JavaParamRef<jobject>& prefetch_params,
-    const base::android::JavaParamRef<jobject>& callback,
-    const base::android::JavaParamRef<jobject>& callback_executor) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  TRACE_EVENT0("android_webview", "AwBrowserContext::StartPrefetchRequest");
+int AwBrowserContext::AllowedPrerenderingCount() const {
+  return allowed_prerendering_count_;
+}
 
-  GURL pf_url = GURL(url);
-  net::HttpRequestHeaders additional_headers =
-      GetAdditionalHeadersFromPrefetchParameters(env, prefetch_params);
-  std::optional<net::HttpNoVarySearchData> expected_no_vary_search =
-      GetExpectedNoVarySearchFromPrefetchParameters(env, prefetch_params);
-  std::unique_ptr<content::PrefetchRequestStatusListener>
-      request_status_listener =
-          std::make_unique<AwPrefetchRequestStatusListener>(obj_, callback,
-                                                            callback_executor);
-  StartBrowserPrefetchRequest(
-      pf_url,
-      GetIsJavaScriptEnabledFromPrefetchParameters(env, prefetch_params),
-      expected_no_vary_search, additional_headers,
-      std::move(request_status_listener));
+void AwBrowserContext::SetAllowedPrerenderingCount(JNIEnv* const env,
+                                                   int allowed_count) {
+  CHECK_GT(allowed_count, 0);
+  allowed_prerendering_count_ = allowed_count;
 }
 
 std::unique_ptr<AwContentsIoThreadClient>
@@ -808,6 +745,12 @@ blink::mojom::PermissionStatus AwBrowserContext::GetGeolocationPermission(
 
   return static_cast<blink::mojom::PermissionStatus>(
       Java_AwBrowserContext_getGeolocationPermission(env, obj_, origin.spec()));
+}
+
+std::string AwBrowserContext::GetDefaultAcceptLanguageHeader() {
+  // For now, set this to "en-US,en" instead of "en-us,en", since Android
+  // guarantees region codes will be uppercase.
+  return net::HttpUtil::GenerateAcceptLanguageHeader("en-US,en");
 }
 
 mojo::PendingRemote<network::mojom::URLLoaderFactory>

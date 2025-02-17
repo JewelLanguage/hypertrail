@@ -99,6 +99,10 @@ UIImage* kPrimaryAccountAvatar = [[UIImage alloc] init];
       [self identityForGaiaID:gaiaID], IdentityAvatarSize::TableViewIcon);
 }
 
+- (BOOL)isGaiaIDManaged:(NSString*)gaiaID {
+  return NO;
+}
+
 @end
 
 // The test param determines whether `kSeparateProfilesForManagedAccounts` is
@@ -198,8 +202,8 @@ class AccountMenuViewControllerTest : public PlatformTest,
   // Signs in kPrimaryIdentity as primary identity.
   void AddPrimaryIdentity() {
     fake_system_identity_manager_->AddIdentity(kPrimaryIdentity);
-    authentication_service_->SignIn(
-        kPrimaryIdentity, signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
+    authentication_service_->SignIn(kPrimaryIdentity,
+                                    signin_metrics::AccessPoint::kUnknown);
   }
 
   // Add kSecondaryIdentity as a secondary identity.

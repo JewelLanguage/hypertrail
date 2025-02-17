@@ -63,7 +63,6 @@ CONTENT_EXPORT extern const char kDisableGpuWatchdog[];
 CONTENT_EXPORT extern const char kDisableIpcFloodingProtection[];
 CONTENT_EXPORT extern const char kDisableJavaScriptHarmonyShipping[];
 CONTENT_EXPORT extern const char kDisableLowLatencyDxva[];
-CONTENT_EXPORT extern const char kDisableHangMonitor[];
 extern const char kDisableHistogramCustomizer[];
 CONTENT_EXPORT extern const char kDisableLCDText[];
 CONTENT_EXPORT extern const char kDisableKillAfterBadIPC[];
@@ -210,9 +209,6 @@ CONTENT_EXPORT extern const char kUseFakeUIForDigitalIdentity[];
 CONTENT_EXPORT extern const char kUseFakeUIForFedCM[];
 CONTENT_EXPORT extern const char kUseFakeUIForMediaStream[];
 CONTENT_EXPORT extern const char kVideoImageTextureTarget[];
-#if BUILDFLAG(IS_WIN)
-CONTENT_EXPORT extern const char kUseFontDataManager[];
-#endif
 #if BUILDFLAG(IS_ANDROID) && BUILDFLAG(INCLUDE_BOTH_V8_SNAPSHOTS)
 CONTENT_EXPORT extern const char kUseContextSnapshotSwitch[];
 #endif

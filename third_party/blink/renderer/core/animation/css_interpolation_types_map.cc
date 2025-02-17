@@ -213,6 +213,7 @@ const InterpolationTypes& CSSInterpolationTypesMap::Get(
       case CSSPropertyID::kOpacity:
       case CSSPropertyID::kOrder:
       case CSSPropertyID::kOrphans:
+      case CSSPropertyID::kReadingOrder:
       case CSSPropertyID::kShapeImageThreshold:
       case CSSPropertyID::kStopOpacity:
       case CSSPropertyID::kStrokeMiterlimit:
@@ -231,8 +232,8 @@ const InterpolationTypes& CSSInterpolationTypesMap::Get(
         applicable_types->push_back(
             std::make_unique<CSSNumberInterpolationType>(used_property));
         break;
-      case CSSPropertyID::kPopoverShowDelay:
-      case CSSPropertyID::kPopoverHideDelay:
+      case CSSPropertyID::kInterestTargetShowDelay:
+      case CSSPropertyID::kInterestTargetHideDelay:
         applicable_types->push_back(
             std::make_unique<CSSTimeInterpolationType>(used_property));
         break;

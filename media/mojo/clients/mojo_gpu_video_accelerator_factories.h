@@ -28,7 +28,6 @@ class SequencedTaskRunner;
 
 namespace gpu {
 class GpuChannelHost;
-class GpuMemoryBufferManager;
 }  // namespace gpu
 
 namespace viz {
@@ -58,7 +57,6 @@ class MojoGpuVideoAcceleratorFactories
       const scoped_refptr<base::SequencedTaskRunner>& task_runner,
       const scoped_refptr<viz::ContextProviderCommandBuffer>& context_provider,
       std::unique_ptr<MojoCodecFactory> codec_factory,
-      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       bool enable_video_gpu_memory_buffers,
       bool enable_media_stream_gpu_memory_buffers,
       bool enable_video_decode_accelerator,
@@ -87,11 +85,6 @@ class MojoGpuVideoAcceleratorFactories
   std::unique_ptr<media::VideoEncodeAccelerator> CreateVideoEncodeAccelerator()
       override;
 
-  std::unique_ptr<gfx::GpuMemoryBuffer> CreateGpuMemoryBuffer(
-      const gfx::Size& size,
-      gfx::BufferFormat format,
-      gfx::BufferUsage usage) override;
-
   bool ShouldUseGpuMemoryBuffersForVideoFrames(
       bool for_media_stream) const override;
   OutputFormat VideoFrameOutputFormat(
@@ -100,7 +93,6 @@ class MojoGpuVideoAcceleratorFactories
   // Called on the media thread. Returns the SharedImageInterface unless the
   // ContextProvider has been lost, in which case it returns null.
   gpu::SharedImageInterface* SharedImageInterface() override;
-  gpu::GpuMemoryBufferManager* GpuMemoryBufferManager() override;
   // Called on the media thread. Verifies if the ContextProvider is lost and
   // notifies the main thread of loss if it has occured, which can be seen later
   // from CheckContextProviderLost().
@@ -139,7 +131,6 @@ class MojoGpuVideoAcceleratorFactories
       const scoped_refptr<base::SequencedTaskRunner>& task_runner,
       const scoped_refptr<viz::ContextProviderCommandBuffer>& context_provider,
       std::unique_ptr<MojoCodecFactory> codec_factory,
-      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       bool enable_gpu_memory_buffer_video_frames_for_video,
       bool enable_gpu_memory_buffer_video_frames_for_media_stream,
       bool enable_video_decode_accelerator,
@@ -185,7 +176,6 @@ class MojoGpuVideoAcceleratorFactories
 
   gfx::ColorSpace rendering_color_space_;
 
-  const raw_ptr<gpu::GpuMemoryBufferManager> gpu_memory_buffer_manager_;
 };
 
 }  // namespace media

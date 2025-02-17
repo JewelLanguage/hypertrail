@@ -31,6 +31,7 @@ interface AILanguageDetectorFactory
     method create
 interface AILanguageModel : EventTarget
     attribute @@toStringTag
+    getter expectedInputLanguages
     getter maxTokens
     getter oncontextoverflow
     getter temperature
@@ -49,18 +50,31 @@ interface AILanguageModelCapabilities
     getter available
     getter defaultTemperature
     getter defaultTopK
+    getter maxTemperature
     getter maxTopK
     method constructor
     method languageAvailable
 interface AILanguageModelFactory
     attribute @@toStringTag
+    method availability
     method capabilities
     method constructor
     method create
+    method params
+interface AILanguageModelParams
+    attribute @@toStringTag
+    getter defaultTemperature
+    getter defaultTopK
+    getter maxTemperature
+    getter maxTopK
+    method constructor
 interface AIRewriter
     attribute @@toStringTag
+    getter expectedContextLanguages
+    getter expectedInputLanguages
     getter format
     getter length
+    getter outputLanguage
     getter sharedContext
     getter tone
     method constructor
@@ -74,8 +88,11 @@ interface AIRewriterFactory
     method create
 interface AISummarizer
     attribute @@toStringTag
+    getter expectedContextLanguages
+    getter expectedInputLanguages
     getter format
     getter length
+    getter outputLanguage
     getter sharedContext
     getter type
     method constructor
@@ -90,14 +107,18 @@ interface AISummarizerCapabilities
     method languageAvailable
 interface AISummarizerFactory
     attribute @@toStringTag
+    method availability
     method capabilities
     method constructor
     method create
 interface AITranslator
     attribute @@toStringTag
+    getter sourceLanguage
+    getter targetLanguage
     method constructor
     method destroy
     method translate
+    method translateStreaming
 interface AITranslatorCapabilities
     attribute @@toStringTag
     getter available
@@ -110,8 +131,11 @@ interface AITranslatorFactory
     method create
 interface AIWriter
     attribute @@toStringTag
+    getter expectedContextLanguages
+    getter expectedInputLanguages
     getter format
     getter length
+    getter outputLanguage
     getter sharedContext
     getter tone
     method constructor
@@ -238,6 +262,21 @@ interface AnimationTimeline
     getter duration
     method constructor
     method getCurrentTime
+interface AnimationTrigger
+    attribute @@toStringTag
+    getter exitRangeEnd
+    getter exitRangeStart
+    getter rangeEnd
+    getter rangeStart
+    getter timeline
+    getter type
+    method constructor
+    setter exitRangeEnd
+    setter exitRangeStart
+    setter rangeEnd
+    setter rangeStart
+    setter timeline
+    setter type
 interface AsyncDisposableStack
     attribute @@toStringTag
     getter disposed
@@ -707,6 +746,22 @@ interface CSSFontPaletteValuesRule : CSSRule
     getter name
     getter overrideColors
     method constructor
+interface CSSFunctionDeclarations : CSSRule
+    attribute @@toStringTag
+    getter style
+    method constructor
+    setter style
+interface CSSFunctionDescriptors : CSSStyleDeclaration
+    attribute @@toStringTag
+    getter result
+    method constructor
+    setter result
+interface CSSFunctionRule : CSSGroupingRule
+    attribute @@toStringTag
+    getter name
+    getter returnType
+    method constructor
+    method getParameters
 interface CSSGroupingRule : CSSRule
     attribute @@toStringTag
     getter cssRules
@@ -1980,6 +2035,7 @@ interface Document : Node
     getter onchange
     getter onclick
     getter onclose
+    getter oncommand
     getter oncontentvisibilityautostatechange
     getter oncontextlost
     getter oncontextmenu
@@ -2204,6 +2260,7 @@ interface Document : Node
     setter onchange
     setter onclick
     setter onclose
+    setter oncommand
     setter oncontentvisibilityautostatechange
     setter oncontextlost
     setter oncontextmenu
@@ -3262,7 +3319,6 @@ interface GPUSupportedLimits
     getter maxComputeWorkgroupsPerDimension
     getter maxDynamicStorageBuffersPerPipelineLayout
     getter maxDynamicUniformBuffersPerPipelineLayout
-    getter maxInterStageShaderComponents
     getter maxInterStageShaderVariables
     getter maxSampledTexturesPerShaderStage
     getter maxSamplersPerShaderStage
@@ -3273,7 +3329,6 @@ interface GPUSupportedLimits
     getter maxStorageTexturesInFragmentStage
     getter maxStorageTexturesInVertexStage
     getter maxStorageTexturesPerShaderStage
-    getter maxSubgroupSize
     getter maxTextureArrayLayers
     getter maxTextureDimension1D
     getter maxTextureDimension2D
@@ -3284,7 +3339,6 @@ interface GPUSupportedLimits
     getter maxVertexBufferArrayStride
     getter maxVertexBuffers
     getter minStorageBufferOffsetAlignment
-    getter minSubgroupSize
     getter minUniformBufferOffsetAlignment
     method constructor
 interface GPUTexture
@@ -3734,6 +3788,7 @@ interface HTMLElement : Element
     getter onchange
     getter onclick
     getter onclose
+    getter oncommand
     getter oncontentvisibilityautostatechange
     getter oncontextlost
     getter oncontextmenu
@@ -3871,6 +3926,7 @@ interface HTMLElement : Element
     setter onchange
     setter onclick
     setter onclose
+    setter oncommand
     setter oncontentvisibilityautostatechange
     setter oncontextlost
     setter oncontextmenu
@@ -4275,7 +4331,6 @@ interface HTMLInputElement : HTMLElement
     getter height
     getter incremental
     getter indeterminate
-    getter interestTargetElement
     getter labels
     getter list
     getter max
@@ -4335,7 +4390,6 @@ interface HTMLInputElement : HTMLElement
     setter height
     setter incremental
     setter indeterminate
-    setter interestTargetElement
     setter max
     setter maxLength
     setter min
@@ -4732,6 +4786,7 @@ interface HTMLScriptElement : HTMLElement
     getter integrity
     getter noModule
     getter referrerPolicy
+    getter signature
     getter src
     getter text
     getter type
@@ -4748,6 +4803,7 @@ interface HTMLScriptElement : HTMLElement
     setter integrity
     setter noModule
     setter referrerPolicy
+    setter signature
     setter src
     setter text
     setter type
@@ -5137,6 +5193,7 @@ interface HighlightRegistry
     method forEach
     method get
     method has
+    method highlightsFromPoint
     method keys
     method set
     method values
@@ -5663,6 +5720,7 @@ interface MathMLElement : Element
     getter onchange
     getter onclick
     getter onclose
+    getter oncommand
     getter oncontentvisibilityautostatechange
     getter oncontextlost
     getter oncontextmenu
@@ -5776,6 +5834,7 @@ interface MathMLElement : Element
     setter onchange
     setter onclick
     setter onclose
+    setter oncommand
     setter oncontentvisibilityautostatechange
     setter oncontextlost
     setter oncontextmenu
@@ -6326,6 +6385,7 @@ interface NavigateEvent : Event
     method commit
     method constructor
     method intercept
+    method redirect
     method scroll
 interface Navigation : EventTarget
     attribute @@toStringTag
@@ -7013,7 +7073,9 @@ interface PerformanceScriptTiming : PerformanceEntry
     getter invokerType
     getter pauseDuration
     getter sourceCharPosition
+    getter sourceColumn
     getter sourceFunctionName
+    getter sourceLine
     getter sourceURL
     getter window
     getter windowAttribution
@@ -7835,6 +7897,7 @@ interface SVGElement : Element
     getter onchange
     getter onclick
     getter onclose
+    getter oncommand
     getter oncontentvisibilityautostatechange
     getter oncontextlost
     getter oncontextmenu
@@ -7950,6 +8013,7 @@ interface SVGElement : Element
     setter onchange
     setter onclick
     setter onclose
+    setter oncommand
     setter oncontentvisibilityautostatechange
     setter oncontextlost
     setter oncontextmenu
@@ -11839,6 +11903,7 @@ namespace console
     getter onchange
     getter onclick
     getter onclose
+    getter oncommand
     getter oncontentvisibilityautostatechange
     getter oncontextlost
     getter oncontextmenu
@@ -12068,6 +12133,7 @@ namespace console
     setter onchange
     setter onclick
     setter onclose
+    setter oncommand
     setter oncontentvisibilityautostatechange
     setter oncontextlost
     setter oncontextmenu

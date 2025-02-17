@@ -7,8 +7,9 @@ package org.chromium.chrome.browser.ui.android.webid.data;
 import android.graphics.Bitmap;
 
 import org.jni_zero.CalledByNative;
+import org.jni_zero.JniType;
 
-import org.chromium.url.GURL;
+import org.chromium.build.annotations.Nullable;
 
 /**
  * This class holds the data used to represent a selectable account in the Account Selection sheet.
@@ -20,7 +21,10 @@ public class Account {
     private final String mEmail;
     private final String mName;
     private final String mGivenName;
-    private final GURL mPictureUrl;
+    // The secondary description. This value is not null if and only if the UI being displayed is
+    // multi IDP. The text contains the IDP origin and possibly the last used timestamp if this is
+    // an account that has been used in the device before.
+    private final @Nullable String mSecondaryDescription;
     private final Bitmap mPictureBitmap;
     private final boolean mIsSignIn;
     private final boolean mIsBrowserTrustedSignIn;
@@ -31,8 +35,7 @@ public class Account {
      * @param email Email shown to the user.
      * @param name Full name.
      * @param givenName Given name.
-     * @param pictureUrl Picture URL of the avatar shown to the user.
-     * @param pictureBitmap The Bitmap for the picture in pictureUrl.
+     * @param pictureBitmap The Bitmap for the picture.
      * @param isSignIn Whether this account's login state is sign in or sign up. Unlike the other
      *     fields this can be populated either by the IDP or by the browser based on its stored
      *     permission grants.
@@ -44,11 +47,11 @@ public class Account {
      */
     @CalledByNative
     public Account(
-            String id,
-            String email,
-            String name,
-            String givenName,
-            GURL pictureUrl,
+            @JniType("std::string") String id,
+            @JniType("std::string") String email,
+            @JniType("std::string") String name,
+            @JniType("std::string") String givenName,
+            @JniType("std::optional<std::string>") @Nullable String secondaryDescription,
             Bitmap pictureBitmap,
             boolean isSignIn,
             boolean isBrowserTrustedSignIn,
@@ -57,11 +60,15 @@ public class Account {
         mEmail = email;
         mName = name;
         mGivenName = givenName;
-        mPictureUrl = pictureUrl;
+        mSecondaryDescription = secondaryDescription;
         mPictureBitmap = pictureBitmap;
         mIsSignIn = isSignIn;
         mIsBrowserTrustedSignIn = isBrowserTrustedSignIn;
         mIsFilteredOut = isFilteredOut;
+    }
+
+    public String getId() {
+        return mId;
     }
 
     public String getEmail() {
@@ -76,8 +83,8 @@ public class Account {
         return mGivenName;
     }
 
-    public GURL getPictureUrl() {
-        return mPictureUrl;
+    public @Nullable String getSecondaryDescription() {
+        return mSecondaryDescription;
     }
 
     public Bitmap getPictureBitmap() {
@@ -94,11 +101,5 @@ public class Account {
 
     public boolean isFilteredOut() {
         return mIsFilteredOut;
-    }
-
-    // Return all the String fields. Note that this excludes non-string fields, in particular
-    // mPictureUrl.
-    public String[] getStringFields() {
-        return new String[] {mId, mEmail, mName, mGivenName};
     }
 }

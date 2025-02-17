@@ -21,8 +21,8 @@ BASE_FEATURE(kOneTimePermission,
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 #if !BUILDFLAG(IS_ANDROID)
-BASE_FEATURE(kKeyboardAndPointerLockPrompt,
-             "KeyboardAndPointerLockPrompt",
+BASE_FEATURE(kKeyboardLockPrompt,
+             "KeyboardLockPrompt",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // !BUILDFLAG(IS_ANDROID)
 
@@ -328,6 +328,11 @@ const base::FeatureParam<std::string>
 const base::FeatureParam<std::string> kWebKioskBrowserPermissionsAllowlist{
     &permissions::features::kAllowMultipleOriginsForWebKioskPermissions,
     "allowlist_urls", ""};
+
+#if !BUILDFLAG(IS_ANDROID)
+const base::FeatureParam<bool> kKeyboardLockPromptUIStyle{
+    &permissions::features::kKeyboardLockPrompt, "use_pepc_ui", true};
+#endif
 
 }  // namespace feature_params
 }  // namespace permissions

@@ -15,6 +15,7 @@
 #include "base/thread_annotations.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "content/browser/interest_group/for_debugging_only_report_util.h"
 #include "content/browser/interest_group/interest_group_update.h"
 #include "content/browser/interest_group/storage_interest_group.h"
 #include "content/common/content_export.h"
@@ -39,7 +40,6 @@ struct BiddingAndAuctionServerKey;
 // within the same sequence.
 class CONTENT_EXPORT InterestGroupStorage {
  public:
-  static constexpr base::TimeDelta kHistoryLength = base::Days(30);
   static constexpr base::TimeDelta kMaintenanceInterval = base::Hours(1);
   // Gets the default time the database waits idle before maintenance is
   // triggered.
@@ -88,7 +88,7 @@ class CONTENT_EXPORT InterestGroupStorage {
       const url::Origin& main_frame_origin);
 
   // Gets lockout for sending forDebuggingOnly reports.
-  std::optional<base::Time> GetDebugReportLockout();
+  std::optional<DebugReportLockout> GetDebugReportLockout();
 
   // Gets lockout and cooldowns for sending forDebuggingOnly reports.
   std::optional<DebugReportLockoutAndCooldowns>
@@ -123,12 +123,15 @@ class CONTENT_EXPORT InterestGroupStorage {
                               const std::string& ad_json);
   // Adds an entry to forDebuggingOnly report lockout table if the table is
   // empty. Otherwise replaces the existing entry.
-  void RecordDebugReportLockout(base::Time last_report_sent_time);
+  void RecordDebugReportLockout(base::Time starting_time,
+                                base::TimeDelta duration);
   // Adds an entry to forDebuggingOnly report cooldown table for `origin` if it
   // does not exist, otherwise replaces the existing entry.
   void RecordDebugReportCooldown(const url::Origin& origin,
                                  base::Time cooldown_start,
                                  DebugReportCooldownType cooldown_type);
+  // Clear out all entries for debug report cooldown information.
+  void DeleteAllDebugReportCooldowns();
 
   // Records a K-anonymity update for an interest group. If
   // `replace_existing_values` is true, this update will store the new
@@ -173,6 +176,11 @@ class CONTENT_EXPORT InterestGroupStorage {
 
   std::vector<std::pair<url::Origin, url::Origin>>
   GetAllInterestGroupOwnerJoinerPairs();
+
+  // Set forDebuggingOnly lockout to the time until all interest groups that
+  // previously joined expires.
+  void SetDebugReportLockoutUntilIGExpires();
+
   void RemoveInterestGroupsMatchingOwnerAndJoiner(url::Origin owner,
                                                   url::Origin joining_origin);
 

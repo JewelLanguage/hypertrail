@@ -10,7 +10,6 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
-#include "chrome/browser/feedback/public/feedback_source.h"
 #include "chrome/browser/optimization_guide/mock_optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
@@ -22,9 +21,11 @@
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/test_utils/autofill_test_utils.h"
 #include "components/autofill/core/browser/test_utils/test_profiles.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill_ai/core/browser/autofill_ai_features.h"
+#include "components/autofill_ai/core/browser/suggestion/autofill_ai_model_executor.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/optimization_guide/proto/features/common_quality_data.pb.h"
 #include "components/signin/public/identity_manager/account_capabilities_test_mutator.h"
@@ -87,7 +88,8 @@ class ChromeAutofillAiClientTest : public ChromeRenderViewHostTestHarness {
   }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_{autofill_ai::kAutofillAi};
+  base::test::ScopedFeatureList scoped_feature_list_{
+      autofill::features::kAutofillAiWithDataSchema};
   std::unique_ptr<ChromeAutofillAiClient> client_;
 };
 
@@ -95,10 +97,6 @@ TEST_F(ChromeAutofillAiClientTest, GetAXTree) {
   base::MockCallback<autofill_ai::AutofillAiClient::AXTreeCallback> callback;
   EXPECT_CALL(callback, Run);
   client().GetAXTree(callback.Get());
-}
-
-TEST_F(ChromeAutofillAiClientTest, GetUserAnnotationsService) {
-  EXPECT_TRUE(client().GetUserAnnotationsService());
 }
 
 TEST_F(ChromeAutofillAiClientTest,
@@ -160,43 +158,6 @@ TEST_F(ChromeAutofillAiClientTest, GetModelExecutor) {
   EXPECT_TRUE(client().GetModelExecutor());
 }
 
-// Tests that GetLastCommittedURL() accurately returns the last committed URL.
-TEST_F(ChromeAutofillAiClientTest, GetLastCommittedURL) {
-  const GURL about_blank = GURL("about:blank");
-  content::WebContentsTester::For(web_contents())
-      ->NavigateAndCommit(about_blank);
-  EXPECT_EQ(client().GetLastCommittedURL(), about_blank);
-}
-
-// Tests that GetTitle() returns an empty string if no navigation had happened
-// before.
-TEST_F(ChromeAutofillAiClientTest, GetTitle) {
-  EXPECT_EQ(client().GetTitle(), "");
-}
-
-// Tests that TryToOpenFeedbackPage() doesn't emit histogram
-// "Feedback.RequestSource" when
-// `LogAiDataRequest::FeatureCase::kFormsPredictions` should not be allowed for
-// feedback. The emission of the histogram is an indicator that the feedback
-// page would be opened. Unfortunately there isn't a more robust way to test
-// this. Also the case where the feature should be allowed for feedback is hard
-// to test in this environment because it involves views and crashes the test.
-TEST_F(ChromeAutofillAiClientTest, TryToOpenFeedbackPage) {
-  auto* mock_optimization_guide_service =
-      static_cast<NiceMock<MockOptimizationGuideKeyedService>*>(
-          OptimizationGuideKeyedServiceFactory::GetInstance()->GetForProfile(
-              profile()));
-  EXPECT_CALL(*mock_optimization_guide_service,
-              ShouldFeatureBeCurrentlyAllowedForFeedback(
-                  optimization_guide::proto::LogAiDataRequest::FeatureCase::
-                      kFormsPredictions))
-      .WillOnce(Return(false));
-  base::HistogramTester histogram_tester_;
-  client().TryToOpenFeedbackPage("feedback id");
-  histogram_tester_.ExpectUniqueSample("Feedback.RequestSource",
-                                       feedback::kFeedbackSourceAI, 0);
-}
-
 // Tests that no ChromeAutofillAiClient is created if
 // IsAutofillAiSupported() is false.
 TEST_F(ChromeAutofillAiClientTest, MaybeCreateForWebContents) {
@@ -209,47 +170,6 @@ TEST_F(ChromeAutofillAiClientTest, MaybeCreateForWebContents) {
   ASSERT_FALSE(autofill_ai::IsAutofillAiSupported(profile()->GetPrefs()));
   EXPECT_FALSE(ChromeAutofillAiClient::MaybeCreateForWebContents(web_contents(),
                                                                  profile()));
-}
-
-// Tests that
-// ChromeAutofillAiClient::GetAutofillNameFillingValue
-// returns accurate information about the value for filling of an
-// AutofillProfile for a given name type.
-TEST_F(ChromeAutofillAiClientTest, GetAutofillNameFillingValue) {
-  autofill::FormFieldData test_field;
-  autofill::AutofillProfile test_autofill_profile =
-      autofill::test::GetFullProfile();
-
-  // Currently the client should not see any info since no
-  // `test_autofill_profile` is not stored.
-  EXPECT_TRUE(client()
-                  .GetAutofillNameFillingValue(test_autofill_profile.guid(),
-                                               autofill::NAME_FIRST, test_field)
-                  .empty());
-
-  // Add `test_profile` to the autofill profile storage.
-  autofill::PersonalDataManager* pdm =
-      autofill::PersonalDataManagerFactory::GetForBrowserContext(
-          browser_context());
-  pdm->address_data_manager().AddProfile(test_autofill_profile);
-
-  // Now, the client should have access to the profile since it was stored in
-  // memory, and should return an accurate value for filling.
-  ASSERT_TRUE(test_autofill_profile.HasInfo(autofill::NAME_FIRST));
-  EXPECT_EQ(client().GetAutofillNameFillingValue(
-                test_autofill_profile.guid(), autofill::NAME_FIRST, test_field),
-            test_autofill_profile.GetRawInfo(autofill::NAME_FIRST));
-
-  // Nevertheless, the client should not have access to more than the values
-  // of the profiles for the name types, since by design those additional values
-  // are not needed.
-  ASSERT_TRUE(
-      test_autofill_profile.HasInfo(autofill::ADDRESS_HOME_STREET_ADDRESS));
-  EXPECT_TRUE(client()
-                  .GetAutofillNameFillingValue(
-                      test_autofill_profile.guid(),
-                      autofill::ADDRESS_HOME_STREET_ADDRESS, test_field)
-                  .empty());
 }
 
 }  // namespace

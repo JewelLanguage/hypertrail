@@ -13,7 +13,6 @@
 #include "base/functional/callback_forward.h"
 #include "base/functional/callback_helpers.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/reauth_result.h"
@@ -188,14 +187,14 @@ void HandleSignoutConfirmationChoice(
         browser->signin_view_controller()->ShowGaiaLogoutTab(
             token_signout_source);
       }
-      if (switches::IsExplicitBrowserSigninUIOnDesktopEnabled()) {
-        // In Uno, Gaia logout tab invalidating the account will lead to a sign
-        // in paused state. Unset the primary account to ensure it is removed
-        // from chrome. The `AccountReconcilor` will revoke refresh tokens for
-        // accounts not in the Gaia cookie on next reconciliation.
-        identity_manager->GetPrimaryAccountMutator()
-            ->RemovePrimaryAccountButKeepTokens(profile_signout_source);
-      }
+
+      // In Uno, Gaia logout tab invalidating the account will lead to a sign
+      // in paused state. Unset the primary account to ensure it is removed
+      // from chrome. The `AccountReconcilor` will revoke refresh tokens for
+      // accounts not in the Gaia cookie on next reconciliation.
+      identity_manager->GetPrimaryAccountMutator()
+          ->RemovePrimaryAccountButKeepTokens(profile_signout_source);
+
       return;
     }
   }
@@ -216,9 +215,8 @@ GURL GetSigninUrlForDiceSigninTab(
   // Note: It is expected with the below sign in reason and access point
   // that there is no primary account. Maybe move to a `CHECK` later.
   if (signin_reason == signin_metrics::Reason::kAddSecondaryAccount &&
-      access_point == signin_metrics::AccessPoint::ACCESS_POINT_EXTENSIONS &&
-      !identity_manager.HasPrimaryAccount(signin::ConsentLevel::kSignin) &&
-      switches::IsExplicitBrowserSigninUIOnDesktopEnabled()) {
+      access_point == signin_metrics::AccessPoint::kExtensions &&
+      !identity_manager.HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
     // Extensions wants the user to sign in to Chrome.
     // Ensure the Gaia page informs the user that they will also be signed in to
     // Chrome.
@@ -371,7 +369,7 @@ void SigninViewController::MaybeShowChromeSigninDialogForExtensions(
 }
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
-#if BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
 void SigninViewController::ShowModalProfileCustomizationDialog(
     bool is_local_profile_creation) {
   CloseModalSignin();
@@ -395,7 +393,7 @@ void SigninViewController::ShowModalSigninEmailConfirmationDialog(
           std::move(callback)),
       GetOnModalDialogClosedCallback());
 }
-#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
 void SigninViewController::ShowModalSyncConfirmationDialog(
     bool is_signin_intercept,
@@ -413,8 +411,7 @@ void SigninViewController::ShowModalSyncConfirmationDialog(
 void SigninViewController::ShowModalManagedUserNoticeDialog(
     std::unique_ptr<signin::EnterpriseProfileCreationDialogParams>
         create_param) {
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
-    BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
   CloseModalSignin();
   dialog_ = std::make_unique<SigninModalDialogImpl>(
       SigninViewControllerDelegate::CreateManagedUserNoticeDelegate(
@@ -505,7 +502,7 @@ void SigninViewController::ShowDiceSigninTab(
       signin_reason, email_hint, continue_url);
 
   content::WebContents* active_contents = nullptr;
-  if (access_point == signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE) {
+  if (access_point == signin_metrics::AccessPoint::kStartPage) {
     active_contents = browser_->tab_strip_model()->GetActiveWebContents();
     content::OpenURLParams params(signin_url, content::Referrer(),
                                   WindowOpenDisposition::CURRENT_TAB,
@@ -516,8 +513,7 @@ void SigninViewController::ShowDiceSigninTab(
     TabStripModel* tab_strip = browser_->tab_strip_model();
     int dice_tab_index = FindDiceSigninTab(tab_strip, signin_url);
     if (dice_tab_index != -1) {
-      if (access_point !=
-          signin_metrics::AccessPoint::ACCESS_POINT_EXTENSIONS) {
+      if (access_point != signin_metrics::AccessPoint::kExtensions) {
         // Extensions do not activate the tab to prevent misbehaving
         // extensions to keep focusing the signin tab.
         tab_strip->ActivateTabAt(
@@ -610,10 +606,8 @@ void SigninViewController::ShowGaiaLogoutTab(
   // Pass a continue URL when the Web Signin Intercept bubble is shown, so that
   // the bubble and the app picker do not overlap. If the bubble is not shown,
   // open the app picker in case the user is lost.
-  GURL logout_url =
-      switches::IsExplicitBrowserSigninUIOnDesktopEnabled()
-          ? GaiaUrls::GetInstance()->LogOutURLWithContinueURL(GURL())
-          : GaiaUrls::GetInstance()->service_logout_url();
+  GURL logout_url = GaiaUrls::GetInstance()->LogOutURLWithContinueURL(GURL());
+
   // Do not use a singleton tab. A new tab should be opened even if there is
   // already a logout tab.
   ShowTabOverwritingNTP(browser_, logout_url);
@@ -679,9 +673,7 @@ void SigninViewController::SignoutOrReauthWithPromptWithUnsyncedDataTypes(
         ChromeSignoutConfirmationPromptVariant::kProfileWithParentalControls;
   }
 
-  // Show confirmation prompt where the user can reauth or sign out.
-  ShowChromeSignoutConfirmationPrompt(*browser_, prompt_variant,
-                                      std::move(callback));
+  ShowSignoutConfirmationPrompt(prompt_variant, std::move(callback));
 }
 
 void SigninViewController::ShowChromeSigninDialogForExtensions(
@@ -706,7 +698,7 @@ void SigninViewController::ShowChromeSigninDialogForExtensions(
         if (identity_manager) {
           identity_manager->GetPrimaryAccountMutator()->SetPrimaryAccount(
               account_id, signin::ConsentLevel::kSignin,
-              signin_metrics::AccessPoint::ACCESS_POINT_EXTENSIONS);
+              signin_metrics::AccessPoint::kExtensions);
         }
       },
       browser_->profile()->GetWeakPtr(), account_info_for_promos.account_id);
@@ -744,6 +736,25 @@ void SigninViewController::ShowChromeSigninDialogForExtensions(
 
   chrome::ShowTabModal(dialog_builder.Build(), contents);
 }
+
+void SigninViewController::ShowSignoutConfirmationPrompt(
+    ChromeSignoutConfirmationPromptVariant prompt_variant,
+    base::OnceCallback<void(ChromeSignoutConfirmationChoice)> callback) {
+  if (!switches::IsImprovedSigninUIOnDesktopEnabled() &&
+      prompt_variant ==
+          ChromeSignoutConfirmationPromptVariant::kNoUnsyncedData) {
+    // This variant is not enabled. Skip the UI and sign out immediately.
+    std::move(callback).Run(ChromeSignoutConfirmationChoice::kSignout);
+    return;
+  }
+
+  CloseModalSignin();
+  dialog_ = std::make_unique<SigninModalDialogImpl>(
+      SigninViewControllerDelegate::CreateSignoutConfirmationDelegate(
+          browser_, prompt_variant, std::move(callback)),
+      GetOnModalDialogClosedCallback());
+}
+
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
 content::WebContents*

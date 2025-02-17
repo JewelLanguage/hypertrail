@@ -185,7 +185,7 @@ void BirchBarController::OnItemHiddenByUser(BirchItem* item) {
     return;
   }
 
-  auto iter = base::ranges::find_if(items_, base::MatchesUniquePtr(item));
+  auto iter = std::ranges::find_if(items_, base::MatchesUniquePtr(item));
   if (iter == items_.end()) {
     return;
   }
@@ -251,15 +251,10 @@ void BirchBarController::ProvideFeedbackForCoral() {
           static_cast<BirchCoralItem*>(item.get())->ToCoralItemDetails());
     }
   }
-  Shell::Get()->shell_delegate()->OpenFeedbackDialog(
-      ShellDelegate::FeedbackSource::kOverview,
-      /*description_template=*/
-      base::StrCat({kUserFeedbackPrompt, kMarkdownBackticks, "json\n",
-                    base::WriteJsonWithOptions(
-                        root, base::JSONWriter::OPTIONS_PRETTY_PRINT)
-                        .value_or(std::string()),
-                    "\n", kMarkdownBackticks}),
-      /*category_tag=*/"Coral");
+  Shell::Get()->coral_controller()->OpenFeedbackDialog(
+      /*group_description=*/
+      base::WriteJsonWithOptions(root, base::JSONWriter::OPTIONS_PRETTY_PRINT)
+          .value_or(std::string()));
 }
 
 void BirchBarController::ExecuteMenuCommand(int command_id, bool from_chip) {

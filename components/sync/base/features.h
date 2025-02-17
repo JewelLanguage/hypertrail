@@ -38,9 +38,6 @@ BASE_DECLARE_FEATURE(kEnableBatchUploadFromSettings);
 BASE_DECLARE_FEATURE(kUnoPhase2FollowUp);
 #endif  // BUILDFLAG(IS_ANDROID)
 
-// Controls whether to enable syncing of Autofill Wallet Usage Data.
-BASE_DECLARE_FEATURE(kSyncAutofillWalletUsageData);
-
 // Controls whether to enable syncing of Autofill Wallet Credential Data.
 BASE_DECLARE_FEATURE(kSyncAutofillWalletCredentialData);
 
@@ -65,11 +62,6 @@ BASE_DECLARE_FEATURE(kSyncEnableContactInfoDataTypeForDasherUsers);
 //   saves always happen to the profile store.
 // - The account store is synced. When the flag is disabled, the profile one is.
 BASE_DECLARE_FEATURE(kEnablePasswordsAccountStorageForSyncingUsers);
-
-// Enables a separate account-scoped storage for preferences, for syncing users.
-// (Note that opposed to other "account storage" features, this one does not
-// have any effect for signed-in non-syncing users!)
-BASE_DECLARE_FEATURE(kEnablePreferencesAccountStorage);
 
 #if BUILDFLAG(IS_IOS)
 // On iOS, Webauthn Credential Sync is controlled by a build-time flag, because
@@ -114,7 +106,7 @@ BASE_DECLARE_FEATURE(kEnableBookmarksSelectedTypeOnSigninForTesting);
 
 // Feature flag used for enabling sync (transport mode) for signed-in users that
 // haven't turned on full sync.
-#if !BUILDFLAG(IS_IOS)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 BASE_DECLARE_FEATURE(kReadingListEnableSyncTransportModeUponSignIn);
 // Returns whether reading list storage related UI can be enabled, by testing
 // `kReadingListEnableSyncTransportModeUponSignIn`.
@@ -123,7 +115,7 @@ bool IsReadingListAccountStorageEnabled();
 constexpr bool IsReadingListAccountStorageEnabled() {
   return true;
 }
-#endif  // !BUILDFLAG(IS_IOS)
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 
 // Flag to allow SHARED_TAB_GROUP_DATA to run in transport mode.
 BASE_DECLARE_FEATURE(kSyncSharedTabGroupDataInTransportMode);
@@ -161,6 +153,9 @@ BASE_DECLARE_FEATURE(kMigrateAccountPrefs);
 // If enabled, distinguishes between local and account themes.
 BASE_DECLARE_FEATURE(kSeparateLocalAndAccountThemes);
 
+// If enabled, offers batch upload of local themes upon sign in.
+BASE_DECLARE_FEATURE(kThemesBatchUpload);
+
 // If enabled, the local change nudge delays for single-client users are
 // increased by some factor, specified via the FeatureParam below.
 BASE_DECLARE_FEATURE(kSyncIncreaseNudgeDelayForSingleClient);
@@ -182,6 +177,15 @@ BASE_DECLARE_FEATURE(kWebApkBackupAndRestoreBackend);
 // Enables syncing for extensions when in transport mode (when a user is signed
 // in but has not turned on full sync).
 BASE_DECLARE_FEATURE(kSyncEnableExtensionsInTransportMode);
+
+#if BUILDFLAG(IS_ANDROID)
+// Flag to test different alternatives for the passwords sync error message
+// content.
+BASE_DECLARE_FEATURE(kSyncEnablePasswordsSyncErrorMessageAlternative);
+inline constexpr base::FeatureParam<int>
+    kSyncEnablePasswordsSyncErrorMessageAlternativeVersion{
+        &kSyncEnablePasswordsSyncErrorMessageAlternative, "version", 1};
+#endif  // BUILDFLAG(IS_ANDROID)
 
 }  // namespace syncer
 

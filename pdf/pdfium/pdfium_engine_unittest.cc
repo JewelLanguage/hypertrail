@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <utility>
 
 #include "base/compiler_specific.h"
@@ -35,6 +36,7 @@
 #include "pdf/test/test_client.h"
 #include "pdf/test/test_document_loader.h"
 #include "pdf/test/test_helpers.h"
+#include "pdf/text_search.h"
 #include "pdf/ui/thumbnail.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -57,6 +59,7 @@
 
 #include "pdf/pdf_ink_brush.h"
 #include "pdf/pdf_ink_constants.h"
+#include "pdf/pdf_ink_metrics_handler.h"
 #include "pdf/pdfium/pdfium_test_helpers.h"
 #include "pdf/test/pdf_ink_test_helpers.h"
 #include "third_party/ink/src/ink/strokes/input/stroke_input_batch.h"
@@ -111,10 +114,10 @@ blink::WebMouseEvent CreateMoveWebMouseEventToPosition(
       .Build();
 }
 
-base::FilePath GetTextSelectionReferenceFilePath(
+base::FilePath GetReferenceFilePath(
+    base::FilePath::StringViewType sub_directory,
     std::string_view test_filename) {
-  return base::FilePath(FILE_PATH_LITERAL("text_selection"))
-      .AppendASCII(test_filename);
+  return base::FilePath(sub_directory).AppendASCII(test_filename);
 }
 
 class MockTestClient : public TestClient {
@@ -230,6 +233,7 @@ class PDFiumEngineTest : public PDFiumTestBase {
                                int page_index,
                                std::string_view expected_png_filename) {
     return DrawSelectionAndCompareImpl(engine, page_index,
+                                       FILE_PATH_LITERAL("text_selection"),
                                        expected_png_filename,
                                        /*use_platform_suffix=*/false);
   }
@@ -239,13 +243,24 @@ class PDFiumEngineTest : public PDFiumTestBase {
       int page_index,
       std::string_view expected_png_filename) {
     return DrawSelectionAndCompareImpl(engine, page_index,
+                                       FILE_PATH_LITERAL("text_selection"),
                                        expected_png_filename,
                                        /*use_platform_suffix=*/true);
+  }
+
+  void DrawHighlightsAndCompare(PDFiumEngine& engine,
+                                int page_index,
+                                std::string_view expected_png_filename) {
+    return DrawSelectionAndCompareImpl(engine, page_index,
+                                       FILE_PATH_LITERAL("text_fragments"),
+                                       expected_png_filename,
+                                       /*use_platform_suffix=*/false);
   }
 
  private:
   void DrawSelectionAndCompareImpl(PDFiumEngine& engine,
                                    int page_index,
+                                   base::FilePath::StringViewType sub_directory,
                                    std::string_view expected_png_filename,
                                    bool use_platform_suffix) {
     // Since the GetPageContentsRect() return value may have a non-zero origin,
@@ -268,7 +283,7 @@ class PDFiumEngineTest : public PDFiumTestBase {
     engine.progressive_paints_.clear();
 
     base::FilePath expectation_path =
-        GetTextSelectionReferenceFilePath(expected_png_filename);
+        GetReferenceFilePath(sub_directory, expected_png_filename);
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
     // Note that the expectation files without a suffix is typically generated
@@ -1044,6 +1059,56 @@ TEST_P(PDFiumEngineTest, SelectLinkAreaWithNoText) {
   EXPECT_EQ(kExpectedText, engine->GetSelectedText());
 }
 
+TEST_P(PDFiumEngineTest, SelectTextAcrossEmptyPage) {
+  NiceMock<MockTestClient> client;
+  std::unique_ptr<PDFiumEngine> engine = InitializeEngine(
+      &client, FILE_PATH_LITERAL("multi_page_hello_world_with_empty_page.pdf"));
+  ASSERT_TRUE(engine);
+
+  // Plugin size chosen so all pages of the document are visible.
+  engine->PluginSizeUpdated({1024, 4096});
+
+  EXPECT_THAT(engine->GetSelectedText(), IsEmpty());
+
+  static constexpr gfx::PointF kStartPosition(80, 200);
+  static constexpr gfx::PointF kEndPosition(95, 765);
+
+  // Forward selection.
+  EXPECT_TRUE(engine->HandleInputEvent(
+      CreateLeftClickWebMouseEventAtPosition(kStartPosition)));
+  EXPECT_TRUE(engine->HandleInputEvent(
+      CreateMoveWebMouseEventToPosition(kEndPosition)));
+#if BUILDFLAG(IS_WIN)
+  static constexpr char kExpectedForwardSelection[] = "world!\r\nGoodbye";
+#else
+  static constexpr char kExpectedForwardSelection[] = "world!\nGoodbye";
+#endif
+  EXPECT_EQ(kExpectedForwardSelection, engine->GetSelectedText());
+
+  // Backward selection.
+  EXPECT_TRUE(engine->HandleInputEvent(
+      CreateLeftClickWebMouseEventAtPosition(kEndPosition)));
+  EXPECT_TRUE(engine->HandleInputEvent(
+      CreateMoveWebMouseEventToPosition(kStartPosition)));
+#if BUILDFLAG(IS_WIN)
+  static constexpr char kExpectedBackwardSelection[] = "world!\r\nGoodbye,";
+#else
+  static constexpr char kExpectedBackwardSelection[] = "world!\nGoodbye,";
+#endif
+  EXPECT_EQ(kExpectedBackwardSelection, engine->GetSelectedText());
+
+  // Select all.
+  engine->SelectAll();
+#if BUILDFLAG(IS_WIN)
+  static constexpr char kExpectedAllSelection[] =
+      "Hello, world!\r\nGoodbye, world!";
+#else
+  static constexpr char kExpectedAllSelection[] =
+      "Hello, world!\nGoodbye, world!";
+#endif
+  EXPECT_EQ(kExpectedAllSelection, engine->GetSelectedText());
+}
+
 TEST_P(PDFiumEngineTest, DrawTextSelectionsHelloWorld) {
   constexpr int kPageIndex = 0;
   NiceMock<MockTestClient> client;
@@ -1061,7 +1126,8 @@ TEST_P(PDFiumEngineTest, DrawTextSelectionsHelloWorld) {
   SetSelection(*engine, /*start_page_index=*/kPageIndex, /*start_char_index=*/1,
                /*end_page_index=*/kPageIndex, /*end_char_index=*/2);
   EXPECT_EQ("e", engine->GetSelectedText());
-  DrawSelectionAndCompare(*engine, kPageIndex, "hello_world_selection_1.png");
+  DrawSelectionAndCompareWithPlatformExpectations(
+      *engine, kPageIndex, "hello_world_selection_1.png");
 
   SetSelection(*engine, /*start_page_index=*/kPageIndex, /*start_char_index=*/0,
                /*end_page_index=*/kPageIndex, /*end_char_index=*/3);
@@ -2046,6 +2112,31 @@ TEST_P(PDFiumEngineInkTest, CannotSelectTextInAnnotationMode) {
   EXPECT_THAT(engine->GetSelectedText(), IsEmpty());
 }
 
+TEST_P(PDFiumEngineInkTest, ContainsV2InkPath) {
+  NiceMock<MockTestClient> client;
+  std::unique_ptr<PDFiumEngine> engine =
+      InitializeEngine(&client, FILE_PATH_LITERAL("blank.pdf"));
+  ASSERT_TRUE(engine);
+  ASSERT_EQ(1, engine->GetNumberOfPages());
+  constexpr base::TimeDelta kContainsV2InkPathTimeout =
+      base::Milliseconds(5000);
+  EXPECT_EQ(engine->ContainsV2InkPath(kContainsV2InkPathTimeout),
+            PDFLoadedWithV2InkAnnotations::kFalse);
+
+  engine = InitializeEngine(&client, FILE_PATH_LITERAL("ink_v2.pdf"));
+  ASSERT_TRUE(engine);
+  ASSERT_EQ(1, engine->GetNumberOfPages());
+  EXPECT_EQ(engine->ContainsV2InkPath(kContainsV2InkPathTimeout),
+            PDFLoadedWithV2InkAnnotations::kTrue);
+
+  // Test timeout.
+  engine = InitializeEngine(&client, FILE_PATH_LITERAL("ink_v2.pdf"));
+  ASSERT_TRUE(engine);
+  ASSERT_EQ(1, engine->GetNumberOfPages());
+  EXPECT_EQ(engine->ContainsV2InkPath(base::Milliseconds(0)),
+            PDFLoadedWithV2InkAnnotations::kUnknown);
+}
+
 TEST_P(PDFiumEngineInkTest, LoadV2InkPathsForPage) {
   NiceMock<MockTestClient> client;
   std::unique_ptr<PDFiumEngine> engine =
@@ -2138,6 +2229,8 @@ TEST_P(PDFiumEngineInkDrawTest, StrokeData) {
   const base::FilePath kAppliedStroke2FilePath(
       GetInkTestDataFilePath("applied_stroke2.png"));
   CheckPdfRendering(page.GetPage(), kPageSizeInPoints, kAppliedStroke2FilePath);
+  EXPECT_TRUE(engine->stroked_pages_unload_preventers_for_testing().contains(
+      kPageIndex));
 
   // Getting the save data should now have the new strokes.
   // Verify visibility of strokes in that copy.  Must call GetSaveData()
@@ -2165,6 +2258,8 @@ TEST_P(PDFiumEngineInkDrawTest, StrokeData) {
   EXPECT_EQ(GetPdfMarkObjCountForTesting(engine->doc(),
                                          kInkAnnotationIdentifierKeyV2),
             1);
+  EXPECT_TRUE(engine->stroked_pages_unload_preventers_for_testing().contains(
+      kPageIndex));
 
   // Set the highlighter stroke as active again, to perform the equivalent of an
   // "redo" action. The affected stroke should be included in the saved PDF data
@@ -2178,6 +2273,8 @@ TEST_P(PDFiumEngineInkDrawTest, StrokeData) {
   EXPECT_EQ(GetPdfMarkObjCountForTesting(engine->doc(),
                                          kInkAnnotationIdentifierKeyV2),
             2);
+  EXPECT_TRUE(engine->stroked_pages_unload_preventers_for_testing().contains(
+      kPageIndex));
 }
 
 TEST_P(PDFiumEngineInkDrawTest, StrokeDiscardStroke) {
@@ -2220,6 +2317,8 @@ TEST_P(PDFiumEngineInkDrawTest, StrokeDiscardStroke) {
   const base::FilePath kAppliedStroke1FilePath(
       GetInkTestDataFilePath("applied_stroke1.png"));
   CheckPdfRendering(page.GetPage(), kPageSizeInPoints, kAppliedStroke1FilePath);
+  EXPECT_TRUE(engine->stroked_pages_unload_preventers_for_testing().contains(
+      kPageIndex));
 
   // Set the stroke as inactive, to perform the equivalent of an "undo" action.
   engine->UpdateStrokeActive(kPageIndex, kStrokeId, /*active=*/false);
@@ -2233,11 +2332,15 @@ TEST_P(PDFiumEngineInkDrawTest, StrokeDiscardStroke) {
                                          kInkAnnotationIdentifierKeyV2),
             0);
   EXPECT_EQ(FPDFPage_CountObjects(page.GetPage()), 1);
+  EXPECT_TRUE(engine->stroked_pages_unload_preventers_for_testing().contains(
+      kPageIndex));
 
   // Discard the stroke.
   engine->DiscardStroke(kPageIndex, kStrokeId);
 
   EXPECT_EQ(FPDFPage_CountObjects(page.GetPage()), 0);
+  EXPECT_FALSE(engine->stroked_pages_unload_preventers_for_testing().contains(
+      kPageIndex));
 
   // Draw a new stroke, reusing the same InkStrokeId. This can occur after an
   // undo action.
@@ -2255,6 +2358,8 @@ TEST_P(PDFiumEngineInkDrawTest, StrokeDiscardStroke) {
       GetInkTestDataFilePath("applied_stroke3.png"));
   CheckPdfRendering(page.GetPage(), kPageSizeInPoints, kAppliedStroke3FilePath);
   EXPECT_EQ(FPDFPage_CountObjects(page.GetPage()), 1);
+  EXPECT_TRUE(engine->stroked_pages_unload_preventers_for_testing().contains(
+      kPageIndex));
 }
 
 TEST_P(PDFiumEngineInkDrawTest, LoadedV2InkPathsAndUpdateShapeActive) {
@@ -2314,5 +2419,151 @@ TEST_P(PDFiumEngineInkDrawTest, LoadedV2InkPathsAndUpdateShapeActive) {
 INSTANTIATE_TEST_SUITE_P(All, PDFiumEngineInkDrawTest, testing::Values(false));
 
 #endif  // BUILDFLAG(ENABLE_PDF_INK2)
+
+class SearchStringTestClient : public TestClient {
+ public:
+  std::vector<SearchStringResult> SearchString(const std::u16string& needle,
+                                               const std::u16string& haystack,
+                                               bool case_sensitive) override {
+    EXPECT_FALSE(needle.empty());
+    EXPECT_FALSE(haystack.empty());
+    return TextSearch(/*needle=*/needle, /*haystack=*/haystack, case_sensitive);
+  }
+};
+
+class PDFiumEngineHighlightTextFragmentTest : public PDFiumEngineTest {
+ public:
+  std::unique_ptr<PDFiumEngine> InitializePdfEngine(TestClient& client) {
+    std::unique_ptr<PDFiumEngine> engine =
+        InitializeEngine(&client, FILE_PATH_LITERAL("spanner.pdf"));
+    // Update the plugin size so that all the text is visible by
+    // `HighlightChangeInvalidator`.
+    engine->PluginSizeUpdated({816, 1056});
+    return engine;
+  }
+};
+
+TEST_P(PDFiumEngineHighlightTextFragmentTest, OnlyTextStart) {
+  NiceMock<SearchStringTestClient> client;
+  std::unique_ptr<PDFiumEngine> engine = InitializePdfEngine(client);
+  ASSERT_TRUE(engine);
+  engine->HighlightTextFragments({"Spanner"});
+
+  DrawHighlightsAndCompare(*engine, 0, "spanner_text_start_highlight.png");
+}
+
+TEST_P(PDFiumEngineHighlightTextFragmentTest, TextStartAndEnd) {
+  NiceMock<SearchStringTestClient> client;
+  std::unique_ptr<PDFiumEngine> engine = InitializePdfEngine(client);
+  ASSERT_TRUE(engine);
+
+  engine->HighlightTextFragments({"spanner,database"});
+
+  DrawHighlightsAndCompare(*engine, 0, "spanner_text_start_end_highlight.png");
+}
+
+TEST_P(PDFiumEngineHighlightTextFragmentTest, TextStartAndTextSuffix) {
+  NiceMock<SearchStringTestClient> client;
+  std::unique_ptr<PDFiumEngine> engine = InitializePdfEngine(client);
+  ASSERT_TRUE(engine);
+
+  engine->HighlightTextFragments({"how,-many"});
+
+  DrawHighlightsAndCompare(*engine, 0,
+                           "spanner_text_start_suffix_highlight.png");
+}
+
+TEST_P(PDFiumEngineHighlightTextFragmentTest, TextStartEndAndSuffix) {
+  NiceMock<SearchStringTestClient> client;
+  std::unique_ptr<PDFiumEngine> engine = InitializePdfEngine(client);
+  ASSERT_TRUE(engine);
+
+  engine->HighlightTextFragments({"this,api,-and"});
+
+  DrawHighlightsAndCompare(*engine, 0,
+                           "spanner_text_start_end_suffix_highlight.png");
+}
+
+TEST_P(PDFiumEngineHighlightTextFragmentTest, TextPrefixAndTextStart) {
+  NiceMock<SearchStringTestClient> client;
+  std::unique_ptr<PDFiumEngine> engine = InitializePdfEngine(client);
+  ASSERT_TRUE(engine);
+
+  engine->HighlightTextFragments({"is-,Google"});
+
+  DrawHighlightsAndCompare(*engine, 0,
+                           "spanner_text_prefix_start_highlight.png");
+}
+
+TEST_P(PDFiumEngineHighlightTextFragmentTest, TextPrefixStartAndSuffix) {
+  NiceMock<SearchStringTestClient> client;
+  std::unique_ptr<PDFiumEngine> engine = InitializePdfEngine(client);
+  ASSERT_TRUE(engine);
+
+  engine->HighlightTextFragments({"of-,Google,-'s"});
+
+  DrawHighlightsAndCompare(*engine, 0,
+                           "spanner_text_prefix_start_suffix_highlight.png");
+}
+
+TEST_P(PDFiumEngineHighlightTextFragmentTest, TextPrefixStartEndAndSuffix) {
+  NiceMock<SearchStringTestClient> client;
+  std::unique_ptr<PDFiumEngine> engine = InitializePdfEngine(client);
+  ASSERT_TRUE(engine);
+
+  engine->HighlightTextFragments({"and-,applications,old,-timestamps"});
+
+  DrawHighlightsAndCompare(
+      *engine, 0, "spanner_text_prefix_start_end_suffix_highlight.png");
+}
+
+TEST_P(PDFiumEngineHighlightTextFragmentTest, MultipleTextFragments) {
+  NiceMock<SearchStringTestClient> client;
+  std::unique_ptr<PDFiumEngine> engine = InitializePdfEngine(client);
+  ASSERT_TRUE(engine);
+
+  engine->HighlightTextFragments({"Google", "is-,Google", "of-,Google,-'s",
+                                  "and-,applications,old,-timestamps"});
+
+  DrawHighlightsAndCompare(*engine, 0,
+                           "spanner_multiple_fragments_highlight.png");
+}
+
+TEST_P(PDFiumEngineHighlightTextFragmentTest, FragmentNotInPDF) {
+  NiceMock<SearchStringTestClient> client;
+  std::unique_ptr<PDFiumEngine> engine = InitializePdfEngine(client);
+  ASSERT_TRUE(engine);
+
+  engine->HighlightTextFragments({});
+  DrawHighlightsAndCompare(*engine, 0, "spanner_blank.png");
+
+  engine->HighlightTextFragments({"apples"});
+  DrawHighlightsAndCompare(*engine, 0, "spanner_blank.png");
+
+  engine->HighlightTextFragments({"of-,Google,-random"});
+  DrawHighlightsAndCompare(*engine, 0, "spanner_blank.png");
+
+  engine->HighlightTextFragments({"of-,Google,random"});
+  DrawHighlightsAndCompare(*engine, 0, "spanner_blank.png");
+
+  engine->HighlightTextFragments({"and-,applications,old,-random"});
+  DrawHighlightsAndCompare(*engine, 0, "spanner_blank.png");
+
+  engine->HighlightTextFragments({"apples-,Google"});
+  DrawHighlightsAndCompare(*engine, 0, "spanner_blank.png");
+
+  engine->HighlightTextFragments({"Google,-random"});
+  DrawHighlightsAndCompare(*engine, 0, "spanner_blank.png");
+
+  engine->HighlightTextFragments({"applications,random"});
+  DrawHighlightsAndCompare(*engine, 0, "spanner_blank.png");
+
+  engine->HighlightTextFragments({"applications,old,-random"});
+  DrawHighlightsAndCompare(*engine, 0, "spanner_blank.png");
+}
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         PDFiumEngineHighlightTextFragmentTest,
+                         testing::Bool());
 
 }  // namespace chrome_pdf

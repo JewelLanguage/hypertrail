@@ -182,7 +182,7 @@ bool HasManagedDeviceSettings() {
 bool IsOobeComplete() {
   // Oobe is completed and we have a user or we are enterprise enrolled.
   return StartupUtils::IsOobeCompleted() &&
-         ((!user_manager::UserManager::Get()->GetUsers().empty() &&
+         ((!user_manager::UserManager::Get()->GetPersistedUsers().empty() &&
            !HasManagedDeviceSettings()) ||
           ash::InstallAttributes::Get()->IsEnterpriseManaged());
 }
@@ -665,7 +665,8 @@ void LoginDisplayHostWebUI::OnStartSignInScreen() {
   DVLOG(1) << "Starting sign in screen";
   CreateExistingUserController();
 
-  existing_user_controller_->Init(user_manager::UserManager::Get()->GetUsers());
+  existing_user_controller_->Init(
+      user_manager::UserManager::Get()->GetPersistedUsers());
 
   ShowGaiaDialogCommon(EmptyAccountId());
 
@@ -970,6 +971,7 @@ void LoginDisplayHostWebUI::InitLoginWindowAndView() {
       &params, kShellWindowId_LockScreenContainer);
   login_window_ = new views::Widget;
   login_window_->Init(std::move(params));
+  Shell::UpdateAccessibilityForStatusAreaWidget();
 
   login_view_ = new WebUILoginView(weak_factory_.GetWeakPtr());
   login_view_->Init();
@@ -1012,6 +1014,7 @@ void LoginDisplayHostWebUI::ResetLoginWindowAndView() {
     login_window_->RemoveRemovalsObserver(this);
     login_window_->RemoveObserver(this);
     login_window_ = nullptr;
+    Shell::UpdateAccessibilityForStatusAreaWidget();
   }
 
   // Release wizard controller with the webui and hosting window so that it

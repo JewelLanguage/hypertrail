@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <type_traits>
 
 #include "ash/constants/ash_pref_names.h"
@@ -22,7 +23,6 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/unguessable_token.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/ash/mahi/web_contents/mahi_content_extraction_delegate.h"
 #include "chrome/browser/content_extraction/inner_text.h"
 #include "chrome/browser/favicon/favicon_utils.h"
@@ -276,7 +276,7 @@ void MahiWebContentsManagerImpl::WebContentsDestroyed(
 void MahiWebContentsManagerImpl::OnContextMenuClicked(
     int64_t display_id,
     ButtonType button_type,
-    const std::u16string& question,
+    std::u16string_view question,
     const gfx::Rect& mahi_menu_bounds) {
   // Records the `button_type` has been clicked.
   base::UmaHistogramEnumeration(chromeos::mahi::kMahiContextMenuActivated,
@@ -297,7 +297,7 @@ void MahiWebContentsManagerImpl::OnContextMenuClicked(
           /*question=*/std::nullopt,
           /*mahi_menu_bounds=*/mahi_menu_bounds);
   if (button_type == chromeos::mahi::ButtonType::kQA) {
-    context_menu_request->question = question;
+    context_menu_request->question = std::u16string(question);
   }
   if (button_type == chromeos::mahi::ButtonType::kElucidation ||
       button_type == chromeos::mahi::ButtonType::kSummaryOfSelection) {
@@ -433,7 +433,7 @@ void MahiWebContentsManagerImpl::RequestPDFContent(
   }
 
   pdf_observer_ = std::make_unique<MahiPDFObserver>(
-      web_contents_to_observe, ui::kAXModeWebContentsOnly | ui::AXMode::kPDFOcr,
+      web_contents_to_observe, ui::kAXModeWebContentsOnly,
       rfh_pdf->GetAXTreeID(),
       base::BindOnce(&MahiWebContentsManagerImpl::OnGetAXTreeUpdatesForPDF,
                      weak_pointer_factory_.GetWeakPtr(), std::move(callback)));

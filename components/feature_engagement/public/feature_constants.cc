@@ -124,9 +124,6 @@ BASE_FEATURE(kIPHPasswordsManagementBubbleDuringSigninFeature,
 BASE_FEATURE(kIPHPasswordsWebAppProfileSwitchFeature,
              "IPH_PasswordsWebAppProfileSwitch",
              base::FEATURE_ENABLED_BY_DEFAULT);
-BASE_FEATURE(kIPHSupervisedUserProfileSigninFeature,
-             "IPH_SupervisedUserProfileSignin",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kIPHPasswordManagerShortcutFeature,
              "IPH_PasswordManagerShortcut",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -196,6 +193,12 @@ BASE_FEATURE(kIPHTabGroupsSaveV2IntroFeature,
 BASE_FEATURE(kIPHTabGroupsSaveV2CloseGroupFeature,
              "IPH_TabGroupsSaveV2CloseGroup",
              base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kIPHTabGroupsSharedTabChangedFeature,
+             "IPH_TabGroupsSharedTabChanged",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kIPHTabGroupsSharedTabFeedbackFeature,
+             "IPH_TabGroupsSharedTabFeedback",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kIPHTabOrganizationSuccessFeature,
              "IPH_TabOrganizationSuccess",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -227,6 +230,9 @@ BASE_FEATURE(kIPHBackNavigationMenuFeature,
         // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
 
 #if BUILDFLAG(IS_ANDROID)
+BASE_FEATURE(kIPHAccountSettingsHistorySync,
+             "IPH_AccountSettingsHistorySync",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kIPHAndroidTabDeclutter,
              "IPH_AndroidTabDeclutter",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -407,6 +413,9 @@ BASE_FEATURE(kIPHTabGroupCreationDialogSyncTextFeature,
 BASE_FEATURE(kIPHTabGroupsDragAndDropFeature,
              "IPH_TabGroupsDragAndDrop",
              base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kIPHTabGroupShareNoticeFeature,
+             "IPH_TabGroupShareNotice",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kIPHTabGroupShareNotificationBubbleOnStripFeature,
              "IPH_TabGroupSharedNotificationBubbleOnStrip",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -566,6 +575,9 @@ BASE_FEATURE(kIPHiOSHistoryOnOverflowMenuFeature,
 BASE_FEATURE(kIPHiOSPromoPostRestoreDefaultBrowserFeature,
              "IPH_iOSPromoPostRestoreDefaultBrowser",
              base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kIPHiOSPromoNonModalUrlPasteDefaultBrowserFeature,
+             "IPH_iOSPromoNonModalUrlPasteDefaultBrowser",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kIPHiOSPromoPasswordManagerWidgetFeature,
              "IPH_iOSPromoPasswordManagerWidget",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -638,6 +650,9 @@ BASE_FEATURE(kIPHiOSSharedTabGroupForeground,
 BASE_FEATURE(kIPHiOSDefaultBrowserBannerPromoFeature,
              "IPH_iOSDefaultBrowserBannerPromoFeature",
              base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kIPHiOSReminderNotificationsOverflowMenuBubbleFeature,
+             "IPH_iOSReminderNotificationsOverflowMenuBubbleFeature",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Non-FET feature.
 BASE_FEATURE(kDefaultBrowserEligibilitySlidingWindow,
@@ -671,9 +686,6 @@ BASE_FEATURE(kIPHAutofillExternalAccountProfileSuggestionFeature,
              base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kIPHAutofillPredictionImprovementsFeature,
              "IPH_AutofillPredictionImprovements",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-BASE_FEATURE(kIPHAutofillPredictionImprovementsBootstrappingFeature,
-             "IPH_AutofillPredictionImprovementsBootstrapping",
              base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kIPHAutofillVirtualCardCVCSuggestionFeature,
              "IPH_AutofillVirtualCardCVCSuggestion",
@@ -812,6 +824,10 @@ BASE_FEATURE(kIPHDesktopPWAsLinkCapturingLaunch,
 // use-cases to show the IPH are guarded by that flag.
 BASE_FEATURE(kIPHDesktopPWAsLinkCapturingLaunchAppInTab,
              "IPH_DesktopPWAsLinkCapturingLaunchAppInTab",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kIPHSupervisedUserProfileSigninFeature,
+             "IPH_SupervisedUserProfileSignin",
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) ||
         // BUILDFLAG(IS_LINUX)

@@ -4,6 +4,7 @@
 
 #include "components/autofill/core/browser/metrics/form_events/credit_card_form_event_logger.h"
 
+#include <algorithm>
 #include <string>
 
 #include "base/containers/contains.h"
@@ -11,7 +12,6 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/types/cxx23_to_underlying.h"
 #include "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
@@ -56,6 +56,10 @@ void CreditCardFormEventLogger::OnDidFetchSuggestion(
       with_card_info_retrieval_enrolled;
   is_virtual_card_standalone_cvc_field_ = is_virtual_card_standalone_cvc_field;
   metadata_logging_context_ = std::move(metadata_logging_context);
+  VLOG(3) << "Number of instruments with card benefits in "
+             "OnDidFetchSuggestion: "
+          << metadata_logging_context_
+                 .instrument_ids_to_issuer_ids_with_benefits_available.size();
   suggestions_.clear();
   for (const auto& suggestion : suggestions)
     suggestions_.emplace_back(suggestion);
@@ -486,6 +490,10 @@ void CreditCardFormEventLogger::OnDidUndoAutofill() {
 void CreditCardFormEventLogger::OnMetadataLoggingContextReceived(
     autofill_metrics::CardMetadataLoggingContext metadata_logging_context) {
   metadata_logging_context_ = std::move(metadata_logging_context);
+  VLOG(3) << "Number of instruments with card benefits in "
+             "OnMetadataLoggingContextReceived: "
+          << metadata_logging_context_
+                 .instrument_ids_to_issuer_ids_with_benefits_available.size();
 }
 
 void CreditCardFormEventLogger::Log(FormEvent event,

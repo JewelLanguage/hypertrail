@@ -185,22 +185,6 @@ class MockSafeBrowsingUIManager : public SafeBrowsingUIManager {
       delete;
 
   MOCK_METHOD1(DisplayBlockingPage, void(const UnsafeResource& resource));
-
-  // Helper function which calls OnBlockingPageComplete for this client
-  // object.
-  void InvokeOnBlockingPageComplete(
-    const security_interstitials::UnsafeResource::UrlCheckCallback& callback) {
-    DCHECK_CURRENTLY_ON(BrowserThread::IO);
-    // Note: this will delete the client object in the case of the CsdClient
-    // implementation.
-    if (!callback.is_null()) {
-      security_interstitials::UnsafeResource::UrlCheckResult result(
-          false /*proceed*/, true /*showed_interstitial*/,
-          false /*has_post_commit_interstitial_skipped*/);
-      callback.Run(result);
-    }
-  }
-
  protected:
   ~MockSafeBrowsingUIManager() override = default;
 };
@@ -247,6 +231,23 @@ class MockSafeBrowsingDatabaseManager : public TestSafeBrowsingDatabaseManager {
 
  private:
   base::flat_map<std::string, bool> urls_allowlist_match_;
+};
+
+class MockClientSideDetectionHostDelegate
+    : public ChromeClientSideDetectionHostDelegate {
+ public:
+  explicit MockClientSideDetectionHostDelegate(
+      content::WebContents* web_contents)
+      : ChromeClientSideDetectionHostDelegate(web_contents) {}
+
+  void GetInnerText(HostInnerTextCallback callback) override {
+    std::move(callback).Run(inner_text_);
+  }
+
+  void ForceEmptyInnerText() { inner_text_ = ""; }
+
+ private:
+  std::string inner_text_ = "inner text";
 };
 
 }  // namespace
@@ -373,6 +374,10 @@ class ClientSideDetectionHostTestBase : public ChromeRenderViewHostTestHarness {
         std::make_unique<StrictMock<MockSafeBrowsingTokenFetcher>>();
     raw_token_fetcher_ = token_fetcher.get();
     csd_host_->set_token_fetcher_for_testing(std::move(token_fetcher));
+    auto delegate =
+        std::make_unique<MockClientSideDetectionHostDelegate>(web_contents());
+    raw_delegate_ = delegate.get();
+    csd_host_->set_delegate_for_testing(std::move(delegate));
     // Commit to a URL for tests that do not explicitly NavigateAndCommit.
     // Committing to "about:blank" avoids triggering logic irrelevant for tests.
     NavigateAndCommit(GURL("about:blank"));
@@ -382,6 +387,7 @@ class ClientSideDetectionHostTestBase : public ChromeRenderViewHostTestHarness {
 
   void TearDown() override {
     raw_token_fetcher_ = nullptr;
+    raw_delegate_ = nullptr;
 
     // Delete the host object on the UI thread and release the
     // SafeBrowsingService.
@@ -487,6 +493,7 @@ class ClientSideDetectionHostTestBase : public ChromeRenderViewHostTestHarness {
   FakePhishingDetector fake_phishing_detector_;
   raw_ptr<StrictMock<MockSafeBrowsingTokenFetcher>> raw_token_fetcher_ =
       nullptr;
+  raw_ptr<MockClientSideDetectionHostDelegate> raw_delegate_ = nullptr;
   base::SimpleTestTickClock clock_;
   const bool is_incognito_;
   signin::IdentityTestEnvironment identity_test_env_;
@@ -544,39 +551,13 @@ TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneNotPhishing) {
   EXPECT_TRUE(Mock::VerifyAndClear(ui_manager_.get()));
 }
 
-TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneDisabled) {
-  if (base::FeatureList::IsEnabled(kClientSideDetectionKillswitch))
-    GTEST_SKIP();
-
-  // Case 2: client thinks the page is phishing and so does the server but
-  // showing the interstitial is disabled => no interstitial is shown.
-  ClientSideDetectionService::ClientReportPhishingRequestCallback cb;
-  ClientPhishingRequest verdict;
-  verdict.set_url("http://phishingurl.com/");
-  verdict.set_client_score(1.0f);
-  verdict.set_is_phishing(true);
-
-  EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(
-                                 PartiallyEqualVerdict(verdict), _, _))
-      .WillOnce(MoveArg<1>(&cb));
-  PhishingDetectionDone(mojo_base::ProtoWrapper(verdict));
-  EXPECT_TRUE(Mock::VerifyAndClear(csd_host_.get()));
-  ASSERT_FALSE(cb.is_null());
-
-  // Make sure DisplayBlockingPage is not going to be called.
-  EXPECT_CALL(*ui_manager_.get(), DisplayBlockingPage(_)).Times(0);
-  std::move(cb).Run(GURL(verdict.url()), false, net::HTTP_OK, std::nullopt);
-  base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(Mock::VerifyAndClear(ui_manager_.get()));
-}
-
 TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneShowInterstitial) {
   if (base::FeatureList::IsEnabled(kClientSideDetectionKillswitch))
     GTEST_SKIP();
 
   base::HistogramTester histogram_tester;
 
-  // Case 3: client thinks the page is phishing and so does the server.
+  // Case 2: client thinks the page is phishing and so does the server.
   // We show an interstitial.
   ClientSideDetectionService::ClientReportPhishingRequestCallback cb;
   GURL phishing_url("http://phishingurl.com/");
@@ -608,12 +589,6 @@ TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneShowInterstitial) {
   EXPECT_EQ(web_contents(),
             unsafe_resource_util::GetWebContentsForResource(resource));
 
-  // Make sure the client object will be deleted.
-  content::GetIOThreadTaskRunner({})->PostTask(
-      FROM_HERE,
-      base::BindOnce(&MockSafeBrowsingUIManager::InvokeOnBlockingPageComplete,
-                     ui_manager_, resource.callback));
-
   histogram_tester.ExpectUniqueSample(
       "SBClientPhishing.HighConfidenceAllowlistMatchOnServerVerdictPhishy",
       false, 1);
@@ -623,7 +598,7 @@ TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneMultiplePings) {
   if (base::FeatureList::IsEnabled(kClientSideDetectionKillswitch))
     GTEST_SKIP();
 
-  // Case 4 & 5: client thinks a page is phishing then navigates to
+  // Case 3 & 4: client thinks a page is phishing then navigates to
   // another page which is also considered phishing by the client
   // before the server responds with a verdict.  After a while the
   // server responds for both requests with a phishing verdict.  Only
@@ -684,19 +659,13 @@ TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneMultiplePings) {
   EXPECT_EQ(ThreatSource::CLIENT_SIDE_DETECTION, resource.threat_source);
   EXPECT_EQ(web_contents(),
             unsafe_resource_util::GetWebContentsForResource(resource));
-
-  // Make sure the client object will be deleted.
-  content::GetIOThreadTaskRunner({})->PostTask(
-      FROM_HERE,
-      base::BindOnce(&MockSafeBrowsingUIManager::InvokeOnBlockingPageComplete,
-                     ui_manager_, resource.callback));
 }
 
 TEST_F(ClientSideDetectionHostTest, PhishingDetectionDoneVerdictNotPhishing) {
   if (base::FeatureList::IsEnabled(kClientSideDetectionKillswitch))
     GTEST_SKIP();
 
-  // Case 6: renderer sends a verdict string that isn't phishing.
+  // Case 5: renderer sends a verdict string that isn't phishing.
   ClientPhishingRequest verdict;
   verdict.set_url("http://not-phishing.com/");
   verdict.set_client_score(0.1f);
@@ -752,12 +721,6 @@ TEST_F(
   EXPECT_EQ(web_contents(),
             unsafe_resource_util::GetWebContentsForResource(resource));
 
-  // Make sure the client object will be deleted.
-  content::GetIOThreadTaskRunner({})->PostTask(
-      FROM_HERE,
-      base::BindOnce(&MockSafeBrowsingUIManager::InvokeOnBlockingPageComplete,
-                     ui_manager_, resource.callback));
-
   // Test that the histogram has been logged that the allowlist did exist with
   // the server model verdict phishy.
   histogram_tester.ExpectUniqueSample(
@@ -765,29 +728,6 @@ TEST_F(
   histogram_tester.ExpectUniqueSample(
       "SBClientPhishing.HighConfidenceAllowlistMatchOnServerVerdictPhishy",
       true, 1);
-}
-
-TEST_F(ClientSideDetectionHostTest,
-       PhishingDetectionDoneVerdictNotPhishingButSBMatchSubResource) {
-  if (base::FeatureList::IsEnabled(kClientSideDetectionKillswitch))
-    GTEST_SKIP();
-
-  // Case 7: renderer sends a verdict string that isn't phishing but the URL
-  // of a subresource was on the regular phishing or malware lists.
-  GURL url("http://not-phishing.com/");
-  ClientPhishingRequest verdict;
-  verdict.set_url(url.spec());
-  verdict.set_client_score(0.1f);
-  verdict.set_is_phishing(false);
-
-  database_manager_->SetAllowlistLookupDetailsForUrl(url, false);
-
-  ExpectPreClassificationChecks(url, &kFalse, &kFalse, &kFalse, &kFalse,
-                                &kFalse);
-  NavigateAndCommit(url);
-  WaitAndCheckPreClassificationChecks();
-
-  PhishingDetectionDone(mojo_base::ProtoWrapper(verdict));
 }
 
 TEST_F(ClientSideDetectionHostTest,
@@ -818,46 +758,6 @@ TEST_F(ClientSideDetectionHostTest,
   ExpectPreClassificationChecks(url, &kFalse, &kFalse, &kFalse, &kFalse,
                                 &kFalse);
   NavigateAndCommit(url);
-  WaitAndCheckPreClassificationChecks();
-
-  PhishingDetectionDone(mojo_base::ProtoWrapper(verdict));
-}
-
-TEST_F(
-    ClientSideDetectionHostTest,
-    PhishingDetectionDoneVerdictNotPhishingButSBMatchOnSubresourceWhileNavPending) {
-  if (base::FeatureList::IsEnabled(kClientSideDetectionKillswitch))
-    GTEST_SKIP();
-
-  // When a malware hit happens on a committed page while a slow pending load is
-  // in progress, the csd report should be sent for the committed page.
-
-  GURL start_url("http://safe.example.com/");
-  database_manager_->SetAllowlistLookupDetailsForUrl(start_url, false);
-  ExpectPreClassificationChecks(start_url, &kFalse, &kFalse, &kFalse, &kFalse,
-                                &kFalse);
-  NavigateAndCommit(start_url);
-  WaitAndCheckPreClassificationChecks();
-
-  // Now navigate to a different host which does not have a SB hit.
-  GURL url("http://not-malware-not-phishing-but-malware-subresource.com/");
-  ClientPhishingRequest verdict;
-  verdict.set_url(url.spec());
-  verdict.set_client_score(0.1f);
-  verdict.set_is_phishing(false);
-
-  database_manager_->SetAllowlistLookupDetailsForUrl(url, false);
-  ExpectPreClassificationChecks(url, &kFalse, &kFalse, &kFalse, &kFalse,
-                                &kFalse);
-  NavigateAndCommit(url);
-
-  // Create a pending navigation, but don't commit it.
-  GURL pending_url("http://slow.example.com/");
-  auto pending_navigation =
-      content::NavigationSimulator::CreateBrowserInitiated(pending_url,
-                                                           web_contents());
-  pending_navigation->Start();
-
   WaitAndCheckPreClassificationChecks();
 
   PhishingDetectionDone(mojo_base::ProtoWrapper(verdict));
@@ -2332,6 +2232,55 @@ TEST_F(ClientSideDetectionHostScamDetectionTest,
 }
 
 TEST_F(ClientSideDetectionHostScamDetectionTest,
+       EmptyInnerTextDoesNotTriggersOnDeviceLLM) {
+  if (base::FeatureList::IsEnabled(kClientSideDetectionKillswitch)) {
+    GTEST_SKIP();
+  }
+
+  raw_delegate_->ForceEmptyInnerText();
+
+  SetEnhancedProtectionPrefForTests(profile()->GetPrefs(), true);
+  SetFeatures({kClientSideDetectionBrandAndIntentForScamDetection}, {});
+
+  base::HistogramTester histogram_tester;
+
+  ClientPhishingRequest verdict;
+  verdict.set_url("http://example.com/");
+  verdict.set_client_score(0.0f);
+  verdict.set_is_phishing(false);
+
+  // Because the inner text is empty, we will NOT inquire the on-device model.
+  EXPECT_CALL(*csd_service_, InquireOnDeviceModel(_, _, _)).Times(0);
+
+  // We can expect the token fetcher to occur as usual because ESB preference is
+  // enabled.
+  std::unique_ptr<ClientPhishingRequest> verdict_sent;
+  EXPECT_CALL(*csd_service_, SendClientReportPhishingRequest(
+                                 PartiallyEqualVerdict(verdict), _,
+                                 "fake_access_token_keyboard_lock"))
+      .WillOnce(MoveArg<0>(&verdict_sent));
+
+  SafeBrowsingTokenFetcher::Callback cb;
+  EXPECT_CALL(*raw_token_fetcher_, Start(_)).WillOnce(MoveArg<0>(&cb));
+
+  PhishingDetectionDone(mojo_base::ProtoWrapper(verdict),
+                        ClientSideDetectionType::KEYBOARD_LOCK_REQUESTED);
+
+  EXPECT_TRUE(Mock::VerifyAndClear(raw_token_fetcher_));
+
+  ASSERT_FALSE(cb.is_null());
+  std::move(cb).Run("fake_access_token_keyboard_lock");
+
+  EXPECT_TRUE(Mock::VerifyAndClear(csd_host_.get()));
+  EXPECT_TRUE(Mock::VerifyAndClear(csd_service_.get()));
+
+  IntelligentScanInfo intelligent_scan_info =
+      verdict_sent->intelligent_scan_info();
+  EXPECT_EQ(intelligent_scan_info.no_info_reason(),
+            IntelligentScanInfo::EMPTY_TEXT);
+}
+
+TEST_F(ClientSideDetectionHostScamDetectionTest,
        NonKeyboardLockRequestDoesNotTriggersOnDeviceLLM) {
   if (base::FeatureList::IsEnabled(kClientSideDetectionKillswitch)) {
     GTEST_SKIP();
@@ -2913,6 +2862,106 @@ TEST_F(
       1);
   histogram_tester.ExpectTotalCount(
       "SBClientPhishing.OnDeviceModelHasSuccessfulResponse", 0);
+}
+
+TEST_F(
+    ClientSideDetectionHostTest,
+    FullscreenApiCallChecksAllowlistInPreClassificationAndDoesNotProceedWithClassification) {
+  if (base::FeatureList::IsEnabled(kClientSideDetectionKillswitch)) {
+    GTEST_SKIP();
+  }
+
+  std::vector<base::test::FeatureRef> enabled_features = {};
+  enabled_features.push_back(kClientSideDetectionAcceptHCAllowlist);
+  SetFeatures(enabled_features, {});
+
+  csd_host_->set_high_confidence_allowlist_acceptance_rate_for_testing(1.0f);
+  base::HistogramTester histogram_tester;
+
+  GURL url("http://host.com/");
+  database_manager_->SetAllowlistLookupDetailsForUrl(url, /*match=*/true);
+  ExpectPreClassificationChecks(url, &kFalse, &kFalse, nullptr, nullptr,
+                                nullptr);
+  NavigateAndKeepLoading(web_contents(), url);
+  WaitAndCheckPreClassificationChecks();
+
+  histogram_tester.ExpectTotalCount(
+      "SBClientPhishing.MatchHighConfidenceAllowlist.TriggerModel", 1);
+  histogram_tester.ExpectBucketCount(
+      "SBClientPhishing.PreClassificationCheckResult",
+      PreClassificationCheckResult::NO_CLASSIFY_MATCH_HC_ALLOWLIST, 1);
+
+  ExpectPreClassificationChecks(url, &kFalse, &kFalse, nullptr, nullptr,
+                                nullptr);
+  csd_host_->DidToggleFullscreenModeForTab(false, false);
+  WaitAndCheckPreClassificationChecks();
+
+  histogram_tester.ExpectTotalCount(
+      "SBClientPhishing.MatchCSDAllowlistOnFullscreenApi", 1);
+  histogram_tester.ExpectTotalCount(
+      "SBClientPhishing.MatchHighConfidenceAllowlist.FullscreenApi", 1);
+  histogram_tester.ExpectBucketCount(
+      "SBClientPhishing.PreClassificationCheckResult.FullscreenApi",
+      PreClassificationCheckResult::NO_CLASSIFY_ALLOWLIST_METRIC, 1);
+}
+
+TEST_F(ClientSideDetectionHostTest,
+       TwoFullscreenApiTriggersOnSamePageOnlyLogsOnePreclassificationCheck) {
+  if (base::FeatureList::IsEnabled(kClientSideDetectionKillswitch)) {
+    GTEST_SKIP();
+  }
+
+  base::HistogramTester histogram_tester;
+
+  GURL url("http://host.com/");
+  database_manager_->SetAllowlistLookupDetailsForUrl(url, /*match=*/true);
+  ExpectPreClassificationChecks(url, nullptr, nullptr, nullptr, nullptr,
+                                nullptr);
+  csd_host_->DidToggleFullscreenModeForTab(false, false);
+  WaitAndCheckPreClassificationChecks();
+
+  histogram_tester.ExpectTotalCount(
+      "SBClientPhishing.PreClassificationCheckResult.FullscreenApi", 1);
+
+  // We do not expect preclassification checks this time because we've done it
+  // already on the same page.
+  csd_host_->DidToggleFullscreenModeForTab(false, false);
+
+  histogram_tester.ExpectTotalCount(
+      "SBClientPhishing.PreClassificationCheckResult.FullscreenApi", 1);
+}
+
+TEST_F(ClientSideDetectionHostTest,
+       TwoKeyboardLockRequestsOnSamePageOnlyLogsOnePreclassificationCheck) {
+  if (base::FeatureList::IsEnabled(kClientSideDetectionKillswitch)) {
+    GTEST_SKIP();
+  }
+
+  SetEnhancedProtectionPrefForTests(profile()->GetPrefs(), true);
+
+  base::HistogramTester histogram_tester;
+
+  GURL url("http://host3.com/");
+  database_manager_->SetAllowlistLookupDetailsForUrl(url, true);
+
+  // Keyboard lock request incoming, which triggers preclassification checks.
+  ExpectPreClassificationChecks(
+      /*url=*/url, /*is_private=*/&kFalse,
+      /*match_csd_allowlist=*/nullptr, /*get_valid_cached_result=*/nullptr,
+      /*over_phishing_report_limit=*/nullptr, /*is_local=*/nullptr);
+
+  csd_host_->KeyboardLockRequested();
+  WaitAndCheckPreClassificationChecks();
+
+  histogram_tester.ExpectTotalCount(
+      "SBClientPhishing.PreClassificationCheckResult.KeyboardLockRequested", 1);
+
+  // We trigger keyboard lock again, but because we're still on the same page,
+  // we do not trigger preclassification again.
+  csd_host_->KeyboardLockRequested();
+
+  histogram_tester.ExpectTotalCount(
+      "SBClientPhishing.PreClassificationCheckResult.KeyboardLockRequested", 1);
 }
 
 }  // namespace safe_browsing

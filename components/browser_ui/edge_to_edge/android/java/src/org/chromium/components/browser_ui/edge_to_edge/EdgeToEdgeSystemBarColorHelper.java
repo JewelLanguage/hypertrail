@@ -7,41 +7,48 @@ package org.chromium.components.browser_ui.edge_to_edge;
 import android.graphics.Color;
 import android.view.Window;
 
-import androidx.annotation.NonNull;
-
 import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
+import org.chromium.build.annotations.NullMarked;
 
 /**
  * Helper class that coordinates whether to apply the color changes to system window, or external
  * delegate based on the edge to edge status for the current activity window. When the window switch
- * to drawing edge to edge, the window's nav bar will be set to Color.TRANSPARENT.
+ * to drawing edge to edge, the window's nav bar and status bar will be set to Color.TRANSPARENT.
  *
  * <p>This instance is meant to be created at the based activity level, and one instance per
  * activity. This class will use the window's bar color when it's initialized.
  */
+@NullMarked
 public class EdgeToEdgeSystemBarColorHelper extends BaseSystemBarColorHelper {
     private final ObservableSupplier<Boolean> mDoesContentFitWindowSupplier;
     private final OneshotSupplier<SystemBarColorHelper> mEdgeToEdgeDelegateHelperSupplier;
+    private final Window mWindow;
     private final WindowSystemBarColorHelper mWindowColorHelper;
     private final Callback<Boolean> mOnEdgeToEdgeChanged = this::onContentFitsWindowChanged;
 
     protected boolean mIsActivityEdgeToEdge;
+    protected boolean mCanColorStatusBarColor;
 
     /**
      * @param window Window from {@link android.app.Activity#getWindow()}.
      * @param doesContentFitWindowSupplier Supplier of whether the activity content fits the window
      *     insets.
      * @param delegateHelperSupplier Delegate helper that colors the bar when edge to edge.
+     * @param canColorStatusBarColor Value of the EdgeToEdgeEverywhere flag. Determines whether the
+     *     status bar color could be colored.
      */
     public EdgeToEdgeSystemBarColorHelper(
-            @NonNull Window window,
-            @NonNull ObservableSupplier<Boolean> doesContentFitWindowSupplier,
-            @NonNull OneshotSupplier<SystemBarColorHelper> delegateHelperSupplier) {
+            Window window,
+            ObservableSupplier<Boolean> doesContentFitWindowSupplier,
+            OneshotSupplier<SystemBarColorHelper> delegateHelperSupplier,
+            boolean canColorStatusBarColor) {
+        mWindow = window;
         mDoesContentFitWindowSupplier = doesContentFitWindowSupplier;
         mEdgeToEdgeDelegateHelperSupplier = delegateHelperSupplier;
         mWindowColorHelper = new WindowSystemBarColorHelper(window);
+        mCanColorStatusBarColor = canColorStatusBarColor;
 
         // Initial values. By default, read the values from window.
         mIsActivityEdgeToEdge = Boolean.FALSE.equals(mDoesContentFitWindowSupplier.get());
@@ -61,33 +68,34 @@ public class EdgeToEdgeSystemBarColorHelper extends BaseSystemBarColorHelper {
 
     @Override
     protected void applyStatusBarColor() {
-        // Don't support color status bar yet. Delegate to the window directly.
-        mWindowColorHelper.setStatusBarColor(mStatusBarColor);
+        updateStatusBarColor();
     }
 
     @Override
     protected void applyNavBarColor() {
-        updateColors();
+        updateNavBarColors();
     }
 
     @Override
     protected void applyNavigationBarDividerColor() {
-        updateColors();
+        updateNavBarColors();
     }
 
     private void onContentFitsWindowChanged(Boolean contentFitsWindow) {
         boolean toEdge = Boolean.FALSE.equals(contentFitsWindow);
         if (mIsActivityEdgeToEdge != toEdge) {
             mIsActivityEdgeToEdge = toEdge;
-            updateColors();
+            updateNavBarColors();
+            updateStatusBarColor();
         }
     }
 
-    private void onDelegateColorHelperChanged(@NonNull SystemBarColorHelper delegate) {
-        updateColors();
+    private void onDelegateColorHelperChanged(SystemBarColorHelper delegate) {
+        updateStatusBarColor();
+        updateNavBarColors();
     }
 
-    private void updateColors() {
+    private void updateNavBarColors() {
         int windowNavColor = mIsActivityEdgeToEdge ? Color.TRANSPARENT : mNavBarColor;
         int windowNavDividerColor = mIsActivityEdgeToEdge ? Color.TRANSPARENT : mNavBarDividerColor;
         mWindowColorHelper.setNavigationBarColor(windowNavColor);
@@ -101,6 +109,29 @@ public class EdgeToEdgeSystemBarColorHelper extends BaseSystemBarColorHelper {
             delegateHelper.setNavigationBarColor(mNavBarColor);
             delegateHelper.setNavigationBarDividerColor(mNavBarDividerColor);
         }
+
+        updateNavigationBarIconColor(mWindow.getDecorView(), mNavBarColor);
+    }
+
+    private void updateStatusBarColor() {
+        if (!canSetStatusBarColor()) {
+            return;
+        }
+        SystemBarColorHelper delegateHelper = mEdgeToEdgeDelegateHelperSupplier.get();
+        // In ChromeTabbedActivity the delegate is null because native has not initialized. Prevents
+        // setting the window status bar to transparent when the delegate is null.
+        int windowStatusBarColor = mStatusBarColor;
+        if (mIsActivityEdgeToEdge
+                && delegateHelper != null
+                && delegateHelper.canSetStatusBarColor()) {
+            delegateHelper.setStatusBarColor(mStatusBarColor);
+            windowStatusBarColor = Color.TRANSPARENT;
+        }
+
+        mWindowColorHelper.setStatusBarColor(windowStatusBarColor);
+        mWindowColorHelper.setStatusBarContrastEnforced(!mIsActivityEdgeToEdge);
+
+        updateStatusBarIconColor(mWindow.getDecorView(), mStatusBarColor);
     }
 
     WindowSystemBarColorHelper getWindowHelperForTesting() {
@@ -109,5 +140,10 @@ public class EdgeToEdgeSystemBarColorHelper extends BaseSystemBarColorHelper {
 
     SystemBarColorHelper getEdgeToEdgeDelegateHelperForTesting() {
         return mEdgeToEdgeDelegateHelperSupplier.get();
+    }
+
+    @Override
+    public boolean canSetStatusBarColor() {
+        return mCanColorStatusBarColor;
     }
 }

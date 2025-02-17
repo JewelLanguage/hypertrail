@@ -90,7 +90,6 @@
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/scroll/scrollbar_theme.h"
 #include "third_party/blink/renderer/core/scroll/scrollbar_theme_overlay_mobile.h"
-#include "third_party/blink/renderer/core/scroll/smooth_scroll_sequencer.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image_chrome_client.h"
 #include "third_party/blink/renderer/core/svg/svg_resource_document_cache.h"
 #include "third_party/blink/renderer/platform/bindings/source_location.h"
@@ -137,6 +136,29 @@ void SetSafeAreaEnvVariables(LocalFrame* frame,
       StyleEnvironmentVariables::FormatFloatPx(safe_area.bottom()));
   vars.SetVariable(UADefinedVariable::kSafeAreaInsetRight,
                    StyleEnvironmentVariables::FormatFloatPx(safe_area.right()));
+}
+
+// static
+void SetSafeAreaMaxEnvVariables(
+    LocalFrame* frame,
+    const gfx::InsetsF& safe_area_max_in_physical_px) {
+  gfx::InsetsF safe_area_max = ScaleInsets(safe_area_max_in_physical_px,
+                                           1.0f / frame->LayoutZoomFactor());
+
+  DocumentStyleEnvironmentVariables& vars =
+      frame->GetDocument()->GetStyleEngine().EnsureEnvironmentVariables();
+  vars.SetVariable(
+      UADefinedVariable::kSafeAreaMaxInsetTop,
+      StyleEnvironmentVariables::FormatFloatPx(safe_area_max.top()));
+  vars.SetVariable(
+      UADefinedVariable::kSafeAreaMaxInsetLeft,
+      StyleEnvironmentVariables::FormatFloatPx(safe_area_max.left()));
+  vars.SetVariable(
+      UADefinedVariable::kSafeAreaMaxInsetBottom,
+      StyleEnvironmentVariables::FormatFloatPx(safe_area_max.bottom()));
+  vars.SetVariable(
+      UADefinedVariable::kSafeAreaMaxInsetRight,
+      StyleEnvironmentVariables::FormatFloatPx(safe_area_max.right()));
 }
 
 }  // namespace
@@ -992,6 +1014,9 @@ void Page::SetMaxSafeAreaInsets(LocalFrame* setter, gfx::Insets max_safe_area) {
     applied_safe_area_insets_ = scaled_max_safe_area_insets_;
     SetSafeAreaEnvVariables(setter, scaled_max_safe_area_insets_);
   }
+  if (RuntimeEnabledFeatures::CSSSafeAreaMaxInsetEnabled()) {
+    SetSafeAreaMaxEnvVariables(setter, scaled_max_safe_area_insets_);
+  }
 }
 
 void Page::SettingsChanged(ChangeType change_type) {
@@ -1047,12 +1072,9 @@ void Page::SettingsChanged(ChangeType change_type) {
       // We need to update even for remote main frames since this setting
       // could be changed via InternalSettings.
       TextAutosizer::UpdatePageInfoInAllFrames(MainFrame());
-      // The new text-size-adjust implementation requires the text autosizing
-      // setting but applies the adjustment in style rather than via the text
-      // autosizer, so we need to invalidate style.
-      if (RuntimeEnabledFeatures::TextSizeAdjustImprovementsEnabled()) {
-        InitialStyleChanged();
-      }
+      // The text-size-adjust adjustment in style depends on the text autosizing
+      // setting, so we need to invalidate style.
+      InitialStyleChanged();
       break;
     case ChangeType::kFontFamily:
       for (Frame* frame = MainFrame(); frame;

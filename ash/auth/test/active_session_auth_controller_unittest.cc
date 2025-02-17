@@ -33,7 +33,7 @@ namespace ash {
 namespace {
 
 constexpr char kUserEmail[] = "expected_email@example.com";
-constexpr char kFakeGaia[] = "fake_gaia";
+constexpr GaiaId::Literal kFakeGaia("fake_gaia");
 constexpr char kExpectedPassword[] = "expected_password";
 constexpr char kExpectedPin[] = "123456";
 constexpr char kExpectedSalt[] = "test salt";
@@ -63,11 +63,10 @@ class ActiveSessionAuthControllerTest
     SystemSaltGetter::Initialize();
     CryptohomeMiscClient::InitializeFake();
     UserDataAuthClient::InitializeFake();
-    auth_parts_ = AuthParts::Create(&local_state_);
+    auth_parts_ = AuthParts::Create(local_state());
 
     AshTestBase::SetUp();
 
-    GetSessionControllerClient()->DisableAutomaticallyProvideSigninPref();
     GetSessionControllerClient()->Reset();
     GetSessionControllerClient()->AddUserSession(
         kUserEmail, user_manager::UserType::kRegular);
@@ -89,21 +88,20 @@ class ActiveSessionAuthControllerTest
   }
 
   void InitializeUserManager() {
-    user_manager::UserManagerImpl::RegisterPrefs(local_state_.registry());
     user_manager_ =
-        std::make_unique<user_manager::FakeUserManager>(&local_state_);
+        std::make_unique<user_manager::FakeUserManager>(local_state());
     user_manager_->Initialize();
   }
 
   void AddUserToUserManager() {
-    account_id_ = AccountId::FromUserEmailGaiaId(kUserEmail, GaiaId(kFakeGaia));
+    account_id_ = AccountId::FromUserEmailGaiaId(kUserEmail, kFakeGaia);
     user_manager_->AddGaiaUser(account_id_, user_manager::UserType::kRegular);
     user_manager_->UserLoggedIn(
         account_id_,
         user_manager::FakeUserManager::GetFakeUsernameHash(account_id_),
         /*browser_restart=*/false,
         /*is_child=*/false);
-    user_manager_->SetUserCryptohomeDataEphemeral(account_id_, false);
+    ASSERT_FALSE(user_manager_->IsUserCryptohomeDataEphemeral(account_id_));
   }
 
   std::string HashPassword(const std::string& unhashed_password) {
@@ -205,7 +203,6 @@ class ActiveSessionAuthControllerTest
 
  protected:
   AccountId account_id_;
-  TestingPrefServiceSimple local_state_;
   std::unique_ptr<user_manager::FakeUserManager> user_manager_;
   std::unique_ptr<AuthParts> auth_parts_;
 };

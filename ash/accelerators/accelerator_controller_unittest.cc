@@ -907,12 +907,12 @@ TEST_F(AcceleratorControllerTestWithClamshellSplitView, WindowSnapUma) {
   // so overview will be nonempty. Otherwise split view will end when it starts.
   std::unique_ptr<aura::Window> window2(
       CreateTestWindowInShellWithBounds(gfx::Rect(5, 5, 20, 20)));
-  base::HistogramBase::Count left_clamshell_no_overview = 0;
-  base::HistogramBase::Count left_clamshell_overview = 0;
-  base::HistogramBase::Count left_tablet = 0;
-  base::HistogramBase::Count right_clamshell_no_overview = 0;
-  base::HistogramBase::Count right_clamshell_overview = 0;
-  base::HistogramBase::Count right_tablet = 0;
+  base::HistogramBase::Count32 left_clamshell_no_overview = 0;
+  base::HistogramBase::Count32 left_clamshell_overview = 0;
+  base::HistogramBase::Count32 left_tablet = 0;
+  base::HistogramBase::Count32 right_clamshell_no_overview = 0;
+  base::HistogramBase::Count32 right_clamshell_overview = 0;
+  base::HistogramBase::Count32 right_tablet = 0;
   // Performs |action|, checks that |window1| is in |target_window1_state_type|,
   // and verifies metrics. Output of failed expectations includes |description|.
   const auto test = [&](const char* description, AcceleratorAction action,
@@ -2723,18 +2723,12 @@ class SystemShortcutBehaviorTest : public AcceleratorControllerTest {
   void SetUp() override {
     AcceleratorControllerTest::SetUp();
 
-    auto* session_controller = GetSessionControllerClient();
-
     auto user_prefs = std::make_unique<TestingPrefServiceSimple>();
     user_prefs_ = user_prefs.get();
     RegisterUserProfilePrefs(user_prefs->registry(), /*country=*/"",
                              /*for_test=*/true);
-    session_controller->AddUserSession(kUserEmail,
-                                       user_manager::UserType::kRegular,
-                                       /*provide_pref_service=*/false);
-    session_controller->SetUserPrefService(AccountId::FromUserEmail(kUserEmail),
-                                           std::move(user_prefs));
-    SimulateUserLogin(AccountId::FromUserEmail(kUserEmail));
+    SimulateUserLogin(AccountId::FromUserEmail(kUserEmail),
+                      user_manager::UserType::kRegular, std::move(user_prefs));
   }
 
   void TearDown() override {

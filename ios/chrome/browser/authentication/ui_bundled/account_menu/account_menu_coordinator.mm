@@ -34,7 +34,6 @@
 #import "ios/chrome/browser/policy/model/management_state.h"
 #import "ios/chrome/browser/policy/ui_bundled/management_util.h"
 #import "ios/chrome/browser/push_notification/model/push_notification_service.h"
-#import "ios/chrome/browser/scoped_ui_blocker/ui_bundled/scoped_ui_blocker.h"
 #import "ios/chrome/browser/settings/ui_bundled/google_services/manage_accounts/manage_accounts_coordinator.h"
 #import "ios/chrome/browser/settings/ui_bundled/google_services/manage_accounts/manage_accounts_coordinator_delegate.h"
 #import "ios/chrome/browser/settings/ui_bundled/settings_controller_protocol.h"
@@ -99,7 +98,6 @@ void ChangeProfileSignOutIfMismatchContinuation(
 
   authentication_service->SignOut(
       signin_metrics::ProfileSignout::kChangeAccountInAccountMenu,
-      /*force_clear_browsing_data=*/false,
       base::CallbackToBlock(std::move(closure)));
 }
 
@@ -116,8 +114,8 @@ void ChangeProfileSignInContinuation(id<SystemIdentity> identity,
   // necessary.
   AuthenticationService* authentication_service =
       AuthenticationServiceFactory::GetForProfile(browser->GetProfile());
-  authentication_service->SignIn(
-      identity, signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_MENU);
+  authentication_service->SignIn(identity,
+                                 signin_metrics::AccessPoint::kAccountMenu);
   std::move(closure).Run();
 }
 
@@ -158,17 +156,14 @@ void ChangeProfileSignInContinuation(id<SystemIdentity> identity,
   // The child signin coordinator if it’s open. It may be presented by the
   // Manage Account’s coordinator view controller.
   SigninCoordinator* _signinCoordinator;
-
-  // Block the UI when the identity removal or switch is in progress.
-  std::unique_ptr<ScopedUIBlocker> _UIBlocker;
 }
 
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
                                    browser:(Browser*)browser {
-  return [super initWithBaseViewController:viewController
-                                   browser:browser
-                               accessPoint:signin_metrics::AccessPoint::
-                                               ACCESS_POINT_ACCOUNT_MENU];
+  return [super
+      initWithBaseViewController:viewController
+                         browser:browser
+                     accessPoint:signin_metrics::AccessPoint::kAccountMenu];
 }
 
 - (void)dealloc {
@@ -252,7 +247,6 @@ void ChangeProfileSignInContinuation(id<SystemIdentity> identity,
   _applicationHandler = nil;
   _syncService = nullptr;
   _accountManagerService = nullptr;
-  [self unblockOtherScenes];
   [super stop];
 }
 
@@ -362,9 +356,8 @@ void ChangeProfileSignInContinuation(id<SystemIdentity> identity,
   AuthenticationFlow* authenticationFlow = [[AuthenticationFlow alloc]
                initWithBrowser:self.browser
                       identity:identity
-                   accessPoint:signin_metrics::AccessPoint::
-                                   ACCESS_POINT_ACCOUNT_MENU
-             postSignInActions:PostSignInActionSet({PostSignInAction::kNone})
+                   accessPoint:signin_metrics::AccessPoint::kAccountMenu
+             postSignInActions:PostSignInActionSet()
       presentingViewController:_navigationController];
 
   [authenticationFlow
@@ -391,21 +384,6 @@ void ChangeProfileSignInContinuation(id<SystemIdentity> identity,
   id<SnackbarCommands> snackbarCommandsHandler =
       HandlerForProtocol(dispatcher, SnackbarCommands);
   [snackbarCommandsHandler showSnackbarMessageOverBrowserToolbar:snackbarTitle];
-}
-
-- (BOOL)blockOtherScenesIfPossible {
-  SceneState* sceneState = self.browser->GetSceneState();
-  if (sceneState.isUIBlocked) {
-    // This could occur due to race condition with multiple windows and
-    // simultaneous taps. See crbug.com/368310663.
-    return NO;
-  }
-  _UIBlocker = std::make_unique<ScopedUIBlocker>(sceneState);
-  return YES;
-}
-
-- (void)unblockOtherScenes {
-  _UIBlocker.reset();
 }
 
 #pragma mark - SyncErrorSettingsCommandHandler
@@ -438,7 +416,7 @@ void ChangeProfileSignInContinuation(id<SystemIdentity> identity,
   syncer::TrustedVaultUserActionTriggerForUMA trigger =
       syncer::TrustedVaultUserActionTriggerForUMA::kAccountMenu;
   signin_metrics::AccessPoint accessPoint =
-      signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_MENU;
+      signin_metrics::AccessPoint::kAccountMenu;
   SigninTrustedVaultDialogIntent intent =
       SigninTrustedVaultDialogIntentFetchKeys;
   _signinCoordinator = [SigninCoordinator
@@ -460,7 +438,7 @@ void ChangeProfileSignInContinuation(id<SystemIdentity> identity,
   syncer::TrustedVaultUserActionTriggerForUMA trigger =
       syncer::TrustedVaultUserActionTriggerForUMA::kAccountMenu;
   signin_metrics::AccessPoint accessPoint =
-      signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_MENU;
+      signin_metrics::AccessPoint::kAccountMenu;
   SigninTrustedVaultDialogIntent intent =
       SigninTrustedVaultDialogIntentDegradedRecoverability;
   _signinCoordinator = [SigninCoordinator
@@ -482,7 +460,7 @@ void ChangeProfileSignInContinuation(id<SystemIdentity> identity,
 
 - (void)openPrimaryAccountReauthDialog {
   signin_metrics::AccessPoint accessPoint =
-      signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_MENU;
+      signin_metrics::AccessPoint::kAccountMenu;
   signin_metrics::PromoAction promoAction =
       signin_metrics::PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO;
   _signinCoordinator = [SigninCoordinator

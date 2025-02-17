@@ -39,7 +39,7 @@
 #include "base/types/pass_key.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
-#include "cc/input/browser_controls_offset_tags_info.h"
+#include "cc/input/browser_controls_offset_tag_modifications.h"
 #include "cc/input/event_listener_properties.h"
 #include "cc/input/overscroll_behavior.h"
 #include "cc/trees/layer_tree_host.h"
@@ -69,6 +69,7 @@
 #include "third_party/blink/renderer/core/page/drag_controller.h"
 #include "third_party/blink/renderer/core/page/event_with_hit_test_results.h"
 #include "third_party/blink/renderer/core/page/viewport_description.h"
+#include "third_party/blink/renderer/platform/allow_discouraged_type.h"
 #include "third_party/blink/renderer/platform/graphics/apply_viewport_changes.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_image.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
@@ -237,8 +238,8 @@ class CORE_EXPORT WebFrameWidgetImpl
       cc::BrowserControlsState constraints,
       cc::BrowserControlsState current,
       bool animate,
-      base::optional_ref<const cc::BrowserControlsOffsetTagsInfo>
-          offset_tags_info) final;
+      base::optional_ref<const cc::BrowserControlsOffsetTagModifications>
+          offset_tag_modifications) final;
   void SetEventListenerProperties(cc::EventListenerClass,
                                   cc::EventListenerProperties) final;
   cc::EventListenerProperties EventListenerProperties(
@@ -246,7 +247,7 @@ class CORE_EXPORT WebFrameWidgetImpl
   mojom::blink::DisplayMode DisplayMode() const override;
   ui::mojom::blink::WindowShowState WindowShowState() const override;
   bool Resizable() const override;
-  const WebVector<gfx::Rect>& ViewportSegments() const override;
+  const std::vector<gfx::Rect>& ViewportSegments() const override;
   void SetDelegatedInkMetadata(
       std::unique_ptr<gfx::DelegatedInkMetadata> metadata) final;
   void InjectScrollbarGestureScroll(const gfx::Vector2dF& delta,
@@ -264,7 +265,6 @@ class CORE_EXPORT WebFrameWidgetImpl
   WebTextInputInfo TextInputInfo() override;
   ui::mojom::VirtualKeyboardVisibilityRequest
   GetLastVirtualKeyboardVisibilityRequest() override;
-  bool ShouldSuppressKeyboardForFocusedElement() override;
   void GetEditContextBoundsInWindow(
       std::optional<gfx::Rect>* control_bounds,
       std::optional<gfx::Rect>* selection_bounds) override;
@@ -294,7 +294,7 @@ class CORE_EXPORT WebFrameWidgetImpl
   void SetEditCommandsForNextKeyEvent(
       Vector<mojom::blink::EditCommandPtr> edit_commands) override;
   Vector<ui::mojom::blink::ImeTextSpanInfoPtr> GetImeTextSpansInfo(
-      const WebVector<ui::ImeTextSpan>& ime_text_spans) override;
+      const std::vector<ui::ImeTextSpan>& ime_text_spans) override;
   void RequestMouseLock(
       bool has_transient_user_activation,
       bool request_unadjusted_movement,
@@ -444,7 +444,7 @@ class CORE_EXPORT WebFrameWidgetImpl
   gfx::Rect ViewRect() override;
   void SetScreenRects(const gfx::Rect& widget_screen_rect,
                       const gfx::Rect& window_screen_rect) override;
-  gfx::Size VisibleViewportSizeInDIPs() override;
+  gfx::Size VisibleViewportSize() override;
   bool IsHidden() const override;
   WebString GetLastToolTipTextForTesting() const override;
   float GetEmulatorScale() override;
@@ -1115,7 +1115,8 @@ class CORE_EXPORT WebFrameWidgetImpl
   ui::mojom::blink::WindowShowState window_show_state_;
   bool resizable_;
 
-  WebVector<gfx::Rect> viewport_segments_;
+  std::vector<gfx::Rect> viewport_segments_
+      ALLOW_DISCOURAGED_TYPE("Will be passed to FrameVisualProperties");
 
   // This is owned by the LayerTreeHostImpl, and should only be used on the
   // compositor thread, so we keep the TaskRunner where you post tasks to

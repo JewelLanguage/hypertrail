@@ -12,10 +12,12 @@
 #include "content/services/auction_worklet/bidder_lazy_filler.h"
 #include "content/services/auction_worklet/for_debugging_only_bindings.h"
 #include "content/services/auction_worklet/private_aggregation_bindings.h"
+#include "content/services/auction_worklet/private_model_training_bindings.h"
 #include "content/services/auction_worklet/real_time_reporting_bindings.h"
 #include "content/services/auction_worklet/register_ad_beacon_bindings.h"
 #include "content/services/auction_worklet/register_ad_macro_bindings.h"
 #include "content/services/auction_worklet/report_bindings.h"
+#include "content/services/auction_worklet/report_win_browser_signals_lazy_filler.h"
 #include "content/services/auction_worklet/seller_lazy_filler.h"
 #include "content/services/auction_worklet/set_bid_bindings.h"
 #include "content/services/auction_worklet/set_priority_bindings.h"
@@ -84,6 +86,13 @@ void ContextRecycler::AddReportBindings(
   AddBindings(report_bindings_.get());
 }
 
+void ContextRecycler::AddPrivateModelTrainingBindings() {
+  DCHECK(!private_model_training_bindings_);
+  private_model_training_bindings_ =
+      std::make_unique<PrivateModelTrainingBindings>(v8_helper_);
+  AddBindings(private_model_training_bindings_.get());
+}
+
 void ContextRecycler::AddSetBidBindings() {
   DCHECK(!set_bid_bindings_);
   set_bid_bindings_ = std::make_unique<SetBidBindings>(v8_helper_);
@@ -124,6 +133,12 @@ void ContextRecycler::AddSellerBrowserSignalsLazyFiller() {
   seller_browser_signals_lazy_filler_ =
       std::make_unique<SellerBrowserSignalsLazyFiller>(v8_helper_,
                                                        v8_logger_.get());
+}
+
+void ContextRecycler::AddReportWinBrowserSignalsLazyFiller() {
+  DCHECK(!report_win_browser_signals_lazy_filler_);
+  report_win_browser_signals_lazy_filler_ =
+      std::make_unique<ReportWinBrowserSignalsLazyFiller>(v8_helper_);
 }
 
 void ContextRecycler::EnsureAuctionConfigLazyFillers(size_t required) {
@@ -167,14 +182,20 @@ v8::Local<v8::Context> ContextRecycler::GetContext() {
 }
 
 void ContextRecycler::ResetForReuse() {
-  for (Bindings* bindings : bindings_list_)
+  for (Bindings* bindings : bindings_list_) {
     bindings->Reset();
-  if (bidding_browser_signals_lazy_filler_)
+  }
+  if (bidding_browser_signals_lazy_filler_) {
     bidding_browser_signals_lazy_filler_->Reset();
-  if (interest_group_lazy_filler_)
+  }
+  if (interest_group_lazy_filler_) {
     interest_group_lazy_filler_->Reset();
+  }
   if (seller_browser_signals_lazy_filler_) {
     seller_browser_signals_lazy_filler_->Reset();
+  }
+  if (report_win_browser_signals_lazy_filler_) {
+    report_win_browser_signals_lazy_filler_->Reset();
   }
   for (const auto& auction_config_lazy_filler : auction_config_lazy_fillers_) {
     auction_config_lazy_filler->Reset();

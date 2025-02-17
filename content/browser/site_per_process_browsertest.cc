@@ -141,6 +141,7 @@
 #include "net/test/embedded_test_server/http_response.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/cpp/permissions_policy/origin_with_possible_wildcards.h"
 #include "services/network/public/cpp/web_sandbox_flags.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-shared.h"
 #include "services/viz/privileged/mojom/compositing/features.mojom-features.h"
@@ -149,8 +150,8 @@
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
-#include "third_party/blink/public/common/permissions_policy/origin_with_possible_wildcards.h"
 #include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
+#include "third_party/blink/public/common/permissions_policy/permissions_policy_declaration.h"
 #include "third_party/blink/public/common/permissions_policy/policy_value.h"
 #include "third_party/blink/public/common/switches.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
@@ -373,7 +374,7 @@ bool ConvertJSONToPoint(const std::string& str, gfx::PointF* point) {
 // (Equivalent to the declared policy "feature *")
 blink::ParsedPermissionsPolicyDeclaration
 CreateParsedPermissionsPolicyDeclaration(
-    blink::mojom::PermissionsPolicyFeature feature,
+    network::mojom::PermissionsPolicyFeature feature,
     const std::vector<GURL>& origins,
     bool match_all_origins = false,
     const std::optional<GURL> self_if_matches = std::nullopt) {
@@ -388,7 +389,7 @@ CreateParsedPermissionsPolicyDeclaration(
 
   for (const auto& origin : origins)
     declaration.allowed_origins.emplace_back(
-        *blink::OriginWithPossibleWildcards::FromOrigin(
+        *network::OriginWithPossibleWildcards::FromOrigin(
             url::Origin::Create(origin)));
 
   std::sort(declaration.allowed_origins.begin(),
@@ -398,7 +399,7 @@ CreateParsedPermissionsPolicyDeclaration(
 }
 
 blink::ParsedPermissionsPolicy CreateParsedPermissionsPolicy(
-    const std::vector<blink::mojom::PermissionsPolicyFeature>& features,
+    const std::vector<network::mojom::PermissionsPolicyFeature>& features,
     const std::vector<GURL>& origins,
     bool match_all_origins = false,
     const std::optional<GURL> self_if_matches = std::nullopt) {
@@ -411,18 +412,18 @@ blink::ParsedPermissionsPolicy CreateParsedPermissionsPolicy(
 }
 
 blink::ParsedPermissionsPolicy CreateParsedPermissionsPolicyMatchesSelf(
-    const std::vector<blink::mojom::PermissionsPolicyFeature>& features,
+    const std::vector<network::mojom::PermissionsPolicyFeature>& features,
     const GURL& self_if_matches) {
   return CreateParsedPermissionsPolicy(features, {}, false, self_if_matches);
 }
 
 blink::ParsedPermissionsPolicy CreateParsedPermissionsPolicyMatchesAll(
-    const std::vector<blink::mojom::PermissionsPolicyFeature>& features) {
+    const std::vector<network::mojom::PermissionsPolicyFeature>& features) {
   return CreateParsedPermissionsPolicy(features, {}, true);
 }
 
 blink::ParsedPermissionsPolicy CreateParsedPermissionsPolicyMatchesNone(
-    const std::vector<blink::mojom::PermissionsPolicyFeature>& features) {
+    const std::vector<network::mojom::PermissionsPolicyFeature>& features) {
   return CreateParsedPermissionsPolicy(features, {});
 }
 
@@ -456,7 +457,20 @@ SitePerProcessBrowserTestBase::SitePerProcessBrowserTestBase() {
 #if !BUILDFLAG(IS_ANDROID)
   // TODO(bokan): Needed for scrollability check in
   // FrameOwnerPropertiesPropagationScrolling. crbug.com/662196.
-  feature_list_.InitAndDisableFeature(features::kOverlayScrollbar);
+  // Overlay scrollbar will be turned off with both conditions satisfied:
+  // 1) feature flag `kOverlayScrollbar` is off
+  // 2) always show scrollbar os settings on :
+  //  2.1)`kOverlayScrollbarsOSSetting` off or
+  //  2.2)`kOverlayScrollbarsOSSetting` on and always show scrollbar preference
+  //  setting on.
+  feature_list_.InitWithFeatures(
+      /*enabled_features=*/{},
+      /*disabled_features=*/{features::kOverlayScrollbar
+#if BUILDFLAG(IS_CHROMEOS)
+                             ,
+                             features::kOverlayScrollbarsOSSetting
+#endif
+      });
 #endif
 }
 
@@ -7134,7 +7148,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 
   FrameTreeNode* root = web_contents()->GetPrimaryFrameTree().root();
   EXPECT_EQ(CreateParsedPermissionsPolicyMatchesSelf(
-                {blink::mojom::PermissionsPolicyFeature::kGeolocation},
+                {network::mojom::PermissionsPolicyFeature::kGeolocation},
                 url.DeprecatedGetOriginAsURL()),
             root->current_replication_state().permissions_policy_header);
 }
@@ -7151,8 +7165,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 
   FrameTreeNode* root = web_contents()->GetPrimaryFrameTree().root();
   EXPECT_EQ(CreateParsedPermissionsPolicyMatchesSelf(
-                {blink::mojom::PermissionsPolicyFeature::kGeolocation,
-                 blink::mojom::PermissionsPolicyFeature::kPayment},
+                {network::mojom::PermissionsPolicyFeature::kGeolocation,
+                 network::mojom::PermissionsPolicyFeature::kPayment},
                 start_url.DeprecatedGetOriginAsURL()),
             root->current_replication_state().permissions_policy_header);
 
@@ -7160,8 +7174,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   // overwrite the old one.
   EXPECT_TRUE(NavigateToURL(shell(), first_nav_url));
   EXPECT_EQ(CreateParsedPermissionsPolicyMatchesAll(
-                {blink::mojom::PermissionsPolicyFeature::kGeolocation,
-                 blink::mojom::PermissionsPolicyFeature::kPayment}),
+                {network::mojom::PermissionsPolicyFeature::kGeolocation,
+                 network::mojom::PermissionsPolicyFeature::kPayment}),
             root->current_replication_state().permissions_policy_header);
 
   // When the main frame navigates to a page without a policy, the replicated
@@ -7183,8 +7197,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 
   FrameTreeNode* root = web_contents()->GetPrimaryFrameTree().root();
   EXPECT_EQ(CreateParsedPermissionsPolicyMatchesSelf(
-                {blink::mojom::PermissionsPolicyFeature::kGeolocation,
-                 blink::mojom::PermissionsPolicyFeature::kPayment},
+                {network::mojom::PermissionsPolicyFeature::kGeolocation,
+                 network::mojom::PermissionsPolicyFeature::kPayment},
                 start_url.DeprecatedGetOriginAsURL()),
             root->current_replication_state().permissions_policy_header);
 
@@ -7192,8 +7206,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   // overwrite the old one.
   EXPECT_TRUE(NavigateToURL(shell(), first_nav_url));
   EXPECT_EQ(CreateParsedPermissionsPolicyMatchesAll(
-                {blink::mojom::PermissionsPolicyFeature::kGeolocation,
-                 blink::mojom::PermissionsPolicyFeature::kPayment}),
+                {network::mojom::PermissionsPolicyFeature::kGeolocation,
+                 network::mojom::PermissionsPolicyFeature::kPayment}),
             root->current_replication_state().permissions_policy_header);
 
   // When the main frame navigates to a page without a policy, the replicated
@@ -7217,16 +7231,16 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 
   FrameTreeNode* root = web_contents()->GetPrimaryFrameTree().root();
   EXPECT_EQ(CreateParsedPermissionsPolicy(
-                {blink::mojom::PermissionsPolicyFeature::kGeolocation,
-                 blink::mojom::PermissionsPolicyFeature::kPayment},
+                {network::mojom::PermissionsPolicyFeature::kGeolocation,
+                 network::mojom::PermissionsPolicyFeature::kPayment},
                 {GURL("http://example.com/")}, /*match_all_origins=*/false,
                 main_url.DeprecatedGetOriginAsURL()),
             root->current_replication_state().permissions_policy_header);
   EXPECT_EQ(1UL, root->child_count());
   EXPECT_EQ(
       CreateParsedPermissionsPolicyMatchesSelf(
-          {blink::mojom::PermissionsPolicyFeature::kGeolocation,
-           blink::mojom::PermissionsPolicyFeature::kPayment},
+          {network::mojom::PermissionsPolicyFeature::kGeolocation,
+           network::mojom::PermissionsPolicyFeature::kPayment},
           main_url.DeprecatedGetOriginAsURL()),
       root->child_at(0)->current_replication_state().permissions_policy_header);
 
@@ -7234,8 +7248,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(0), first_nav_url));
   EXPECT_EQ(
       CreateParsedPermissionsPolicyMatchesAll(
-          {blink::mojom::PermissionsPolicyFeature::kGeolocation,
-           blink::mojom::PermissionsPolicyFeature::kPayment}),
+          {network::mojom::PermissionsPolicyFeature::kGeolocation,
+           network::mojom::PermissionsPolicyFeature::kPayment}),
       root->child_at(0)->current_replication_state().permissions_policy_header);
 
   // Navigate the iframe to another location, this one with no policy header
@@ -7248,8 +7262,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(0), first_nav_url));
   EXPECT_EQ(
       CreateParsedPermissionsPolicyMatchesAll(
-          {blink::mojom::PermissionsPolicyFeature::kGeolocation,
-           blink::mojom::PermissionsPolicyFeature::kPayment}),
+          {network::mojom::PermissionsPolicyFeature::kGeolocation,
+           network::mojom::PermissionsPolicyFeature::kPayment}),
       root->child_at(0)->current_replication_state().permissions_policy_header);
 }
 
@@ -7280,8 +7294,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(1), first_nav_url));
   EXPECT_EQ(
       CreateParsedPermissionsPolicyMatchesNone(
-          {blink::mojom::PermissionsPolicyFeature::kGeolocation,
-           blink::mojom::PermissionsPolicyFeature::kPayment}),
+          {network::mojom::PermissionsPolicyFeature::kGeolocation,
+           network::mojom::PermissionsPolicyFeature::kPayment}),
       root->child_at(1)->current_replication_state().permissions_policy_header);
 
   EXPECT_EQ(1UL, root->child_at(1)->child_count());
@@ -10786,7 +10800,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessNoSharingBrowserTest,
   EXPECT_FALSE(bar_instance->IsRelatedSiteInstance(new_instance));
   EXPECT_FALSE(foo_instance->IsRelatedSiteInstance(new_instance));
   EXPECT_NE(new_instance->GetProcess(), foo_instance->GetProcess());
-  EXPECT_NE(new_instance->GetProcess(), bar_instance->GetProcess());
+  EXPECT_NE(new_instance->GetProcess(), bar_instance->GetOrCreateProcess());
 }
 
 namespace {
@@ -12925,13 +12939,13 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 // Pending navigations must be canceled when a frame becomes pending deletion.
 //
 // 1) Initial state: A(B).
-// 2) Navigation from B to C. The server is slow to respond.
+// 2) Navigation from B to C. Pause when the speculative RFH is created.
 // 3) Deletion of B.
 IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
                        NavigationCommitInIframePendingDeletionAB) {
   GURL url_a(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b)"));
-  GURL url_c(embedded_test_server()->GetURL("c.com", "/hung"));
+  GURL url_c(embedded_test_server()->GetURL("c.com", "/title1.html"));
 
   // 1) Initial state: A(B).
   EXPECT_TRUE(NavigateToURL(shell(), url_a));
@@ -12942,7 +12956,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   rfh_b->DoNotDeleteForTesting();
   EXPECT_TRUE(ExecJs(rfh_b, "onunload=function(){}"));
 
-  // 2) Navigation from B to C. The server is slow to respond.
+  // 2) Navigation from B to C. The navigation will be paused
+  // when the speculative RFH is created.
   TestNavigationManager navigation_observer(web_contents(), url_c);
   EXPECT_TRUE(ExecJs(rfh_b, JsReplace("location.href=$1;", url_c)));
   navigation_observer.WaitForSpeculativeRenderFrameHostCreation();
@@ -12980,13 +12995,13 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 // Pending navigations must be canceled when a frame becomes pending deletion.
 //
 // 1) Initial state: A(B(C)).
-// 2) Navigation from C to D. The server is slow to respond.
+// 2) Navigation from C to D. Pause when the speculative RFH is created.
 // 3) Deletion of B.
 IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
                        NavigationCommitInIframePendingDeletionABC) {
   GURL url_a(embedded_test_server()->GetURL(
       "a.com", "/cross_site_iframe_factory.html?a(b(c))"));
-  GURL url_d(embedded_test_server()->GetURL("d.com", "/hung"));
+  GURL url_d(embedded_test_server()->GetURL("d.com", "/title1.html"));
 
   // 1) Initial state: A(B(C)).
   EXPECT_TRUE(NavigateToURL(shell(), url_a));
@@ -12997,7 +13012,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   // Leave rfh_c in pending deletion state.
   LeaveInPendingDeletionState(rfh_c);
 
-  // 2) Navigation from C to D. The server is slow to respond.
+  // 2) Navigation from C to D. The navigation will be paused
+  // when the speculative RFH is created.
   TestNavigationManager navigation_observer(web_contents(), url_d);
   EXPECT_TRUE(ExecJs(rfh_c, JsReplace("location.href=$1;", url_d)));
   navigation_observer.WaitForSpeculativeRenderFrameHostCreation();

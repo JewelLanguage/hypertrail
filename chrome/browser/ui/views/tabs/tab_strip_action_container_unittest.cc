@@ -18,6 +18,7 @@
 #include "chrome/browser/ui/views/tabs/tab_strip_nudge_button.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/test_browser_window.h"
+#include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/views/chrome_views_test_base.h"
 #include "components/commerce/core/commerce_feature_list.h"
@@ -75,6 +76,7 @@ class TabStripActionContainerTest : public ChromeViewsTestBase {
   ~TabStripActionContainerTest() override = default;
 
   void SetUp() override {
+    TestingBrowserProcess::GetGlobal()->CreateGlobalFeaturesForTesting();
     ChromeViewsTestBase::SetUp();
     profile_ = std::make_unique<TestingProfile>();
     web_contents_ = content::WebContentsTester::CreateTestWebContents(
@@ -211,7 +213,8 @@ TEST_F(TabStripActionContainerTest, OrdersButtonsCorrectlyWithProduct) {
 #if BUILDFLAG(ENABLE_GLIC)
 TEST_F(TabStripActionContainerTest, GlicButtonUpdateLabel) {
   BuildGlicContainer(/*use_otr_profile=*/false);
-  glic_nudge_controller_->UpdateNudgeLabel(web_contents(), "TEST");
+  glic_nudge_controller_->UpdateNudgeLabel(web_contents(), "TEST",
+                                           base::NullCallback());
   ASSERT_EQ(tab_strip_action_container_->glic_nudge_button()->GetText(),
             u"TEST");
 }

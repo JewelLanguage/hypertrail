@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/passwords/manage_passwords_test.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller_mock.h"
@@ -50,7 +49,7 @@ class ManagePasswordsIconViewTest : public ManagePasswordsTest {
   }
 
   std::u16string GetTooltipText() {
-    return GetView()->GetTooltipText(gfx::Point());
+    return GetView()->GetRenderedTooltipText(gfx::Point());
   }
 };
 

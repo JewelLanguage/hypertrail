@@ -108,6 +108,12 @@ class DataSharingService : public KeyedService, public base::SupportsUserData {
     virtual void OnGroupMemberRemoved(const GroupId& group_id,
                                       const GaiaId& member_gaia_id,
                                       const base::Time& event_time) {}
+
+    // Called to notify of the sync bridge state changes, e.g. whether initial
+    // merge or disable sync are in progress. Interested consumers can choose
+    // to ignore incoming sync events during this duration.
+    virtual void OnSyncBridgeUpdateTypeChanged(
+        SyncBridgeUpdateType sync_bridge_update_type) {}
   };
 
   using GroupDataOrFailureOutcome =
@@ -220,6 +226,13 @@ class DataSharingService : public KeyedService, public base::SupportsUserData {
   virtual void LeaveGroup(
       const GroupId& group_id,
       base::OnceCallback<void(PeopleGroupActionOutcome)> callback) = 0;
+
+  // Returns whether the current user has attempted to leave or delete a group
+  // in the current session that they had joined or created before. This is
+  // different than if the member is removed from the group by someone else.
+  // Returns true for the entire current session even after leave / delete
+  // attempt has been committed.
+  virtual bool IsLeavingOrDeletingGroup(const GroupId& group_id) = 0;
 
   // Returns group events since the DataSharingService was started. This is
   // similar to events exposed to Observers, but allows to collect changes by

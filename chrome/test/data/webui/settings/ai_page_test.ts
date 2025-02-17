@@ -40,6 +40,7 @@ suite('ExperimentalAdvancedPage', function() {
   teardown(function() {
     Router.getInstance().resetRouteForTesting();
     metricsBrowserProxy.reset();
+    openWindowProxy.reset();
   });
 
   async function createPage() {
@@ -77,7 +78,7 @@ suite('ExperimentalAdvancedPage', function() {
       showCompareControl: true,
       showComposeControl: true,
       showTabOrganizationControl: false,
-      showWallpaperSearchControl: false,
+      showPasswordChangeControl: false,
     });
     resetRouterForTesting();
     await createPage();
@@ -100,13 +101,13 @@ suite('ExperimentalAdvancedPage', function() {
     await verifyFeatureVisibilityMetrics(
         'Settings.AiPage.ElementVisibility.TabOrganization', false);
 
-    assertFalse(isChildVisible(page, '#wallpaperSearchRowV2'));
-    await verifyFeatureVisibilityMetrics(
-        'Settings.AiPage.ElementVisibility.Themes', false);
-
     assertTrue(isChildVisible(page, '#autofillAiRowV2'));
     await verifyFeatureVisibilityMetrics(
         'Settings.AiPage.ElementVisibility.AutofillAI', true);
+
+    assertFalse(isChildVisible(page, '#passwordChangeRowV2'));
+    await verifyFeatureVisibilityMetrics(
+        'Settings.AiPage.ElementVisibility.PasswordChange', false);
 
     // The old UI should not be visible if the refresh flag is enabled.
     const toggles1 =
@@ -127,7 +128,7 @@ suite('ExperimentalAdvancedPage', function() {
       showCompareControl: false,
       showComposeControl: false,
       showTabOrganizationControl: true,
-      showWallpaperSearchControl: true,
+      showPasswordChangeControl: true,
     });
     resetRouterForTesting();
     await createPage();
@@ -149,13 +150,13 @@ suite('ExperimentalAdvancedPage', function() {
     await verifyFeatureVisibilityMetrics(
         'Settings.AiPage.ElementVisibility.TabOrganization', true);
 
-    assertTrue(isChildVisible(page, '#wallpaperSearchRowV2'));
-    await verifyFeatureVisibilityMetrics(
-        'Settings.AiPage.ElementVisibility.Themes', true);
-
     assertFalse(isChildVisible(page, '#autofillAiRowV2'));
     await verifyFeatureVisibilityMetrics(
         'Settings.AiPage.ElementVisibility.AutofillAI', false);
+
+    assertTrue(isChildVisible(page, '#passwordChangeRowV2'));
+    await verifyFeatureVisibilityMetrics(
+        'Settings.AiPage.ElementVisibility.PasswordChange', true);
 
     // The old UI should not be visible if the refresh flag is enabled.
     const toggles2 =
@@ -346,25 +347,36 @@ suite('ExperimentalAdvancedPage', function() {
     assertEquals(routes.AUTOFILL_AI, Router.getInstance().getCurrentRoute());
   });
 
-  test('WallpaperSearchRow', async () => {
+  test('PasswordChangeRow', async () => {
     loadTimeData.overrideValues({
-      showWallpaperSearchControl: true,
+      showPasswordChangeControl: true,
     });
-    resetRouterForTesting();
     await createPage();
 
-    const wallpaperSearchRow =
-        page.shadowRoot!.querySelector<HTMLElement>('#wallpaperSearchRowV2');
-    assertTrue(!!wallpaperSearchRow);
-    assertTrue(isVisible(wallpaperSearchRow));
+    const passwordChangeRow =
+        page.shadowRoot!.querySelector<HTMLElement>('#passwordChangeRowV2');
+    assertTrue(!!passwordChangeRow);
+    assertTrue(isVisible(passwordChangeRow));
 
-    wallpaperSearchRow.click();
+    passwordChangeRow.click();
     await verifyFeatureInteractionMetrics(
-        AiPageInteractions.WALLPAPER_SEARCH_CLICK,
-        'Settings.AiPage.ThemesEntryPointClick');
+        AiPageInteractions.PASSWORD_CHANGE_CLICK,
+        'Settings.AiPage.PasswordChangeEntryPointClick');
 
     const url = await openWindowProxy.whenCalled('openUrl');
-    assertEquals(url, loadTimeData.getString('wallpaperSearchLearnMoreUrl'));
+    assertEquals(url, loadTimeData.getString('passwordChangeSettingsUrl'));
+  });
+
+  test('NoPasswordChangeRowWhenFeatureDisabled', async () => {
+    loadTimeData.overrideValues({
+      showPasswordChangeControl: false,
+    });
+    await createPage();
+
+    const passwordChangeRow =
+        page.shadowRoot!.querySelector<HTMLElement>('#passwordChangeRowV2');
+    assertTrue(!!passwordChangeRow);
+    assertFalse(isVisible(passwordChangeRow));
   });
 });
 
@@ -393,7 +405,7 @@ suite('ExperimentalAdvancedPageRefreshDisabled', () => {
     return flushTasks();
   }
 
-  test('HistorySearchVisibility', async () => {
+  test('HistorySearchVisibility', () => {
     // Hide history search row.
     loadTimeData.overrideValues({
       showHistorySearchControl: false,

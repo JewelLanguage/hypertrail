@@ -212,8 +212,6 @@ FormStructureBrowserTest::FormStructureBrowserTest()
           features::kAutofillFixValueSemantics,
           // TODO(crbug.com/40741721): Remove once shared labels are launched.
           features::kAutofillEnableSupportForParsingWithSharedLabels,
-          // TODO(crbug.com/40230674): Remove once launched.
-          features::kAutofillParseVcnCardOnFileStandaloneCvcFields,
           // TODO(crbug.com/40266396): Remove once launched.
           features::kAutofillEnableExpirationDateImprovements,
           features::kAutofillUseITAddressModel,
@@ -224,7 +222,9 @@ FormStructureBrowserTest::FormStructureBrowserTest()
       {// TODO(crbug.com/320965828): This feature is not supported on the iOS
        // renderer side and disabled to avoid too many differences between
        // the expectations.
-       features::kAutofillBetterLocalHeuristicPlaceholderSupport});
+       features::kAutofillBetterLocalHeuristicPlaceholderSupport,
+       // TODO(crbug.com/40285735): Remove when launched.
+       features::kAutofillEnableEmailHeuristicOutsideForms});
 }
 
 FormStructureBrowserTest::~FormStructureBrowserTest() = default;

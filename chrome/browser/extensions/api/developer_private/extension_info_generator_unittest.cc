@@ -992,7 +992,7 @@ TEST_F(ExtensionInfoGeneratorUnitTest,
   // The permissions info should still show the set of granted API permissions
   // which should include the notifications permission.
   EXPECT_EQ(messages.size(), info->permissions.simple_permissions.size() - 1);
-  EXPECT_TRUE(base::ranges::any_of(
+  EXPECT_TRUE(std::ranges::any_of(
       info->permissions.simple_permissions,
       [](api::developer_private::Permission& permission) {
         return permission.message == "Display notifications";
@@ -1275,8 +1275,7 @@ TEST_F(ExtensionInfoGeneratorUnitTest, UploadAsAccountExtension_FullSync) {
 TEST_F(ExtensionInfoGeneratorUnitTest, UploadAsAccountExtension_TransportMode) {
   // Allow extensions to sync in transport mode.
   base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures({switches::kExplicitBrowserSigninUIOnDesktop,
-                                 syncer::kSyncEnableExtensionsInTransportMode},
+  feature_list.InitWithFeatures({syncer::kSyncEnableExtensionsInTransportMode},
                                 /*disabled_features=*/{});
 
   // Sign the user in without full sync.

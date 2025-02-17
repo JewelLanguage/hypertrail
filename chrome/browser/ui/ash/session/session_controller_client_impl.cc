@@ -14,7 +14,6 @@
 #include "ash/public/cpp/session/session_types.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -45,6 +44,7 @@
 #include "chromeos/ash/components/login/session/session_termination_manager.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
+#include "components/session_manager/core/session.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/supervised_user/core/browser/supervised_user_service.h"
 #include "components/user_manager/multi_user/multi_user_sign_in_policy.h"
@@ -80,9 +80,9 @@ SessionControllerClientImpl* g_session_controller_client_instance = nullptr;
 // Returns the session id of a given user or 0 if user has no session.
 uint32_t GetSessionId(const User& user) {
   const AccountId& account_id = user.GetAccountId();
-  for (auto& session : SessionManager::Get()->sessions()) {
-    if (session.user_account_id == account_id) {
-      return session.id;
+  for (const auto& session : SessionManager::Get()->sessions()) {
+    if (session->account_id() == account_id) {
+      return session->session_id();
     }
   }
 
@@ -126,7 +126,7 @@ std::unique_ptr<ash::UserSession> UserToUserSession(const User& user) {
 
 void DoSwitchUser(const AccountId& account_id, bool switch_user) {
   if (switch_user) {
-    UserManager::Get()->SwitchActiveUser(account_id);
+    session_manager::SessionManager::Get()->SwitchActiveSession(account_id);
   }
 }
 
@@ -360,8 +360,9 @@ std::tuple<bool, bool> SessionControllerClientImpl::IsEligibleForSeaPen(
 
 std::optional<int> SessionControllerClientImpl::GetExistingUsersCount() const {
   const auto* user_manager = UserManager::Get();
-  return !user_manager ? std::nullopt
-                       : std::optional<int>(user_manager->GetUsers().size());
+  return !user_manager
+             ? std::nullopt
+             : std::optional<int>(user_manager->GetPersistedUsers().size());
 }
 
 // static
@@ -509,8 +510,7 @@ void SessionControllerClientImpl::DoCycleActiveUser(
   AccountId account_id = UserManager::Get()->GetActiveUser()->GetAccountId();
 
   // Get an iterator positioned at the active user.
-  auto it =
-      base::ranges::find(logged_in_users, account_id, &User::GetAccountId);
+  auto it = std::ranges::find(logged_in_users, account_id, &User::GetAccountId);
 
   // Active user not found.
   if (it == logged_in_users.end()) {

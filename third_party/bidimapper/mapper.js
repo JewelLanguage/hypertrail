@@ -87,13 +87,12 @@
      */
     var LogType;
     (function (LogType) {
-        // keep-sorted start
         LogType["bidi"] = "bidi";
         LogType["cdp"] = "cdp";
         LogType["debug"] = "debug";
         LogType["debugError"] = "debug:error";
         LogType["debugInfo"] = "debug:info";
-        // keep-sorted end
+        LogType["debugWarn"] = "debug:warn";
     })(LogType || (LogType = {}));
 
     /**
@@ -174,9 +173,9 @@
      * See the License for the specific language governing permissions and
      * limitations under the License.
      */
+    /* eslint-enable @typescript-eslint/no-unnecessary-template-expression */
     var BiDiModule;
     (function (BiDiModule) {
-        // keep-sorted start
         BiDiModule["Bluetooth"] = "bluetooth";
         BiDiModule["Browser"] = "browser";
         BiDiModule["BrowsingContext"] = "browsingContext";
@@ -187,16 +186,13 @@
         BiDiModule["Network"] = "network";
         BiDiModule["Script"] = "script";
         BiDiModule["Session"] = "session";
-        // keep-sorted end
     })(BiDiModule || (BiDiModule = {}));
     var Script$2;
     (function (Script) {
         (function (EventNames) {
-            // keep-sorted start
             EventNames["Message"] = "script.message";
             EventNames["RealmCreated"] = "script.realmCreated";
             EventNames["RealmDestroyed"] = "script.realmDestroyed";
-            // keep-sorted end
         })(Script.EventNames || (Script.EventNames = {}));
     })(Script$2 || (Script$2 = {}));
     var Log$1;
@@ -208,7 +204,6 @@
     var BrowsingContext$2;
     (function (BrowsingContext) {
         (function (EventNames) {
-            // keep-sorted start
             EventNames["ContextCreated"] = "browsingContext.contextCreated";
             EventNames["ContextDestroyed"] = "browsingContext.contextDestroyed";
             EventNames["DomContentLoaded"] = "browsingContext.domContentLoaded";
@@ -217,23 +212,21 @@
             EventNames["HistoryUpdated"] = "browsingContext.historyUpdated";
             EventNames["Load"] = "browsingContext.load";
             EventNames["NavigationAborted"] = "browsingContext.navigationAborted";
+            EventNames["NavigationCommitted"] = "browsingContext.navigationCommitted";
             EventNames["NavigationFailed"] = "browsingContext.navigationFailed";
             EventNames["NavigationStarted"] = "browsingContext.navigationStarted";
             EventNames["UserPromptClosed"] = "browsingContext.userPromptClosed";
             EventNames["UserPromptOpened"] = "browsingContext.userPromptOpened";
-            // keep-sorted end
         })(BrowsingContext.EventNames || (BrowsingContext.EventNames = {}));
     })(BrowsingContext$2 || (BrowsingContext$2 = {}));
     var Network$2;
     (function (Network) {
         (function (EventNames) {
-            // keep-sorted start
             EventNames["AuthRequired"] = "network.authRequired";
             EventNames["BeforeRequestSent"] = "network.beforeRequestSent";
             EventNames["FetchError"] = "network.fetchError";
             EventNames["ResponseCompleted"] = "network.responseCompleted";
             EventNames["ResponseStarted"] = "network.responseStarted";
-            // keep-sorted end
         })(Network.EventNames || (Network.EventNames = {}));
     })(Network$2 || (Network$2 = {}));
     var Bluetooth$2;
@@ -243,13 +236,12 @@
         })(Bluetooth.EventNames || (Bluetooth.EventNames = {}));
     })(Bluetooth$2 || (Bluetooth$2 = {}));
     const EVENT_NAMES = new Set([
-        // keep-sorted start
         ...Object.values(BiDiModule),
+        ...Object.values(Bluetooth$2.EventNames),
         ...Object.values(BrowsingContext$2.EventNames),
         ...Object.values(Log$1.EventNames),
         ...Object.values(Network$2.EventNames),
         ...Object.values(Script$2.EventNames),
-        // keep-sorted end
     ]);
 
     class Exception extends Error {
@@ -386,7 +378,6 @@
      */
     class BidiNoOpParser {
         // Bluetooth module
-        // keep-sorted start block=yes
         parseHandleRequestDevicePromptParams(params) {
             return params;
         }
@@ -399,15 +390,11 @@
         parseSimulatePreconnectedPeripheralParameters(params) {
             return params;
         }
-        // keep-sorted end
         // Browser module
-        // keep-sorted start block=yes
         parseRemoveUserContextParams(params) {
             return params;
         }
-        // keep-sorted end
         // Browsing Context module
-        // keep-sorted start block=yes
         parseActivateParams(params) {
             return params;
         }
@@ -444,9 +431,7 @@
         parseTraverseHistoryParams(params) {
             return params;
         }
-        // keep-sorted end
         // CDP module
-        // keep-sorted start block=yes
         parseGetSessionParams(params) {
             return params;
         }
@@ -456,9 +441,7 @@
         parseSendCommandParams(params) {
             return params;
         }
-        // keep-sorted end
         // Script module
-        // keep-sorted start block=yes
         parseAddPreloadScriptParams(params) {
             return params;
         }
@@ -477,9 +460,7 @@
         parseRemovePreloadScriptParams(params) {
             return params;
         }
-        // keep-sorted end
         // Input module
-        // keep-sorted start block=yes
         parsePerformActionsParams(params) {
             return params;
         }
@@ -489,9 +470,7 @@
         parseSetFilesParams(params) {
             return params;
         }
-        // keep-sorted end
         // Network module
-        // keep-sorted start block=yes
         parseAddInterceptParams(params) {
             return params;
         }
@@ -516,19 +495,17 @@
         parseSetCacheBehavior(params) {
             return params;
         }
-        // keep-sorted end
         // Permissions module
-        // keep-sorted start block=yes
         parseSetPermissionsParams(params) {
             return params;
         }
-        // keep-sorted end
         // Session module
-        // keep-sorted start block=yes
         parseSubscribeParams(params) {
             return params;
         }
-        // keep-sorted end
+        parseUnsubscribeParams(params) {
+            return params;
+        }
         // Storage module
         parseDeleteCookiesParams(params) {
             return params;
@@ -560,9 +537,11 @@
     class BrowserProcessor {
         #browserCdpClient;
         #browsingContextStorage;
-        constructor(browserCdpClient, browsingContextStorage) {
+        #userContextStorage;
+        constructor(browserCdpClient, browsingContextStorage, userContextStorage) {
             this.#browserCdpClient = browserCdpClient;
             this.#browsingContextStorage = browsingContextStorage;
+            this.#userContextStorage = userContextStorage;
         }
         close() {
             // Ensure that it is put at the end of the event loop.
@@ -603,18 +582,8 @@
             return {};
         }
         async getUserContexts() {
-            const result = await this.#browserCdpClient.sendCommand('Target.getBrowserContexts');
             return {
-                userContexts: [
-                    {
-                        userContext: 'default',
-                    },
-                    ...result.browserContextIds.map((id) => {
-                        return {
-                            userContext: id,
-                        };
-                    }),
-                ],
+                userContexts: await this.#userContextStorage.getUserContexts(),
             };
         }
         async #getWindowInfo(targetId) {
@@ -1103,6 +1072,14 @@
         }
         getClickCount(button) {
             return this.#clickContexts.get(button)?.count ?? 0;
+        }
+        /**
+         * Resets click count. Resets consequent click counter. Prevents grouping clicks in
+         * different `performActions` calls, so that they are not grouped as double, triple etc
+         * clicks. Required for https://github.com/GoogleChromeLabs/chromium-bidi/issues/3043.
+         */
+        resetClickCount() {
+            this.#clickContexts = new Map();
         }
     }
     class WheelSource {
@@ -2946,6 +2923,8 @@
                         if (source.subtype !== action.parameters.pointerType) {
                             throw new InvalidArgumentException(`Expected input source ${action.id} to be ${source.subtype}; got ${action.parameters.pointerType}.`);
                         }
+                        // https://github.com/GoogleChromeLabs/chromium-bidi/issues/3043
+                        source.resetClickCount();
                         break;
                     }
                     default:
@@ -3020,6 +2999,21 @@
             return `${acc}${header.name}: ${header.value.value}\r\n`;
         }, '');
         return new TextEncoder().encode(requestHeaders).length;
+    }
+    function stringToBase64(str) {
+        return typedArrayToBase64(new TextEncoder().encode(str));
+    }
+    function typedArrayToBase64(typedArray) {
+        // chunkSize should be less V8 limit on number of arguments!
+        // https://github.com/v8/v8/blob/d3de848bea727518aee94dd2fd42ba0b62037a27/src/objects/code.h#L444
+        const chunkSize = 65534;
+        const chunks = [];
+        for (let i = 0; i < typedArray.length; i += chunkSize) {
+            const chunk = typedArray.subarray(i, i + chunkSize);
+            chunks.push(String.fromCodePoint.apply(null, chunk));
+        }
+        const binaryString = chunks.join('');
+        return btoa(binaryString);
     }
     /** Converts from CDP Network domain headers to BiDi network headers. */
     function bidiNetworkHeadersFromCdpNetworkHeaders(headers) {
@@ -3991,6 +3985,8 @@
         #sandbox;
         /** The browsing contexts to execute the preload scripts in, if any. */
         #contexts;
+        /** The browsing contexts to execute the preload scripts in, if any. */
+        #userContexts;
         get id() {
             return this.#id;
         }
@@ -4003,6 +3999,7 @@
             this.#functionDeclaration = params.functionDeclaration;
             this.#sandbox = params.sandbox;
             this.#contexts = params.contexts;
+            this.#userContexts = params.userContexts;
         }
         /** Channels of the preload script. */
         get channels() {
@@ -4011,6 +4008,10 @@
         /** Contexts of the preload script, if any */
         get contexts() {
             return this.#contexts;
+        }
+        /** UserContexts of the preload script, if any */
+        get userContexts() {
+            return this.#userContexts;
         }
         /**
          * String to be evaluated. Wraps user-provided function so that the following
@@ -4090,11 +4091,13 @@
         #browsingContextStorage;
         #realmStorage;
         #preloadScriptStorage;
+        #userContextStorage;
         #logger;
-        constructor(eventManager, browsingContextStorage, realmStorage, preloadScriptStorage, logger) {
+        constructor(eventManager, browsingContextStorage, realmStorage, preloadScriptStorage, userContextStorage, logger) {
             this.#browsingContextStorage = browsingContextStorage;
             this.#realmStorage = realmStorage;
             this.#preloadScriptStorage = preloadScriptStorage;
+            this.#userContextStorage = userContextStorage;
             this.#logger = logger;
             this.#eventManager = eventManager;
             this.#eventManager.addSubscribeHook(Script$2.EventNames.RealmCreated, this.#onRealmCreatedSubscribeHook.bind(this));
@@ -4124,14 +4127,28 @@
             return Promise.resolve();
         }
         async addPreloadScript(params) {
-            const contexts = this.#browsingContextStorage.verifyTopLevelContextsList(params.contexts);
+            if (params.userContexts?.length && params.contexts?.length) {
+                throw new InvalidArgumentException('Both userContexts and contexts cannot be specified.');
+            }
+            const userContexts = await this.#userContextStorage.verifyUserContextIdList(params.userContexts ?? []);
+            const browsingContexts = this.#browsingContextStorage.verifyTopLevelContextsList(params.contexts);
             const preloadScript = new PreloadScript(params, this.#logger);
             this.#preloadScriptStorage.add(preloadScript);
-            const cdpTargets = contexts.size === 0
-                ? new Set(this.#browsingContextStorage
+            let contextsToRunIn = [];
+            if (userContexts.size) {
+                contextsToRunIn = this.#browsingContextStorage
                     .getTopLevelContexts()
-                    .map((context) => context.cdpTarget))
-                : new Set([...contexts.values()].map((context) => context.cdpTarget));
+                    .filter((context) => {
+                    return userContexts.has(context.userContext);
+                });
+            }
+            else if (browsingContexts.size) {
+                contextsToRunIn = [...browsingContexts.values()];
+            }
+            else {
+                contextsToRunIn = this.#browsingContextStorage.getTopLevelContexts();
+            }
+            const cdpTargets = new Set(contextsToRunIn.map((context) => context.cdpTarget));
             await preloadScript.initInTargets(cdpTargets, false);
             return {
                 script: preloadScript.id,
@@ -4139,12 +4156,9 @@
         }
         async removePreloadScript(params) {
             const { script: id } = params;
-            const scripts = this.#preloadScriptStorage.find({ id });
-            if (scripts.length === 0) {
-                throw new NoSuchScriptException(`No preload script with id '${id}'`);
-            }
-            await Promise.all(scripts.map((script) => script.remove()));
-            this.#preloadScriptStorage.remove({ id });
+            const script = this.#preloadScriptStorage.getPreloadScript(id);
+            await script.remove();
+            this.#preloadScriptStorage.remove(id);
             return {};
         }
         async callFunction(params) {
@@ -4282,12 +4296,16 @@
             };
         }
         async subscribe(params, channel = {}) {
-            const subscription = await this.#eventManager.subscribe(params.events, params.contexts ?? [], channel);
+            const subscription = await this.#eventManager.subscribe(params.events, params.contexts ?? [], params.userContexts ?? [], channel);
             return {
                 subscription,
             };
         }
         async unsubscribe(params, channel = {}) {
+            if ('subscriptions' in params) {
+                await this.#eventManager.unsubscribeByIds(params.subscriptions);
+                return {};
+            }
             await this.#eventManager.unsubscribe(params.events, params.contexts ?? [], channel);
             return {};
         }
@@ -4544,7 +4562,6 @@
      * limitations under the License.
      */
     class CommandProcessor extends EventEmitter {
-        // keep-sorted start
         #bluetoothProcessor;
         #browserProcessor;
         #browsingContextProcessor;
@@ -4555,30 +4572,26 @@
         #scriptProcessor;
         #sessionProcessor;
         #storageProcessor;
-        // keep-sorted end
         #parser;
         #logger;
-        constructor(cdpConnection, browserCdpClient, eventManager, browsingContextStorage, realmStorage, preloadScriptStorage, networkStorage, bluetoothProcessor, parser = new BidiNoOpParser(), initConnection, logger) {
+        constructor(cdpConnection, browserCdpClient, eventManager, browsingContextStorage, realmStorage, preloadScriptStorage, networkStorage, bluetoothProcessor, userContextStorage, parser = new BidiNoOpParser(), initConnection, logger) {
             super();
             this.#parser = parser;
             this.#logger = logger;
             this.#bluetoothProcessor = bluetoothProcessor;
-            // keep-sorted start block=yes
-            this.#browserProcessor = new BrowserProcessor(browserCdpClient, browsingContextStorage);
+            this.#browserProcessor = new BrowserProcessor(browserCdpClient, browsingContextStorage, userContextStorage);
             this.#browsingContextProcessor = new BrowsingContextProcessor(browserCdpClient, browsingContextStorage, eventManager);
             this.#cdpProcessor = new CdpProcessor(browsingContextStorage, realmStorage, cdpConnection, browserCdpClient);
             this.#inputProcessor = new InputProcessor(browsingContextStorage);
             this.#networkProcessor = new NetworkProcessor(browsingContextStorage, networkStorage);
             this.#permissionsProcessor = new PermissionsProcessor(browserCdpClient);
-            this.#scriptProcessor = new ScriptProcessor(eventManager, browsingContextStorage, realmStorage, preloadScriptStorage, logger);
+            this.#scriptProcessor = new ScriptProcessor(eventManager, browsingContextStorage, realmStorage, preloadScriptStorage, userContextStorage, logger);
             this.#sessionProcessor = new SessionProcessor(eventManager, browserCdpClient, initConnection);
             this.#storageProcessor = new StorageProcessor(browserCdpClient, browsingContextStorage, logger);
-            // keep-sorted end
         }
         async #processCommand(command) {
             switch (command.method) {
                 // Bluetooth module
-                // keep-sorted start block=yes
                 case 'bluetooth.handleRequestDevicePrompt':
                     return await this.#bluetoothProcessor.handleRequestDevicePrompt(this.#parser.parseHandleRequestDevicePromptParams(command.params));
                 case 'bluetooth.simulateAdapter':
@@ -4587,9 +4600,7 @@
                     return await this.#bluetoothProcessor.simulateAdvertisement(this.#parser.parseSimulateAdvertisementParameters(command.params));
                 case 'bluetooth.simulatePreconnectedPeripheral':
                     return await this.#bluetoothProcessor.simulatePreconnectedPeripheral(this.#parser.parseSimulatePreconnectedPeripheralParameters(command.params));
-                // keep-sorted end
                 // Browser module
-                // keep-sorted start block=yes
                 case 'browser.close':
                     return this.#browserProcessor.close();
                 case 'browser.createUserContext':
@@ -4602,9 +4613,7 @@
                     return await this.#browserProcessor.removeUserContext(this.#parser.parseRemoveUserContextParams(command.params));
                 case 'browser.setClientWindowState':
                     throw new UnknownErrorException(`Method ${command.method} is not implemented.`);
-                // keep-sorted end
                 // Browsing Context module
-                // keep-sorted start block=yes
                 case 'browsingContext.activate':
                     return await this.#browsingContextProcessor.activate(this.#parser.parseActivateParams(command.params));
                 case 'browsingContext.captureScreenshot':
@@ -4629,37 +4638,32 @@
                     return await this.#browsingContextProcessor.setViewport(this.#parser.parseSetViewportParams(command.params));
                 case 'browsingContext.traverseHistory':
                     return await this.#browsingContextProcessor.traverseHistory(this.#parser.parseTraverseHistoryParams(command.params));
-                // keep-sorted end
                 // CDP module
-                // keep-sorted start block=yes
                 case 'goog:cdp.getSession':
                     return this.#cdpProcessor.getSession(this.#parser.parseGetSessionParams(command.params));
                 case 'goog:cdp.resolveRealm':
                     return this.#cdpProcessor.resolveRealm(this.#parser.parseResolveRealmParams(command.params));
                 case 'goog:cdp.sendCommand':
                     return await this.#cdpProcessor.sendCommand(this.#parser.parseSendCommandParams(command.params));
-                // keep-sorted end
                 // CDP deprecated domain.
                 // https://github.com/GoogleChromeLabs/chromium-bidi/issues/2844
-                // keep-sorted start block=yes
                 case 'cdp.getSession':
+                    this.#logger?.(LogType.debugWarn, `Legacy '${command.method}' command is deprecated and will not supported soon. Use 'goog:${command.method}' instead.`);
                     return this.#cdpProcessor.getSession(this.#parser.parseGetSessionParams(command.params));
                 case 'cdp.resolveRealm':
+                    this.#logger?.(LogType.debugWarn, `Legacy '${command.method}' command is deprecated and will not supported soon. Use 'goog:${command.method}' instead.`);
                     return this.#cdpProcessor.resolveRealm(this.#parser.parseResolveRealmParams(command.params));
                 case 'cdp.sendCommand':
+                    this.#logger?.(LogType.debugWarn, `Legacy '${command.method}' command is deprecated and will not supported soon. Use 'goog:${command.method}' instead.`);
                     return await this.#cdpProcessor.sendCommand(this.#parser.parseSendCommandParams(command.params));
-                // keep-sorted end
                 // Input module
-                // keep-sorted start block=yes
                 case 'input.performActions':
                     return await this.#inputProcessor.performActions(this.#parser.parsePerformActionsParams(command.params));
                 case 'input.releaseActions':
                     return await this.#inputProcessor.releaseActions(this.#parser.parseReleaseActionsParams(command.params));
                 case 'input.setFiles':
                     return await this.#inputProcessor.setFiles(this.#parser.parseSetFilesParams(command.params));
-                // keep-sorted end
                 // Network module
-                // keep-sorted start block=yes
                 case 'network.addIntercept':
                     return await this.#networkProcessor.addIntercept(this.#parser.parseAddInterceptParams(command.params));
                 case 'network.continueRequest':
@@ -4676,14 +4680,10 @@
                     return await this.#networkProcessor.removeIntercept(this.#parser.parseRemoveInterceptParams(command.params));
                 case 'network.setCacheBehavior':
                     return await this.#networkProcessor.setCacheBehavior(this.#parser.parseSetCacheBehavior(command.params));
-                // keep-sorted end
                 // Permissions module
-                // keep-sorted start block=yes
                 case 'permissions.setPermission':
                     return await this.#permissionsProcessor.setPermissions(this.#parser.parseSetPermissionsParams(command.params));
-                // keep-sorted end
                 // Script module
-                // keep-sorted start block=yes
                 case 'script.addPreloadScript':
                     return await this.#scriptProcessor.addPreloadScript(this.#parser.parseAddPreloadScriptParams(command.params));
                 case 'script.callFunction':
@@ -4696,9 +4696,7 @@
                     return this.#scriptProcessor.getRealms(this.#parser.parseGetRealmsParams(command.params));
                 case 'script.removePreloadScript':
                     return await this.#scriptProcessor.removePreloadScript(this.#parser.parseRemovePreloadScriptParams(command.params));
-                // keep-sorted end
                 // Session module
-                // keep-sorted start block=yes
                 case 'session.end':
                     throw new UnknownErrorException(`Method ${command.method} is not implemented.`);
                 case 'session.new':
@@ -4708,24 +4706,19 @@
                 case 'session.subscribe':
                     return await this.#sessionProcessor.subscribe(this.#parser.parseSubscribeParams(command.params), command.channel);
                 case 'session.unsubscribe':
-                    return await this.#sessionProcessor.unsubscribe(this.#parser.parseSubscribeParams(command.params), command.channel);
-                // keep-sorted end
+                    return await this.#sessionProcessor.unsubscribe(this.#parser.parseUnsubscribeParams(command.params), command.channel);
                 // Storage module
-                // keep-sorted start block=yes
                 case 'storage.deleteCookies':
                     return await this.#storageProcessor.deleteCookies(this.#parser.parseDeleteCookiesParams(command.params));
                 case 'storage.getCookies':
                     return await this.#storageProcessor.getCookies(this.#parser.parseGetCookiesParams(command.params));
                 case 'storage.setCookie':
                     return await this.#storageProcessor.setCookie(this.#parser.parseSetCookieParams(command.params));
-                // keep-sorted end
                 // WebExtension module
-                // keep-sorted start block=yes
                 case 'webExtension.install':
                     throw new UnknownErrorException(`Method ${command.method} is not implemented.`);
                 case 'webExtension.uninstall':
                     throw new UnknownErrorException(`Method ${command.method} is not implemented.`);
-                // keep-sorted end
             }
             // Intentionally kept outside the switch statement to ensure that
             // ESLint @typescript-eslint/switch-exhaustiveness-check triggers if a new
@@ -4855,6 +4848,57 @@
                 });
             }
             return {};
+        }
+    }
+
+    /**
+     * Copyright 2025 Google LLC.
+     * Copyright (c) Microsoft Corporation.
+     *
+     * Licensed under the Apache License, Version 2.0 (the "License");
+     * you may not use this file except in compliance with the License.
+     * You may obtain a copy of the License at
+     *
+     *     http://www.apache.org/licenses/LICENSE-2.0
+     *
+     * Unless required by applicable law or agreed to in writing, software
+     * distributed under the License is distributed on an "AS IS" BASIS,
+     * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     * See the License for the specific language governing permissions and
+     * limitations under the License.
+     */
+    class UserContextStorage {
+        #browserClient;
+        constructor(browserClient) {
+            this.#browserClient = browserClient;
+        }
+        async getUserContexts() {
+            const result = await this.#browserClient.sendCommand('Target.getBrowserContexts');
+            return [
+                {
+                    userContext: 'default',
+                },
+                ...result.browserContextIds.map((id) => {
+                    return {
+                        userContext: id,
+                    };
+                }),
+            ];
+        }
+        async verifyUserContextIdList(userContextIds) {
+            const foundContexts = new Set();
+            if (!userContextIds.length) {
+                return foundContexts;
+            }
+            const userContexts = await this.getUserContexts();
+            const knownUserContextIds = new Set(userContexts.map((userContext) => userContext.userContext));
+            for (const userContextId of userContextIds) {
+                if (!knownUserContextIds.has(userContextId)) {
+                    throw new NoSuchUserContextException(`User context ${userContextId} not found`);
+                }
+                foundContexts.add(userContextId);
+            }
+            return foundContexts;
         }
     }
 
@@ -5771,6 +5815,13 @@
         }
         frameNavigated() {
             this.#navigated = true;
+            if (!this.#isInitial) {
+                this.#eventManager.registerEvent({
+                    type: 'event',
+                    method: BrowsingContext$2.EventNames.NavigationCommitted,
+                    params: this.navigationInfo(),
+                }, this.#browsingContextId);
+            }
         }
         fragmentNavigated() {
             this.#navigated = true;
@@ -5860,7 +5911,7 @@
                 return this.#loaderIdToNavigationsMap.get(loaderId);
             }
             if (this.#pendingNavigation !== undefined &&
-                this.#pendingNavigation?.loaderId === undefined) {
+                this.#pendingNavigation.loaderId === undefined) {
                 // This can be a pending navigation to `about:blank` created by a command. Use the
                 // pending navigation in this case.
                 return this.#pendingNavigation;
@@ -5885,7 +5936,6 @@
                 return;
             }
             const navigation = this.#getNavigationForFrameNavigated(url, loaderId);
-            navigation.frameNavigated();
             if (navigation !== this.#currentNavigation) {
                 this.#currentNavigation.fail('navigation canceled by concurrent navigation');
             }
@@ -5893,6 +5943,7 @@
             navigation.loaderId = loaderId;
             this.#loaderIdToNavigationsMap.set(loaderId, navigation);
             navigation.start();
+            navigation.frameNavigated();
             this.#currentNavigation = navigation;
             if (this.#pendingNavigation === navigation) {
                 this.#pendingNavigation = undefined;
@@ -6110,7 +6161,6 @@
         }
         dispose(emitContextDestroyed) {
             this.#navigationTracker.dispose();
-            this.#deleteAllChildren();
             this.#realmStorage.deleteRealms({
                 browsingContextId: this.id,
             });
@@ -6124,9 +6174,11 @@
                 this.#eventManager.registerEvent({
                     type: 'event',
                     method: BrowsingContext$2.EventNames.ContextDestroyed,
-                    params: this.serializeToBidiValue(),
+                    params: this.serializeToBidiValue(null),
                 }, this.id);
             }
+            // Dispose children after the events are emitted.
+            this.#deleteAllChildren();
             this.#eventManager.clearBufferedEvents(this.id);
             this.#browsingContextStorage.deleteContextById(this.id);
         }
@@ -6237,6 +6289,9 @@
             // through evaluation.
             return maybeSandboxes[0];
         }
+        /**
+         * Implements https://w3c.github.io/webdriver-bidi/#get-the-navigable-info.
+         */
         serializeToBidiValue(maxDepth = 0, addParentField = true) {
             return {
                 context: this.#id,
@@ -6245,8 +6300,8 @@
                 originalOpener: this.#originalOpener ?? null,
                 // TODO(#2646): Implement Client Window correctly
                 clientWindow: '',
-                children: maxDepth > 0
-                    ? this.directChildren.map((c) => c.serializeToBidiValue(maxDepth - 1, false))
+                children: maxDepth === null || maxDepth > 0
+                    ? this.directChildren.map((c) => c.serializeToBidiValue(maxDepth === null ? maxDepth : maxDepth - 1, false))
                     : null,
                 ...(addParentField ? { parent: this.#parentId } : {}),
             };
@@ -8106,7 +8161,6 @@
                 .find({
                 // Needed for OOPIF
                 targetId: this.topLevelId,
-                global: true,
             })
                 .map((script) => {
                 return script.initInTarget(this, true);
@@ -8171,7 +8225,6 @@
                 this.#handleTargetCrashedEvent(cdpClient);
             });
             cdpClient.on('Page.frameAttached', this.#handleFrameAttachedEvent.bind(this));
-            cdpClient.on('Page.frameDetached', this.#handleFrameDetachedEvent.bind(this));
             cdpClient.on('Page.frameSubtreeWillBeDetached', this.#handleFrameSubtreeWillBeDetached.bind(this));
         }
         #handleFrameAttachedEvent(params) {
@@ -8182,13 +8235,6 @@
                 // later.
                 'about:blank', undefined, this.#unhandledPromptBehavior, this.#logger);
             }
-        }
-        #handleFrameDetachedEvent(params) {
-            // In case of OOPiF no need in deleting BrowsingContext.
-            if (params.reason === 'swap') {
-                return;
-            }
-            this.#browsingContextStorage.findContext(params.frameId)?.dispose(true);
         }
         #handleFrameSubtreeWillBeDetached(params) {
             this.#browsingContextStorage.findContext(params.frameId)?.dispose(true);
@@ -8224,8 +8270,12 @@
                 return;
             }
             this.#targetKeysToBeIgnoredByAutoAttach.add(targetKey);
+            const userContext = targetInfo.browserContextId &&
+                targetInfo.browserContextId !== this.#defaultUserContextId
+                ? targetInfo.browserContextId
+                : 'default';
             switch (targetInfo.type) {
-                case 'tab':
+                case 'tab': {
                     // Tab targets are required only to handle page targets beneath them.
                     this.#setEventListeners(targetCdpClient);
                     // Auto-attach to the page target. No need in resuming tab target debugger, as it
@@ -8239,9 +8289,10 @@
                         });
                     })();
                     return;
+                }
                 case 'page':
                 case 'iframe': {
-                    const cdpTarget = this.#createCdpTarget(targetCdpClient, parentSessionCdpClient, targetInfo);
+                    const cdpTarget = this.#createCdpTarget(targetCdpClient, parentSessionCdpClient, targetInfo, userContext);
                     const maybeContext = this.#browsingContextStorage.findContext(targetInfo.targetId);
                     if (maybeContext && targetInfo.type === 'iframe') {
                         // OOPiF.
@@ -8251,10 +8302,6 @@
                         // If attaching to existing browser instance, there could be OOPiF targets. This
                         // case is handled by the `findFrameParentId` method.
                         const parentId = this.#findFrameParentId(targetInfo, parentSessionCdpClient.sessionId);
-                        const userContext = targetInfo.browserContextId &&
-                            targetInfo.browserContextId !== this.#defaultUserContextId
-                            ? targetInfo.browserContextId
-                            : 'default';
                         // New context.
                         BrowsingContextImpl.create(targetInfo.targetId, parentId, userContext, cdpTarget, this.#eventManager, this.#browsingContextStorage, this.#realmStorage, 
                         // Hack: when a new target created, CDP emits targetInfoChanged with an empty
@@ -8279,7 +8326,7 @@
                         void detach();
                         return;
                     }
-                    const cdpTarget = this.#createCdpTarget(targetCdpClient, parentSessionCdpClient, targetInfo);
+                    const cdpTarget = this.#createCdpTarget(targetCdpClient, parentSessionCdpClient, targetInfo, userContext);
                     this.#handleWorkerTarget(cdpToBidiTargetTypes[targetInfo.type], cdpTarget, realm);
                     return;
                 }
@@ -8288,7 +8335,7 @@
                 // behave like service workers (emits on both browser and frame targets),
                 // we can remove this block and merge service workers with the above one.
                 case 'shared_worker': {
-                    const cdpTarget = this.#createCdpTarget(targetCdpClient, parentSessionCdpClient, targetInfo);
+                    const cdpTarget = this.#createCdpTarget(targetCdpClient, parentSessionCdpClient, targetInfo, userContext);
                     this.#handleWorkerTarget(cdpToBidiTargetTypes[targetInfo.type], cdpTarget);
                     return;
                 }
@@ -8312,8 +8359,9 @@
             }
             return null;
         }
-        #createCdpTarget(targetCdpClient, parentCdpClient, targetInfo) {
+        #createCdpTarget(targetCdpClient, parentCdpClient, targetInfo, userContext) {
             this.#setEventListeners(targetCdpClient);
+            this.#preloadScriptStorage.onCdpTargetCreated(targetInfo.targetId, userContext);
             const target = CdpTarget.create(targetInfo.targetId, targetCdpClient, this.#browserCdpClient, parentCdpClient, this.#realmStorage, this.#eventManager, this.#preloadScriptStorage, this.#browsingContextStorage, this.#networkStorage, this.#prerenderingDisabled, this.#unhandledPromptBehavior, this.#logger);
             this.#networkStorage.onCdpTargetCreated(target);
             this.#bluetoothProcessor.onCdpTargetCreated(target);
@@ -8481,6 +8529,14 @@
                 }
             }
             return foundContexts;
+        }
+        verifyContextsList(contexts) {
+            if (!contexts.length) {
+                return;
+            }
+            for (const contextId of contexts) {
+                this.getContext(contextId);
+            }
         }
     }
 
@@ -9317,7 +9373,7 @@
     function getCdpBodyFromBiDiBytesValue(body) {
         let parsedBody;
         if (body?.type === 'string') {
-            parsedBody = btoa(body.value);
+            parsedBody = stringToBase64(body.value);
         }
         else if (body?.type === 'base64') {
             parsedBody = body.value;
@@ -9552,6 +9608,22 @@
         }
     }
 
+    /*
+     * Copyright 2023 Google LLC.
+     * Copyright (c) Microsoft Corporation.
+     *
+     * Licensed under the Apache License, Version 2.0 (the "License");
+     * you may not use this file except in compliance with the License.
+     * You may obtain a copy of the License at
+     *
+     *     http://www.apache.org/licenses/LICENSE-2.0
+     *
+     * Unless required by applicable law or agreed to in writing, software
+     * distributed under the License is distributed on an "AS IS" BASIS,
+     * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     * See the License for the specific language governing permissions and
+     * limitations under the License.
+     */
     /**
      * Container class for preload scripts.
      */
@@ -9566,18 +9638,12 @@
                 return [...this.#scripts];
             }
             return [...this.#scripts].filter((script) => {
-                if (filter.id !== undefined && filter.id === script.id) {
+                // Global scripts have no contexts or userContext
+                if (script.contexts === undefined && script.userContexts === undefined) {
                     return true;
                 }
                 if (filter.targetId !== undefined &&
                     script.targetIds.has(filter.targetId)) {
-                    return true;
-                }
-                if (filter.global !== undefined &&
-                    // Global scripts have no contexts
-                    ((filter.global && script.contexts === undefined) ||
-                        // Non global scripts always have contexts
-                        (!filter.global && script.contexts !== undefined))) {
                     return true;
                 }
                 return false;
@@ -9587,9 +9653,31 @@
             this.#scripts.add(preloadScript);
         }
         /** Deletes all BiDi preload script entries that match the given filter. */
-        remove(filter) {
-            for (const preloadScript of this.find(filter)) {
-                this.#scripts.delete(preloadScript);
+        remove(id) {
+            const script = [...this.#scripts].find((script) => script.id === id);
+            if (script === undefined) {
+                throw new NoSuchScriptException(`No preload script with id '${id}'`);
+            }
+            this.#scripts.delete(script);
+        }
+        /** Gets the preload script with the given ID, if any, otherwise throws. */
+        getPreloadScript(id) {
+            const script = [...this.#scripts].find((script) => script.id === id);
+            if (script === undefined) {
+                throw new NoSuchScriptException(`No preload script with id '${id}'`);
+            }
+            return script;
+        }
+        onCdpTargetCreated(targetId, userContext) {
+            const scriptInUserContext = [...this.#scripts].filter((script) => {
+                // Global scripts
+                if (!script.userContexts && !script.contexts) {
+                    return true;
+                }
+                return script.userContexts?.includes(userContext);
+            });
+            for (const script of scriptInUserContext) {
+                script.targetIds.add(targetId);
             }
         }
     }
@@ -9826,10 +9914,11 @@
                     allEvents.add(event);
             }
         }
-        return [...allEvents.values()];
+        return allEvents.values();
     }
     class SubscriptionManager {
         #subscriptions = [];
+        #knownSubscriptionIds = new Set();
         #browsingContextStorage;
         constructor(browsingContextStorage) {
             this.#browsingContextStorage = browsingContextStorage;
@@ -9856,7 +9945,7 @@
             }
             return Array.from(channels.values());
         }
-        #isSubscribedTo(subscription, moduleOrEvent, contextId) {
+        #isSubscribedTo(subscription, moduleOrEvent, browsingContextId) {
             let includesEvent = false;
             for (const eventName of subscription.eventNames) {
                 // This also covers the `cdp` case where
@@ -9875,18 +9964,28 @@
             if (!includesEvent) {
                 return false;
             }
+            // user context subscription.
+            if (subscription.userContextIds.size !== 0) {
+                if (!browsingContextId) {
+                    return false;
+                }
+                const context = this.#browsingContextStorage.findContext(browsingContextId);
+                if (!context) {
+                    return false;
+                }
+                return subscription.userContextIds.has(context.userContext);
+            }
+            // context subscription.
+            if (subscription.topLevelTraversableIds.size !== 0) {
+                if (!browsingContextId) {
+                    return false;
+                }
+                const topLevelContext = this.#browsingContextStorage.findTopLevelContextId(browsingContextId);
+                return (topLevelContext !== null &&
+                    subscription.topLevelTraversableIds.has(topLevelContext));
+            }
             // global subscription.
-            if (subscription.topLevelTraversableIds.size === 0) {
-                return true;
-            }
-            const topLevelContext = contextId
-                ? this.#browsingContextStorage.findTopLevelContextId(contextId)
-                : null;
-            if (topLevelContext !== null &&
-                subscription.topLevelTraversableIds.has(topLevelContext)) {
-                return true;
-            }
-            return false;
+            return true;
         }
         isSubscribedTo(moduleOrEvent, contextId) {
             for (const subscription of this.#subscriptions) {
@@ -9906,7 +10005,7 @@
          * events. If the contextId is null, it will return all the top-level contexts which were
          * not subscribed before the command.
          */
-        subscribe(eventNames, contextIds, channel) {
+        subscribe(eventNames, contextIds, userContextIds, channel) {
             // All the subscriptions are handled on the top-level contexts.
             const subscription = {
                 id: uuidv4(),
@@ -9918,9 +10017,11 @@
                     }
                     return topLevelContext;
                 })),
+                userContextIds: new Set(userContextIds),
                 channel,
             };
             this.#subscriptions.push(subscription);
+            this.#knownSubscriptionIds.add(subscription.id);
             return subscription;
         }
         /**
@@ -9930,10 +10031,8 @@
          */
         unsubscribe(inputEventNames, inputContextIds, channel) {
             const eventNames = new Set(unrollEvents(inputEventNames));
-            for (const contextId of inputContextIds) {
-                // Validation that contexts exist.
-                this.#browsingContextStorage.getContext(contextId);
-            }
+            // Validation that contexts exist.
+            this.#browsingContextStorage.verifyContextsList(inputContextIds);
             const topLevelTraversables = new Set(inputContextIds.map((contextId) => {
                 const topLevelContext = this.#browsingContextStorage.findTopLevelContextId(contextId);
                 if (!topLevelContext) {
@@ -9948,6 +10047,11 @@
             for (const subscription of this.#subscriptions) {
                 // `channel` is undefined or an object with 1 field, so `JSON.stringify` is stable.
                 if (JSON.stringify(subscription.channel) !== JSON.stringify(channel)) {
+                    newSubscriptions.push(subscription);
+                    continue;
+                }
+                // Skip user context subscriptions.
+                if (subscription.userContextIds.size !== 0) {
                     newSubscriptions.push(subscription);
                     continue;
                 }
@@ -10010,6 +10114,7 @@
                             channel: subscription.channel,
                             eventNames: new Set([eventName]),
                             topLevelTraversableIds: remainingContextIds,
+                            userContextIds: new Set(),
                         };
                         newSubscriptions.push(partialSubscription);
                     }
@@ -10029,8 +10134,16 @@
         /**
          * Unsubscribes by subscriptionId.
          */
-        unsubscribeById(_subscription) {
-            // TODO: implement.
+        unsubscribeById(subscriptionIds) {
+            const subscriptionIdsSet = new Set(subscriptionIds);
+            const unknownIds = difference(subscriptionIdsSet, this.#knownSubscriptionIds);
+            if (unknownIds.size !== 0) {
+                throw new InvalidArgumentException('No subscription found');
+            }
+            this.#subscriptions = this.#subscriptions.filter((subscription) => {
+                return !subscriptionIdsSet.has(subscription.id);
+            });
+            this.#knownSubscriptionIds = difference(this.#knownSubscriptionIds, subscriptionIdsSet);
         }
     }
     /**
@@ -10132,9 +10245,11 @@
          * Map of event name to hooks to be called when client is subscribed to the event.
          */
         #subscribeHooks;
-        constructor(browsingContextStorage) {
+        #userContextStorage;
+        constructor(browsingContextStorage, userContextStorage) {
             super();
             this.#browsingContextStorage = browsingContextStorage;
+            this.#userContextStorage = userContextStorage;
             this.#subscriptionManager = new SubscriptionManager(browsingContextStorage);
             this.#subscribeHooks = new DefaultMap(() => []);
         }
@@ -10188,17 +10303,17 @@
                 this.#markEventSent(eventWrapper, channel, eventName);
             }
         }
-        async subscribe(eventNames, contextIds, channel) {
+        async subscribe(eventNames, contextIds, userContextIds, channel) {
             for (const name of eventNames) {
                 assertSupportedEvent(name);
             }
-            // First check if all the contexts are known.
-            for (const contextId of contextIds) {
-                if (contextId !== null) {
-                    // Assert the context is known. Throw exception otherwise.
-                    this.#browsingContextStorage.getContext(contextId);
-                }
+            if (userContextIds.length && contextIds.length) {
+                throw new InvalidArgumentException('Both userContexts and contexts cannot be specified.');
             }
+            // First check if all the contexts are known.
+            this.#browsingContextStorage.verifyContextsList(contextIds);
+            // Validate user contexts.
+            await this.#userContextStorage.verifyUserContextIdList(userContextIds);
             const unrolledEventNames = new Set(unrollEvents(eventNames));
             const subscribeStepEvents = new Map();
             const subscriptionNavigableIds = new Set(contextIds.length
@@ -10219,7 +10334,7 @@
                 }));
                 subscribeStepEvents.set(eventName, difference(subscriptionNavigableIds, subscribedNavigableIds));
             }
-            const subscription = this.#subscriptionManager.subscribe(eventNames, contextIds, channel);
+            const subscription = this.#subscriptionManager.subscribe(eventNames, contextIds, userContextIds, channel);
             for (const eventName of subscription.eventNames) {
                 for (const contextId of subscriptionNavigableIds) {
                     for (const eventWrapper of this.#getBufferedEvents(eventName, contextId, channel)) {
@@ -10245,6 +10360,10 @@
                 assertSupportedEvent(name);
             }
             this.#subscriptionManager.unsubscribe(eventNames, contextIds, channel);
+            await this.toggleModulesIfNeeded();
+        }
+        async unsubscribeByIds(subscriptionIds) {
+            this.#subscriptionManager.unsubscribeById(subscriptionIds);
             await this.toggleModulesIfNeeded();
         }
         async toggleModulesIfNeeded() {
@@ -10364,10 +10483,11 @@
             this.#messageQueue = new ProcessingQueue(this.#processOutgoingMessage, this.#logger);
             this.#transport = bidiTransport;
             this.#transport.setOnMessage(this.#handleIncomingMessage);
-            this.#eventManager = new EventManager(this.#browsingContextStorage);
+            const userUserContextStorage = new UserContextStorage(browserCdpClient);
+            this.#eventManager = new EventManager(this.#browsingContextStorage, userUserContextStorage);
             const networkStorage = new NetworkStorage(this.#eventManager, this.#browsingContextStorage, browserCdpClient, logger);
             this.#bluetoothProcessor = new BluetoothProcessor(this.#eventManager, this.#browsingContextStorage);
-            this.#commandProcessor = new CommandProcessor(cdpConnection, browserCdpClient, this.#eventManager, this.#browsingContextStorage, this.#realmStorage, this.#preloadScriptStorage, networkStorage, this.#bluetoothProcessor, parser, async (options) => {
+            this.#commandProcessor = new CommandProcessor(cdpConnection, browserCdpClient, this.#eventManager, this.#browsingContextStorage, this.#realmStorage, this.#preloadScriptStorage, networkStorage, this.#bluetoothProcessor, userUserContextStorage, parser, async (options) => {
                 // This is required to ignore certificate errors when service worker is fetched.
                 await browserCdpClient.sendCommand('Security.setIgnoreCertificateErrors', {
                     ignore: options.acceptInsecureCerts ?? false,
@@ -15485,11 +15605,14 @@
     (function (Session) {
         Session.UnsubscribeSchema = z.lazy(() => z.object({
             method: z.literal('session.unsubscribe'),
-            params: z.union([
-                Session.UnsubscribeByAttributesRequestSchema,
-                Session.UnsubscribeByIdRequestSchema,
-            ]),
+            params: Session.UnsubscribeParametersSchema,
         }));
+    })(Session$1 || (Session$1 = {}));
+    (function (Session) {
+        Session.UnsubscribeParametersSchema = z.lazy(() => z.union([
+            Session.UnsubscribeByAttributesRequestSchema,
+            Session.UnsubscribeByIdRequestSchema,
+        ]));
     })(Session$1 || (Session$1 = {}));
     const BrowserCommandSchema = z.lazy(() => z.union([
         Browser$1.CloseSchema,
@@ -15628,6 +15751,7 @@
         BrowsingContext$1.HistoryUpdatedSchema,
         BrowsingContext$1.LoadSchema,
         BrowsingContext$1.NavigationAbortedSchema,
+        BrowsingContext$1.NavigationCommittedSchema,
         BrowsingContext$1.NavigationFailedSchema,
         BrowsingContext$1.NavigationStartedSchema,
         BrowsingContext$1.UserPromptClosedSchema,
@@ -16033,6 +16157,12 @@
     (function (BrowsingContext) {
         BrowsingContext.NavigationAbortedSchema = z.lazy(() => z.object({
             method: z.literal('browsingContext.navigationAborted'),
+            params: BrowsingContext.NavigationInfoSchema,
+        }));
+    })(BrowsingContext$1 || (BrowsingContext$1 = {}));
+    (function (BrowsingContext) {
+        BrowsingContext.NavigationCommittedSchema = z.lazy(() => z.object({
+            method: z.literal('browsingContext.navigationCommitted'),
             params: BrowsingContext.NavigationInfoSchema,
         }));
     })(BrowsingContext$1 || (BrowsingContext$1 = {}));
@@ -16997,6 +17127,7 @@
                 .array(BrowsingContext$1.BrowsingContextSchema)
                 .min(1)
                 .optional(),
+            userContexts: z.array(Browser$1.UserContextSchema).min(1).optional(),
             sandbox: z.string().optional(),
         }));
     })(Script$1 || (Script$1 = {}));
@@ -17702,6 +17833,13 @@
             return parseObject(params, Session$1.SubscriptionRequestSchema);
         }
         Session.parseSubscribeParams = parseSubscribeParams;
+        function parseUnsubscribeParams(params) {
+            if (params && typeof params === 'object' && 'subscriptions' in params) {
+                return parseObject(params, Session$1.UnsubscribeByIdRequestSchema);
+            }
+            return parseObject(params, Session$1.UnsubscribeParametersSchema);
+        }
+        Session.parseUnsubscribeParams = parseUnsubscribeParams;
     })(Session || (Session = {}));
     var Input;
     (function (Input) {
@@ -17812,7 +17950,6 @@
 
     class BidiParser {
         // Bluetooth module
-        // keep-sorted start block=yes
         parseHandleRequestDevicePromptParams(params) {
             return Bluetooth.parseHandleRequestDevicePromptParams(params);
         }
@@ -17825,15 +17962,11 @@
         parseSimulatePreconnectedPeripheralParameters(params) {
             return Bluetooth.parseSimulatePreconnectedPeripheralParams(params);
         }
-        // keep-sorted end
         // Browser module
-        // keep-sorted start block=yes
         parseRemoveUserContextParams(params) {
             return Browser.parseRemoveUserContextParams(params);
         }
-        // keep-sorted end
         // Browsing Context module
-        // keep-sorted start block=yes
         parseActivateParams(params) {
             return BrowsingContext.parseActivateParams(params);
         }
@@ -17870,9 +18003,7 @@
         parseTraverseHistoryParams(params) {
             return BrowsingContext.parseTraverseHistoryParams(params);
         }
-        // keep-sorted end
         // CDP module
-        // keep-sorted start block=yes
         parseGetSessionParams(params) {
             return Cdp.parseGetSessionRequest(params);
         }
@@ -17882,9 +18013,7 @@
         parseSendCommandParams(params) {
             return Cdp.parseSendCommandRequest(params);
         }
-        // keep-sorted end
         // Input module
-        // keep-sorted start block=yes
         parsePerformActionsParams(params) {
             return Input.parsePerformActionsParams(params);
         }
@@ -17894,9 +18023,7 @@
         parseSetFilesParams(params) {
             return Input.parseSetFilesParams(params);
         }
-        // keep-sorted end
         // Network module
-        // keep-sorted start block=yes
         parseAddInterceptParams(params) {
             return Network.parseAddInterceptParameters(params);
         }
@@ -17921,15 +18048,11 @@
         parseSetCacheBehavior(params) {
             return Network.parseSetCacheBehavior(params);
         }
-        // keep-sorted end
         // Permissions module
-        // keep-sorted start block=yes
         parseSetPermissionsParams(params) {
             return Permissions.parseSetPermissionsParams(params);
         }
-        // keep-sorted end
         // Script module
-        // keep-sorted start block=yes
         parseAddPreloadScriptParams(params) {
             return Script.parseAddPreloadScriptParams(params);
         }
@@ -17948,13 +18071,13 @@
         parseRemovePreloadScriptParams(params) {
             return Script.parseRemovePreloadScriptParams(params);
         }
-        // keep-sorted end
         // Session module
-        // keep-sorted start block=yes
         parseSubscribeParams(params) {
             return Session.parseSubscribeParams(params);
         }
-        // keep-sorted end
+        parseUnsubscribeParams(params) {
+            return Session.parseUnsubscribeParams(params);
+        }
         // Storage module
         parseDeleteCookiesParams(params) {
             return Storage.parseDeleteCookiesParams(params);
@@ -18030,6 +18153,7 @@
     class WindowBidiTransport {
         static LOGGER_PREFIX_RECV = `${LogType.bidi}:RECV ◂`;
         static LOGGER_PREFIX_SEND = `${LogType.bidi}:SEND ▸`;
+        static LOGGER_PREFIX_WARN = LogType.debugWarn;
         #onMessage = null;
         constructor() {
             window.onBidiMessage = (message) => {
@@ -18131,6 +18255,7 @@
                 }
             }
             else if (command.channel !== undefined) {
+                log(_a.LOGGER_PREFIX_WARN, 'Legacy `channel` parameter is deprecated and will not supported soon. Use `goog:channel` instead.');
                 const channelType = _a.#getJsonType(command.channel);
                 if (channelType !== 'string') {
                     throw new Error(`Expected string 'channel' but got ${channelType}`);

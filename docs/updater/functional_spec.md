@@ -55,6 +55,22 @@ detect and properly represent any overinstallations of an application, which are
 done by users or third-party software on macOS (and don't otherwise interact
 with the updater).
 
+##### Install ID
+The tag may carry a unique identifier called an "install ID" or "iid". The
+install ID is transmitted back to the server as part of the install event
+associated with running the installer, and as part of the first update check
+for the app that reports activity. It is then deleted from the client. It is not
+sent as part of update event reports, nor as part of non-active update checks,
+nor as part of active update checks after the first.
+
+If a user runs an installer when the software is already installed, the install
+ID for the software will be updated to match, and the new value will be
+transmitted during the install event and the next active update check.
+
+The install ID is meant to enable the app distributor to correlate each
+installer's download with the outcome of running that particular installer, and
+whether or not the installed software is eventually actively used at least once.
+
 #### Elevation (Windows)
 The metainstaller parses its tag and re-launches itself at high integrity if
 it is being run at medium integrity with UAC on and installing an application
@@ -1512,7 +1528,10 @@ event with `"eventtype": 2` indicating the outcome of installation. The updater
 does not send such a ping for its own successful installation, but if the
 updater installation fails, then the updater sends an error event with
 `"eventtype": 2`. For example:
-`"event":[{"errorcode":75075,"eventresult":1,"eventtype":2,`.
+`"event":[{"errorcode":75075,"eventresult":0,"eventtype":2,`.
+
+Or for metainstaller errors in the 73000-73500 range:
+`"event":[{"errorcode":73118,"eventresult":0,"eventtype":2,`.
 
 When the updater updates an application (including itself) it sends an
 event with `"eventtype": 3` indicating the outcome of update operation.
@@ -1532,8 +1551,11 @@ in the order they are returned in the update response.
 
 The integrity of the payload is verified.
 
-There is no download cache. Payloads are re-downloaded for applications which
-fail to install.
+Downloads are cached in the `crx_cache` subdirectory of the program's install
+location. The cache contains at most one item per app ID, in a file named
+`A_F` where A is the app ID and F is the
+[differential update fingerprint](protocol_4.md#differential-updates) of the
+download.
 
 ### Install location
 On Windows for system-scope updaters, the install location for both 32-bit and

@@ -57,11 +57,12 @@ class EnterpriseSearchAggregatorSuggestionsService : public KeyedService {
                               std::unique_ptr<std::string> response_body)>;
 
   void CreateEnterpriseSearchAggregatorSuggestionsRequest(
+      const std::u16string& query,
       const GURL& suggest_url,
-      const std::string& request_body,
       CreationCallback creation_callback,
       StartCallback start_callback,
-      CompletionCallback completion_callback);
+      CompletionCallback completion_callback,
+      bool in_keyword_mode);
 
  private:
   // Called when an access token request completes (successfully or not).

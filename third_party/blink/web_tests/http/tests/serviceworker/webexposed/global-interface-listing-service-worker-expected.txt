@@ -30,6 +30,7 @@ interface AILanguageDetectorFactory
     method create
 interface AILanguageModel : EventTarget
     attribute @@toStringTag
+    getter expectedInputLanguages
     getter maxTokens
     getter oncontextoverflow
     getter temperature
@@ -48,18 +49,31 @@ interface AILanguageModelCapabilities
     getter available
     getter defaultTemperature
     getter defaultTopK
+    getter maxTemperature
     getter maxTopK
     method constructor
     method languageAvailable
 interface AILanguageModelFactory
     attribute @@toStringTag
+    method availability
     method capabilities
     method constructor
     method create
+    method params
+interface AILanguageModelParams
+    attribute @@toStringTag
+    getter defaultTemperature
+    getter defaultTopK
+    getter maxTemperature
+    getter maxTopK
+    method constructor
 interface AIRewriter
     attribute @@toStringTag
+    getter expectedContextLanguages
+    getter expectedInputLanguages
     getter format
     getter length
+    getter outputLanguage
     getter sharedContext
     getter tone
     method constructor
@@ -73,8 +87,11 @@ interface AIRewriterFactory
     method create
 interface AISummarizer
     attribute @@toStringTag
+    getter expectedContextLanguages
+    getter expectedInputLanguages
     getter format
     getter length
+    getter outputLanguage
     getter sharedContext
     getter type
     method constructor
@@ -89,14 +106,18 @@ interface AISummarizerCapabilities
     method languageAvailable
 interface AISummarizerFactory
     attribute @@toStringTag
+    method availability
     method capabilities
     method constructor
     method create
 interface AITranslator
     attribute @@toStringTag
+    getter sourceLanguage
+    getter targetLanguage
     method constructor
     method destroy
     method translate
+    method translateStreaming
 interface AITranslatorCapabilities
     attribute @@toStringTag
     getter available
@@ -109,8 +130,11 @@ interface AITranslatorFactory
     method create
 interface AIWriter
     attribute @@toStringTag
+    getter expectedContextLanguages
+    getter expectedInputLanguages
     getter format
     getter length
+    getter outputLanguage
     getter sharedContext
     getter tone
     method constructor
@@ -1030,7 +1054,6 @@ interface GPUSupportedLimits
     getter maxComputeWorkgroupsPerDimension
     getter maxDynamicStorageBuffersPerPipelineLayout
     getter maxDynamicUniformBuffersPerPipelineLayout
-    getter maxInterStageShaderComponents
     getter maxInterStageShaderVariables
     getter maxSampledTexturesPerShaderStage
     getter maxSamplersPerShaderStage
@@ -1041,7 +1064,6 @@ interface GPUSupportedLimits
     getter maxStorageTexturesInFragmentStage
     getter maxStorageTexturesInVertexStage
     getter maxStorageTexturesPerShaderStage
-    getter maxSubgroupSize
     getter maxTextureArrayLayers
     getter maxTextureDimension1D
     getter maxTextureDimension2D
@@ -1052,7 +1074,6 @@ interface GPUSupportedLimits
     getter maxVertexBufferArrayStride
     getter maxVertexBuffers
     getter minStorageBufferOffsetAlignment
-    getter minSubgroupSize
     getter minUniformBufferOffsetAlignment
     method constructor
 interface GPUTexture

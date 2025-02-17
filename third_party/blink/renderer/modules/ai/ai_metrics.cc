@@ -22,6 +22,8 @@ std::string_view GetAISessionTypeName(AIMetrics::AISessionType session_type) {
       return "Rewriter";
     case AIMetrics::AISessionType::kSummarizer:
       return "Summarizer";
+    case AIMetrics::AISessionType::kTranslator:
+      return "Translator";
   }
   NOTREACHED();
 }
@@ -34,10 +36,9 @@ std::string AIMetrics::GetAIAPIUsageMetricName(AISessionType session_type) {
 }
 
 // static
-std::string AIMetrics::GetAICapabilityAvailabilityMetricName(
-    AISessionType session_type) {
+std::string AIMetrics::GetAIAvailabilityMetricName(AISessionType session_type) {
   return base::StrCat(
-      {"AI.", GetAISessionTypeName(session_type), ".Availability"});
+      {"AI.", GetAISessionTypeName(session_type), ".AvailabilityV2"});
 }
 
 // static

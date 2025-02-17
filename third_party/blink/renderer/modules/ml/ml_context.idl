@@ -126,44 +126,44 @@ dictionary MLNormalizationSupportLimits {
 };
 
 dictionary MLPreluSupportLimits {
-  MLDataTypeLimits input;
-  MLDataTypeLimits slope;
+  MLTensorLimits input;
+  MLTensorLimits slope;
   MLDataTypeLimits output;
 };
 
 dictionary MLQuantizeDequantizeLinearSupportLimits {
-  MLDataTypeLimits input;
-  MLDataTypeLimits scale;
-  MLDataTypeLimits zeroPoint;
+  MLTensorLimits input;
+  MLTensorLimits scale;
+  MLTensorLimits zeroPoint;
   MLDataTypeLimits output;
 };
 
 dictionary MLLogicalNotSupportLimits {
-  MLDataTypeLimits a;
+  MLTensorLimits a;
   MLDataTypeLimits output;
 };
 
 dictionary MLSingleInputSupportLimits {
-  MLDataTypeLimits input;
+  MLTensorLimits input;
   MLDataTypeLimits output;
 };
 
 dictionary MLScatterSupportLimits {
-  MLDataTypeLimits input;
-  MLDataTypeLimits indices;
-  MLDataTypeLimits updates;
+  MLTensorLimits input;
+  MLTensorLimits indices;
+  MLTensorLimits updates;
   MLDataTypeLimits output;
 };
 
 dictionary MLSplitSupportLimits {
-  MLDataTypeLimits input;
+  MLTensorLimits input;
   MLDataTypeLimits outputs;
 };
 
 dictionary MLWhereSupportLimits {
-  MLDataTypeLimits condition;
-  MLDataTypeLimits trueValue;
-  MLDataTypeLimits falseValue;
+  MLTensorLimits condition;
+  MLTensorLimits trueValue;
+  MLTensorLimits falseValue;
   MLDataTypeLimits output;
 };
 

@@ -35,7 +35,6 @@
 #include "third_party/blink/public/common/switches.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/web/web_link_preview_triggerer.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
@@ -56,6 +55,7 @@
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
+#include "third_party/blink/renderer/core/inspector/inspector_audits_issue.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/loader/anchor_element_interaction_tracker.h"
 #include "third_party/blink/renderer/core/loader/frame_load_request.h"
@@ -558,6 +558,9 @@ void HTMLAnchorElementBase::NavigateToHyperlink(
       }
       UseCounter::Count(GetDocument(),
                         WebFeature::kCrossTopLevelSiteBlobURLNavigation);
+      AuditsIssue::ReportPartitioningBlobURLIssue(
+          window, completed_url.GetString(),
+          mojom::blink::PartitioningBlobURLInfo::kEnforceNoopenerForNavigation);
     }
   }
 
@@ -614,14 +617,13 @@ void HTMLAnchorElementBase::NavigateToHyperlink(
   }
 }
 
-void HTMLAnchorElementBase::SetHovered(bool hovered) {
-  HTMLElement::SetHovered(hovered);
-}
-
 Element* HTMLAnchorElementBase::interestTargetElement() {
-  CHECK(RuntimeEnabledFeatures::HTMLInterestTargetAttributeEnabled());
-
-  if (!IsInTreeScope()) {
+  if (!RuntimeEnabledFeatures::HTMLInterestTargetAttributeEnabled()) {
+    return nullptr;
+  }
+  // Anchor elements that don't have the `href` attribute are not interactive,
+  // so they can't support `interesttarget`.
+  if (!IsInTreeScope() || !IsLink()) {
     return nullptr;
   }
 

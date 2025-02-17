@@ -27,6 +27,7 @@ import org.jni_zero.NativeMethods;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
+import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.compositor.layouts.LayoutProvider;
 import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
@@ -60,6 +61,7 @@ public class CompositorView extends FrameLayout
     private CompositorSurfaceManager mCompositorSurfaceManager;
     private boolean mOverlayVideoEnabled;
     private boolean mAlwaysTranslucent;
+    private boolean mIsXrFullSpaceMode;
 
     // Are we waiting to hide the outgoing surface until the foreground has something to display?
     // If == 0, then no.  If > 0, then yes.  We'll hide when it transitions from one to zero.
@@ -68,6 +70,7 @@ public class CompositorView extends FrameLayout
     private long mNativeCompositorView;
     private final LayoutRenderHost mRenderHost;
     private int mPreviousWindowTop = -1;
+    private ActivityTabProvider mActivityTabProvider;
 
     // Resource Management
     private ResourceManager mResourceManager;
@@ -190,6 +193,10 @@ public class CompositorView extends FrameLayout
             initializeIfOnUiThread();
         }
         mRootView = view;
+    }
+
+    public void setActivityTabProvider(ActivityTabProvider provider) {
+        mActivityTabProvider = provider;
     }
 
     @Override
@@ -417,6 +424,25 @@ public class CompositorView extends FrameLayout
         return !mIsInXr && !mSelectionHandlesActive;
     }
 
+    /**
+     * Enables/disables full space mode on Android XR device, a variant of overlay video mode.
+     *
+     * @param enabled Whether to enter or leave overlay full space mode on XR device.
+     */
+    public void setXrFullSpaceMode(boolean enabled) {
+        if (mIsXrFullSpaceMode != enabled) {
+            mIsXrFullSpaceMode = enabled;
+            // Request the new surface as mode has changed. We'll get a synthetic destroy / create /
+            // changed callback in that case, possibly before this returns.
+            mCompositorSurfaceManager.requestSurface(
+                    mIsXrFullSpaceMode ? PixelFormat.TRANSLUCENT : PixelFormat.OPAQUE);
+            // Set space mode environment.
+            CompositorViewJni.get()
+                    .setOverlayXrFullScreenMode(
+                            mNativeCompositorView, CompositorView.this, enabled);
+        }
+    }
+
     @Override
     public void surfaceRedrawNeededAsync(Runnable drawingFinished) {
         // Do not hold onto more than one draw callback, to prevent deadlock.
@@ -477,7 +503,12 @@ public class CompositorView extends FrameLayout
         if (InputUtils.isTransferInputToVizSupported()
                 && surfaceId != null
                 && browserInputToken != null) {
-            InputTransferHandler handler = new InputTransferHandler(browserInputToken);
+
+            InputTransferHandlerDelegate delegate =
+                    new InputTransferHandlerDelegate(mActivityTabProvider);
+            InputTransferHandler handler =
+                    new InputTransferHandler(browserInputToken, delegate, mWindowAndroid);
+
             assert mSurfaceId == null;
             mSurfaceId = surfaceId;
             SurfaceInputTransferHandlerMap.getMap().put(mSurfaceId, handler);
@@ -515,7 +546,7 @@ public class CompositorView extends FrameLayout
             mScreenStateReceiver.maybeResetCompositorSurfaceManager();
         }
         if (InputUtils.isTransferInputToVizSupported() && mSurfaceId != null) {
-            SurfaceInputTransferHandlerMap.getMap().remove(mSurfaceId);
+            SurfaceInputTransferHandlerMap.remove(mSurfaceId);
             mSurfaceId = null;
         }
     }
@@ -839,6 +870,9 @@ public class CompositorView extends FrameLayout
         void setOverlayVideoMode(long nativeCompositorView, CompositorView caller, boolean enabled);
 
         void setOverlayImmersiveArMode(
+                long nativeCompositorView, CompositorView caller, boolean enabled);
+
+        void setOverlayXrFullScreenMode(
                 long nativeCompositorView, CompositorView caller, boolean enabled);
 
         void setSceneLayer(long nativeCompositorView, CompositorView caller, SceneLayer sceneLayer);

@@ -13,6 +13,7 @@
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/page_content_annotations/page_content_annotations_service_factory.h"
 #include "chrome/browser/passage_embeddings/chrome_passage_embeddings_service_controller.h"
+#include "chrome/browser/passage_embeddings/passage_embedder_model_observer_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
@@ -21,11 +22,12 @@
 #include "components/history_embeddings/history_embeddings_features.h"
 #include "components/history_embeddings/history_embeddings_service.h"
 #include "components/history_embeddings/ml_answerer.h"
-#include "components/history_embeddings/ml_embedder.h"
 #include "components/history_embeddings/ml_intent_classifier.h"
 #include "components/history_embeddings/mock_answerer.h"
 #include "components/history_embeddings/mock_intent_classifier.h"
 #include "components/keyed_service/core/service_access_type.h"
+#include "components/passage_embeddings/ml_embedder.h"
+#include "components/passage_embeddings/mock_embedder.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/profiles/profile_helper.h"
@@ -83,7 +85,6 @@ HistoryEmbeddingsServiceFactory::GetInstance() {
 std::unique_ptr<KeyedService> HistoryEmbeddingsServiceFactory::
     BuildServiceInstanceForBrowserContextForTesting(
         content::BrowserContext* context,
-        std::unique_ptr<history_embeddings::Embedder> embedder,
         std::unique_ptr<history_embeddings::Answerer> answerer,
         std::unique_ptr<history_embeddings::IntentClassifier>
             intent_classifier) {
@@ -92,12 +93,16 @@ std::unique_ptr<KeyedService> HistoryEmbeddingsServiceFactory::
     return nullptr;
   }
 
+  std::unique_ptr<passage_embeddings::Embedder> embedder =
+      std::make_unique<passage_embeddings::MockEmbedder>();
+
   return std::make_unique<history_embeddings::ChromeHistoryEmbeddingsService>(
       profile,
       HistoryServiceFactory::GetForProfile(profile,
                                            ServiceAccessType::EXPLICIT_ACCESS),
       PageContentAnnotationsServiceFactory::GetForProfile(profile),
       OptimizationGuideKeyedServiceFactory::GetForProfile(profile),
+      passage_embeddings::ChromePassageEmbeddingsServiceController::Get(),
       std::move(embedder), std::move(answerer), std::move(intent_classifier));
 }
 
@@ -113,6 +118,8 @@ HistoryEmbeddingsServiceFactory::HistoryEmbeddingsServiceFactory()
   DependsOn(HistoryServiceFactory::GetInstance());
   DependsOn(PageContentAnnotationsServiceFactory::GetInstance());
   DependsOn(OptimizationGuideKeyedServiceFactory::GetInstance());
+  DependsOn(
+      passage_embeddings::PassageEmbedderModelObserverFactory::GetInstance());
 }
 
 HistoryEmbeddingsServiceFactory::~HistoryEmbeddingsServiceFactory() = default;
@@ -127,6 +134,10 @@ HistoryEmbeddingsServiceFactory::BuildServiceInstanceForBrowserContext(
 
   OptimizationGuideKeyedService* optimization_guide_keyed_service =
       OptimizationGuideKeyedServiceFactory::GetForProfile(profile);
+
+  std::unique_ptr<passage_embeddings::Embedder> embedder =
+      passage_embeddings::ChromePassageEmbeddingsServiceController::Get()
+          ->MakeEmbedder();
 
   std::unique_ptr<history_embeddings::Answerer> answerer;
   if (history_embeddings::IsHistoryEmbeddingsAnswersFeatureEnabled()) {
@@ -156,8 +167,6 @@ HistoryEmbeddingsServiceFactory::BuildServiceInstanceForBrowserContext(
                                            ServiceAccessType::EXPLICIT_ACCESS),
       PageContentAnnotationsServiceFactory::GetForProfile(profile),
       optimization_guide_keyed_service,
-      std::make_unique<history_embeddings::MlEmbedder>(
-          optimization_guide_keyed_service,
-          passage_embeddings::ChromePassageEmbeddingsServiceController::Get()),
-      std::move(answerer), std::move(intent_classifier));
+      passage_embeddings::ChromePassageEmbeddingsServiceController::Get(),
+      std::move(embedder), std::move(answerer), std::move(intent_classifier));
 }

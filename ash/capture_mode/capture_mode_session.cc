@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -33,6 +34,7 @@
 #include "ash/capture_mode/recording_type_menu_view.h"
 #include "ash/capture_mode/search_results_panel.h"
 #include "ash/capture_mode/user_nudge_controller.h"
+#include "ash/constants/ash_pref_names.h"
 #include "ash/display/mouse_cursor_event_filter.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
@@ -59,10 +61,12 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
+#include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "cc/paint/paint_flags.h"
 #include "components/prefs/pref_service.h"
 #include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
@@ -206,9 +210,56 @@ constexpr float kRegionDefaultRatio = 0.24f;
 // The spacing between the feedback button and the work area.
 constexpr int kFeedbackButtonSpacing = 10;
 
+// The radius of the painted capture region when in sunfish mode.
+constexpr int kSunfishModeCaptureRegionRadiusDp = 16;
+
+// The width of the border around the capture region when selecting or adjusting
+// a region in sunfish mode.
+constexpr int kSunfishModeCaptureRegionBorderWidthDp = 6;
+
+// The radius of the focus ring drawn around the whole capture region in sunfish
+// mode.
+constexpr int kSunfishRegionFocusRingRadiusDp = 18;
+
+// The radius of the focus ring drawn around a corner handle of the capture
+// region in sunfish mode.
+constexpr int kSunfishRegionCornerFocusRingRadiusDp = 16;
+
+// The offset between a corner of a sunfish capture region and the center of the
+// the corresponding corner handle. This is used to move the focus ring and hit
+// test rect slightly inwards towards the capture region, to center it around
+// the rounded corner.
+constexpr int kSunfishRegionRoundedCornerOffsetDp =
+    kSunfishModeCaptureRegionRadiusDp / 2;
+
+// The damage outset from the edge of the capture region to repaint when
+// updating the capture region in sunfish mode. The value here is just a
+// heuristic but should be enough to cover all relevant UI around the capture
+// region.
+constexpr int kSunfishRegionDamageOutsetDp =
+    kSunfishModeCaptureRegionBorderWidthDp +
+    kSunfishRegionCornerFocusRingRadiusDp;
+
 // The animation duration for fading in Scanner action buttons.
 constexpr base::TimeDelta kScannerActionButtonFadeInDuration =
     base::Milliseconds(100);
+
+// The delay before sending out an image search request after a capture region
+// is adjusted using keyboard events. This is to prevent too many requests if
+// the user needs to repeatedly adjust the capture region. Note that this delay
+// does not apply to region adjustments that end in a mouse release event.
+constexpr base::TimeDelta kImageSearchRequestStartDelay = base::Seconds(1);
+
+// The preferred alignment of a widget positioned near the capture region.
+enum class CaptureRegionWidgetAlignment {
+  // At the center of the capture region.
+  kCenter,
+  // Right-aligned with the capture region (i.e. the right edges of the widget
+  // and capture region align). We prefer to right-align the widget below the
+  // capture region if possible, otherwise will try to right-align above the
+  // capture region.
+  kRight,
+};
 
 // Mouse cursor warping is disabled when the capture source is a custom region.
 // Sets the mouse warp status to |enable| and return the original value.
@@ -387,28 +438,56 @@ bool IsWidgetOverlappedWithCameraPreview(views::Widget* widget) {
              widget->GetWindowBoundsInScreen());
 }
 
+int GetHitTestRadiusForFineTunePosition(bool is_touch,
+                                        FineTunePosition position,
+                                        CaptureModeBehavior* active_behavior) {
+  if (is_touch) {
+    return kAffordanceCircleTouchHitRadiusDp;
+  }
+
+  if (active_behavior->ShouldPaintSunfishCaptureRegion() &&
+      capture_mode_util::IsCornerFineTunePosition(position)) {
+    return kSunfishRegionCornerFocusRingRadiusDp;
+  }
+
+  return kAffordanceCircleRadiusDp;
+}
+
 gfx::Rect GetHitTestRectAroundPoint(gfx::Point point, int hit_radius) {
   return gfx::Rect(point.x() - hit_radius, point.y() - hit_radius,
                    hit_radius * 2, hit_radius * 2);
 }
 
 gfx::Rect GetHitTestRectForFineTunePosition(
-    int hit_radius,
     const gfx::Rect& capture_region_in_screen,
-    FineTunePosition position) {
+    FineTunePosition position,
+    bool is_touch,
+    CaptureModeBehavior* active_behavior) {
+  const int hit_radius =
+      GetHitTestRadiusForFineTunePosition(is_touch, position, active_behavior);
+
+  // In sunfish mode, the capture region is painted with rounded corners. Inset
+  // the capture region if needed so that the hit test rect is centered around
+  // the corner drag handle.
+  gfx::Rect corner_adjusted_capture_region = capture_region_in_screen;
+  if (active_behavior->ShouldPaintSunfishCaptureRegion() &&
+      capture_mode_util::IsCornerFineTunePosition(position)) {
+    corner_adjusted_capture_region.Inset(kSunfishRegionRoundedCornerOffsetDp);
+  }
+
   switch (position) {
     case FineTunePosition::kTopLeftVertex:
-      return GetHitTestRectAroundPoint(capture_region_in_screen.origin(),
+      return GetHitTestRectAroundPoint(corner_adjusted_capture_region.origin(),
                                        hit_radius);
     case FineTunePosition::kTopRightVertex:
-      return GetHitTestRectAroundPoint(capture_region_in_screen.top_right(),
-                                       hit_radius);
+      return GetHitTestRectAroundPoint(
+          corner_adjusted_capture_region.top_right(), hit_radius);
     case FineTunePosition::kBottomRightVertex:
-      return GetHitTestRectAroundPoint(capture_region_in_screen.bottom_right(),
-                                       hit_radius);
+      return GetHitTestRectAroundPoint(
+          corner_adjusted_capture_region.bottom_right(), hit_radius);
     case FineTunePosition::kBottomLeftVertex:
-      return GetHitTestRectAroundPoint(capture_region_in_screen.bottom_left(),
-                                       hit_radius);
+      return GetHitTestRectAroundPoint(
+          corner_adjusted_capture_region.bottom_left(), hit_radius);
     case FineTunePosition::kTopEdge:
     case FineTunePosition::kBottomEdge: {
       const gfx::Size horizontal_size(
@@ -439,10 +518,12 @@ gfx::Rect GetHitTestRectForFineTunePosition(
 // Calculates the bounds for a widget of `preferred_size` so that it appears
 // along one of the edges of `capture_bounds`, or slightly above
 // `capture_bar_bounds` if there is not a good edge.
-gfx::Rect CalculateRegionEdgeBounds(const gfx::Size& preferred_size,
-                                    const gfx::Rect& capture_bar_root_bounds,
-                                    const gfx::Rect& capture_region_root_bounds,
-                                    aura::Window* root) {
+gfx::Rect CalculateRegionEdgeBounds(
+    const gfx::Size& preferred_size,
+    const gfx::Rect& capture_bar_root_bounds,
+    const gfx::Rect& capture_region_root_bounds,
+    aura::Window* root,
+    CaptureRegionWidgetAlignment preferred_alignment) {
   // The capture button may be placed along the edge of a capture region if it
   // cannot be placed in the middle. This enum represents the possible edges.
   enum class Direction { kBottom, kTop, kLeft, kRight };
@@ -453,21 +534,29 @@ gfx::Rect CalculateRegionEdgeBounds(const gfx::Size& preferred_size,
   const std::vector<Direction> directions = {
       Direction::kBottom, Direction::kTop, Direction::kLeft, Direction::kRight};
 
-  // For each direction, start off with the label in the center of
-  // |capture_bounds| (matching centerpoints). We will shift the label to
-  // slightly outside |capture_bounds| for each direction.
-  gfx::Rect centered_widget_bounds(preferred_size);
-  centered_widget_bounds.set_x(capture_region_root_bounds.CenterPoint().x() -
-                               preferred_size.width() / 2);
-  centered_widget_bounds.set_y(capture_region_root_bounds.CenterPoint().y() -
-                               preferred_size.height() / 2);
+  // Start off with the bounds at the preferred horizontal position but centered
+  // vertically. We will shift the bounds to slightly outside `capture_bounds`
+  // for each direction if needed.
+  gfx::Rect initial_bounds(preferred_size);
+  switch (preferred_alignment) {
+    case CaptureRegionWidgetAlignment::kCenter:
+      initial_bounds.set_x(capture_region_root_bounds.CenterPoint().x() -
+                           preferred_size.width() / 2);
+      break;
+    case CaptureRegionWidgetAlignment::kRight:
+      initial_bounds.set_x(capture_region_root_bounds.right() -
+                           preferred_size.width());
+      break;
+  }
+  initial_bounds.set_y(capture_region_root_bounds.CenterPoint().y() -
+                       preferred_size.height() / 2);
   const int spacing = CaptureModeSession::kCaptureButtonDistanceFromRegionDp;
 
   // Try the directions in the preferred order. We will early out if one of
   // them is viable.
   gfx::Rect widget_bounds;
   for (Direction direction : directions) {
-    widget_bounds = centered_widget_bounds;
+    widget_bounds = initial_bounds;
 
     switch (direction) {
       case Direction::kBottom:
@@ -1405,7 +1494,7 @@ ActionButtonView* CaptureModeSession::AddActionButton(
   // Another process may try to add an action button before the container is
   // created, or while it is invalid. In these cases, we don't want to do
   // anything.
-  if (!action_container_widget_ || !action_container_widget_->IsVisible()) {
+  if (!action_container_widget_) {
     return nullptr;
   }
 
@@ -1425,7 +1514,8 @@ ActionButtonView* CaptureModeSession::AddActionButton(
 }
 
 void CaptureModeSession::AddSmartActionsButton() {
-  if (active_behavior_->CanShowSmartActionsButton()) {
+  if (active_behavior_->CanShowSmartActionsButton() &&
+      !controller_->IsNetworkConnectionOffline()) {
     RecordScannerFeatureUserState(
         ScannerFeatureUserState::kScreenCaptureModeScannerButtonShown);
     // TODO(crbug.com/375967525): Finalize and translate the smart actions
@@ -1439,21 +1529,53 @@ void CaptureModeSession::AddSmartActionsButton() {
   }
 }
 
+void CaptureModeSession::MaybeShowScannerDisclaimer(
+    base::RepeatingClosure accept_callback,
+    base::RepeatingClosure decline_callback) {
+  if (capture_mode_util::GetActiveUserPrefService()->GetBoolean(
+          prefs::kSunfishConsentDisclaimerAccepted)) {
+    if (accept_callback) {
+      std::move(accept_callback).Run();
+    }
+    return;
+  }
+  disclaimer_ = DisclaimerView::CreateWidget(
+      capture_mode_util::GetPreferredRootWindow(),
+      base::BindRepeating(&CaptureModeSession::OnDisclaimerAccepted,
+                          weak_ptr_factory_.GetWeakPtr(),
+                          std::move(accept_callback)),
+      base::BindRepeating(&CaptureModeSession::OnDisclaimerDeclined,
+                          weak_ptr_factory_.GetWeakPtr(),
+                          std::move(decline_callback)));
+  disclaimer_->Show();
+}
+
 void CaptureModeSession::OnScannerActionsFetched(
-    std::vector<ScannerActionViewModel> scanner_actions) {
-  // TODO(crbug.com/374381937): We should also account for other types of
-  // processing, e.g. OCR. The glow should be paused whenever all processing
-  // has finished.
+    ScannerSession::FetchActionsResponse actions_response) {
   CHECK(capture_region_overlay_controller_);
   capture_region_overlay_controller_->PauseGlowAnimation();
 
+  // Create the action container widget if needed.
+  UpdateActionContainerWidget();
+  if (!action_container_widget_) {
+    return;
+  }
+
+  if (!actions_response.has_value()) {
+    action_container_view_->ShowErrorView(
+        actions_response.error(),
+        base::BindRepeating(&CaptureModeSession::OnScannerTryAgainPressed,
+                            weak_ptr_factory_.GetWeakPtr()));
+    UpdateActionContainerWidget();
+    return;
+  }
+
   // This is inefficient, as we repeatedly sort, insert and recalculate the
-  // bounds for buttons one-by-one.
-  // TODO: b/369470078 - Fix this inefficiency by adding multiple action buttons
-  // simultaneously.
-  int size = static_cast<int>(scanner_actions.size());
+  // bounds for buttons one-by-one. However, this is ok since there can only be
+  // a small number of action buttons.
+  int size = static_cast<int>(actions_response->size());
   for (int i = 0; i < size; ++i) {
-    ScannerActionViewModel& action = scanner_actions[i];
+    ScannerActionViewModel& action = actions_response.value()[i];
     std::u16string text = action.GetText();
     const gfx::VectorIcon& icon = action.GetIcon();
     base::RepeatingClosure pressed_callback =
@@ -1469,37 +1591,19 @@ void CaptureModeSession::OnScannerActionsFetched(
   }
 }
 
-void CaptureModeSession::MaybeShowDisclaimer(
-    base::RepeatingClosure accept_callback) {
-  if (capture_mode_util::GetActiveUserPrefService()->GetBoolean(
-          capture_mode::kSunfishConsentDisclaimerAccepted)) {
-    if (accept_callback) {
-      std::move(accept_callback).Run();
-    }
+void CaptureModeSession::ShowActionContainerError(
+    const std::u16string& error_message) {
+  if (!action_container_widget_) {
     return;
   }
-  disclaimer_ = DisclaimerView::CreateWidget(
-      capture_mode_util::GetPreferredRootWindow(),
-      base::BindRepeating(&CaptureModeSession::OnDisclaimerAccepted,
-                          weak_ptr_factory_.GetWeakPtr(),
-                          std::move(accept_callback)),
-      base::BindRepeating(&CaptureModeSession::OnDisclaimerDeclined,
-                          weak_ptr_factory_.GetWeakPtr()));
-  disclaimer_->Show();
+  CHECK(action_container_view_);
+  action_container_view_->ShowErrorView(error_message);
+  UpdateActionContainerWidget();
 }
 
-void CaptureModeSession::OnDisclaimerDeclined() {
+void CaptureModeSession::OnDisclaimerDeclined(base::RepeatingClosure callback) {
   RecordScannerFeatureUserState(
       ScannerFeatureUserState::kConsentDisclaimerRejected);
-
-  disclaimer_.reset();
-}
-
-void CaptureModeSession::OnDisclaimerAccepted(base::RepeatingClosure callback) {
-  RecordScannerFeatureUserState(
-      ScannerFeatureUserState::kConsentDisclaimerAccepted);
-  capture_mode_util::GetActiveUserPrefService()->SetBoolean(
-      capture_mode::kSunfishConsentDisclaimerAccepted, true);
 
   disclaimer_.reset();
   if (callback) {
@@ -1507,13 +1611,33 @@ void CaptureModeSession::OnDisclaimerAccepted(base::RepeatingClosure callback) {
   }
 }
 
-void CaptureModeSession::OnSmartActionsButtonPressed() {
-  MaybeShowDisclaimer(base::BindRepeating(
-      &CaptureModeSession::OnSmartActionsButtonDisclaimerCheckSuccess,
-      weak_ptr_factory_.GetWeakPtr()));
+void CaptureModeSession::OnDisclaimerAccepted(base::RepeatingClosure callback) {
+  RecordScannerFeatureUserState(
+      ScannerFeatureUserState::kConsentDisclaimerAccepted);
+  capture_mode_util::GetActiveUserPrefService()->SetBoolean(
+      prefs::kSunfishConsentDisclaimerAccepted, true);
+
+  disclaimer_.reset();
+  if (callback) {
+    std::move(callback).Run();
+  }
+}
+
+  void CaptureModeSession::OnSmartActionsButtonPressed() {
+  MaybeShowScannerDisclaimer(
+      /*accept_callback=*/base::BindRepeating(
+          &CaptureModeSession::OnSmartActionsButtonDisclaimerCheckSuccess,
+          weak_ptr_factory_.GetWeakPtr()),
+      /*decline_callback=*/base::DoNothing());
 }
 
 void CaptureModeSession::OnSmartActionsButtonDisclaimerCheckSuccess() {
+  if (controller_->IsNetworkConnectionOffline()) {
+    ShowActionContainerError(l10n_util::GetStringUTF16(
+        IDS_ASH_SCREEN_CAPTURE_ACTION_ATTEMPTED_OFFLINE_ERROR));
+    return;
+  }
+
   CHECK(action_container_view_);
   action_container_view_->StartSmartActionsButtonTransition();
 
@@ -1521,7 +1645,7 @@ void CaptureModeSession::OnSmartActionsButtonDisclaimerCheckSuccess() {
   auto* scanner_controller = Shell::Get()->scanner_controller();
   CHECK(scanner_controller);
   scanner_controller->StartNewSession();
-  controller_->PerformImageSearch(PerformCaptureType::kScanner);
+  controller_->PerformCapture(PerformCaptureType::kScanner);
 }
 
 void CaptureModeSession::OnScannerActionButtonPressed(
@@ -1530,6 +1654,13 @@ void CaptureModeSession::OnScannerActionButtonPressed(
   controller_->CloseSearchResultsPanel();
   // End the session. `this` is destroyed here.
   controller_->Stop();
+}
+
+void CaptureModeSession::OnScannerTryAgainPressed() {
+  CHECK(action_container_view_);
+  action_container_view_->HideErrorView();
+  UpdateActionContainerWidget();
+  controller_->PerformCapture(PerformCaptureType::kScanner);
 }
 
 void CaptureModeSession::OnPaintLayer(const ui::PaintContext& context) {
@@ -2028,6 +2159,11 @@ void CaptureModeSession::RefreshStackingOrder() {
 }
 
 void CaptureModeSession::PaintCaptureRegion(gfx::Canvas* canvas) {
+  if (active_behavior_->ShouldPaintSunfishCaptureRegion()) {
+    PaintSunfishCaptureRegion(canvas);
+    return;
+  }
+
   gfx::Rect region;
   bool adjustable_region = false;
 
@@ -2144,6 +2280,167 @@ void CaptureModeSession::PaintCaptureRegion(gfx::Canvas* canvas) {
   draw_circle(region.left_center());
 
   maybe_draw_focus_ring(focused_fine_tune_position);
+}
+
+void CaptureModeSession::PaintSunfishCaptureRegion(gfx::Canvas* canvas) {
+  gfx::Rect region = controller_->user_capture_region();
+  if (region.IsEmpty()) {
+    return;
+  }
+
+  gfx::ScopedCanvas scoped_canvas(canvas);
+  const float dsf = canvas->UndoDeviceScaleFactor();
+  region = gfx::ScaleToEnclosingRect(region, dsf);
+
+  const auto* color_provider = GetColorProviderSource()->GetColorProvider();
+
+  if (capture_region_overlay_controller_ &&
+      active_behavior_->CanPaintRegionOverlay()) {
+    // Draw a glow effect around the capture region if needed. Note that this
+    // needs to be drawn before the region mask and region border are drawn,
+    // since the glow should not cover those parts of the UI.
+    capture_region_overlay_controller_->PaintCurrentGlowState(*canvas, region,
+                                                              color_provider);
+  }
+
+  // Clear the area over the capture region.
+  cc::PaintFlags region_mask_flags;
+  region_mask_flags.setStyle(cc::PaintFlags::kFill_Style);
+  region_mask_flags.setAntiAlias(true);
+  region_mask_flags.setBlendMode(SkBlendMode::kClear);
+  canvas->DrawRoundRect(region, kSunfishModeCaptureRegionRadiusDp,
+                        region_mask_flags);
+
+  // Draw the region border if the user is currently selecting a capture region.
+  // Note that this doesn't include fine tune phases where the user adjusts the
+  // capture region.
+  if (is_selecting_region_) {
+    cc::PaintFlags border_flags;
+    border_flags.setShader(gfx::CreateGradientShader(
+        region.origin(), region.top_right(),
+        color_provider->GetColor(cros_tokens::kCrosSysMuted),
+        color_provider->GetColor(cros_tokens::kCrosSysComplement)));
+    border_flags.setStyle(cc::PaintFlags::kStroke_Style);
+    border_flags.setStrokeWidth(kSunfishModeCaptureRegionBorderWidthDp);
+    border_flags.setAntiAlias(true);
+    border_flags.setLooper(gfx::CreateShadowDrawLooper({kRegionOutlineShadow}));
+    canvas->DrawRoundRect(region, kSunfishModeCaptureRegionRadiusDp,
+                          border_flags);
+  }
+
+  // If the user is currently selecting or adjusting the capture region, there
+  // is no need to paint drag handles so we can early return.
+  if (is_selecting_region_ || fine_tune_position_ != FineTunePosition::kNone) {
+    return;
+  }
+
+  // Draw circular drag handles at the center of each edge of the capture
+  // region.
+  cc::PaintFlags circle_flags;
+  circle_flags.setColor(capture_mode::kRegionBorderColor);
+  circle_flags.setStyle(cc::PaintFlags::kFill_Style);
+  circle_flags.setAntiAlias(true);
+  circle_flags.setLooper(gfx::CreateShadowDrawLooper(
+      {kRegionAffordanceCircleShadow1, kRegionAffordanceCircleShadow2}));
+  auto draw_circle = [&canvas, &circle_flags,
+                      &dsf](const gfx::Point& location) {
+    canvas->DrawCircle(location, dsf * kAffordanceCircleRadiusDp, circle_flags);
+  };
+
+  draw_circle(region.top_center());
+  draw_circle(region.right_center());
+  draw_circle(region.bottom_center());
+  draw_circle(region.left_center());
+
+  // Draw drag handles at each corner of the capture region. Each handle is a
+  // quarter arc with rounded ends.
+  cc::PaintFlags corner_arc_flags;
+  corner_arc_flags.setColor(capture_mode::kRegionBorderColor);
+  corner_arc_flags.setStyle(cc::PaintFlags::kStroke_Style);
+  corner_arc_flags.setAntiAlias(true);
+  corner_arc_flags.setLooper(gfx::CreateShadowDrawLooper(
+      {kRegionAffordanceCircleShadow1, kRegionAffordanceCircleShadow2}));
+  corner_arc_flags.setStrokeWidth(kSunfishModeCaptureRegionBorderWidthDp);
+  // Make the ends of each arc rounded.
+  corner_arc_flags.setStrokeCap(cc::PaintFlags::Cap::kRound_Cap);
+  const float arc_diameter = dsf * 2 * kSunfishModeCaptureRegionRadiusDp;
+  // Draws a 90 degree arc from the circle with diameter `arc_diameter`,
+  // leftmost coordinate `circle_left`, and topmost coordinate `circle_top`.
+  // `start_angle` indicates the starting angle of the arc in degrees, measured
+  // clockwise from the positive x-axis. The arc is drawn clockwise from the
+  // specified `start_angle`.
+  auto draw_corner_arc = [&canvas, &corner_arc_flags, &arc_diameter](
+                             int circle_left, int circle_top,
+                             SkScalar start_angle) {
+    SkPath corner_arc;
+    corner_arc.arcTo(/*oval=*/SkRect::MakeXYWH(circle_left, circle_top,
+                                               arc_diameter, arc_diameter),
+                     /*startAngle=*/start_angle,
+                     /*sweepAngle=*/90, /*forceMoveTo=*/false);
+    canvas->DrawPath(corner_arc, corner_arc_flags);
+  };
+
+  // Top left handle.
+  draw_corner_arc(/*circle_left=*/region.x(), /*circle_top=*/region.y(),
+                  /*start_angle=*/180);
+  // Top right handle.
+  draw_corner_arc(/*circle_left=*/region.right() - arc_diameter,
+                  /*circle_top=*/region.y(),
+                  /*start_angle=*/270);
+  // Bottom right handle.
+  draw_corner_arc(
+      /*circle_left=*/region.right() - arc_diameter,
+      /*circle_top=*/region.bottom() - arc_diameter,
+      /*start_angle=*/0);
+  // Bottom left handle.
+  draw_corner_arc(/*circle_left=*/region.x(),
+                  /*circle_top=*/region.bottom() - arc_diameter,
+                  /*start_angle=*/90);
+
+  // Draw a focus ring if the region or one of the drag handles circles
+  // currently has focus.
+  cc::PaintFlags focus_ring_flags;
+  focus_ring_flags.setAntiAlias(true);
+  focus_ring_flags.setColor(color_provider->GetColor(ui::kColorAshFocusRing));
+  focus_ring_flags.setStyle(cc::PaintFlags::kStroke_Style);
+  focus_ring_flags.setStrokeWidth(kFocusRingStrokeWidthDp);
+  const FineTunePosition focused_fine_tune_position =
+      focus_cycler_->GetFocusedFineTunePosition();
+  switch (focused_fine_tune_position) {
+    case FineTunePosition::kNone:
+      break;
+    case FineTunePosition::kCenter: {
+      gfx::RectF focus_rect(region);
+      focus_rect.Outset(kFocusRingSpacingDp + kFocusRingStrokeWidthDp / 2);
+      canvas->DrawRoundRect(focus_rect, kSunfishRegionFocusRingRadiusDp,
+                            focus_ring_flags);
+      break;
+    }
+    case FineTunePosition::kTopLeftVertex:
+    case FineTunePosition::kTopRightVertex:
+    case FineTunePosition::kBottomRightVertex:
+    case FineTunePosition::kBottomLeftVertex: {
+      const float radius = dsf * (kSunfishRegionCornerFocusRingRadiusDp +
+                                  kFocusRingStrokeWidthDp / 2);
+      region.Inset(kSunfishRegionRoundedCornerOffsetDp);
+      canvas->DrawCircle(capture_mode_util::GetLocationForFineTunePosition(
+                             region, focused_fine_tune_position),
+                         radius, focus_ring_flags);
+      break;
+    }
+    case FineTunePosition::kTopEdge:
+    case FineTunePosition::kRightEdge:
+    case FineTunePosition::kBottomEdge:
+    case FineTunePosition::kLeftEdge: {
+      const float radius =
+          dsf * (kAffordanceCircleRadiusDp + kFocusRingSpacingDp +
+                 kFocusRingStrokeWidthDp / 2);
+      canvas->DrawCircle(capture_mode_util::GetLocationForFineTunePosition(
+                             region, focused_fine_tune_position),
+                         radius, focus_ring_flags);
+      break;
+    }
+  }
 }
 
 void CaptureModeSession::MaybePaintCaptureRegionOverlay(
@@ -2444,11 +2741,9 @@ FineTunePosition CaptureModeSession::GetFineTunePosition(
       FineTunePosition::kBottomEdge,        FineTunePosition::kLeftEdge,
       FineTunePosition::kTopEdge,           FineTunePosition::kRightEdge};
 
-  const int hit_radius =
-      is_touch ? kAffordanceCircleTouchHitRadiusDp : kAffordanceCircleRadiusDp;
   for (FineTunePosition position : drag_positions) {
-    if (GetHitTestRectForFineTunePosition(hit_radius, capture_region_in_screen,
-                                          position)
+    if (GetHitTestRectForFineTunePosition(capture_region_in_screen, position,
+                                          is_touch, active_behavior_)
             .Contains(location_in_screen)) {
       return position;
     }
@@ -2500,7 +2795,7 @@ void CaptureModeSession::OnLocatedEventPressed(
 
   // The capture region will be changing, so remove any existing action buttons,
   // if any, as they will no longer be applicable.
-  RemoveAllActionButtons();
+  ClearActionContainer();
 
   if (fine_tune_position_ == FineTunePosition::kNone) {
     // If the point is outside the capture region and not on the capture bar or
@@ -2650,18 +2945,35 @@ void CaptureModeSession::UpdateCaptureRegion(
     // enough to also cover the border and affordance circles.
     damage_region.Outset(kDamageWithGlowOutsetDp);
   } else {
-    damage_region.Outset(kDamageOutsetDp);
+    damage_region.Outset(active_behavior_->ShouldPaintSunfishCaptureRegion()
+                             ? kSunfishRegionDamageOutsetDp
+                             : kDamageOutsetDp);
   }
   layer()->SchedulePaint(damage_region);
 
   controller_->SetUserCaptureRegion(new_capture_region, by_user);
+  InvalidateImageSearch();
+  ClearActionContainer();
   UpdateDimensionsLabelWidget(is_resizing);
   UpdateCaptureLabelWidget(CaptureLabelAnimation::kNone);
-  UpdateActionContainerWidget();
-  if (ShowDefaultActionButtonsOrPerformSearch()) {
-    return;
-  }
-  InvalidateImageSearch();
+
+  // Start a timer to request default actions or perform search after a delay.
+  // This is to prevent too many requests if the user needs to repeatedly adjust
+  // the capture region. Note that this delay does not apply to region
+  // adjustments that end in a mouse release event, since those follow a
+  // separate codepath in `OnLocatedEventReleased`.
+  image_search_request_timer_.Start(
+      FROM_HERE, kImageSearchRequestStartDelay,
+      base::BindOnce(
+          [](base::WeakPtr<CaptureModeSession> capture_mode_session) {
+            if (capture_mode_session) {
+              // The following may end the session and delete
+              // `capture_mode_session`, but we can ignore the result here.
+              std::ignore = capture_mode_session
+                                ->ShowDefaultActionButtonsOrPerformSearch();
+            }
+          },
+          weak_ptr_factory_.GetWeakPtr()));
 }
 
 void CaptureModeSession::UpdateDimensionsLabelWidget(bool is_resizing) {
@@ -2928,7 +3240,8 @@ gfx::Rect CaptureModeSession::CalculateCaptureLabelWidgetBounds() {
     }
 
     return CalculateRegionEdgeBounds(preferred_size, capture_bar_bounds,
-                                     capture_bounds, root);
+                                     capture_bounds, root,
+                                     CaptureRegionWidgetAlignment::kCenter);
   };
 
   gfx::Rect bounds(current_root_->bounds());
@@ -3028,7 +3341,9 @@ void CaptureModeSession::EndSelection(
 
 void CaptureModeSession::RepaintRegion() {
   gfx::Rect damage_region = controller_->user_capture_region();
-  damage_region.Outset(kDamageOutsetDp);
+  damage_region.Outset(active_behavior_->ShouldPaintSunfishCaptureRegion()
+                           ? kSunfishRegionDamageOutsetDp
+                           : kDamageOutsetDp);
   layer()->SchedulePaint(damage_region);
 }
 
@@ -3226,7 +3541,7 @@ void CaptureModeSession::UpdateActionContainerWidget() {
     if (action_container_widget_ && action_container_widget_->IsVisible()) {
       // It is inefficient to destroy and recreate the widget if a drag is in
       // progress.
-      RemoveAllActionButtons();
+      action_container_view_->ClearContainer();
       action_container_widget_->Hide();
     }
     return;
@@ -3240,6 +3555,11 @@ void CaptureModeSession::UpdateActionContainerWidget() {
 
     action_container_view_ = action_container_widget_->SetContentsView(
         std::make_unique<ActionButtonContainerView>());
+  }
+
+  if (action_container_view_->GetPreferredSize().IsEmpty()) {
+    action_container_widget_->Hide();
+    return;
   }
 
   action_container_widget_->Show();
@@ -3259,23 +3579,27 @@ gfx::Rect CaptureModeSession::CalculateActionContainerWidgetBounds() const {
 
   const gfx::Rect capture_region = controller_->user_capture_region();
   gfx::Rect bounds = CalculateRegionEdgeBounds(
-      preferred_size, capture_bar_bounds, capture_region, current_root_);
+      preferred_size, capture_bar_bounds, capture_region, current_root_,
+      CaptureRegionWidgetAlignment::kRight);
 
   // User capture bounds are in root window coordinates so convert them here.
   wm::ConvertRectToScreen(current_root_, &bounds);
   return bounds;
 }
 
-void CaptureModeSession::RemoveAllActionButtons() {
-  // Remove all children from the action button container, if the widget exists.
+void CaptureModeSession::ClearActionContainer() {
   if (action_container_widget_) {
     CHECK(action_container_view_);
-    action_container_view_->RemoveAllChildViews();
+    action_container_view_->ClearContainer();
+    UpdateActionContainerWidget();
   }
 }
 
 [[nodiscard]] bool
 CaptureModeSession::ShowDefaultActionButtonsOrPerformSearch() {
+  // Cancel previous search requests if needed.
+  InvalidateImageSearch();
+
   // Early exit if we can't show the action container, i.e. a drag is in
   // progress or capture region is empty. This will be checked again if an
   // asynchronous function invokes `AddActionButton()`.
@@ -3283,18 +3607,25 @@ CaptureModeSession::ShowDefaultActionButtonsOrPerformSearch() {
     return false;
   }
 
-  // `ShouldShowActionContainerWidget()` checks `IsSunfishAllowedAndEnabled()`
+  // `ShouldShowActionContainerWidget()` checks `IsSunfishSessionAllowed()`
   // which checks if *either* Scanner or Sunfish is enabled. Check again if
   // Sunfish specifically is enabled to show the Search button.
   if (active_behavior_->ShouldShowDefaultActionButtonsAfterRegionSelected() &&
       features::IsSunfishFeatureEnabled()) {
-    RecordSearchButtonShown();
-    capture_mode_util::AddActionButton(
-        base::BindRepeating(&CaptureModeSession::OnSearchButtonPressed,
-                            weak_ptr_factory_.GetWeakPtr()),
-        u"Search with Lens", &kLensIcon,
-        ActionButtonRank(ActionButtonType::kSunfish, /*weight=*/1),
-        ActionButtonViewID::kSearchButton);
+    if (controller_->IsNetworkConnectionOffline()) {
+      ShowActionContainerError(l10n_util::GetStringUTF16(
+          IDS_ASH_SCREEN_CAPTURE_MORE_ACTIONS_UNAVAILABLE_OFFLINE_ERROR));
+    } else {
+      RecordSearchButtonShown();
+      // TODO(crbug.com/388898754): Finalize and translate the search button
+      // text.
+      capture_mode_util::AddActionButton(
+          base::BindRepeating(&CaptureModeSession::OnSearchButtonPressed,
+                              weak_ptr_factory_.GetWeakPtr()),
+          u"Search with Lens", &kLensIcon,
+          ActionButtonRank(ActionButtonType::kSunfish, /*weight=*/1),
+          ActionButtonViewID::kSearchButton);
+    }
   }
   // TODO: crbug.com/375261308 - Prevent image search when the region stays the
   // same or is within a throttling QPS after a release event.
@@ -3352,7 +3683,7 @@ bool CaptureModeSession::ShouldHideFeedbackWidget(views::Widget* widget) const {
     return false;
   }
 
-  if (!IsSunfishAllowedAndEnabled()) {
+  if (!IsSunfishSessionAllowed()) {
     return true;
   }
 
@@ -3372,7 +3703,7 @@ bool CaptureModeSession::ShouldHideFeedbackWidget(views::Widget* widget) const {
 }
 
 bool CaptureModeSession::ShouldShowActionContainerWidget() const {
-  if (!IsSunfishAllowedAndEnabled()) {
+  if (!IsSunfishSessionAllowed()) {
     return false;
   }
 
@@ -3426,6 +3757,7 @@ void CaptureModeSession::RefreshGlowRegion() {
 
 void CaptureModeSession::InvalidateImageSearch() {
   weak_token_factory_.InvalidateWeakPtrs();
+  image_search_request_timer_.Stop();
   MaybeRemoveGlowAnimation();
 }
 

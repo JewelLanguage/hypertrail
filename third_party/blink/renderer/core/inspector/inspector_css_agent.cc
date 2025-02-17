@@ -142,6 +142,7 @@
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_result_view.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/clear_collection_scope.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/text/text_run.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
@@ -167,8 +168,24 @@ Element* GetPseudoIdAndTag(Element* element,
                            PseudoId& element_pseudo_id,
                            AtomicString& view_transition_name) {
   auto* resolved_element = element;
-  if ((pseudo_element = DynamicTo<PseudoElement>(element))) {
-    resolved_element = IsTransitionPseudoElement(pseudo_element->GetPseudoId())
+  auto* try_pseudo = DynamicTo<PseudoElement>(element);
+  bool is_transition =
+      try_pseudo && IsTransitionPseudoElement(try_pseudo->GetPseudoId());
+  // If nested pseudo element support is turned on, it is better not to do this
+  // translation, as it is lossy. We can query styles directly from the pseudo
+  // element node instead of using the originating element and pseudo id.
+  // TODO(crbug.com/373478544): Remove this function once this flag is no longer
+  // necessary.
+  if (RuntimeEnabledFeatures::CSSNestedPseudoElementsEnabled()) {
+    // View transition pseudo elements depend on the old logic; always translate
+    // them.
+    if (!is_transition) {
+      return resolved_element;
+    }
+  }
+  if (try_pseudo) {
+    pseudo_element = try_pseudo;
+    resolved_element = is_transition
                            ? pseudo_element->UltimateOriginatingElement()
                            : pseudo_element->ParentOrShadowHostElement();
     // TODO(khushalsagar) : This should never be null.
@@ -1271,7 +1288,7 @@ protocol::Response InspectorCSSAgent::getAnimatedStylesForNode(
   PseudoId element_pseudo_id = kPseudoIdNone;
   AtomicString view_transition_name = g_null_atom;
   PseudoElement* pseudo_element = nullptr;
-  // If the requested element is a pseudo element, `element` becomes
+  // If the requested element is a view transition pseudo element, `element` becomes
   // the first non-pseudo parent element or shadow host element
   // after `GetPseudoIdAndTag` call below.
   element = GetPseudoIdAndTag(element, pseudo_element, element_pseudo_id,
@@ -1346,7 +1363,7 @@ protocol::Response InspectorCSSAgent::getMatchedStylesForNode(
 
   PseudoId element_pseudo_id = kPseudoIdNone;
   AtomicString view_transition_name = g_null_atom;
-  // If the requested element is a pseudo element, `element` becomes
+  // If the requested element is a view transition pseudo element, `element` becomes
   // the first non-pseudo parent element or shadow host element
   // after `GetPseudoIdAndTag` call below.
   PseudoElement* pseudo_element = nullptr;
@@ -2061,6 +2078,10 @@ protocol::Response InspectorCSSAgent::resolveValues(
       continue;
     }
 
+    if (!element->GetComputedStyle()) {
+      continue;
+    }
+
     const CSSValue* computed_value =
         StyleResolver::ComputeValue(element, *property_name, *parsed_value);
 
@@ -2669,6 +2690,7 @@ protocol::Response InspectorCSSAgent::setSupportsText(
 
 protocol::Response InspectorCSSAgent::createStyleSheet(
     const String& frame_id,
+    std::optional<bool> force,
     protocol::CSS::StyleSheetId* out_style_sheet_id) {
   LocalFrame* frame =
       IdentifiersFactory::FrameById(inspected_frames_, frame_id);
@@ -2679,7 +2701,8 @@ protocol::Response InspectorCSSAgent::createStyleSheet(
   if (!document)
     return protocol::Response::ServerError("Frame does not have a document");
 
-  InspectorStyleSheet* inspector_style_sheet = ViaInspectorStyleSheet(document);
+  InspectorStyleSheet* inspector_style_sheet =
+      CreateViaInspectorStyleSheet(document, force.value_or(false));
   if (!inspector_style_sheet)
     return protocol::Response::ServerError("No target stylesheet found");
 
@@ -3406,17 +3429,23 @@ InspectorStyleSheet* InspectorCSSAgent::InspectorStyleSheetForRule(
   return BindStyleSheet(rule->parentStyleSheet());
 }
 
-InspectorStyleSheet* InspectorCSSAgent::ViaInspectorStyleSheet(
-    Document* document) {
+InspectorStyleSheet* InspectorCSSAgent::CreateViaInspectorStyleSheet(
+    Document* document,
+    bool force) {
   if (!document)
     return nullptr;
 
   if (!IsA<HTMLDocument>(document) && !document->IsSVGDocument())
     return nullptr;
-
+  bool has_default_stylesheet =
+      default_inspector_stylesheets_.Contains(document);
   CSSStyleSheet& inspector_sheet =
-      document->GetStyleEngine().EnsureInspectorStyleSheet();
-
+      has_default_stylesheet && !force
+          ? *default_inspector_stylesheets_.at(document)
+          : document->GetStyleEngine().CreateInspectorStyleSheet();
+  if (!force) {
+    default_inspector_stylesheets_.Set(document, &inspector_sheet);
+  }
   FlushPendingProtocolNotifications();
 
   auto it = css_style_sheet_to_inspector_style_sheet_.find(&inspector_sheet);
@@ -3477,9 +3506,10 @@ protocol::CSS::StyleSheetOrigin InspectorCSSAgent::DetectOrigin(
 
   if (page_style_sheet->ownerNode() &&
       page_style_sheet->ownerNode()->IsDocumentNode()) {
-    if (page_style_sheet ==
-        owner_document->GetStyleEngine().InspectorStyleSheet())
+    if (owner_document->GetStyleEngine().InspectorStyleSheets().Contains(
+            page_style_sheet)) {
       return protocol::CSS::StyleSheetOriginEnum::Inspector;
+    }
     return protocol::CSS::StyleSheetOriginEnum::Injected;
   }
   return protocol::CSS::StyleSheetOriginEnum::Regular;
@@ -4340,6 +4370,7 @@ void InspectorCSSAgent::Trace(Visitor* visitor) const {
   visitor->Trace(user_agent_view_transition_style_sheet_);
   visitor->Trace(tracker_);
   visitor->Trace(weak_factory_);
+  visitor->Trace(default_inspector_stylesheets_);
   InspectorBaseAgent::Trace(visitor);
 }
 

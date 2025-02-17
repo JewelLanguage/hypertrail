@@ -714,9 +714,11 @@ void WebViewGuest::WebContentsDestroyed() {
   // RenderFrameDeleted(), such as when destroying unattached guests that never
   // had a RenderFrame created.
   // TODO(crbug.com/40202416): Implement an MPArch equivalent of this.
-  WebViewRendererState::GetInstance()->RemoveGuest(
-      GetGuestMainFrame()->GetProcess()->GetDeprecatedID(),
-      GetGuestMainFrame()->GetRoutingID());
+  if (GetGuestMainFrame()) {
+    WebViewRendererState::GetInstance()->RemoveGuest(
+        GetGuestMainFrame()->GetProcess()->GetDeprecatedID(),
+        GetGuestMainFrame()->GetRoutingID());
+  }
   // The following call may destroy `this`.
   GuestViewBase::WebContentsDestroyed();
 }
@@ -766,13 +768,12 @@ void WebViewGuest::FindReply(WebContents* source,
 }
 
 double WebViewGuest::GetZoom() const {
-  double zoom_level =
-      ZoomController::FromWebContents(web_contents())->GetZoomLevel();
+  double zoom_level = GetZoomController()->GetZoomLevel();
   return ConvertZoomLevelToZoomFactor(zoom_level);
 }
 
 ZoomController::ZoomMode WebViewGuest::GetZoomMode() {
-  return ZoomController::FromWebContents(web_contents())->zoom_mode();
+  return GetZoomController()->zoom_mode();
 }
 
 bool WebViewGuest::GuestHandleContextMenu(
@@ -1819,14 +1820,14 @@ bool WebViewGuest::IsSpatialNavigationEnabled() const {
 
 void WebViewGuest::SetZoom(double zoom_factor) {
   did_set_explicit_zoom_ = true;
-  auto* zoom_controller = ZoomController::FromWebContents(web_contents());
+  auto* zoom_controller = GetZoomController();
   DCHECK(zoom_controller);
   double zoom_level = blink::ZoomFactorToZoomLevel(zoom_factor);
   zoom_controller->SetZoomLevel(zoom_level);
 }
 
 void WebViewGuest::SetZoomMode(ZoomController::ZoomMode zoom_mode) {
-  ZoomController::FromWebContents(web_contents())->SetZoomMode(zoom_mode);
+  GetZoomController()->SetZoomMode(zoom_mode);
 }
 
 void WebViewGuest::SetAllowTransparency(bool allow) {
@@ -2043,14 +2044,16 @@ bool WebViewGuest::IsFullscreenForTabOrPending(
   return is_guest_fullscreen_;
 }
 
-void WebViewGuest::RequestPointerLock(WebContents* guest_web_contents,
+void WebViewGuest::RequestPointerLock(WebContents* web_contents,
                                       bool user_gesture,
                                       bool last_unlocked_by_target) {
   CHECK(!base::FeatureList::IsEnabled(features::kGuestViewMPArch));
-  CHECK_EQ(guest_web_contents, web_contents());
 
   web_view_permission_helper_->RequestPointerLockPermission(
-      user_gesture, last_unlocked_by_target);
+      user_gesture, last_unlocked_by_target,
+      base::BindOnce(
+          base::IgnoreResult(&WebContents::GotPointerLockPermissionResponse),
+          base::Unretained(web_contents)));
 }
 
 void WebViewGuest::LoadURLWithParams(

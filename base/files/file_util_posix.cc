@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "base/files/file_util.h"
 
 #include <dirent.h>
@@ -827,7 +832,7 @@ bool CreateTemporaryFileInDir(const FilePath& dir, FilePath* temp_file) {
   return fd.is_valid();
 }
 
-FilePath FormatTemporaryFileName(FilePath::StringPieceType identifier) {
+FilePath FormatTemporaryFileName(FilePath::StringViewType identifier) {
 #if BUILDFLAG(IS_APPLE)
   std::string_view prefix = base::apple::BaseBundleID();
 #elif BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -876,7 +881,7 @@ static bool CreateTemporaryDirInDirImpl(const FilePath& base_dir,
 }
 
 bool CreateTemporaryDirInDir(const FilePath& base_dir,
-                             FilePath::StringPieceType prefix,
+                             FilePath::StringViewType prefix,
                              FilePath* new_dir) {
   FilePath::StringType mkdtemp_template(prefix);
   mkdtemp_template.append("XXXXXX");

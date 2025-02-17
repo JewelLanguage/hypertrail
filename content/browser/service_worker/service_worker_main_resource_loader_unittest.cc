@@ -534,20 +534,22 @@ class ServiceWorkerMainResourceLoaderTest : public testing::Test {
         base::BindOnce(&ServiceWorkerMainResourceLoaderTest::Fallback,
                        base::Unretained(this)),
         /*fetch_event_client_id=*/"", service_worker_client()->AsWeakPtr(),
-        FrameTreeNodeId(),
         /*find_registration_start_time=*/base::TimeTicks::Now());
 
     // Load |request.url|.
-    loader_->StartRequest(*request, loader_remote_.BindNewPipeAndPassReceiver(),
-                          client_.CreateRemote());
+    loader_->StartRequest(loader_remote_.BindNewPipeAndPassReceiver(),
+                          /*request_id=*/0, /*options=*/0, *request,
+                          client_.CreateRemote(),
+                          net::MutableNetworkTrafficAnnotationTag());
   }
 
   // The |fallback_callback| passed to the ServiceWorkerMainResourceLoader in
   // StartRequest().
-  void Fallback(ResponseHeadUpdateParams) {
+  network::mojom::URLLoaderFactory* Fallback(ResponseHeadUpdateParams) {
     did_call_fallback_callback_ = true;
     if (quit_closure_for_fallback_callback_)
       std::move(quit_closure_for_fallback_callback_).Run();
+    return nullptr;
   }
 
   // Runs until the ServiceWorkerMainResourceLoader created in StartRequest()

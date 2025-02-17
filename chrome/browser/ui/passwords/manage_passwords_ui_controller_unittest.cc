@@ -20,6 +20,7 @@
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
+#include "chrome/browser/optimization_guide/mock_optimization_guide_keyed_service.h"
 #include "chrome/browser/password_manager/chrome_password_change_service.h"
 #include "chrome/browser/password_manager/password_change_service_factory.h"
 #include "chrome/browser/ui/hats/mock_trust_safety_sentiment_service.h"
@@ -504,62 +505,6 @@ TEST_F(ManagePasswordsUIControllerTest, PasswordSubmittedBubbleCancelled) {
   EXPECT_FALSE(controller->IsAutomaticallyOpeningBubble());
 }
 
-TEST_F(ManagePasswordsUIControllerTest, DefaultStoreChanged) {
-  std::vector<PasswordForm> best_matches;
-  auto test_form_manager =
-      CreateFormManagerWithBestMatches(best_matches, &submitted_form());
-  EXPECT_CALL(*client().GetPasswordFeatureManager(),
-              ShouldChangeDefaultPasswordStore)
-      .WillOnce(Return(true));
-  EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
-
-  controller()->OnPasswordSubmitted(std::move(test_form_manager));
-  EXPECT_TRUE(controller()->opened_automatic_bubble());
-  EXPECT_EQ(url::Origin::Create(test_local_form().url),
-            controller()->GetOrigin());
-
-  ExpectIconAndControllerStateIs(
-      password_manager::ui::PASSWORD_STORE_CHANGED_BUBBLE_STATE);
-}
-
-TEST_F(ManagePasswordsUIControllerTest,
-       BlocklistedFormPasswordSubmittedDoesNotGetAutomaticWarning) {
-  std::vector<PasswordForm> best_matches;
-  auto test_form_manager = CreateFormManagerWithBestMatches(
-      best_matches, &submitted_form(), /*is_blocklisted=*/true);
-  EXPECT_CALL(*client().GetPasswordFeatureManager(),
-              ShouldChangeDefaultPasswordStore)
-      .WillOnce(Return(true));
-  EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
-  controller()->OnPasswordSubmitted(std::move(test_form_manager));
-  EXPECT_FALSE(controller()->opened_automatic_bubble());
-
-  ExpectIconAndControllerStateIs(
-      password_manager::ui::PASSWORD_STORE_CHANGED_BUBBLE_STATE);
-}
-
-TEST_F(ManagePasswordsUIControllerTest,
-       IfSaveBubbleIsSuppressedNoAutomaticWarning) {
-  std::vector<PasswordForm> best_matches;
-  auto test_form_manager =
-      CreateFormManagerWithBestMatches(best_matches, &submitted_form());
-  std::vector<password_manager::InteractionsStats> stats = {
-      {.origin_domain = submitted_form().url.DeprecatedGetOriginAsURL(),
-       .username_value = submitted_form().username_value,
-       .dismissal_count = kGreatDissmisalCount}};
-  EXPECT_CALL(*client().GetPasswordFeatureManager(),
-              ShouldChangeDefaultPasswordStore)
-      .WillOnce(Return(true));
-  EXPECT_CALL(*test_form_manager, GetInteractionsStats)
-      .WillRepeatedly(Return(stats));
-  EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
-  controller()->OnPasswordSubmitted(std::move(test_form_manager));
-  EXPECT_FALSE(controller()->opened_automatic_bubble());
-
-  ExpectIconAndControllerStateIs(
-      password_manager::ui::PASSWORD_STORE_CHANGED_BUBBLE_STATE);
-}
-
 TEST_F(ManagePasswordsUIControllerTest, PasswordSaved) {
   auto* mock_sentiment_service_ = static_cast<MockTrustSafetySentimentService*>(
       TrustSafetySentimentServiceFactory::GetInstance()
@@ -950,56 +895,6 @@ TEST_F(ManagePasswordsUIControllerTest, ChooseCredentialPSL) {
   EXPECT_THAT(controller()->GetCurrentForms(), IsEmpty());
 }
 
-TEST_F(ManagePasswordsUIControllerTest,
-       PromptSaveBubbleAfterDefaultStoreChanged) {
-  std::vector<PasswordForm> best_matches;
-  auto test_form_manager =
-      CreateFormManagerWithBestMatches(best_matches, &submitted_form());
-  EXPECT_CALL(*client().GetPasswordFeatureManager(),
-              ShouldChangeDefaultPasswordStore)
-      .WillOnce(Return(true));
-  EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility()).Times(2);
-
-  // Change the pwm ui state to PASSWORD_STORE_CHANGED_BUBBLE_STATE.
-  controller()->OnPasswordSubmitted(std::move(test_form_manager));
-  EXPECT_TRUE(controller()->opened_automatic_bubble());
-  EXPECT_EQ(url::Origin::Create(test_local_form().url),
-            controller()->GetOrigin());
-  ExpectIconAndControllerStateIs(
-      password_manager::ui::PASSWORD_STORE_CHANGED_BUBBLE_STATE);
-
-  controller()->PromptSaveBubbleAfterDefaultStoreChanged();
-  EXPECT_FALSE(controller()->opened_automatic_bubble());
-  EXPECT_EQ(url::Origin::Create(test_local_form().url),
-            controller()->GetOrigin());
-  ExpectIconAndControllerStateIs(password_manager::ui::PENDING_PASSWORD_STATE);
-}
-
-TEST_F(ManagePasswordsUIControllerTest,
-       DefaultStoreChangedBubbleClosedAndKeyIconPressedManually) {
-  std::vector<PasswordForm> best_matches;
-  auto test_form_manager =
-      CreateFormManagerWithBestMatches(best_matches, &submitted_form());
-  EXPECT_CALL(*client().GetPasswordFeatureManager(),
-              ShouldChangeDefaultPasswordStore)
-      .WillOnce(Return(true));
-  EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility()).Times(2);
-
-  // Change the pwm ui state to PASSWORD_STORE_CHANGED_BUBBLE_STATE.
-  controller()->OnPasswordSubmitted(std::move(test_form_manager));
-  EXPECT_TRUE(controller()->opened_automatic_bubble());
-  EXPECT_EQ(url::Origin::Create(test_local_form().url),
-            controller()->GetOrigin());
-  ExpectIconAndControllerStateIs(
-      password_manager::ui::PASSWORD_STORE_CHANGED_BUBBLE_STATE);
-
-  controller()->OnBubbleHidden();
-  EXPECT_FALSE(controller()->opened_automatic_bubble());
-  EXPECT_EQ(url::Origin::Create(test_local_form().url),
-            controller()->GetOrigin());
-  ExpectIconAndControllerStateIs(password_manager::ui::PENDING_PASSWORD_STATE);
-}
-
 TEST_F(ManagePasswordsUIControllerTest, AutoSignin) {
   std::vector<std::unique_ptr<PasswordForm>> local_credentials;
   local_credentials.emplace_back(new PasswordForm(test_local_form()));
@@ -1251,7 +1146,7 @@ TEST_F(ManagePasswordsUIControllerTest,
 }
 
 // Verify that after OnHideManualFallbackForSaving, the password manager icon
-// goes away if no passwords were persited before the manual fallback.
+// goes away if no passwords were persisted before the manual fallback.
 TEST_F(ManagePasswordsUIControllerTest,
        ManualFallbackForSaving_HideFallback_WithoutPreexistingPasswords) {
   // Create password form manager without stored passwords.
@@ -2028,50 +1923,32 @@ TEST_F(ManagePasswordsUIControllerTest, OpenPasskeyNotAcceptedBubble) {
 TEST_F(ManagePasswordsUIControllerTest, PasswordChangeOngoing) {
   testing::StrictMock<affiliations::MockAffiliationService>
       mock_affiliation_service;
+  testing::StrictMock<MockOptimizationGuideKeyedService>
+      mock_optimization_service;
   PasswordChangeServiceFactory::GetInstance()->SetTestingFactory(
       profile(),
-      base::BindLambdaForTesting(
-          [&mock_affiliation_service](content::BrowserContext* context)
-              -> std::unique_ptr<KeyedService> {
-            return std::make_unique<ChromePasswordChangeService>(
-                &mock_affiliation_service);
-          }));
+      base::BindLambdaForTesting([&mock_affiliation_service,
+                                  &mock_optimization_service](
+                                     content::BrowserContext* context)
+                                     -> std::unique_ptr<KeyedService> {
+        return std::make_unique<ChromePasswordChangeService>(
+            &mock_affiliation_service, &mock_optimization_service,
+            std::make_unique<password_manager::MockPasswordFeatureManager>());
+      }));
 
   const GURL kUrl = GURL("https://example.com/");
   EXPECT_CALL(mock_affiliation_service, GetChangePasswordURL(kUrl))
       .WillOnce(testing::Return(GURL("https://example.com/password/")));
   auto* password_change_service =
       PasswordChangeServiceFactory::GetForProfile(profile());
-  password_change_service->StartPasswordChange(kUrl, u"new_username",
-                                               u"new_password", web_contents());
+  password_change_service->OfferPasswordChangeUi(
+      kUrl, u"new_username", u"new_password", web_contents());
 
   ASSERT_EQ(password_manager::ui::PASSWORD_CHANGE_STATE,
             controller()->GetState());
 }
 
-TEST_F(ManagePasswordsUIControllerTest, ShowsPasswordChangePrivacyNotice) {
-  testing::StrictMock<affiliations::MockAffiliationService>
-      mock_affiliation_service;
-  PasswordChangeServiceFactory::GetInstance()->SetTestingFactory(
-      profile(),
-      base::BindLambdaForTesting(
-          [&mock_affiliation_service](content::BrowserContext* context)
-              -> std::unique_ptr<KeyedService> {
-            return std::make_unique<ChromePasswordChangeService>(
-                &mock_affiliation_service);
-          }));
-
-  const GURL kUrl = GURL("https://example.com/");
-  EXPECT_CALL(mock_affiliation_service, GetChangePasswordURL(kUrl))
-      .WillOnce(testing::Return(GURL("https://example.com/password/")));
-  static_cast<PasswordsLeakDialogDelegate*>(controller())
-      ->ChangePassword(kUrl, u"new_username", u"new_password");
-
-  // Should show privacy notice bubble automatically
-  EXPECT_TRUE(controller()->opened_automatic_bubble());
-}
-
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
 TEST_F(ManagePasswordsUIControllerTest,
        ShouldShowBiometricAuthenticationForFillingPromo) {
   std::vector<PasswordForm> best_matches;

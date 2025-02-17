@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <algorithm>
 #include <sstream>
 
 #include "base/containers/to_vector.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
-#include "base/ranges/algorithm.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/media/router/media_router_feature.h"
@@ -85,7 +85,7 @@ std::vector<KeyedServiceBaseFactory*> GetKeyedServiceBaseFactories() {
 std::string GetDifferenceString(const std::set<std::string>& set1,
                                 const std::set<std::string>& set2) {
   std::vector<std::string> differences;
-  base::ranges::set_difference(set1, set2, std::back_inserter(differences));
+  std::ranges::set_difference(set1, set2, std::back_inserter(differences));
 
   return differences.empty() ? "None" : base::JoinString(differences, ", ");
 }
@@ -190,7 +190,7 @@ class ProfileKeyedServiceBrowserTest : public InProcessBrowserTest {
 #if BUILDFLAG(IS_WIN)
           switches::kEnableBoundSessionCredentials,
 #endif  // BUILDFLAG(IS_WIN)
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
           features::kEnableCertManagementUIV2Write,
 #endif
           blink::features::kBrowsingTopics,
@@ -376,6 +376,7 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceGuestBrowserTest,
     "ExtensionInstallEventRouter",
 #endif  // BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
     "ChromeEnterpriseRealTimeUrlLookupService",
+    "ExtensionNavigationRegistry",
     "ExtensionSystem",
     "ExtensionURLLoaderFactory::BrowserContextShutdownNotifierFactory",
     "FederatedIdentityPermissionContext",
@@ -628,6 +629,7 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceGuestBrowserTest,
     "HeavyAdService",
 #if BUILDFLAG(ENABLE_EXTENSIONS)
     "HidConnectionResourceManager",
+    "ExtensionNavigationRegistry",
 #endif
     "HidDeviceManager",
     "HistoryAPI",
@@ -689,6 +691,9 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceGuestBrowserTest,
     "PasswordsPrivateEventRouter",
     "PermissionDecisionAutoBlocker",
     "PermissionHelper",
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+    "PermissionsEventRouter",
+#endif
     "PermissionsManager",
     "PermissionsUpdaterShutdownFactory",
     "PersonalDataManager",
@@ -734,9 +739,9 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceGuestBrowserTest,
     "SendTabToSelfSyncService",
     "SerialConnectionManager",
     "SerialPortManager",
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
     "ServerCertificateDatabaseService",
-#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
     "SessionDataService",
     "SessionProtoDBFactory",
     "SessionsAPI",
@@ -761,16 +766,12 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceGuestBrowserTest,
     "StorageNotificationService",
     "SupervisedUserService",
     "SyncInvalidationsService",
-
-#if !BUILDFLAG(IS_CHROMEOS)
-    // TODO(crbug.com/374351946): Investigate if this is necessary on CrOS.
-    "SystemIndicatorManager",
-#endif
     "SystemInfoAPI",
     "TCPServerSocketEventDispatcher",
     "TCPSocketEventDispatcher",
     "TabGroupsEventRouter",
     "TabsWindowsAPI",
+    "TemplateURLPrepopulateDataResolver",
     "TemplateURLServiceFactory",
     "ThemeService",
     "ToolbarActionsModel",
@@ -863,7 +864,6 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceGuestBrowserTest,
     "SyncedPrintersManager",
     "TerminalPrivateAPI",
     "TtsEngineExtensionObserverChromeOS",
-    "UserEducationService",
     "UserNetworkConfigurationUpdater",
     "UserPrivateTokenKeyPermissionsManagerService",
     "VirtualKeyboardAPI",

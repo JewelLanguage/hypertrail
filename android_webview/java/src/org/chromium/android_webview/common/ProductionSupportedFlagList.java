@@ -7,7 +7,7 @@ package org.chromium.android_webview.common;
 import org.chromium.base.BaseFeatures;
 import org.chromium.base.BaseSwitches;
 import org.chromium.blink_public.common.BlinkFeatures;
-import org.chromium.blink_scheduler.BlinkSchedulerFeatures;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.cc.base.CcFeatures;
 import org.chromium.cc.base.CcSwitches;
 import org.chromium.components.autofill.AndroidAutofillFeatures;
@@ -28,7 +28,6 @@ import org.chromium.content_public.common.ContentSwitches;
 import org.chromium.gpu.config.GpuFeatures;
 import org.chromium.gpu.config.GpuSwitches;
 import org.chromium.media.MediaFeatures;
-import org.chromium.net.CookieSwitches;
 import org.chromium.net.NetFeatures;
 import org.chromium.services.network.NetworkServiceFeatures;
 import org.chromium.services.tracing.TracingServiceFeatures;
@@ -46,6 +45,7 @@ import org.chromium.ui.gfx.GfxSwitches;
  * to display) as well as the WebView implementation (so it knows which features/flags are safe to
  * honor).
  */
+@NullMarked
 public final class ProductionSupportedFlagList {
     // Do not instantiate this class.
     private ProductionSupportedFlagList() {}
@@ -237,6 +237,12 @@ public final class ProductionSupportedFlagList {
                 AutofillFeatures.AUTOFILL_ACCEPT_DOM_MUTATION_AFTER_AUTOFILL_SUBMISSION,
                 "Accepts DOM_MUTATION_AFTER_AUTOFILL submissions detected on password forms."),
         Flag.baseFeature(
+                AutofillFeatures.AUTOFILL_BETTER_LOCAL_HEURISTIC_PLACEHOLDER_SUPPORT,
+                "Treats placeholders as a separate signal for Autofill local heuristics"),
+        Flag.baseFeature(
+                AutofillFeatures.AUTOFILL_ENABLE_EMAIL_HEURISTIC_OUTSIDE_FORMS,
+                "Enables heuristics for detecting email fields outside of forms."),
+        Flag.baseFeature(
                 AutofillFeatures.AUTOFILL_ENABLE_EXPIRATION_DATE_IMPROVEMENTS,
                 "Enables various improvements to handling expiration dates."),
         Flag.baseFeature(
@@ -267,6 +273,13 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature(
                 AutofillFeatures.AUTOFILL_DETECT_REMOVED_FORM_CONTROLS,
                 "Enables Autofill to detect if form controls are removed from the DOM"),
+        Flag.baseFeature(
+                AutofillFeatures.AUTOFILL_OPTIMIZE_FORM_EXTRACTION,
+                "Makes Autofill spend less time on extracting forms."),
+        Flag.baseFeature(
+                AutofillFeatures.AUTOFILL_ENABLE_LOYALTY_CARDS_FILLING,
+                "When enabled, Autofill will offer support for filling the user's loyalty cards"
+                        + " stored in Google Wallet."),
         Flag.baseFeature(
                 AutofillFeatures.AUTOFILL_PAGE_LANGUAGE_DETECTION,
                 "Enables Autofill to retrieve the page language for form parsing."),
@@ -354,6 +367,9 @@ public final class ProductionSupportedFlagList {
                 ContentFeatures.COMPOSITE_BG_COLOR_ANIMATION,
                 "When enabled, the background-color animation runs on the compositor thread."),
         Flag.baseFeature(
+                BlinkFeatures.COMPOSITE_CLIP_PATH_ANIMATION,
+                "When enabled, clip-path animations run on the compositor thread."),
+        Flag.baseFeature(
                 CcFeatures.DEFER_IMPL_INVALIDATION,
                 "Allow main thread additional time to respond before creating a pending tree"),
         Flag.baseFeature(
@@ -368,8 +384,8 @@ public final class ProductionSupportedFlagList {
                 AndroidMetricsFeatures.ANDROID_METRICS_ASYNC_METRIC_LOGGING,
                 "Initiate metric uploading on a background thread."),
         Flag.baseFeature(
-                BlinkFeatures.SET_TIMEOUT_WITHOUT_CLAMP,
-                "Enables faster setTimeout(,0) by removing the 1 ms clamping."),
+                BlinkFeatures.SET_INTERVAL_WITHOUT_CLAMP,
+                "Enables faster setInterval(,0) by removing the 1 ms clamping."),
         Flag.baseFeature(
                 BlinkFeatures.PAINT_HOLDING_FOR_IFRAMES,
                 "Show stale paint from old Document until new Document is ready for subframe"
@@ -406,7 +422,6 @@ public final class ProductionSupportedFlagList {
                 BlinkFeatures.ESTABLISH_GPU_CHANNEL_ASYNC,
                 "Enables establishing the GPU channel asnchronously when requesting a new "
                         + "layer tree frame sink."),
-        Flag.baseFeature(BlinkFeatures.TEXT_SIZE_ADJUST_IMPROVEMENTS, "Improved text-size-adjust."),
         Flag.baseFeature(
                 BlinkFeatures.PREFETCH_FONT_LOOKUP_TABLES,
                 "If enabled, font lookup tables will be prefetched on renderer startup."),
@@ -417,9 +432,6 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature(
                 BaseFeatures.RUN_TASKS_BY_BATCHES,
                 "Run tasks in queue for 8ms before before sending a system message."),
-        Flag.baseFeature(
-                BlinkFeatures.CRABBY_AVIF,
-                "If enabled, CrabbyAvif will be used instead of libavif for decoding AVIF images."),
         Flag.baseFeature(
                 BlinkFeatures.DEPRECATE_UNLOAD,
                 "If false prevents the gradual deprecation of the unload event."),
@@ -439,18 +451,11 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature(
                 BlinkFeatures.CHECK_HTML_PARSER_BUDGET_LESS_OFTEN,
                 "If enabled, avoids calling the clock for every token in the HTML parser."),
-        Flag.baseFeature(
-                BlinkFeatures.DETAILS_STYLING,
-                "Enables support for improved styling of HTML details element."),
         Flag.baseFeature(BaseFeatures.ALIGN_WAKE_UPS, "Align delayed wake ups at 125 Hz"),
         Flag.baseFeature(
                 BlinkFeatures.THREADED_SCROLL_PREVENT_RENDERING_STARVATION,
                 "Enable rendering starvation-prevention during threaded scrolling."
                         + " See https://crbug.com/40833407."),
-        Flag.baseFeature(
-                BlinkSchedulerFeatures.PRIORITIZE_COMPOSITING_AFTER_DELAY_TRIALS,
-                "Controls the delay after which main thread compositing tasks "
-                        + "are prioritized over other non-input tasks."),
         Flag.baseFeature(
                 BlinkFeatures.VIEW_TRANSITION_ON_NAVIGATION,
                 "Enables the experimental View Transitions API for navigations."
@@ -472,9 +477,7 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature(
                 BlinkFeatures.THREADED_BODY_LOADER,
                 "If enabled, reads and decodes navigation body data off the main thread."),
-        Flag.baseFeature(BlinkFeatures.HIT_TEST_OPAQUENESS),
         Flag.baseFeature(BlinkFeatures.EXPAND_COMPOSITED_CULL_RECT),
-        Flag.baseFeature(BlinkFeatures.RASTER_INDUCING_SCROLL),
         Flag.baseFeature(CcFeatures.NEW_CONTENT_FOR_CHECKERBOARDED_SCROLLS),
         Flag.baseFeature(CcFeatures.PRESERVE_DISCARDABLE_IMAGE_MAP_QUALITY),
         Flag.baseFeature(BlinkFeatures.SCROLLBAR_COLOR),
@@ -571,6 +574,10 @@ public final class ProductionSupportedFlagList {
                 "Enables new optimized implementation of SpdyHeadersToHttpResponse. No behavior"
                         + " change."),
         Flag.baseFeature(NetFeatures.HAPPY_EYEBALLS_V3, "Enables Happy Eyeballs V3"),
+        Flag.baseFeature(NetFeatures.ENABLE_TLS13_EARLY_DATA, "Enables TLS 1.3 Early Data"),
+        Flag.baseFeature(
+                NetFeatures.HTTP_CACHE_NO_VARY_SEARCH,
+                "Enables support for the No-Vary-Search response header in the HTTP disk cache"),
         Flag.baseFeature("MojoIpcz"),
         Flag.baseFeature(
                 "FixDataPipeTrapBug",
@@ -589,10 +596,6 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature(
                 UiAndroidFeatures.DEPRECATED_EXTERNAL_PICKER_FUNCTION,
                 "Deprecates old external file picker function."),
-        Flag.baseFeature(
-                NetworkServiceFeatures.ATTRIBUTION_REPORTING_CROSS_APP_WEB,
-                "Enable attribution reporting to cross the app/web barrier by letting "
-                        + "the WebView use OS-level attribution."),
         Flag.baseFeature(BaseFeatures.THREAD_POOL_CAP2, "Sets a fixed thread pool cap"),
         Flag.baseFeature("ThreadGroupSemaphore"),
         Flag.baseFeature(
@@ -605,7 +608,15 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature(
                 ContentFeatures.RENDER_DOCUMENT_COMPOSITOR_REUSE,
                 "If enabled, allows compositor to be reused on cross-RenderFrameHost navigations"),
+        Flag.baseFeature(
+                ContentFeatures.SITE_INSTANCE_GROUPS_FOR_DATA_URLS,
+                "If enabled, puts data: URL subframes in a separate SiteInstance in the same"
+                        + "SiteInstanceGroup and process as its initiator"),
         Flag.baseFeature(GpuFeatures.CONDITIONALLY_SKIP_GPU_CHANNEL_FLUSH),
+        Flag.baseFeature(
+                GpuFeatures.SYNC_POINT_GRAPH_VALIDATION,
+                "If enabled, replaces synchronous GPU sync point validation with graph based"
+                        + " validation"),
         Flag.baseFeature("ReduceCpuUtilization2"),
         Flag.baseFeature("NetworkServiceCookiesHighPriorityTaskRunner"),
         Flag.baseFeature("IncreaseCoookieAccesCacheSize"),
@@ -846,6 +857,9 @@ public final class ProductionSupportedFlagList {
                 AwFeatures.WEBVIEW_PRELOAD_CLASSES,
                 "Preloads expensive classes during WebView startup."),
         Flag.baseFeature(
+                AwFeatures.WEBVIEW_PREFETCH_NATIVE_LIBRARY,
+                "Prefetches the native WebView code to memory during startup."),
+        Flag.baseFeature(
                 GfxSwitches.USE_SMART_REF_FOR_GPU_FENCE_HANDLE,
                 "Avoids cloning of gpu fences when possible"),
         Flag.baseFeature(
@@ -869,9 +883,10 @@ public final class ProductionSupportedFlagList {
         Flag.baseFeature("EnableCustomInputStreamBufferSize"),
         Flag.baseFeature("NetworkServiceDedicatedThread"),
         Flag.baseFeature("BrowserThreadPoolAdjustment"),
-        Flag.commandLine(
-                CookieSwitches.DISABLE_PARTITIONED_COOKIES_SWITCH,
-                "Disables paritioned cookies in WebView"),
+        Flag.baseFeature(
+                AwFeatures.WEBVIEW_DISABLE_CHIPS,
+                "Disables partitioned cookies in WebView by default. Will require an additional"
+                        + " restart of WebView to take effect."),
         Flag.baseFeature(ContentFeatures.BTM, "Enables the Bounce Tracking Mitigations feature."),
         Flag.baseFeature(
                 "LevelDBProtoAsyncWrite",
@@ -1033,6 +1048,24 @@ public final class ProductionSupportedFlagList {
                 BlinkFeatures.SPECULATIVE_IMAGE_DECODES,
                 "Start decoding in-viewport images as soon as they have loaded, "
                         + "rather than waiting for them to appear in a raster task."),
+        Flag.baseFeature(
+                BlinkFeatures.STANDARDIZED_TIMER_CLAMPING,
+                "Clamp nested timers according to the spec."),
+        Flag.baseFeature(
+                BlinkFeatures.WEB_SQL_WEBVIEW_ACCESS,
+                "If false, prevents access to WebSQL on webview."),
+        Flag.baseFeature(
+                MediaFeatures.MEDIA_CODEC_BLOCK_MODEL,
+                "Controls use of MediaCodec's LinearBlock mode."),
+        Flag.baseFeature(
+                AwFeatures.WEBVIEW_PARTITIONED_COOKIES_EXCLUDED,
+                "When enabled, WebView records if a site with partitioned cookies has any cookies"
+                    + " excluded due to a different cookie partition key than the current site's."),
+        Flag.baseFeature(BlinkFeatures.FETCH_LATER_API, "Enables FetchLater API."),
+        Flag.baseFeature(
+                ContentFeatures.WEB_PAYMENTS,
+                "Enable the JavaScript PaymentRequest API for launching payment apps through"
+                        + " Android intents."),
         // Add new commandline switches and features above. The final entry should have a
         // trailing comma for cleaner diffs.
     };

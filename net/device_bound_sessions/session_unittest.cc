@@ -4,6 +4,8 @@
 
 #include "net/device_bound_sessions/session.h"
 
+#include <string_view>
+
 #include "base/test/bind.h"
 #include "net/cookies/cookie_constants.h"
 #include "net/cookies/cookie_inclusion_status.h"
@@ -60,6 +62,28 @@ TEST_F(SessionTest, DefaultExpiry) {
   EXPECT_LT(base::Time::Now() + base::Days(399), session->expiry_date());
 }
 
+TEST_F(SessionTest, RelativeServiceRefreshUrl) {
+  auto params = CreateValidParams();
+  params.refresh_url = "/internal/RefreshSession";
+  std::unique_ptr<Session> session = Session::CreateIfValid(params, kTestUrl);
+  ASSERT_TRUE(session);
+
+  // Validate session refresh URL.
+  EXPECT_EQ(session->refresh_url().spec(),
+            "https://example.test/internal/RefreshSession");
+}
+
+TEST_F(SessionTest, RelativeServiceRefreshUrlEscaped) {
+  auto params = CreateValidParams();
+  params.refresh_url = "/internal%26RefreshSession";
+  std::unique_ptr<Session> session = Session::CreateIfValid(params, kTestUrl);
+  ASSERT_TRUE(session);
+
+  // Validate session refresh URL.
+  EXPECT_EQ(session->refresh_url().spec(),
+            "https://example.test/internal&RefreshSession");
+}
+
 TEST_F(SessionTest, InvalidServiceRefreshUrl) {
   auto params = CreateValidParams();
   params.refresh_url = "";
@@ -69,6 +93,25 @@ TEST_F(SessionTest, InvalidServiceRefreshUrl) {
 TEST_F(SessionTest, InvalidTestUrl) {
   auto params = CreateValidParams();
   EXPECT_FALSE(Session::CreateIfValid(params, kTestUrlForWrongETLD));
+}
+
+TEST_F(SessionTest, NonSecureUrl) {
+  // HTTP is not allowed for the refresh URL.
+  {
+    auto params = CreateValidParams();
+    params.refresh_url = "http://example.test/registration";
+    EXPECT_FALSE(
+        Session::CreateIfValid(params, GURL("http://example.test/index.html")));
+  }
+
+  // But localhost is okay.
+  {
+    auto params = CreateValidParams();
+    params.refresh_url = "http://localhost:8080/registration";
+    params.scope.origin = "localhost";
+    EXPECT_TRUE(Session::CreateIfValid(
+        params, GURL("http://localhost:8080/index.html")));
+  }
 }
 
 TEST_F(SessionTest, ToFromProto) {
@@ -266,7 +309,7 @@ class InsecureDelegate : public CookieAccessDelegate {
   }
 
   CookieScopeSemantics GetScopeSemantics(
-      const CanonicalCookie& cookie) const override {
+      const std::string_view domain) const override {
     return CookieScopeSemantics::UNKNOWN;
   }
   // Returns whether a cookie should be attached regardless of its SameSite

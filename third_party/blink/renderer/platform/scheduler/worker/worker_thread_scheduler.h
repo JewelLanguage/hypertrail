@@ -54,6 +54,7 @@ class PLATFORM_EXPORT WorkerThreadScheduler : public NonMainThreadSchedulerBase,
                            Thread::IdleTask) override;
   void PostNonNestableIdleTask(const base::Location&,
                                Thread::IdleTask) override;
+  void RemoveCancelledIdleTasks() override;
   base::TimeTicks MonotonicallyIncreasingVirtualTime() override;
   void SetV8Isolate(v8::Isolate* isolate) override;
   void Shutdown() override;
@@ -102,8 +103,6 @@ class PLATFORM_EXPORT WorkerThreadScheduler : public NonMainThreadSchedulerBase,
       base::TimeTicks now,
       base::TimeDelta* next_long_idle_period_delay_out) override;
   void IsNotQuiescent() override {}
-  void OnIdlePeriodStarted() override {}
-  void OnIdlePeriodEnded() override {}
   void OnPendingTasksChanged(bool new_state) override {}
 
   void CreateBudgetPools();

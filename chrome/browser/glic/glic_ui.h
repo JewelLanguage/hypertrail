@@ -13,6 +13,7 @@
 
 namespace glic {
 class GlicPageHandler;
+class GlicFrePageHandler;
 class GlicUI;
 
 class GlicUIConfig : public content::DefaultWebUIConfig<GlicUI> {
@@ -31,13 +32,27 @@ class GlicUI : public ui::MojoWebUIController,
   void BindInterface(
       mojo::PendingReceiver<glic::mojom::PageHandlerFactory> receiver);
 
+  // When called, the UI will believe it is offline when it is launched from the
+  // current test.
+  static void simulate_no_connection_for_testing() {
+    simulate_no_connection_ = true;
+  }
+
  private:
   void CreatePageHandler(
-      mojo::PendingReceiver<glic::mojom::PageHandler> receiver) override;
+      mojo::PendingReceiver<glic::mojom::PageHandler> receiver,
+      mojo::PendingRemote<glic::mojom::Page> page) override;
+
+  void CreateFrePageHandler(
+      mojo::PendingReceiver<glic::mojom::FrePageHandler> receiver) override;
 
   std::unique_ptr<GlicPageHandler> page_handler_;
 
+  std::unique_ptr<GlicFrePageHandler> fre_page_handler_;
+
   mojo::Receiver<glic::mojom::PageHandlerFactory> page_factory_receiver_{this};
+
+  static bool simulate_no_connection_;
 
   WEB_UI_CONTROLLER_TYPE_DECL();
 };

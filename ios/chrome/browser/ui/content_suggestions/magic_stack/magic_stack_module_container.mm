@@ -6,7 +6,11 @@
 
 #import "base/notreached.h"
 #import "base/strings/sys_string_conversions.h"
+#import "google_apis/gaia/gaia_id.h"
+#import "ios/chrome/browser/push_notification/model/push_notification_client_id.h"
+#import "ios/chrome/browser/push_notification/model/push_notification_settings_util.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_tile_layout_util.h"
@@ -14,6 +18,7 @@
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/magic_stack/magic_stack_constants.h"
+#import "ios/chrome/browser/ui/content_suggestions/magic_stack/magic_stack_context_menu_interaction_handler.h"
 #import "ios/chrome/browser/ui/content_suggestions/magic_stack/magic_stack_module.h"
 #import "ios/chrome/browser/ui/content_suggestions/magic_stack/magic_stack_module_container_delegate.h"
 #import "ios/chrome/browser/ui/content_suggestions/magic_stack/magic_stack_module_content_view_delegate.h"
@@ -21,6 +26,9 @@
 #import "ios/chrome/browser/ui/content_suggestions/magic_stack/magic_stack_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/safety_check/safety_check_state.h"
 #import "ios/chrome/browser/ui/content_suggestions/safety_check/utils.h"
+#import "ios/chrome/browser/ui/content_suggestions/shop_card/shop_card_data.h"
+#import "ios/chrome/browser/ui/content_suggestions/shop_card/shop_card_item.h"
+#import "ios/chrome/browser/ui/content_suggestions/tab_resumption/tab_resumption_item.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/ui/util/ui_util.h"
@@ -72,13 +80,15 @@ const CGFloat kSeparatorHeight = 0.5;
   NSLayoutConstraint* _contentStackViewBottomMarginAnchor;
   ContentSuggestionsModuleType _type;
   BOOL _reducedBottomMargin;
+  MagicStackContextMenuInteractionHandler* _contextMenuInteractionHandler;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame {
   self = [super initWithFrame:frame];
   if (self) {
     self.maximumContentSizeCategory = UIContentSizeCategoryAccessibilityMedium;
-    _magicStackModuleContentsFactory = [[MagicStackModuleContentsFactory alloc] init];
+    _magicStackModuleContentsFactory =
+        [[MagicStackModuleContentsFactory alloc] init];
 
     _titleStackView = [[UIStackView alloc] init];
     _titleStackView.alignment = UIStackViewAlignmentTop;
@@ -214,6 +224,13 @@ const CGFloat kSeparatorHeight = 0.5;
   [self resetView];
 }
 
+#pragma mark - Setters
+
+- (void)setDelegate:(id<MagicStackModuleContainerDelegate>)delegate {
+  _delegate = delegate;
+  [self contextMenuInteractionHandler].delegate = delegate;
+}
+
 // Creates a button with the specified `title` positioned in the module's
 // top-right corner.
 //
@@ -287,12 +304,15 @@ const CGFloat kSeparatorHeight = 0.5;
     return;
   }
   _type = config.type;
+  [[self contextMenuInteractionHandler] configureWithType:_type];
 
   _title.text = [MagicStackModuleContainer titleStringForModule:_type
-                                                   inMagicStack:inMagicStack];
+                                                   inMagicStack:inMagicStack
+                                                         config:config];
   _title.accessibilityIdentifier =
       [MagicStackModuleContainer accessibilityIdentifierForModule:_type
-                                                     inMagicStack:inMagicStack];
+                                                     inMagicStack:inMagicStack
+                                                           config:config];
 
   _seeMoreButton.hidden = !config.shouldShowSeeMore;
 
@@ -362,9 +382,19 @@ const CGFloat kSeparatorHeight = 0.5;
   }
 }
 
+- (MagicStackContextMenuInteractionHandler*)contextMenuInteractionHandler {
+  if (!_contextMenuInteractionHandler) {
+    _contextMenuInteractionHandler =
+        [[MagicStackContextMenuInteractionHandler alloc] init];
+    _contextMenuInteractionHandler.delegate = self.delegate;
+  }
+  return _contextMenuInteractionHandler;
+}
+
 // Returns the module's title, if any, given the Magic Stack module `type`.
 + (NSString*)titleStringForModule:(ContentSuggestionsModuleType)type
-                     inMagicStack:(BOOL)inMagicStack {
+                     inMagicStack:(BOOL)inMagicStack
+                           config:(MagicStackModule*)config {
   switch (type) {
     case ContentSuggestionsModuleType::kShortcuts:
       return l10n_util::GetNSString(
@@ -375,8 +405,20 @@ const CGFloat kSeparatorHeight = 0.5;
             IDS_IOS_CONTENT_SUGGESTIONS_MOST_VISITED_MODULE_TITLE);
       }
       return @"";
-    case ContentSuggestionsModuleType::kTabResumption:
+    case ContentSuggestionsModuleType::kTabResumption: {
+      TabResumptionItem* tabResumptionItem =
+          static_cast<TabResumptionItem*>(config);
+      // Arm 4 of ShopCard is an alternative to Tab Resumption,
+      // triggered by Tab Resumption where the user is given the
+      // option to price track a URL for a price trackable URL.
+      if (tabResumptionItem.shopCardData &&
+          tabResumptionItem.shopCardData.shopCardItemType ==
+              ShopCardItemType::kPriceTrackableProductOnTab) {
+        return l10n_util::GetNSString(
+            IDS_IOS_CONTENT_SUGGESTIONS_SHOPCARD_TRACK_PRICE_TITLE);
+      }
       return l10n_util::GetNSString(IDS_IOS_TAB_RESUMPTION_TITLE);
+    }
     case ContentSuggestionsModuleType::kSetUpListSync:
     case ContentSuggestionsModuleType::kSetUpListDefaultBrowser:
     case ContentSuggestionsModuleType::kSetUpListAutofill:
@@ -395,6 +437,17 @@ const CGFloat kSeparatorHeight = 0.5;
     case ContentSuggestionsModuleType::kSendTabPromo:
       // Send Tab and Price Tracking Promo design do not use title.
       return @"";
+    case ContentSuggestionsModuleType::kShopCard: {
+      ShopCardItem* shopCardItem = static_cast<ShopCardItem*>(config);
+      if (shopCardItem.shopCardData.shopCardItemType ==
+          ShopCardItemType::kPriceDropForTrackedProducts) {
+        return l10n_util::GetNSString(
+            IDS_IOS_CONTENT_SUGGESTIONS_SHOPCARD_PRICE_TRACKING_TITLE);
+      } else {
+        return l10n_util::GetNSString(
+            IDS_IOS_CONTENT_SUGGESTIONS_SHOPCARD_REVIEWS_TITLE);
+      }
+    }
     case ContentSuggestionsModuleType::kTipsWithProductImage:
     case ContentSuggestionsModuleType::kTips:
       return l10n_util::GetNSString(IDS_IOS_MAGIC_STACK_TIP_TITLE);
@@ -405,7 +458,8 @@ const CGFloat kSeparatorHeight = 0.5;
 
 // Returns the accessibility identifier given the Magic Stack module `type`.
 + (NSString*)accessibilityIdentifierForModule:(ContentSuggestionsModuleType)type
-                                 inMagicStack:(BOOL)inMagicStack {
+                                 inMagicStack:(BOOL)inMagicStack
+                                       config:(MagicStackModule*)config {
   switch (type) {
     case ContentSuggestionsModuleType::kTabResumption:
       return kMagicStackContentSuggestionsModuleTabResumptionAccessibilityIdentifier;
@@ -413,7 +467,9 @@ const CGFloat kSeparatorHeight = 0.5;
     default:
       // TODO(crbug.com/40946679): the code should use constants for
       // accessibility identifiers, and not localized strings.
-      return [self titleStringForModule:type inMagicStack:inMagicStack];
+      return [self titleStringForModule:type
+                           inMagicStack:inMagicStack
+                                 config:config];
   }
 }
 
@@ -498,6 +554,16 @@ const CGFloat kSeparatorHeight = 0.5;
   }
 
   _separator.hidden = isHidden;
+}
+
+- (NSArray<UIMenuElement*>*)contextMenuElementsForCurrentModule {
+  return [self.contextMenuInteractionHandler menuElements];
+}
+
+- (void)notifyContextMenuInteractionEndWithAnimator:
+    (id<UIContextMenuInteractionAnimating>)animator {
+  [self.contextMenuInteractionHandler
+      notifyContextMenuInteractionEndWithAnimator:animator];
 }
 
 #pragma mark - Helpers

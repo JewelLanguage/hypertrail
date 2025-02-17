@@ -52,6 +52,12 @@ const base::FeatureParam<DevToolsFreestylerExecutionMode>
         &kDevToolsFreestyler, "execution_mode",
         /*default_value=*/DevToolsFreestylerExecutionMode::kAllScripts,
         &devtools_freestyler_execution_mode_options};
+const base::FeatureParam<bool> kDevToolsFreestylerPatching{
+    &kDevToolsFreestyler, "patching", /*default_value=*/false};
+const base::FeatureParam<bool> kDevToolsFreestylerMultimodal{
+    &kDevToolsFreestyler, "multimodal", /*default_value=*/false};
+const base::FeatureParam<bool> kDevToolsFreestylerFunctionCalling{
+    &kDevToolsFreestyler, "function_calling", /*default_value=*/false};
 
 // Whether the DevTools AI Assistance Network Agent is enabled.
 BASE_FEATURE(kDevToolsAiAssistanceNetworkAgent,
@@ -86,6 +92,10 @@ const base::FeatureParam<DevToolsFreestylerUserTier>
         &kDevToolsAiAssistancePerformanceAgent, "user_tier",
         /*default_value=*/DevToolsFreestylerUserTier::kPublic,
         &devtools_freestyler_user_tier_options};
+const base::FeatureParam<bool>
+    kDevToolsAiAssistancePerformanceAgentInsightsEnabled{
+        &kDevToolsAiAssistancePerformanceAgent, "insights_enabled",
+        /*default_value=*/false};
 
 // Whether the DevTools AI Assistance File Agent is enabled.
 BASE_FEATURE(kDevToolsAiAssistanceFileAgent,
@@ -120,6 +130,23 @@ const base::FeatureParam<bool> kDevToolsVeLoggingTesting{
 // Whether showing animation styles in the styles tab is enabled.
 BASE_FEATURE(kDevToolsAnimationStylesInStylesTab,
              "DevToolsAnimationStylesInStylesTab",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Whether DevTools will attempt to automatically connect Workspace folders.
+// See http://go/chrome-devtools:automatic-workspace-folders-design for details.
+BASE_FEATURE(kDevToolsAutomaticFileSystems,
+             "DevToolsAutomaticFileSystems",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Whether the new DevTools "Workspaces" features are enabled.
+BASE_FEATURE(kDevToolsImprovedWorkspaces,
+             "DevToolsImprovedWorkspaces",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Whether DevTools will attempt to load project settings from a well-known
+// URI. See https://goo.gle/devtools-json-design for additional details.
+BASE_FEATURE(kDevToolsWellKnown,
+             "DevToolsWellKnown",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace features

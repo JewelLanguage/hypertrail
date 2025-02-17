@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <compare>
 #include <iterator>
 #include <map>
@@ -16,9 +17,6 @@
 #include <string_view>
 #include <utility>
 
-#include "ash/components/arc/arc_features.h"
-#include "ash/components/arc/arc_util.h"
-#include "ash/components/arc/mojom/file_system.mojom.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
@@ -56,7 +54,6 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/path_service.h"
 #include "base/process/process_handle.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
 #include "base/strings/escape.h"
@@ -165,6 +162,9 @@
 #include "chromeos/ash/components/smbfs/mojom/smbfs.mojom.h"
 #include "chromeos/ash/components/smbfs/smbfs_host.h"
 #include "chromeos/ash/components/smbfs/smbfs_mounter.h"
+#include "chromeos/ash/experiences/arc/arc_features.h"
+#include "chromeos/ash/experiences/arc/arc_util.h"
+#include "chromeos/ash/experiences/arc/mojom/file_system.mojom.h"
 #include "chromeos/ash/experiences/arc/session/arc_bridge_service.h"
 #include "chromeos/ash/experiences/arc/session/arc_service_manager.h"
 #include "chromeos/ash/experiences/arc/session/connection_holder.h"
@@ -3736,7 +3736,7 @@ void FileManagerBrowserTestBase::OnCommand(const std::string& name,
 
   if (name == "getVolumesCount") {
     file_manager::VolumeManager* volume_manager = VolumeManager::Get(profile());
-    *output = base::NumberToString(base::ranges::count_if(
+    *output = base::NumberToString(std::ranges::count_if(
         volume_manager->GetVolumeList(),
         [](const auto& volume) { return !volume->hidden(); }));
     return;

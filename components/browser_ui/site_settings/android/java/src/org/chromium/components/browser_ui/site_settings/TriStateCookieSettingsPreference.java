@@ -168,19 +168,20 @@ public class TriStateCookieSettingsPreference extends Preference
     }
 
     private void setBlockThirdPartyCookieDescription(Params params) {
+        int blockSublabelId;
         if (params.isRelatedWebsiteSetsDataAccessEnabled) {
-            mBlockThirdPartyButton.setDescriptionText(
-                    getResources()
-                            .getString(
-                                    R.string
-                                            .website_settings_third_party_cookies_page_block_radio_sub_label_rws_enabled));
+            blockSublabelId =
+                    params.isAlwaysBlock3pcsIncognitoEnabled
+                            ? R.string
+                                    .settings_cookies_block_third_party_settings_block_sublabel_rws_enabled
+                            : R.string
+                                    .website_settings_third_party_cookies_page_block_radio_sub_label_rws_enabled;
         } else {
-            mBlockThirdPartyButton.setDescriptionText(
-                    getResources()
-                            .getString(
-                                    R.string
-                                            .website_settings_third_party_cookies_page_block_radio_sub_label_rws_disabled));
+            blockSublabelId =
+                    R.string
+                            .website_settings_third_party_cookies_page_block_radio_sub_label_rws_disabled;
         }
+        mBlockThirdPartyButton.setDescriptionText(getResources().getString(blockSublabelId));
     }
 
     public void setCookiesDetailsRequestedListener(OnCookiesDetailsRequested listener) {
@@ -217,6 +218,10 @@ public class TriStateCookieSettingsPreference extends Preference
         if (params.isAlwaysBlock3pcsIncognitoEnabled) {
             int allowLabelId = R.string.website_settings_third_party_cookies_page_allow_radio_label;
             mBlockThirdPartyIncognitoButton.setPrimaryText(getResources().getString(allowLabelId));
+            int allowSublabelId =
+                    R.string.settings_cookies_block_third_party_settings_allow_sublabel;
+            mBlockThirdPartyIncognitoButton.setDescriptionText(
+                    getResources().getString(allowSublabelId));
         }
         mAllowButton.setEnabled(true);
         mBlockThirdPartyIncognitoButton.setEnabled(true);

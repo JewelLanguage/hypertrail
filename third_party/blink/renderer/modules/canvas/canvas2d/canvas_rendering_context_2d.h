@@ -195,14 +195,11 @@ class MODULES_EXPORT CanvasRenderingContext2D final
   SkAlphaType GetAlphaType() const override {
     return color_params_.GetAlphaType();
   }
-  SkColorType GetSkColorType() const override {
-    return color_params_.GetSkColorType();
+  viz::SharedImageFormat GetSharedImageFormat() const override {
+    return color_params_.GetSharedImageFormat();
   }
   gfx::ColorSpace GetColorSpace() const override {
-    return SkColorSpaceToGfxColorSpace(GetSkColorSpace());
-  }
-  sk_sp<SkColorSpace> GetSkColorSpace() const override {
-    return color_params_.GetSkColorSpace();
+    return color_params_.GetGfxColorSpace();
   }
   scoped_refptr<StaticBitmapImage> GetImage(FlushReason) final;
 

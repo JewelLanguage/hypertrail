@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/base64.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/functional/callback.h"
 #include "base/lazy_instance.h"
 #include "base/no_destructor.h"
@@ -120,7 +121,7 @@ class NativeWidgetMac::ZoomFocusMonitor : public FocusChangeListener {
       return;
     }
     // Web content handles its own zooming.
-    if (strcmp("WebView", focused_now->GetClassName()) == 0) {
+    if (focused_now->GetClassName() == "WebView") {
       return;
     }
     NSRect rect = NSRectFromCGRect(focused_now->GetBoundsInScreen().ToCGRect());
@@ -310,9 +311,11 @@ void NativeWidgetMac::OnWidgetInitDone() {
 void NativeWidgetMac::ReparentNativeViewImpl(gfx::NativeView new_parent) {
   gfx::NativeView child = GetNativeView();
   DCHECK_NE(child, new_parent);
-  DCHECK([new_parent.GetNativeNSView() window]);
-  CHECK(new_parent);
-  CHECK_NE([child.GetNativeNSView() superview], new_parent.GetNativeNSView());
+  if (new_parent) {
+    DCHECK([new_parent.GetNativeNSView() window]);
+    CHECK(new_parent);
+    CHECK_NE([child.GetNativeNSView() superview], new_parent.GetNativeNSView());
+  }
 
   NativeWidgetMacNSWindowHost* child_window_host =
       NativeWidgetMacNSWindowHost::GetFromNativeView(child);
@@ -326,12 +329,13 @@ void NativeWidgetMac::ReparentNativeViewImpl(gfx::NativeView new_parent) {
       [child.GetNativeNSView() isDescendantOf:widget_view.GetNativeNSView()]);
   DCHECK(widget_window && ![widget_window.GetNativeNSWindow() isSheet]);
 
-  NativeWidgetMacNSWindowHost* parent_window_host =
-      NativeWidgetMacNSWindowHost::GetFromNativeView(new_parent);
+  NativeWidgetMacNSWindowHost* new_parent_window_host =
+      new_parent ? NativeWidgetMacNSWindowHost::GetFromNativeView(new_parent)
+                 : nullptr;
 
   // Early out for no-op changes.
-  if (child == widget_view &&
-      child_window_host->parent() == parent_window_host) {
+  if (new_parent_window_host && child == widget_view &&
+      child_window_host->parent() == new_parent_window_host) {
     return;
   }
 
@@ -343,7 +347,7 @@ void NativeWidgetMac::ReparentNativeViewImpl(gfx::NativeView new_parent) {
     widget->NotifyNativeViewHierarchyWillChange();
   }
 
-  child_window_host->SetParent(parent_window_host);
+  child_window_host->SetParent(new_parent_window_host);
 
   // And now, notify them that they have a brand new parent.
   for (Widget* widget : widgets) {
@@ -1133,6 +1137,19 @@ void NativeWidgetMac::OnDidChangeFocus(View* focused_before,
     ns_window_host_->text_input_host()->SetTextInputClient(
         new_text_input_client);
   }
+}
+
+void NativeWidgetMac::OnFocusManagerDestroying(FocusManager* focus_manager) {
+  // TODO(crbug.com/348369180): An observer of FocusManager is still observing
+  // the manager on the manager's destruction. NativeWidgetMac is the suspect.
+  CHECK_EQ(focus_manager, focus_manager_);
+  focus_manager->RemoveFocusChangeListener(this);
+
+  // Log the widget name in crash key.
+  static crash_reporter::CrashKeyString<32> window_info_key("widgetName");
+  crash_reporter::ScopedCrashKeyString scopedWindowKey(&window_info_key, name_);
+
+  base::debug::DumpWithoutCrashing();
 }
 
 ui::EventDispatchDetails NativeWidgetMac::DispatchKeyEventPostIME(

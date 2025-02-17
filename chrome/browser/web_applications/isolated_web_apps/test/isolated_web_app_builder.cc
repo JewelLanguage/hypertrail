@@ -10,6 +10,7 @@
 #include <string_view>
 
 #include "base/base_paths.h"
+#include "base/containers/to_value_list.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_file.h"
@@ -47,11 +48,11 @@
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
+#include "services/network/public/cpp/permissions_policy/origin_with_possible_wildcards.h"
 #include "skia/ext/codec_utils.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
 #include "third_party/blink/public/common/manifest/manifest_util.h"
-#include "third_party/blink/public/common/permissions_policy/origin_with_possible_wildcards.h"
 #include "third_party/blink/public/common/permissions_policy/permissions_policy_declaration.h"
 #include "third_party/blink/public/common/permissions_policy/policy_helper_public.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom.h"
@@ -200,7 +201,7 @@ ManifestBuilder::PermissionsPolicy::~PermissionsPolicy() = default;
 ManifestBuilder::ManifestBuilder()
     : name_("Test App"), version_("0.0.1"), start_url_("/") {
   AddPermissionsPolicy(
-      blink::mojom::PermissionsPolicyFeature::kCrossOriginIsolated,
+      network::mojom::PermissionsPolicyFeature::kCrossOriginIsolated,
       /*self=*/true, /*origins=*/{});
 }
 
@@ -228,6 +229,12 @@ ManifestBuilder& ManifestBuilder::SetDisplayMode(
   return *this;
 }
 
+ManifestBuilder& ManifestBuilder::SetDisplayModeOverride(
+    std::vector<blink::mojom::DisplayMode> display_mode_override) {
+  display_mode_override_ = std::move(display_mode_override);
+  return *this;
+}
+
 ManifestBuilder& ManifestBuilder::AddIcon(std::string_view resource_path,
                                           gfx::Size size,
                                           std::string_view content_type) {
@@ -237,7 +244,7 @@ ManifestBuilder& ManifestBuilder::AddIcon(std::string_view resource_path,
 }
 
 ManifestBuilder& ManifestBuilder::AddPermissionsPolicyWildcard(
-    blink::mojom::PermissionsPolicyFeature feature) {
+    network::mojom::PermissionsPolicyFeature feature) {
   permissions_policy_.insert_or_assign(
       feature,
       ManifestBuilder::PermissionsPolicy(/*wildcard=*/true, /*self=*/false,
@@ -246,7 +253,7 @@ ManifestBuilder& ManifestBuilder::AddPermissionsPolicyWildcard(
 }
 
 ManifestBuilder& ManifestBuilder::AddPermissionsPolicy(
-    blink::mojom::PermissionsPolicyFeature feature,
+    network::mojom::PermissionsPolicyFeature feature,
     bool self,
     std::vector<url::Origin> origins) {
   permissions_policy_.insert_or_assign(
@@ -290,7 +297,10 @@ std::string ManifestBuilder::ToJson() const {
                   .Set("id", "/")
                   .Set("scope", "/")
                   .Set("start_url", start_url_)
-                  .Set("display", blink::DisplayModeToString(display_mode_));
+                  .Set("display", blink::DisplayModeToString(display_mode_))
+                  .Set("display_override",
+                       base::ToValueList(display_mode_override_,
+                                         &blink::DisplayModeToString));
 
   base::Value::Dict policies;
   for (const auto& policy : permissions_policy_) {
@@ -360,6 +370,7 @@ blink::mojom::ManifestPtr ManifestBuilder::ToBlinkManifest(
   manifest->scope = base_url;
   manifest->start_url = base_url.Resolve(start_url_);
   manifest->display = display_mode_;
+  manifest->display_override = display_mode_override_;
 
   for (const auto& icon : icons_) {
     blink::Manifest::ImageResource blink_icon;
@@ -389,7 +400,7 @@ blink::mojom::ManifestPtr ManifestBuilder::ToBlinkManifest(
     }
     for (const auto& origin : policy.second.origins) {
       decl.allowed_origins.push_back(
-          blink::OriginWithPossibleWildcards::FromOrigin(origin).value());
+          network::OriginWithPossibleWildcards::FromOrigin(origin).value());
     }
     manifest->permissions_policy.push_back(decl);
   }
@@ -557,6 +568,8 @@ IsolatedWebAppBuilder& IsolatedWebAppBuilder::AddFileFromDisk(
     const Headers& headers) {
   base::ScopedAllowBlockingForTesting allow_blocking;
   CHECK(base::PathExists(file_path)) << file_path << " does not exist";
+  CHECK(resource_path != kManifestPath)
+      << "The manifest must be specified through the ManifestBuilder";
   resources_.insert_or_assign(std::string(resource_path),
                               Resource(net::HTTP_OK, headers, file_path));
   return *this;
@@ -581,7 +594,13 @@ IsolatedWebAppBuilder& IsolatedWebAppBuilder::AddFolderFromDisk(
   for (base::FilePath path = files.Next(); !path.empty(); path = files.Next()) {
     base::FilePath relative(FILE_PATH_LITERAL("/"));
     CHECK(folder_path.AppendRelativePath(path, &relative));
-    AddFileFromDisk(relative.AsUTF8Unsafe(), path);
+    std::string relative_resource_path = relative.AsUTF8Unsafe();
+    if (relative_resource_path == kManifestPath) {
+      LOG(WARNING) << "Ignoring /.well-known/manifest.webmanifest, the "
+                      "serialized ManifestBuilder value will be used instead.";
+      continue;
+    }
+    AddFileFromDisk(relative_resource_path, path);
   }
   return *this;
 }
@@ -658,12 +677,11 @@ std::vector<uint8_t> IsolatedWebAppBuilder::BuildInMemoryBundle(
   base::ScopedAllowBlockingForTesting allow_blocking;
   Validate();
   web_package::WebBundleBuilder builder;
-  for (const auto& resource : resources_) {
-    scoped_refptr<net::HttpResponseHeaders> headers =
-        resource.second.headers(resource.first);
+  for (const auto& [url, resource] : resources_) {
+    scoped_refptr<net::HttpResponseHeaders> headers = resource.headers(url);
 
     web_package::WebBundleBuilder::Headers bundle_headers = {
-        {":status", base::ToString(resource.second.status())}};
+        {":status", base::ToString(resource.status())}};
     size_t iterator = 0;
     std::string name;
     std::string value;
@@ -673,7 +691,7 @@ std::vector<uint8_t> IsolatedWebAppBuilder::BuildInMemoryBundle(
       bundle_headers.push_back({base::ToLowerASCII(name), value});
     }
 
-    builder.AddExchange(resource.first, bundle_headers, resource.second.body());
+    builder.AddExchange(url, bundle_headers, resource.body());
   }
 
   builder.AddExchange(
@@ -767,12 +785,6 @@ BundledIsolatedWebApp::FakeInstallPageState(Profile* profile) {
       IsolatedWebAppUrlInfo::CreateFromSignedWebBundleId(web_bundle_id_);
   return ::web_app::FakeInstallPageState(
       profile, url_info, manifest_builder_.ToBlinkManifest(url_info.origin()));
-}
-
-base::expected<IsolatedWebAppUrlInfo, std::string>
-BundledIsolatedWebApp::TrustBundleAndInstall(Profile* profile) {
-  TrustSigningKey();
-  return Install(profile);
 }
 
 base::expected<IsolatedWebAppUrlInfo, std::string>

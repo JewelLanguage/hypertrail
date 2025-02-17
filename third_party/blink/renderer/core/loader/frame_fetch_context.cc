@@ -43,6 +43,7 @@
 #include "net/http/structured_headers.h"
 #include "services/network/public/cpp/client_hints.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
 #include "services/network/public/mojom/web_client_hints_types.mojom-blink.h"
 #include "services/network/public/mojom/web_client_hints_types.mojom-shared.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
@@ -50,7 +51,6 @@
 #include "third_party/blink/public/common/device_memory/approximated_device_memory.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/loader/request_context_frame_type.mojom-blink.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_network_provider.h"
 #include "third_party/blink/public/platform/scheduler/web_scoped_virtual_time_pauser.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
@@ -439,7 +439,7 @@ void FrameFetchContext::PrepareRequest(
     request.SetSharedStorageWritableEligible(
         policy &&
         request.IsFeatureEnabledForSubresourceRequestAssumingOptIn(
-            policy, mojom::blink::PermissionsPolicyFeature::kSharedStorage,
+            policy, network::mojom::PermissionsPolicyFeature::kSharedStorage,
             SecurityOrigin::Create(request.Url())->ToUrlOrigin()));
   }
 
@@ -496,7 +496,8 @@ bool FrameFetchContext::AllowImage() const {
   return images_enabled;
 }
 
-void FrameFetchContext::ModifyRequestForCSP(ResourceRequest& resource_request) {
+void FrameFetchContext::ModifyRequestForMixedContentUpgrade(
+    ResourceRequest& resource_request) {
   if (GetResourceFetcherProperties().IsDetached())
     return;
 
@@ -837,10 +838,13 @@ void FrameFetchContext::PopulateResourceRequestBeforeCacheAccess(
     probe::SetDevToolsIds(Probe(), request, options.initiator_info);
   }
 
-  // CSP may change the url.
-  ModifyRequestForCSP(request);
-  if (!request.Url().IsValid()) {
-    return;
+  if (!RuntimeEnabledFeatures::PreloadLinkRelDataUrlsEnabled()) {
+    // CSP may change the url, if Upgrade-Insecure-Request is enforced for
+    // mixed content.
+    ModifyRequestForMixedContentUpgrade(request);
+    if (!request.Url().IsValid()) {
+      return;
+    }
   }
   SetFirstPartyCookie(request);
   if (CoreProbeSink::HasAgentsGlobal(CoreProbeSink::kInspectorEmulationAgent |
@@ -869,7 +873,7 @@ void FrameFetchContext::UpgradeResourceRequestForLoader(
     if (!GetResourceFetcherProperties().IsDetached()) {
       probe::SetDevToolsIds(Probe(), request, options.initiator_info);
     }
-    ModifyRequestForCSP(request);
+    ModifyRequestForMixedContentUpgrade(request);
   }
   AddClientHintsIfNecessary(resource_width, request);
   AddReducedAcceptLanguageIfNecessary(request);
@@ -1152,6 +1156,10 @@ const PermissionsPolicy* FrameFetchContext::GetPermissionsPolicy() const {
                          ->GetSecurityContext()
                          .GetPermissionsPolicy()
                    : nullptr;
+}
+
+const FeatureContext* FrameFetchContext::GetFeatureContext() const {
+  return document_ ? document_->GetExecutionContext() : nullptr;
 }
 
 HashSet<HashAlgorithm> FrameFetchContext::CSPHashesToReport() const {

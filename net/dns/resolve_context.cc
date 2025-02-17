@@ -4,6 +4,7 @@
 
 #include "net/dns/resolve_context.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <limits>
 #include <utility>
@@ -19,7 +20,6 @@
 #include "base/no_destructor.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/observer_list.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/clock.h"
 #include "base/time/tick_clock.h"
@@ -55,7 +55,7 @@ const size_t kRttBucketCount = 350;
 // Target percentile in the RTT histogram used for fallback period.
 const int kRttPercentile = 99;
 // Number of samples to seed the histogram with.
-const base::HistogramBase::Count kNumSeeds = 2;
+const base::HistogramBase::Count32 kNumSeeds = 2;
 
 DohProviderEntry::List FindDohProvidersMatchingServerConfig(
     DnsOverHttpsServerConfig server_config) {
@@ -206,8 +206,8 @@ size_t ResolveContext::NumAvailableDohServers(const DnsSession* session) const {
   if (!IsCurrentSession(session))
     return 0;
 
-  return base::ranges::count_if(doh_server_stats_,
-                                &ServerStatsToDohAvailability);
+  return std::ranges::count_if(doh_server_stats_,
+                               &ServerStatsToDohAvailability);
 }
 
 void ResolveContext::RecordServerFailure(size_t server_index,
@@ -496,14 +496,14 @@ base::TimeDelta ResolveContext::NextFallbackPeriodHelper(
   if (initial_fallback_period_ > max_fallback_period_)
     return initial_fallback_period_;
 
-  static_assert(std::numeric_limits<base::HistogramBase::Count>::is_signed,
+  static_assert(std::numeric_limits<base::HistogramBase::Count32>::is_signed,
                 "histogram base count assumed to be signed");
 
   // Use fixed percentile of observed samples.
   const base::SampleVector& samples = *server_stats->rtt_histogram;
 
-  base::HistogramBase::Count total = samples.TotalCount();
-  base::HistogramBase::Count remaining_count = kRttPercentile * total / 100;
+  base::HistogramBase::Count32 total = samples.TotalCount();
+  base::HistogramBase::Count32 remaining_count = kRttPercentile * total / 100;
   size_t index = 0;
   while (remaining_count > 0 && index < GetRttBuckets()->size()) {
     remaining_count -= samples.GetCountAtIndex(index);

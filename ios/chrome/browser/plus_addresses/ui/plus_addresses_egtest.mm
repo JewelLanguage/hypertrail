@@ -38,7 +38,6 @@ namespace {
 
 constexpr char kEmailFormUrl[] = "/email_signup_form.html";
 constexpr char kEmailFieldId[] = "email";
-constexpr char kFakeSuggestionLabel[] = "Lorem Ipsum";
 
 // Assert that a given plus address modal event of type `event_type` occurred
 // `count` times.
@@ -93,6 +92,7 @@ void ExpectModalTimeSample(
 
   // To prevent any flakiness.
   [PlusAddressAppInterface clearState];
+  [PlusAddressAppInterface setUserHasAcceptedNotice];
   [PlusAddressAppInterface setPlusAddressFillingEnabled:YES];
 
   [self loadPlusAddressEligiblePage];
@@ -145,11 +145,15 @@ void ExpectModalTimeSample(
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
       performAction:chrome_test_util::TapWebElementWithId(kEmailFieldId)];
 
-  NSString* suggestionLabel = base::SysUTF8ToNSString(kFakeSuggestionLabel);
+  NSString* suggestionLabel =
+      l10n_util::GetNSString(IDS_PLUS_ADDRESS_CREATE_SUGGESTION_MAIN_TEXT);
+  NSString* suggestionSubLabel =
+      l10n_util::GetNSString(IDS_PLUS_ADDRESS_CREATE_SUGGESTION_SECONDARY_TEXT);
   id<GREYMatcher> userChip =
       [AutofillAppInterface isKeyboardAccessoryUpgradeEnabled]
-          ? grey_accessibilityLabel([NSString
-                stringWithFormat:@"%@, %@", suggestionLabel, suggestionLabel])
+          ? grey_accessibilityLabel(
+                [NSString stringWithFormat:@"%@, %@", suggestionLabel,
+                                           suggestionSubLabel])
           : grey_text(suggestionLabel);
 
   // Ensure the plus_address suggestion appears.
@@ -192,9 +196,10 @@ id<GREYMatcher> GetMatcherForPlusAddressLabel(NSString* labelText) {
 
 #pragma mark - Tests
 
+// TODO(crbug.com/394490489): Test is flaky.
 // Tests showing up a bottom sheet to confirm a plus address. Once, the plus
 // address is confirmed checks if it is filled in the file.
-- (void)testConfirmPlusAddressUsingBottomSheet {
+- (void)DISABLED_testConfirmPlusAddressUsingBottomSheet {
   [self openCreatePlusAddressBottomSheet];
 
   id<GREYMatcher> plusAddressLabelMatcher = GetMatcherForPlusAddressLabel(

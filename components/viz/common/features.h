@@ -56,6 +56,10 @@ VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kRenderPassDrawnRect);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kRecordSkPicture);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kUseDrmBlackFullscreenOptimization);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kUseFrameIntervalDecider);
+#if BUILDFLAG(IS_ANDROID)
+VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(
+    kUseFrameIntervalDeciderNewAndroidFeatures);
+#endif
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(
     kTemporalSkipOverlaysWithRootCopyOutputRequests);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kUseMultipleOverlays);
@@ -90,13 +94,13 @@ VIZ_COMMON_EXPORT extern const base::FeatureParam<int>
 #endif
 
 #if BUILDFLAG(IS_MAC)
-VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kCVDisplayLinkBeginFrameSource);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kVSyncAlignedPresent);
 #endif
 
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kAllowUndamagedNonrootRenderPassToSkip);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(
     kAllowForceMergeRenderPassWithRequireOverlayQuads);
+VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kOcclusionCullingForTextureQuads);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kOnBeginFrameAcks);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kOnBeginFrameThrottleVideo);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kAdpf);
@@ -112,7 +116,6 @@ VIZ_COMMON_EXPORT extern const base::FeatureParam<double>
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kEnableADPFRendererMain);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kEnableInteractiveOnlyADPFRenderer);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kEnableADPFGpuCompositorThread);
-VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kEnableADPFAsyncThreadsVerification);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kEnableADPFSeparateRendererMainSession);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kEnableADPFSetThreads);
 VIZ_COMMON_EXPORT BASE_DECLARE_FEATURE(kUseDisplaySDRMaxLuminanceNits);
@@ -164,9 +167,9 @@ VIZ_COMMON_EXPORT bool UseSurfaceLayerForVideo();
 VIZ_COMMON_EXPORT int MaxOverlaysConsidered();
 VIZ_COMMON_EXPORT bool ShouldOnBeginFrameThrottleVideo();
 VIZ_COMMON_EXPORT bool IsOnBeginFrameAcksEnabled();
+VIZ_COMMON_EXPORT bool IsOcclusionCullingForTextureQuadsEnabled();
 VIZ_COMMON_EXPORT bool ShouldDrawImmediatelyWhenInteractive();
 VIZ_COMMON_EXPORT std::optional<double> SnapshotEvictedRootSurfaceScale();
-VIZ_COMMON_EXPORT bool IsCVDisplayLinkBeginFrameSourceEnabled();
 VIZ_COMMON_EXPORT bool IsVSyncAlignedPresentEnabled();
 VIZ_COMMON_EXPORT bool ShouldLogFrameQuadInfo();
 VIZ_COMMON_EXPORT bool IsUsingFrameIntervalDecider();

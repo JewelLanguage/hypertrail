@@ -469,7 +469,7 @@ class CONTENT_EXPORT WebContentsDelegate {
 
   // Notifies `BrowserView` about the resizable boolean having been set vith
   // `window.setResizable(bool)` API.
-  virtual void OnCanResizeFromWebAPIChanged() {}
+  virtual void OnWebApiWindowResizableChanged() {}
   // Returns the overall resizability of the `BrowserView` when considering
   // both the value set by the AWC API and browser's "native" resizability.
   virtual bool GetCanResize();
@@ -754,6 +754,10 @@ class CONTENT_EXPORT WebContentsDelegate {
       WebContents& web_contents,
       PreloadingTriggerType trigger_type);
 
+  // Returns how many prerendering can be triggered by
+  // WebContents::StartPrerendering().
+  virtual int AllowedPrerenderingCount(WebContents& web_contents);
+
   // Returns whether to override user agent for prerendering navigation.
   virtual NavigationController::UserAgentOverrideOption
   ShouldOverrideUserAgentForPrerender2();
@@ -830,13 +834,14 @@ class CONTENT_EXPORT WebContentsDelegate {
       base::OnceCallback<void(const SkBitmap&)> callback);
 
 #if BUILDFLAG(IS_ANDROID)
-  // Allows delegate to override whether there is support for animations when
-  // performing a forward transition.
-  virtual bool SupportsForwardTransitionAnimation();
-
   // Synchronous version of |MaybeCopyContentAreaAsBitmap|. Return an
   // empty bitmap if embedder is not showing any custom view.
   virtual SkBitmap MaybeCopyContentAreaAsBitmapSync();
+
+  // Return an icon to use for privileged internal pages, if no screenshot of
+  // the page is available during back forward transition animations. An empty
+  // bitmap can be returned if the embedder wants to leave the preview empty.
+  virtual SkBitmap GetBackForwardTransitionFallbackUXInternalPageIcon();
 
   // Notifies the delegate that the back forward transition animation state
   // has changed. If necessary, the delegate should use this notification to

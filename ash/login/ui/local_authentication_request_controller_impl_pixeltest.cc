@@ -30,7 +30,6 @@
 #include "chromeos/ash/components/login/auth/public/cryptohome_key_constants.h"
 #include "chromeos/ash/components/login/auth/public/key.h"
 #include "chromeos/ash/components/login/auth/public/user_context.h"
-#include "components/prefs/testing_pref_service.h"
 #include "components/session_manager/session_manager_types.h"
 #include "components/user_manager/fake_user_manager.h"
 #include "components/user_manager/scoped_user_manager.h"
@@ -48,7 +47,7 @@ namespace {
 using ::cryptohome::KeyLabel;
 
 constexpr char kTestAccount[] = "user@test.com";
-constexpr char kFakeGaia[] = "fake_gaia";
+constexpr GaiaId::Literal kFakeGaia("fake_gaia");
 constexpr char kExpectedPassword[] = "qwerty";
 
 class LocalAuthenticationRequestControllerImplPixelTest : public AshTestBase {
@@ -85,14 +84,12 @@ class LocalAuthenticationRequestControllerImplPixelTest : public AshTestBase {
     UserDataAuthClient::InitializeFake();
     SystemSaltGetter::Initialize();
 
-    test_account_id_ =
-        AccountId::FromUserEmailGaiaId(kTestAccount, GaiaId(kFakeGaia));
+    test_account_id_ = AccountId::FromUserEmailGaiaId(kTestAccount, kFakeGaia);
 
     SetExpectedCredentialsWithDbusClient(test_account_id_, kExpectedPassword);
 
-    user_manager::UserManagerImpl::RegisterPrefs(local_state_.registry());
     auto fake_user_manager =
-        std::make_unique<user_manager::FakeUserManager>(&local_state_);
+        std::make_unique<user_manager::FakeUserManager>(local_state());
     fake_user_manager->AddGaiaUser(test_account_id_,
                                    user_manager::UserType::kRegular);
     scoped_user_manager_ = std::make_unique<user_manager::ScopedUserManager>(
@@ -201,7 +198,6 @@ class LocalAuthenticationRequestControllerImplPixelTest : public AshTestBase {
   }
 
   base::test::ScopedFeatureList scoped_features_;
-  TestingPrefServiceSimple local_state_;
 
   // Number of times the view was dismissed with close button.
   int close_action_ = 0;

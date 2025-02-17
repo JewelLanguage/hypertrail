@@ -19,6 +19,7 @@
 #import "ios/chrome/browser/authentication/ui_bundled/account_menu/account_menu_mediator_delegate.h"
 #import "ios/chrome/browser/authentication/ui_bundled/account_menu/account_menu_view_controller.h"
 #import "ios/chrome/browser/authentication/ui_bundled/cells/table_view_account_item.h"
+#import "ios/chrome/browser/authentication/ui_bundled/enterprise/enterprise_utils.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_constants.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_utils.h"
 #import "ios/chrome/browser/policy/ui_bundled/management_util.h"
@@ -110,7 +111,7 @@
     _syncService = syncService;
     _syncObserver = std::make_unique<SyncObserverBridge>(self, _syncService);
     _diplayedAccountErrorType = syncer::SyncService::UserActionableError::kNone;
-    [self updateIdentities];
+    [self updateIdentitiesIfAllowed];
     // By default, if the mediator was not involved in stopping the account
     // menu, it mean the coordinator was directly interupted.
     self.signinCoordinatorResult = SigninCoordinatorResultInterrupted;
@@ -159,6 +160,22 @@
       [self identityForGaiaID:gaiaID], IdentityAvatarSize::TableViewIcon);
 }
 
+- (BOOL)isGaiaIDManaged:(NSString*)gaiaID {
+  id<SystemIdentity> identity = [self identityForGaiaID:gaiaID];
+  if (std::optional<BOOL> managed = IsIdentityManaged(identity);
+      managed.has_value()) {
+    return managed.value();
+  }
+
+  __weak __typeof(self) weakSelf = self;
+  FetchManagedStatusForIdentity(identity, base::BindOnce(^(bool managed) {
+                                  if (managed) {
+                                    [weakSelf updateIdentitiesIfAllowed];
+                                  }
+                                }));
+  return NO;
+}
+
 - (NSString*)primaryAccountEmail {
   return _primaryIdentity.userEmail;
 }
@@ -183,7 +200,7 @@
 #pragma mark - ChromeAccountManagerServiceObserver
 
 - (void)identityListChanged {
-  if (AreSeparateProfilesForManagedAccountsEnabled()) {
+  if (IsUseAccountListFromIdentityManagerEnabled()) {
     // Listening to `onAccountsOnDeviceChanged` instead.
     return;
   }
@@ -191,7 +208,7 @@
 }
 
 - (void)identityUpdated:(id<SystemIdentity>)identity {
-  if (AreSeparateProfilesForManagedAccountsEnabled()) {
+  if (IsUseAccountListFromIdentityManagerEnabled()) {
     // Listening to `onExtendedAccountInfoUpdated` instead.
     return;
   }
@@ -218,7 +235,7 @@
     case signin::PrimaryAccountChangeEvent::Type::kSet:
       _primaryIdentity = _authenticationService->GetPrimaryIdentity(
           signin::ConsentLevel::kSignin);
-      [self updateIdentities];
+      [self updateIdentitiesIfAllowed];
       break;
     case signin::PrimaryAccountChangeEvent::Type::kCleared:
       if (_authenticationService->IsAccountSwitchInProgress()) {
@@ -234,7 +251,7 @@
 }
 
 - (void)onExtendedAccountInfoUpdated:(const AccountInfo&)info {
-  if (!AreSeparateProfilesForManagedAccountsEnabled()) {
+  if (!IsUseAccountListFromIdentityManagerEnabled()) {
     // Listening to `identityUpdated` instead.
     return;
   }
@@ -242,7 +259,7 @@
 }
 
 - (void)onAccountsOnDeviceChanged {
-  if (!AreSeparateProfilesForManagedAccountsEnabled()) {
+  if (!IsUseAccountListFromIdentityManagerEnabled()) {
     // Listening to `identityListChanged` instead.
     return;
   }
@@ -279,10 +296,6 @@
   if (self.userInteractionsBlocked) {
     return;
   }
-  if (![self.delegate blockOtherScenesIfPossible]) {
-    // This scene is currently blocked. Abort signout.
-    return;
-  }
   _blockUpdates = YES;
   self.userInteractionsBlocked = YES;
   __weak __typeof(self) weakSelf = self;
@@ -309,7 +322,6 @@
   CHECK(newIdentity);
 
   [self.consumer switchingStarted];
-  [self.delegate blockOtherScenesIfPossible];
   _blockUpdates = YES;
   self.userInteractionsBlocked = YES;
 
@@ -429,7 +441,6 @@
 
 // Callback for signout.
 - (void)signoutEndedWithSuccess:(BOOL)success {
-  [self.delegate unblockOtherScenes];
   if (success) {
     // By signing-out the user cancelled the option to signin in this menu.
     self.signinCoordinatorResult = SigninCoordinatorResultCanceledByUser;
@@ -447,7 +458,6 @@
                      toIdentity:(id<SystemIdentity>)newIdentity {
   if (!signoutSuccess) {
     // User had not signed-out. Allow to interact with the UI.
-    [self.delegate unblockOtherScenes];
     self.userInteractionsBlocked = NO;
     _accountSwitchInProgress.RunAndReset();
     [self restartUpdates];
@@ -469,7 +479,6 @@
   CHECK(_authenticationFlow);
   _authenticationFlow = nil;
   _accountSwitchInProgress.RunAndReset();
-  [self.delegate unblockOtherScenes];
   BOOL success =
       result == SigninCoordinatorResult::SigninCoordinatorResultSuccess;
   if (success) {
@@ -482,7 +491,7 @@
     // restart using the account menu.
     _authenticationService->SignIn(
         previousIdentity,
-        signin_metrics::AccessPoint::ACCESS_POINT_ACCOUNT_MENU_FAILED_SWITCH);
+        signin_metrics::AccessPoint::kAccountMenuFailedSwitch);
     self.userInteractionsBlocked = NO;
     [self restartUpdates];
   } else {
@@ -494,22 +503,20 @@
 #pragma mark - Private
 
 - (void)handleIdentityListChanged {
-  if (_blockUpdates) {
-    return;
-  }
-  [self updateIdentities];
+  [self updateIdentitiesIfAllowed];
 }
 
 - (void)handleIdentityUpdated {
-  if (_blockUpdates) {
-    return;
-  }
-  [self updateIdentities];
+  [self updateIdentitiesIfAllowed];
 }
 
 // Updates the identity list in `_identities`, and sends an notification to
 // the consumer.
-- (void)updateIdentities {
+- (void)updateIdentitiesIfAllowed {
+  if (_blockUpdates) {
+    return;
+  }
+
   NSArray<id<SystemIdentity>>* identitiesOnDevice =
       signin::GetIdentitiesOnDevice(_identityManager, _accountManagerService);
 
@@ -545,9 +552,11 @@
     }
   }
 
-  [self.consumer updateAccountListWithGaiaIDsToAdd:gaiaIDsToAdd
-                                   gaiaIDsToRemove:gaiaIDsToRemove
-                                     gaiaIDsToKeep:gaiaIDsToKeep];
+  if ([gaiaIDsToAdd count] > 0 || [gaiaIDsToRemove count] > 0) {
+    [self.consumer updateAccountListWithGaiaIDsToAdd:gaiaIDsToAdd
+                                     gaiaIDsToRemove:gaiaIDsToRemove
+                                       gaiaIDsToKeep:gaiaIDsToKeep];
+  }
   // In case the primary account information changed.
   if ([self primaryAccountInfoChanged]) {
     [self.consumer updatePrimaryAccount];
@@ -563,7 +572,7 @@
   }
   [self.consumer switchingStopped];
   _blockUpdates = NO;
-  [self updateIdentities];
+  [self updateIdentitiesIfAllowed];
   [self onSyncStateChanged];
 }
 

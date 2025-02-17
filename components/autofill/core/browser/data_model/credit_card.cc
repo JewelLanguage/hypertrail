@@ -256,41 +256,31 @@ std::u16string CreditCard::NetworkForDisplay(const std::string& network) {
 
 // static
 int CreditCard::IconResourceId(Suggestion::Icon icon) {
-  bool should_show_metadata_icon = base::FeatureList::IsEnabled(
-      features::kAutofillEnableNewCardArtAndNetworkImages);
-  auto get_icon = [&](int metadata_icon, int default_icon) {
-    return should_show_metadata_icon ? metadata_icon : default_icon;
-  };
-
   switch (icon) {
     case Suggestion::Icon::kCardAmericanExpress:
-      return get_icon(IDR_AUTOFILL_METADATA_CC_AMEX, IDR_AUTOFILL_CC_AMEX);
+      return IDR_AUTOFILL_METADATA_CC_AMEX;
     case Suggestion::Icon::kCardDiners:
-      return get_icon(IDR_AUTOFILL_METADATA_CC_DINERS, IDR_AUTOFILL_CC_DINERS);
+      return IDR_AUTOFILL_METADATA_CC_DINERS;
     case Suggestion::Icon::kCardDiscover:
-      return get_icon(IDR_AUTOFILL_METADATA_CC_DISCOVER,
-                      IDR_AUTOFILL_CC_DISCOVER);
+      return IDR_AUTOFILL_METADATA_CC_DISCOVER;
     case Suggestion::Icon::kCardElo:
-      return get_icon(IDR_AUTOFILL_METADATA_CC_ELO, IDR_AUTOFILL_CC_ELO);
+      return IDR_AUTOFILL_METADATA_CC_ELO;
     case Suggestion::Icon::kCardJCB:
-      return get_icon(IDR_AUTOFILL_METADATA_CC_JCB, IDR_AUTOFILL_CC_JCB);
+      return IDR_AUTOFILL_METADATA_CC_JCB;
     case Suggestion::Icon::kCardMasterCard:
-      return get_icon(IDR_AUTOFILL_METADATA_CC_MASTERCARD,
-                      IDR_AUTOFILL_CC_MASTERCARD);
+      return IDR_AUTOFILL_METADATA_CC_MASTERCARD;
     case Suggestion::Icon::kCardMir:
-      return get_icon(IDR_AUTOFILL_METADATA_CC_MIR, IDR_AUTOFILL_CC_MIR);
+      return IDR_AUTOFILL_METADATA_CC_MIR;
     case Suggestion::Icon::kCardTroy:
-      return get_icon(IDR_AUTOFILL_METADATA_CC_TROY, IDR_AUTOFILL_CC_TROY);
+      return IDR_AUTOFILL_METADATA_CC_TROY;
     case Suggestion::Icon::kCardUnionPay:
-      return get_icon(IDR_AUTOFILL_METADATA_CC_UNIONPAY,
-                      IDR_AUTOFILL_CC_UNIONPAY);
+      return IDR_AUTOFILL_METADATA_CC_UNIONPAY;
     case Suggestion::Icon::kCardVerve:
-      return get_icon(IDR_AUTOFILL_METADATA_CC_VERVE, IDR_AUTOFILL_CC_VERVE);
+      return IDR_AUTOFILL_METADATA_CC_VERVE;
     case Suggestion::Icon::kCardVisa:
-      return get_icon(IDR_AUTOFILL_METADATA_CC_VISA, IDR_AUTOFILL_CC_VISA);
+      return IDR_AUTOFILL_METADATA_CC_VISA;
     case Suggestion::Icon::kCardGeneric:
-      return get_icon(IDR_AUTOFILL_METADATA_CC_GENERIC,
-                      IDR_AUTOFILL_CC_GENERIC);
+      return IDR_AUTOFILL_METADATA_CC_GENERIC;
     case Suggestion::Icon::kAutofillAi:
 
     case Suggestion::Icon::kAccount:
@@ -299,6 +289,7 @@ int CreditCard::IconResourceId(Suggestion::Icon icon) {
     case Suggestion::Icon::kCreate:
     case Suggestion::Icon::kDelete:
     case Suggestion::Icon::kDevice:
+    case Suggestion::Icon::kVehicle:
     case Suggestion::Icon::kEdit:
     case Suggestion::Icon::kEmail:
     case Suggestion::Icon::kError:
@@ -310,9 +301,11 @@ int CreditCard::IconResourceId(Suggestion::Icon icon) {
     case Suggestion::Icon::kGooglePayDark:
     case Suggestion::Icon::kHttpsInvalid:
     case Suggestion::Icon::kHttpWarning:
+    case Suggestion::Icon::kIdCard:
     case Suggestion::Icon::kIban:
     case Suggestion::Icon::kKey:
     case Suggestion::Icon::kLocation:
+    case Suggestion::Icon::kLoyalty:
     case Suggestion::Icon::kMagic:
     case Suggestion::Icon::kNoIcon:
     case Suggestion::Icon::kOfferTag:
@@ -571,13 +564,10 @@ void CreditCard::SetRawInfoWithVerificationStatus(FieldType type,
   }
 }
 
-void CreditCard::GetMatchingTypesWithProfileSources(
-    const std::u16string& text,
-    const std::string& app_locale,
-    FieldTypeSet* matching_types,
-    PossibleProfileValueSources* profile_value_sources) const {
-  FormGroup::GetMatchingTypesWithProfileSources(
-      text, app_locale, matching_types, profile_value_sources);
+void CreditCard::GetMatchingTypes(const std::u16string& text,
+                                  const std::string& app_locale,
+                                  FieldTypeSet* matching_types) const {
+  FormGroup::GetMatchingTypes(text, app_locale, matching_types);
 
   std::u16string card_number = GetInfo(CREDIT_CARD_NUMBER, app_locale);
   if (!card_number.empty()) {
@@ -859,6 +849,12 @@ bool CreditCard::IsEmpty(const std::string& app_locale) const {
   return types.empty();
 }
 
+bool CreditCard::IsEnrolledInCardInfoRetrieval() const {
+  return card_info_retrieval_enrollment_state() ==
+             CardInfoRetrievalEnrollmentState::kRetrievalEnrolled &&
+         record_type() == RecordType::kMaskedServerCard;
+}
+
 bool CreditCard::IsValid() const {
   return HasValidCardNumber() && HasValidExpirationDate();
 }
@@ -1111,23 +1107,25 @@ bool CreditCard::HasRichCardArtImageFromMetadata() const {
          card_art_url().spec() != kCapitalOneCardArtUrl;
 }
 
-void CreditCard::GetSupportedTypes(FieldTypeSet* supported_types) const {
-  supported_types->insert(CREDIT_CARD_NAME_FULL);
-  supported_types->insert(CREDIT_CARD_NAME_FIRST);
-  supported_types->insert(CREDIT_CARD_NAME_LAST);
-  supported_types->insert(CREDIT_CARD_NUMBER);
-  supported_types->insert(CREDIT_CARD_TYPE);
-  supported_types->insert(CREDIT_CARD_EXP_MONTH);
-  supported_types->insert(CREDIT_CARD_EXP_2_DIGIT_YEAR);
-  supported_types->insert(CREDIT_CARD_EXP_4_DIGIT_YEAR);
-  supported_types->insert(CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR);
-  supported_types->insert(CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR);
+FieldTypeSet CreditCard::GetSupportedTypes() const {
+  static constexpr FieldTypeSet supported_types{
+      CREDIT_CARD_NAME_FULL,
+      CREDIT_CARD_NAME_FIRST,
+      CREDIT_CARD_NAME_LAST,
+      CREDIT_CARD_NUMBER,
+      CREDIT_CARD_TYPE,
+      CREDIT_CARD_EXP_MONTH,
+      CREDIT_CARD_EXP_2_DIGIT_YEAR,
+      CREDIT_CARD_EXP_4_DIGIT_YEAR,
+      CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR,
+      CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR};
+  return supported_types;
 }
 
-std::u16string CreditCard::GetInfoImpl(const AutofillType& type,
-                                       const std::string& app_locale) const {
-  FieldType storable_type = type.GetStorableType();
-  if (storable_type == CREDIT_CARD_NUMBER) {
+std::u16string CreditCard::GetInfo(const AutofillType& autofill_type,
+                                   const std::string& app_locale) const {
+  FieldType type = autofill_type.GetStorableType();
+  if (type == CREDIT_CARD_NUMBER) {
     // Web pages should never actually be filled by a masked server card,
     // but this function is used at the preview stage.
     if (record_type() == RecordType::kMaskedServerCard) {
@@ -1135,14 +1133,13 @@ std::u16string CreditCard::GetInfoImpl(const AutofillType& type,
     }
     return StripCardNumberSeparators(number_);
   }
-  return GetRawInfo(storable_type);
+  return GetRawInfo(type);
 }
 
-bool CreditCard::SetInfoWithVerificationStatusImpl(
-    const AutofillType& type,
-    const std::u16string& value,
-    const std::string& app_locale,
-    VerificationStatus status) {
+bool CreditCard::SetInfoWithVerificationStatus(const AutofillType& type,
+                                               const std::u16string& value,
+                                               const std::string& app_locale,
+                                               VerificationStatus status) {
   FieldType storable_type = type.GetStorableType();
   if (storable_type == CREDIT_CARD_EXP_MONTH)
     return SetExpirationMonthFromString(value, app_locale);
@@ -1154,6 +1151,10 @@ bool CreditCard::SetInfoWithVerificationStatusImpl(
     SetRawInfoWithVerificationStatus(storable_type, value, status);
   }
   return true;
+}
+
+VerificationStatus CreditCard::GetVerificationStatus(FieldType type) const {
+  return VerificationStatus::kNoStatus;
 }
 
 std::u16string CreditCard::NetworkForFill() const {

@@ -87,8 +87,6 @@ template <class T>
 class ScopedConfigForTesting : Config<T> {
  public:
   ScopedConfigForTesting() : original_config_(Get()) { Reset(); }
-  ScopedConfigForTesting(const ScopedConfigForTesting&) = delete;
-  ScopedConfigForTesting& operator=(const ScopedConfigForTesting&) = delete;
   ~ScopedConfigForTesting() { Get() = original_config_; }
 
   T& Get() { return const_cast<T&>(T::Get()); }
@@ -195,7 +193,7 @@ struct SearchAggregatorProvider : Config<SearchAggregatorProvider> {
   std::string icon_url;
   // If enabled, Chrome will blend search suggestions with other Omnibox
   // suggestions without requiring keyword mode.
-  bool trigger_omnibox_blending;
+  bool require_shortcut;
   // The amount of time to wait before calling the callback function after
   // making a request to get enterprise suggestions.
   base::TimeDelta callback_delay;

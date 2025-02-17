@@ -4,22 +4,16 @@
 
 #include "chrome/browser/enterprise/connectors/common.h"
 
-#include "build/chromeos_buildflags.h"
+#include "build/build_config.h"
 #include "chrome/browser/enterprise/connectors/analysis/content_analysis_downloads_delegate.h"
 #include "chrome/browser/enterprise/connectors/analysis/content_analysis_features.h"
 #include "chrome/browser/enterprise/connectors/connectors_service.h"
 #include "chrome/browser/enterprise/util/affiliation.h"
 #include "chrome/browser/policy/dm_token_utils.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "components/user_manager/user.h"
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chrome/browser/browser_process.h"
-#include "chrome/browser/profiles/profile_manager.h"
-#include "components/policy/core/common/policy_loader_lacros.h"
 #endif
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
@@ -168,12 +162,10 @@ void RunSavePackageScanningCallback(download::DownloadItem* item,
 }
 
 bool IncludeDeviceInfo(Profile* profile, bool per_profile) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   const user_manager::User* user =
       ash::ProfileHelper::Get()->GetUserByProfile(profile);
   return user && user->IsAffiliated();
-#elif BUILDFLAG(IS_CHROMEOS_LACROS)
-  return policy::PolicyLoaderLacros::IsMainUserAffiliated();
 #else
   // A browser managed through the device can send device info.
   if (!per_profile) {
@@ -295,16 +287,14 @@ bool ResultShouldAllowDataUse(const AnalysisSettings& settings,
   }
 }
 
-safe_browsing::EventResult CalculateEventResult(
-    const AnalysisSettings& settings,
-    bool allowed_by_scan_result,
-    bool should_warn) {
+EventResult CalculateEventResult(const AnalysisSettings& settings,
+                                 bool allowed_by_scan_result,
+                                 bool should_warn) {
   bool wait_for_verdict =
       settings.block_until_verdict == BlockUntilVerdict::kBlock;
   return (allowed_by_scan_result || !wait_for_verdict)
-             ? safe_browsing::EventResult::ALLOWED
-             : (should_warn ? safe_browsing::EventResult::WARNED
-                            : safe_browsing::EventResult::BLOCKED);
+             ? EventResult::ALLOWED
+             : (should_warn ? EventResult::WARNED : EventResult::BLOCKED);
 }
 #endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
 
@@ -444,20 +434,5 @@ void ReportDataMaskingEvent(
 }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 #endif  // BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-Profile* GetMainProfileLacros() {
-  ProfileManager* profile_manager = g_browser_process->profile_manager();
-  if (!profile_manager) {
-    return nullptr;
-  }
-  auto profiles = g_browser_process->profile_manager()->GetLoadedProfiles();
-  const auto main_it = base::ranges::find_if(profiles, &Profile::IsMainProfile);
-  if (main_it == profiles.end()) {
-    return nullptr;
-  }
-  return *main_it;
-}
-#endif
 
 }  // namespace enterprise_connectors

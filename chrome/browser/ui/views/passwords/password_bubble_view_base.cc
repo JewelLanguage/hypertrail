@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/passwords/password_bubble_view_base.h"
 
+#include "base/functional/bind.h"
 #include "base/notreached.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -23,7 +24,6 @@
 #include "chrome/browser/ui/views/passwords/password_add_username_view.h"
 #include "chrome/browser/ui/views/passwords/password_auto_sign_in_view.h"
 #include "chrome/browser/ui/views/passwords/password_change/password_change_view_factory.h"
-#include "chrome/browser/ui/views/passwords/password_default_store_changed_view.h"
 #include "chrome/browser/ui/views/passwords/password_save_unsynced_credentials_locally_view.h"
 #include "chrome/browser/ui/views/passwords/password_save_update_view.h"
 #include "chrome/browser/ui/views/passwords/post_save_compromised_bubble_view.h"
@@ -46,7 +46,7 @@
 #include "chrome/browser/ui/views/passwords/password_relaunch_chrome_view.h"
 #endif
 
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ui/views/passwords/biometric_authentication_confirmation_bubble_view.h"
 #include "chrome/browser/ui/views/passwords/biometric_authentication_for_filling_bubble_view.h"
 #endif
@@ -105,6 +105,8 @@ void PasswordBubbleViewBase::ShowBubble(content::WebContents* web_contents,
   views::BubbleDialogDelegateView::CreateBubble(g_manage_passwords_bubble_);
 
   g_manage_passwords_bubble_->ShowForReason(reason);
+  g_manage_passwords_bubble_->RegisterWindowClosingCallback(
+      base::BindOnce([]() { g_manage_passwords_bubble_ = nullptr; }));
 
   if (features::IsToolbarPinningEnabled()) {
     auto* passwords_action_item = actions::ActionManager::Get().FindAction(
@@ -154,7 +156,7 @@ PasswordBubbleViewBase* PasswordBubbleViewBase::CreateBubble(
   } else if (model_state ==
              password_manager::ui::GENERATED_PASSWORD_CONFIRMATION_STATE) {
     view = new PasswordAddUsernameView(web_contents, anchor_view, reason);
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
   } else if (model_state ==
              password_manager::ui::BIOMETRIC_AUTHENTICATION_FOR_FILLING_STATE) {
     view = new BiometricAuthenticationForFillingBubbleView(
@@ -177,9 +179,6 @@ PasswordBubbleViewBase* PasswordBubbleViewBase::CreateBubble(
         Profile::FromBrowserContext(web_contents->GetBrowserContext())
             ->GetPrefs());
 #endif
-  } else if (model_state ==
-             password_manager::ui::PASSWORD_STORE_CHANGED_BUBBLE_STATE) {
-    view = new PasswordDefaultStoreChangedView(web_contents, anchor_view);
   } else if (model_state ==
              password_manager::ui::PASSKEY_SAVED_CONFIRMATION_STATE) {
     view = new PasskeySavedConfirmationView(web_contents, anchor_view,
@@ -257,9 +256,7 @@ PasswordBubbleViewBase::PasswordBubbleViewBase(
 }
 
 PasswordBubbleViewBase::~PasswordBubbleViewBase() {
-  if (g_manage_passwords_bubble_ == this) {
-    g_manage_passwords_bubble_ = nullptr;
-  }
+  CHECK(this != g_manage_passwords_bubble_);
   // It is possible in tests for |browser_| not to exist.
   if (features::IsToolbarPinningEnabled() && browser_) {
     auto* passwords_action_item = actions::ActionManager::Get().FindAction(
@@ -276,7 +273,7 @@ void PasswordBubbleViewBase::SetBubbleHeader(int light_image_id,
   auto image_view = std::make_unique<ThemeTrackingNonAccessibleImageView>(
       *bundle.GetImageSkiaNamed(light_image_id),
       *bundle.GetImageSkiaNamed(dark_image_id),
-      base::BindRepeating(&views::BubbleDialogDelegate::GetBackgroundColor,
+      base::BindRepeating(&views::BubbleDialogDelegate::background_color,
                           base::Unretained(this)));
 
   gfx::Size preferred_size = image_view->GetPreferredSize();

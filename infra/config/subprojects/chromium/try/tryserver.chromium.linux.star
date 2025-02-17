@@ -195,6 +195,21 @@ try_.builder(
 )
 
 try_.builder(
+    name = "linux-oi-rel",
+    mirrors = [
+        "ci/Linux Builder",
+        "ci/linux-oi-rel",
+    ],
+    gn_args = gn_args.config(
+        configs = [
+            "ci/Linux Builder",
+        ],
+    ),
+    contact_team_email = "chrome-security-architecture@google.com",
+    siso_remote_jobs = siso.remote_jobs.LOW_JOBS_FOR_CQ,
+)
+
+try_.builder(
     name = "linux-bfcache-rel",
     mirrors = [
         "ci/linux-bfcache-rel",
@@ -480,6 +495,22 @@ try_.orchestrator_builder(
 try_.compilator_builder(
     name = "linux-full-remote-rel-compilator",
     contact_team_email = "chrome-build-team@google.com",
+)
+
+try_.builder(
+    name = "linux-rel-test-selection",
+    description_html = "Experimental " + linkify_builder("try", "linux-rel", "chromium") + " builder with smart tests selection. go/chrome-sts",
+    mirrors = builder_config.copy_from("linux-rel"),
+    gn_args = "try/linux-rel",
+    builderless = False,
+    contact_team_email = "chrome-sts@google.com",
+    experiments = {
+        "chromium_rts.rts": 100,
+    },
+    tryjob = try_.job(
+        experiment_percentage = 10,
+    ),
+    use_clang_coverage = True,
 )
 
 try_.builder(
@@ -961,21 +992,34 @@ try_.builder(
 try_.builder(
     name = "tricium-metrics-analysis",
     executable = "recipe:tricium_metrics",
+    tryjob = try_.job(
+        custom_cq_run_modes = [cq.MODE_NEW_PATCHSET_RUN],
+        disable_reuse = True,
+        experiment_percentage = 100,
+        location_filters = [
+            cq.location_filter(path_regexp = r".*\.(json|xml)"),
+        ],
+    ),
 )
 
 try_.builder(
     name = "tricium-oilpan-analysis",
     executable = "recipe:tricium_oilpan",
-)
-
-try_.builder(
-    name = "tricium-simple",
-    executable = "recipe:tricium_simple",
+    tryjob = try_.job(
+        custom_cq_run_modes = [cq.MODE_NEW_PATCHSET_RUN],
+        disable_reuse = True,
+        experiment_percentage = 100,
+        location_filters = [
+            cq.location_filter(path_regexp = r".*\.(c|cc|cpp|h)"),
+        ],
+    ),
 )
 
 try_.gpu.optional_tests_builder(
     name = "linux_optional_gpu_tests_rel",
     branch_selector = branches.selector.LINUX_BRANCHES,
+    description_html = ("Runs GPU tests on Linux machines with NVIDIA GTX 1660 and Intel UHD 630 GPUs. " +
+                        "Only automatically added to CLs that touch GPU-related files."),
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
@@ -1014,6 +1058,7 @@ try_.gpu.optional_tests_builder(
         browser_config = targets.browser_config.RELEASE,
         os_type = targets.os_type.LINUX,
     ),
+    contact_team_email = "chrome-gpu-infra@google.com",
     main_list_view = "try",
     tryjob = try_.job(
         location_filters = [

@@ -364,14 +364,6 @@ viz_component("service") {
 
     deps += [ "//ui/accelerated_widget_mac" ]
     frameworks = [ "IOSurface.framework" ]
-    if (is_ios) {
-      sources += [
-        "frame_sinks/external_begin_frame_source_ios.h",
-        "frame_sinks/external_begin_frame_source_ios.mm",
-      ]
-
-      frameworks += [ "CoreGraphics.framework" ]
-    }
     if (is_mac) {
       sources += [
         "frame_sinks/external_begin_frame_source_mac.cc",
@@ -592,6 +584,8 @@ viz_source_set("unit_tests") {
     "display/software_renderer_unittest.cc",
     "display/surface_aggregator_pixeltest.cc",
     "display/surface_aggregator_unittest.cc",
+    "display/test_resource_factory.cc",
+    "display/test_resource_factory.h",
     "display/viz_pixel_test.cc",
     "display/viz_pixel_test.h",
     "display_embedder/buffer_queue_unittest.cc",
@@ -760,6 +754,7 @@ if (is_android) {
     deps = [
       "//base:base_java",
       "//build/android:build_java",
+      "//third_party/androidx:androidx_annotation_annotation_java",
       "//third_party/jni_zero:jni_zero_java",
       "//ui/android:ui_no_recycler_view_java",
     ]
@@ -768,6 +763,7 @@ if (is_android) {
     sources = [
       "java/src/org/chromium/components/viz/service/frame_sinks/ExternalBeginFrameSourceAndroid.java",
       "java/src/org/chromium/components/viz/service/gl/ThrowUncaughtException.java",
+      "java/src/org/chromium/components/viz/service/input/InputTransferHandlerViz.java",
     ]
   }
 
@@ -775,6 +771,7 @@ if (is_android) {
     sources = [
       "java/src/org/chromium/components/viz/service/frame_sinks/ExternalBeginFrameSourceAndroid.java",
       "java/src/org/chromium/components/viz/service/gl/ThrowUncaughtException.java",
+      "java/src/org/chromium/components/viz/service/input/InputTransferHandlerViz.java",
     ]
   }
 }

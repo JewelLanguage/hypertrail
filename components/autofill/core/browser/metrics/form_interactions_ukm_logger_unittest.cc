@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "base/base64.h"
+#include "base/strings/to_string.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/metrics/user_action_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -1685,7 +1686,7 @@ INSTANTIATE_TEST_SUITE_P(
     [](const testing::TestParamInfo<
         LogFocusedComplexFormAtFormRemoveTest::ParamType>& info) {
       std::string name = info.param.test_name;
-      base::ranges::replace_if(
+      std::ranges::replace_if(
           name, [](char c) { return !std::isalnum(c); }, '_');
       return name;
     });
@@ -1698,7 +1699,7 @@ TEST_P(LogFocusedComplexFormAtFormRemoveTest, TestEmittedUKM) {
       {features::kAutofillAblationStudyAblationWeightPerMilleParam.name,
        "1000"},
       {features::kAutofillAblationStudyIsDryRun.name,
-       GetParam().ablation_study_is_dry_run ? "true" : "false"}};
+       base::ToString(GetParam().ablation_study_is_dry_run)}};
   base::test::ScopedFeatureList scoped_feature_list;
   if (GetParam().enable_ablation_study_for_addresses) {
     scoped_feature_list.InitAndEnableFeatureWithParameters(

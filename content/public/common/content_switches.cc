@@ -173,11 +173,6 @@ const char kDisableGpuWatchdog[] = "disable-gpu-watchdog";
 // can be used.
 const char kDisableIpcFloodingProtection[] = "disable-ipc-flooding-protection";
 
-// Suppresses hang monitor dialogs in renderer processes.  This may allow slow
-// unload handlers on a page to prevent the tab from closing, but the Task
-// Manager can be used to terminate the offending process in this case.
-const char kDisableHangMonitor[]            = "disable-hang-monitor";
-
 // Disable the RenderThread's HistogramCustomizer.
 const char kDisableHistogramCustomizer[]    = "disable-histogram-customizer";
 
@@ -778,12 +773,6 @@ const char kUseFakeUIForFedCM[] = "use-fake-ui-for-fedcm";
 // Prefer --auto-accept-camera-and-microphone-capture which does not interact
 // with screen/tab capture.
 const char kUseFakeUIForMediaStream[]     = "use-fake-ui-for-media-stream";
-
-#if BUILDFLAG(IS_WIN)
-// This will replace the existing font manager with FontDataManager in the
-// renderer.
-const char kUseFontDataManager[] = "use-font-data-manager";
-#endif
 
 // Texture target for CHROMIUM_image backed video frame textures.
 const char kVideoImageTextureTarget[] = "video-image-texture-target";

@@ -8,9 +8,11 @@ source_set("coordinator") {
     "parent_access_coordinator.mm",
     "parent_access_mediator.h",
     "parent_access_mediator.mm",
+    "parent_access_mediator_delegate.h",
   ]
   deps = [
     "//base",
+    "//components/supervised_user/core/browser",
     "//components/supervised_user/core/common",
     "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
     "//ios/chrome/browser/shared/model/application_context",

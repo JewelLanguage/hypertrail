@@ -52,7 +52,7 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.tasks.tab_management.TabGridDialogView.VisibilityListener;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
+import org.chromium.components.browser_ui.widget.scrim.ScrimManager;
 import org.chromium.ui.test.util.BlankUiTestActivity;
 
 import java.util.concurrent.TimeoutException;
@@ -80,6 +80,7 @@ public class TabGridDialogViewTest {
     private RelativeLayout mTabGridDialogContainer;
     private FrameLayout.LayoutParams mContainerParams;
     private TabGridDialogView mTabGridDialogView;
+    private ScrimManager mScrimManager;
 
     @BeforeClass
     public static void setupSuite() {
@@ -105,9 +106,8 @@ public class TabGridDialogViewTest {
                     mAnimationCardView =
                             mTabGridDialogView.findViewById(R.id.dialog_animation_card_view);
                     mBackgroundFrameView = mTabGridDialogView.findViewById(R.id.dialog_frame);
-                    ScrimCoordinator scrimCoordinator =
-                            new ScrimCoordinator(sActivity, null, mTestParent);
-                    mTabGridDialogView.setupScrimCoordinator(scrimCoordinator);
+                    mScrimManager = new ScrimManager(sActivity, mTestParent);
+                    mTabGridDialogView.setupScrimManager(mScrimManager);
                     mTabGridDialogView.setScrimClickRunnable(() -> {});
 
                     mMinMargin =
@@ -607,6 +607,22 @@ public class TabGridDialogViewTest {
                     mTabGridDialogView.dispatchTouchEvent(event);
                 });
         assertTrue(isFocusCleared[0]);
+    }
+
+    @Test
+    @SmallTest
+    public void testSetScrimClickRunnable() {
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    mTabGridDialogView.showDialog();
+                    mTabGridDialogView.setScrimClickRunnable(() -> {});
+                    mTabGridDialogView.hideDialog();
+                });
+        CriteriaHelper.pollInstrumentationThread(
+                () ->
+                        Criteria.checkThat(
+                                mScrimManager.getScrimVisibilitySupplier().get(),
+                                Matchers.is(false)));
     }
 
     private void mockDialogStatus(boolean isShowing) {

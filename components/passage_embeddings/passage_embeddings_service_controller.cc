@@ -11,8 +11,11 @@
 #include "base/notreached.h"
 #include "base/task/thread_pool.h"
 #include "components/optimization_guide/core/optimization_guide_util.h"
+#include "components/passage_embeddings/ml_embedder.h"
 #include "components/passage_embeddings/passage_embeddings_features.h"
+#include "components/passage_embeddings/passage_embeddings_types.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
+#include "services/passage_embeddings/public/mojom/passage_embeddings.mojom-shared.h"
 
 namespace passage_embeddings {
 
@@ -38,7 +41,18 @@ mojom::PassageEmbedderParamsPtr MakeEmbedderParams() {
       kUserInitiatedPriorityNumThreads.Get();
   params->passive_priority_num_threads = kPassivePriorityNumThreads.Get();
   params->embedder_cache_size = kEmbedderCacheSize.Get();
+  params->allow_gpu_execution = kAllowGpuExecution.Get();
   return params;
+}
+
+mojom::PassagePriority PassagePriorityToMojom(PassagePriority priority) {
+  switch (priority) {
+    case kUserInitiated:
+      return mojom::PassagePriority::kUserInitiated;
+    case kPassive:
+    case kLatent:
+      return mojom::PassagePriority::kPassive;
+  }
 }
 
 class ScopedEmbeddingsModelInfoStatusLogger {
@@ -57,10 +71,18 @@ class ScopedEmbeddingsModelInfoStatusLogger {
 
 }  // namespace
 
-PassageEmbeddingsServiceController::PassageEmbeddingsServiceController() =
-    default;
-PassageEmbeddingsServiceController::~PassageEmbeddingsServiceController() =
-    default;
+PassageEmbeddingsServiceController::PassageEmbeddingsServiceController()
+    : scheduling_embedder_(std::make_unique<SchedulingEmbedder>(
+          std::make_unique<MlEmbedder>(this),
+          kSchedulerMaxJobs.Get(),
+          kSchedulerMaxBatchSize.Get(),
+          kUsePerformanceScenario.Get())) {
+  AddObserver(scheduling_embedder_.get());
+}
+
+PassageEmbeddingsServiceController::~PassageEmbeddingsServiceController() {
+  RemoveObserver(scheduling_embedder_.get());
+}
 
 bool PassageEmbeddingsServiceController::MaybeUpdateModelInfo(
     base::optional_ref<const optimization_guide::ModelInfo> model_info) {
@@ -112,6 +134,8 @@ bool PassageEmbeddingsServiceController::MaybeUpdateModelInfo(
 
   CHECK(EmbedderReady());
   logger.set_status(EmbeddingsModelInfoStatus::kValid);
+  observer_list_.Notify(&EmbedderMetadataObserver::EmbedderMetadataUpdated,
+                        GetEmbedderMetadata());
   return true;
 }
 
@@ -140,18 +164,28 @@ void PassageEmbeddingsServiceController::OnLoadModelsResult(bool success) {
   }
 }
 
-EmbedderMetadata PassageEmbeddingsServiceController::GetEmbedderMetadata() {
-  if (model_metadata_->score_threshold() > 0.0) {
-    return EmbedderMetadata(model_version_, model_metadata_->output_size(),
-                            model_metadata_->score_threshold());
-  }
+std::unique_ptr<Embedder> PassageEmbeddingsServiceController::MakeEmbedder() {
+  auto client =
+      std::make_unique<SchedulingClientEmbedder>(scheduling_embedder_.get());
+  return client;
+}
 
-  return EmbedderMetadata(model_version_, model_metadata_->output_size());
+void PassageEmbeddingsServiceController::AddObserver(
+    EmbedderMetadataObserver* observer) {
+  if (EmbedderReady()) {
+    observer->EmbedderMetadataUpdated(GetEmbedderMetadata());
+  }
+  observer_list_.AddObserver(observer);
+}
+
+void PassageEmbeddingsServiceController::RemoveObserver(
+    EmbedderMetadataObserver* observer) {
+  observer_list_.RemoveObserver(observer);
 }
 
 void PassageEmbeddingsServiceController::GetEmbeddings(
     std::vector<std::string> passages,
-    mojom::PassagePriority priority,
+    PassagePriority priority,
     GetEmbeddingsCallback callback) {
   if (!EmbedderReady()) {
     VLOG(1) << "Missing model path: embeddings='" << embeddings_model_path_
@@ -184,7 +218,7 @@ void PassageEmbeddingsServiceController::GetEmbeddings(
 
   pending_requests_.push_back(next_request_id_);
   embedder_remote_->GenerateEmbeddings(
-      std::move(passages), priority,
+      std::move(passages), PassagePriorityToMojom(priority),
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
           base::BindOnce(&PassageEmbeddingsServiceController::OnGotEmbeddings,
                          weak_ptr_factory_.GetWeakPtr(), next_request_id_,
@@ -195,6 +229,15 @@ void PassageEmbeddingsServiceController::GetEmbeddings(
 
 bool PassageEmbeddingsServiceController::EmbedderReady() {
   return !sp_model_path_.empty() && !embeddings_model_path_.empty();
+}
+
+EmbedderMetadata PassageEmbeddingsServiceController::GetEmbedderMetadata() {
+  if (model_metadata_->score_threshold() > 0.0) {
+    return EmbedderMetadata(model_version_, model_metadata_->output_size(),
+                            model_metadata_->score_threshold());
+  }
+
+  return EmbedderMetadata(model_version_, model_metadata_->output_size());
 }
 
 bool PassageEmbeddingsServiceController::EmbedderRunning() {

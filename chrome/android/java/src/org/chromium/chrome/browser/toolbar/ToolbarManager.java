@@ -134,6 +134,7 @@ import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonState;
 import org.chromium.chrome.browser.toolbar.top.ActionModeController;
 import org.chromium.chrome.browser.toolbar.top.ActionModeController.ActionBarDelegate;
+import org.chromium.chrome.browser.toolbar.top.NavigationPopup;
 import org.chromium.chrome.browser.toolbar.top.TabSwitcherActionMenuCoordinator;
 import org.chromium.chrome.browser.toolbar.top.ToggleTabStackButton;
 import org.chromium.chrome.browser.toolbar.top.ToggleTabStackButtonCoordinator;
@@ -165,7 +166,7 @@ import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateMa
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler.BackPressResult;
-import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
+import org.chromium.components.browser_ui.widget.scrim.ScrimManager;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.omnibox.action.OmniboxActionDelegate;
@@ -304,7 +305,7 @@ public class ToolbarManager
 
     private int mCurrentOrientation;
 
-    private final ScrimCoordinator mScrimCoordinator;
+    private final ScrimManager mScrimManager;
 
     private OneshotSupplier<Boolean> mPromoShownOneshotSupplier;
     private OverlayPanelManagerObserver mOverlayPanelManagerObserver;
@@ -624,7 +625,7 @@ public class ToolbarManager
      * @param buttonDataProviders The list of button data providers for the optional toolbar button
      *     in the browsing mode toolbar, given in precedence order.
      * @param tabProvider The {@link ActivityTabProvider} for accessing current activity tab.
-     * @param scrimCoordinator A means of showing the scrim.
+     * @param scrimManager A means of showing the scrim.
      * @param toolbarActionModeCallback Callback that communicates changes in the conceptual mode of
      *     toolbar interaction.
      * @param findToolbarManager The manager for the find in page function.
@@ -673,7 +674,7 @@ public class ToolbarManager
             ObservableSupplier<ShareDelegate> shareDelegateSupplier,
             List<ButtonDataProvider> buttonDataProviders,
             ActivityTabProvider tabProvider,
-            ScrimCoordinator scrimCoordinator,
+            ScrimManager scrimManager,
             ToolbarActionModeCallback toolbarActionModeCallback,
             FindToolbarManager findToolbarManager,
             ObservableSupplier<Profile> profileSupplier,
@@ -718,7 +719,7 @@ public class ToolbarManager
                         activity.getSupportActionBar(),
                         controlContainer,
                         activity.findViewById(R.id.action_bar_black_background));
-        mScrimCoordinator = scrimCoordinator;
+        mScrimManager = scrimManager;
         mTabModelSelectorSupplier = tabModelSelectorSupplier;
         mOmniboxFocusStateSupplier = omniboxFocusStateSupplier;
         mPromoShownOneshotSupplier = promoShownOneshotSupplier;
@@ -1017,7 +1018,7 @@ public class ToolbarManager
         View scrimTarget = mCompositorViewHolder;
         mLocationBarFocusHandler =
                 new LocationBarFocusScrimHandler(
-                        scrimCoordinator,
+                        scrimManager,
                         new TabObscuringCallback(tabObscuringHandler),
                         /* context= */ activity,
                         mLocationBarModel,
@@ -1225,6 +1226,7 @@ public class ToolbarManager
 
                             mToolbar.onNavigatedToDifferentPage();
                             maybeTriggerCacheRefreshForZeroSuggest(navigation.getUrl());
+                            mBottomControlsStacker.notifyDidFinishNavigationInPrimaryMainFrame();
                         }
 
                         // If the load failed due to a different navigation, there is no need to
@@ -1408,9 +1410,6 @@ public class ToolbarManager
                             mToolbar.setTabSwitcherMode(false);
                             mIsTabSwitcherFinishedShowingSupplier.set(false);
                             updateButtonStatus();
-                            if (mToolbar.setForceTextureCapture(true)) {
-                                mControlContainer.invalidateBitmap();
-                            }
                         }
                         mToolbar.onTransitionStart();
                     }
@@ -1564,6 +1563,11 @@ public class ToolbarManager
             ObservableSupplier<Integer> constraintsSupplier,
             OnLongClickListener onLongClickListener,
             ToolbarProgressBar progressBar) {
+        NavigationPopup.HistoryDelegate historyDelegate =
+                (tab) -> {
+                    HistoryManagerUtils.showHistoryManager(
+                            tab.getWindowAndroid().getActivity().get(), tab, tab.getProfile());
+                };
         TopToolbarCoordinator toolbar =
                 new TopToolbarCoordinator(
                         controlContainer,
@@ -1580,7 +1584,7 @@ public class ToolbarManager
                         mTabModelSelectorSupplier,
                         mHomepageEnabledSupplier,
                         mCompositorViewHolder::getResourceManager,
-                        HistoryManagerUtils::showHistoryManager,
+                        historyDelegate,
                         PartnerBrowserCustomizations.getInstance()
                                 ::isHomepageProviderAvailableAndEnabled,
                         DownloadUtils::downloadOfflinePage,
@@ -1790,7 +1794,7 @@ public class ToolbarManager
                         mActivity,
                         root.findViewById(R.id.bottom_container_slot),
                         mBrowserControlsSizer,
-                        mScrimCoordinator,
+                        mScrimManager,
                         mOmniboxFocusStateSupplier,
                         mBottomSheetController,
                         mDataSharingTabManager,
@@ -1927,7 +1931,8 @@ public class ToolbarManager
                     stripLayoutHelperManager.getDragListener());
 
             mTabStripTransitionDelegateSupplier.set(stripLayoutHelperManager);
-            stripLayoutHelperManager.setIsTabStripHidden(mToolbar.getTabStripHeight() == 0);
+            stripLayoutHelperManager.setIsTabStripHiddenByHeightTransition(
+                    mToolbar.getTabStripHeight() == 0);
         }
 
         mTabStripHeightObserver =
@@ -2429,14 +2434,6 @@ public class ToolbarManager
     }
 
     /**
-     * Unfocus the url bar when back press is performed. Do nothing if it is unfocused.
-     * @return Whether url bar is focused when this method is called.
-     */
-    public boolean unfocusUrlBarOnBackPress() {
-        return mLocationBar.unfocusUrlBarOnBackPressed();
-    }
-
-    /**
      * See {@link #setUrlBarFocus}, but if native is not loaded it will queue the request instead of
      * dropping it.
      */
@@ -2596,11 +2593,32 @@ public class ToolbarManager
 
     private void maybeShowBottomToolbarIph() {
         if (!ToolbarPositionController.isToolbarPositionCustomizationEnabled(
-                mActivity, mIsCustomTab)) {
+                        mActivity, mIsCustomTab)
+                || mLocationBarModel.getCurrentGurl().isEmpty()
+                || UrlUtilities.isNtpUrl(mLocationBarModel.getCurrentGurl())) {
             return;
         }
 
         mIphController.showBottomToolbarIph(mControlContainer.findViewById(R.id.location_bar));
+    }
+
+    /**
+     * This method and checkIfNtpLoaded encode different concepts of the current tab's NTP-ness"
+     * which are suitable for different use cases. checkIfNtpShowingWithNoPendingLoad checks that
+     * the NTP is loaded and that there is no pending load away from the NTP; this is suitable for
+     * cases where we need to update the UI as soon an extra-NTP load begins.In contrast,
+     * checkIfNtpLoaded checks only that the NTP is showing, which will remain true until
+     * didFinishNavigationInPrimaryMainFrame causes the tab to hide the NTP NativePage and render
+     * the new page.
+     */
+    private void checkIfNtpShowingWithNoPendingLoad() {
+        boolean isNtpUrl = UrlUtilities.isNtpUrl(mLocationBarModel.getCurrentGurl());
+        if (isNtpUrl && getNewTabPageForCurrentTab() != null) {
+            mIsNtpShowingSupplier.set(true);
+        } else {
+            mIsNtpShowingSupplier.set(false);
+            maybeShowBottomToolbarIph();
+        }
     }
 
     private void checkIfNtpLoaded() {
@@ -2609,11 +2627,9 @@ public class ToolbarManager
         if (ntp != null) {
             ntp.setOmniboxStub(mLocationBar.getOmniboxStub());
             mLocationBarModel.notifyNtpStartedLoading();
-            mIsNtpShowingSupplier.set(true);
-        } else {
-            maybeShowBottomToolbarIph();
-            mIsNtpShowingSupplier.set(false);
         }
+
+        checkIfNtpShowingWithNoPendingLoad();
     }
 
     private void setBookmarkModel(
@@ -2656,6 +2672,7 @@ public class ToolbarManager
         if (updateUrl) {
             mLocationBarModel.notifyUrlChanged();
             updateButtonStatus();
+            checkIfNtpShowingWithNoPendingLoad();
         }
     }
 

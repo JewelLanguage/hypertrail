@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/webui/signin/profile_picker_handler.h"
 
+#include <algorithm>
 #include <vector>
 
 #include "base/check.h"
@@ -16,7 +17,6 @@
 #include "base/json/values_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
@@ -148,6 +148,8 @@ base::Value::Dict CreateProfileEntry(const ProfileAttributesEntry* entry,
   base::Value::Dict profile_entry;
   profile_entry.Set("profilePath", base::FilePathToValue(entry->GetPath()));
   profile_entry.Set("localProfileName", entry->GetLocalProfileName());
+  profile_entry.Set("hasEnterpriseLabel",
+                    !entry->GetEnterpriseProfileLabel().empty());
   profile_entry.Set("isSyncing",
                     entry->GetSigninState() ==
                         SigninState::kSignedInWithConsentedPrimaryAccount);
@@ -512,12 +514,10 @@ void ProfilePickerHandler::HandleContinueWithoutAccount(
       ProfileMetrics::ADD_NEW_PROFILE_PICKER_LOCAL);
   ProfilePicker::SwitchToSignedOutPostIdentityFlow(
       profile_color,
-      base::BindOnce(
-          &ProfilePickerHandler::OnProfileCreationFinished,
-          // `OnProfileCreationFinished` is called when we want to close the
-          // profile picker. `ProfilePickerHandler` will always be initialized
-          // when we get to that call because the picker will still be open.
-          base::Unretained(this)));
+      base::BindOnce(&ProfilePickerHandler::OnProfileCreationFinished,
+                     // `OnProfileCreationFinished` is called when we want to
+                     // close the profile picker.
+                     weak_factory_.GetWeakPtr()));
 }
 
 void ProfilePickerHandler::HandleGetSwitchProfile(
@@ -571,7 +571,7 @@ void ProfilePickerHandler::OnProfileCreationFinished(
 void ProfilePickerHandler::HandleRecordSignInPromoImpression(
     const base::Value::List& /*args*/) {
   signin_metrics::RecordSigninImpressionUserActionForAccessPoint(
-      signin_metrics::AccessPoint::ACCESS_POINT_USER_MANAGER);
+      signin_metrics::AccessPoint::kUserManager);
 }
 
 void ProfilePickerHandler::HandleSetProfileName(const base::Value::List& args) {
@@ -914,14 +914,6 @@ void ProfilePickerHandler::OnVisibilityChanged(content::Visibility visibility) {
 }
 
 void ProfilePickerHandler::MaybeUpdateGuestMode() {
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-  if (!base::FeatureList::IsEnabled(
-          supervised_user::kHideGuestModeForSupervisedUsers)) {
-    return;
-  }
-#else
-  return;
-#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
   CHECK(IsJavascriptAllowed());
   FireWebUIListener("guest-mode-availability-updated",
                     base::Value(profiles::IsGuestModeEnabled()));

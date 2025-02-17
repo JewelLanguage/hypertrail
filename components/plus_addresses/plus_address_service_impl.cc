@@ -18,10 +18,13 @@
 #include "base/notimplemented.h"
 #include "base/notreached.h"
 #include "base/scoped_observation.h"
+#include "base/strings/to_string.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "components/affiliations/core/browser/affiliation_utils.h"
 #include "components/autofill/core/browser/data_quality/validation.h"
+#include "components/autofill/core/browser/field_types.h"
+#include "components/autofill/core/browser/filling/filling_product.h"
 #include "components/autofill/core/browser/suggestions/suggestion.h"
 #include "components/autofill/core/browser/suggestions/suggestion_hiding_reason.h"
 #include "components/autofill/core/browser/suggestions/suggestion_type.h"
@@ -146,7 +149,9 @@ PlusAddressServiceImpl::PlusAddressServiceImpl(
   if (webdata_service_) {
     webdata_service_observation_.Observe(webdata_service_.get());
     if (IsEnabled()) {
-      webdata_service_->GetPlusProfiles(this);
+      webdata_service_->GetPlusProfiles(
+          base::BindOnce(&PlusAddressServiceImpl::OnWebDataServiceRequestDone,
+                         weak_ptr_factory_.GetWeakPtr()));
     }
   }
   identity_manager_observation_.Observe(identity_manager);
@@ -287,6 +292,22 @@ bool PlusAddressServiceImpl::IsPlusAddressFillingEnabled(
 
 bool PlusAddressServiceImpl::IsPlusAddressFullFormFillingEnabled() const {
   return base::FeatureList::IsEnabled(features::kPlusAddressFullFormFill);
+}
+
+bool PlusAddressServiceImpl::IsFieldEligibleForPlusAddress(
+    const autofill::AutofillField& field) const {
+  autofill::FillingProduct filling_product =
+      autofill::GetFillingProductFromFieldTypeGroup(field.Type().group());
+
+  if (filling_product == autofill::FillingProduct::kAddress) {
+    return true;
+  }
+
+  return base::FeatureList::IsEnabled(
+             features::kPlusAddressSuggestionsOnUsernameFields) &&
+         (field.server_type() == autofill::FieldType::USERNAME ||
+          field.server_type() == autofill::FieldType::SINGLE_USERNAME) &&
+         field.heuristic_type() == autofill::FieldType::EMAIL_ADDRESS;
 }
 
 void PlusAddressServiceImpl::GetAffiliatedPlusAddresses(
@@ -555,11 +576,7 @@ void PlusAddressServiceImpl::RecordAutofillSuggestionEvent(
           "PlusAddresses.StandaloneFillSuggestionShown"));
       return;
     case kCreateNewPlusAddressSuggested: {
-      const bool user_acepted_notice =
-          setting_service_->GetHasAcceptedNotice() ||
-          !base::FeatureList::IsEnabled(
-              features::kPlusAddressUserOnboardingEnabled);
-      if (user_acepted_notice) {
+      if (setting_service_->GetHasAcceptedNotice()) {
         base::RecordAction(
             base::UserMetricsAction("PlusAddresses.CreateSuggestionShown"));
       } else {
@@ -736,7 +753,8 @@ PlusAddressServiceImpl::GetPlusAddressHatsData() const {
                                : std::string("-1");
   };
 
-  return {{hats::kFirstPlusAddressCreationTime,
+  return {{hats::kPlusAddressesCount, base::ToString(GetPlusProfiles().size())},
+          {hats::kFirstPlusAddressCreationTime,
            time_pref_to_string(prefs::kFirstPlusAddressCreationTime)},
           {hats::kLastPlusAddressFillingTime,
            time_pref_to_string(prefs::kLastPlusAddressFillingTime)}};

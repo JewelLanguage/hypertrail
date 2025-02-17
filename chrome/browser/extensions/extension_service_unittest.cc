@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <algorithm>
 #include <array>
 #include <map>
 #include <memory>
@@ -28,7 +29,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/one_shot_event.h"
 #include "base/path_service.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_number_conversions.h"
@@ -891,8 +891,8 @@ class ExtensionServiceTest : public ExtensionServiceTestWithInstall {
   ExternalInstallError* GetError(const std::string& extension_id) {
     std::vector<ExternalInstallError*> errors =
         service_->external_install_manager()->GetErrorsForTesting();
-    auto found = base::ranges::find(errors, extension_id,
-                                    &ExternalInstallError::extension_id);
+    auto found = std::ranges::find(errors, extension_id,
+                                   &ExternalInstallError::extension_id);
     return found == errors.end() ? nullptr : *found;
   }
 
@@ -1942,7 +1942,9 @@ TEST_F(ExtensionServiceTest,
   extension = registry()->GetInstalledExtension(id);
   ASSERT_TRUE(extension);
   EXPECT_TRUE(registry()->disabled_extensions().Contains(id));
-  EXPECT_EQ(disable_reason::DISABLE_USER_ACTION, prefs->GetDisableReasons(id));
+  EXPECT_THAT(
+      prefs->GetDisableReasons(id),
+      testing::UnorderedElementsAre(disable_reason::DISABLE_USER_ACTION));
 }
 
 TEST_F(ExtensionServiceTest,
@@ -1967,8 +1969,8 @@ TEST_F(ExtensionServiceTest,
 
   // Disable the extension due to a supposed permission increase, but retain its
   // granted permissions.
-  service()->DisableExtension(id, disable_reason::DISABLE_PERMISSIONS_INCREASE |
-                                      disable_reason::DISABLE_USER_ACTION);
+  service()->DisableExtension(id, {disable_reason::DISABLE_PERMISSIONS_INCREASE,
+                                   disable_reason::DISABLE_USER_ACTION});
   EXPECT_TRUE(registry()->disabled_extensions().Contains(id));
   EXPECT_TRUE(prefs->HasDisableReason(
       id, disable_reason::DISABLE_PERMISSIONS_INCREASE));
@@ -1978,7 +1980,9 @@ TEST_F(ExtensionServiceTest,
   // should stay disabled due to the remaining DISABLE_USER_ACTION reason.
   service()->ReloadExtensionsForTest();
   EXPECT_TRUE(registry()->disabled_extensions().Contains(id));
-  EXPECT_EQ(disable_reason::DISABLE_USER_ACTION, prefs->GetDisableReasons(id));
+  EXPECT_THAT(
+      prefs->GetDisableReasons(id),
+      testing::UnorderedElementsAre(disable_reason::DISABLE_USER_ACTION));
 }
 
 // Tests that installing an extension with a permission adds it to the granted
@@ -3320,8 +3324,9 @@ TEST_F(ExtensionServiceTest, UpdateExtensionPreservesState) {
       registry()->disabled_extensions().GetByID(good_crx);
   ASSERT_EQ("1.0.0.1", goodext2->version().GetString());
   EXPECT_TRUE(util::IsIncognitoEnabled(goodext2->id(), profile()));
-  EXPECT_EQ(disable_reason::DISABLE_USER_ACTION,
-            ExtensionPrefs::Get(profile())->GetDisableReasons(goodext2->id()));
+  EXPECT_THAT(
+      ExtensionPrefs::Get(profile())->GetDisableReasons(goodext2->id()),
+      testing::UnorderedElementsAre(disable_reason::DISABLE_USER_ACTION));
 }
 
 // Tests that updating preserves extension location.
@@ -4343,8 +4348,9 @@ TEST_F(ExtensionServiceTest, NonCWSForceInstalledDisabledOnNonDomainJoin) {
   // The extension should be disabled because it is force-installed from a
   // non-CWS source in a non-domain-joined (low-trust) environment.
   EXPECT_TRUE(registry()->disabled_extensions().GetByID(extension->id()));
-  EXPECT_EQ(disable_reason::DISABLE_NOT_VERIFIED,
-            ExtensionPrefs::Get(profile())->GetDisableReasons(extension->id()));
+  EXPECT_THAT(
+      ExtensionPrefs::Get(profile())->GetDisableReasons(extension->id()),
+      testing::UnorderedElementsAre(disable_reason::DISABLE_NOT_VERIFIED));
 }
 
 // Tests that non-CWS extensions are enabled when force-installed in a domain-
@@ -4445,20 +4451,19 @@ TEST_F(ExtensionServiceTest, ManagementPolicyProhibitsDisable) {
   EXPECT_EQ(1u, registry()->enabled_extensions().size());
   EXPECT_TRUE(registry()->enabled_extensions().GetByID(good_crx));
   EXPECT_EQ(0u, registry()->disabled_extensions().size());
-  EXPECT_EQ(disable_reason::DISABLE_NONE,
-            ExtensionPrefs::Get(profile())->GetDisableReasons(good_crx));
+  EXPECT_TRUE(
+      ExtensionPrefs::Get(profile())->GetDisableReasons(good_crx).empty());
 
   // Internal disable reasons are allowed.
-  service()->DisableExtension(
-      good_crx,
-      disable_reason::DISABLE_CORRUPTED | disable_reason::DISABLE_USER_ACTION);
+  service()->DisableExtension(good_crx, {disable_reason::DISABLE_CORRUPTED,
+                                         disable_reason::DISABLE_USER_ACTION});
 
   EXPECT_EQ(0u, registry()->enabled_extensions().size());
   EXPECT_EQ(1u, registry()->disabled_extensions().size());
   EXPECT_TRUE(registry()->disabled_extensions().GetByID(good_crx));
   EXPECT_FALSE(registry()->enabled_extensions().GetByID(good_crx));
-  EXPECT_EQ(disable_reason::DISABLE_CORRUPTED,
-            ExtensionPrefs::Get(profile())->GetDisableReasons(good_crx));
+  EXPECT_THAT(ExtensionPrefs::Get(profile())->GetDisableReasons(good_crx),
+              testing::UnorderedElementsAre(disable_reason::DISABLE_CORRUPTED));
 }
 
 // Tests uninstalling an extension when prohibited by the ManagementPolicy.
@@ -4503,10 +4508,12 @@ TEST_F(ExtensionServiceTest, ManagementPolicyUnloadsAllProhibited) {
   service()->CheckManagementPolicy();
   EXPECT_EQ(0u, registry()->enabled_extensions().size());
   EXPECT_EQ(2u, registry()->disabled_extensions().size());
-  EXPECT_EQ(disable_reason::DISABLE_BLOCKED_BY_POLICY,
-            prefs->GetDisableReasons(good_crx));
-  EXPECT_EQ(disable_reason::DISABLE_BLOCKED_BY_POLICY,
-            prefs->GetDisableReasons(page_action));
+  EXPECT_THAT(
+      prefs->GetDisableReasons(good_crx),
+      testing::UnorderedElementsAre(disable_reason::DISABLE_BLOCKED_BY_POLICY));
+  EXPECT_THAT(
+      prefs->GetDisableReasons(page_action),
+      testing::UnorderedElementsAre(disable_reason::DISABLE_BLOCKED_BY_POLICY));
 
   // Removing the extensions from policy blocklist should re-enable them.
   GetManagementPolicy()->UnregisterAllProviders();
@@ -4560,8 +4567,9 @@ TEST_F(ExtensionServiceTest, ManagementPolicyProhibitsEnableOnInstalled) {
   EXPECT_EQ(1u, registry()->disabled_extensions().size());
 
   // Verifies that the disable reason is set properly.
-  EXPECT_EQ(disable_reason::DISABLE_NOT_VERIFIED,
-            service()->extension_prefs_->GetDisableReasons(kGoodId));
+  EXPECT_THAT(
+      service()->extension_prefs_->GetDisableReasons(kGoodId),
+      testing::UnorderedElementsAre(disable_reason::DISABLE_NOT_VERIFIED));
 }
 
 // Tests that extensions with conflicting required permissions by enterprise
@@ -4817,8 +4825,9 @@ TEST_F(ExtensionServiceTest, ExternalExtensionDisabledOnInstallation) {
   EXPECT_TRUE(registry()->disabled_extensions().Contains(good_crx));
   ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
   EXPECT_FALSE(prefs->IsExternalExtensionAcknowledged(good_crx));
-  EXPECT_EQ(disable_reason::DISABLE_EXTERNAL_EXTENSION,
-            prefs->GetDisableReasons(good_crx));
+  EXPECT_THAT(prefs->GetDisableReasons(good_crx),
+              testing::UnorderedElementsAre(
+                  disable_reason::DISABLE_EXTERNAL_EXTENSION));
 
   // Updating the extension shouldn't cause it to be enabled.
   provider->UpdateOrAddExtension(good_crx, "1.0.0.1",
@@ -4827,8 +4836,9 @@ TEST_F(ExtensionServiceTest, ExternalExtensionDisabledOnInstallation) {
 
   EXPECT_TRUE(registry()->disabled_extensions().Contains(good_crx));
   EXPECT_FALSE(prefs->IsExternalExtensionAcknowledged(good_crx));
-  EXPECT_EQ(disable_reason::DISABLE_EXTERNAL_EXTENSION,
-            prefs->GetDisableReasons(good_crx));
+  EXPECT_THAT(prefs->GetDisableReasons(good_crx),
+              testing::UnorderedElementsAre(
+                  disable_reason::DISABLE_EXTERNAL_EXTENSION));
   const Extension* extension =
       registry()->disabled_extensions().GetByID(good_crx);
   ASSERT_TRUE(extension);
@@ -4856,7 +4866,7 @@ TEST_F(ExtensionServiceTest, ExternalExtensionIsNotDisabledOnUpdate) {
   EXPECT_TRUE(registry()->enabled_extensions().Contains(good_crx));
   ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
   EXPECT_FALSE(prefs->IsExternalExtensionAcknowledged(good_crx));
-  EXPECT_EQ(disable_reason::DISABLE_NONE, prefs->GetDisableReasons(good_crx));
+  EXPECT_TRUE(prefs->GetDisableReasons(good_crx).empty());
 
   provider->UpdateOrAddExtension(good_crx, "1.0.0.1",
                                  data_dir().AppendASCII("good2.crx"));
@@ -4879,7 +4889,7 @@ TEST_F(ExtensionServiceTest, ExternalExtensionIsNotDisabledOnUpdate) {
     EXPECT_EQ("1.0.0.1", extension->version().GetString());
   }
   EXPECT_FALSE(prefs->IsExternalExtensionAcknowledged(good_crx));
-  EXPECT_EQ(disable_reason::DISABLE_NONE, prefs->GetDisableReasons(good_crx));
+  EXPECT_TRUE(prefs->GetDisableReasons(good_crx).empty());
 }
 
 // Test that if an external extension warning is ignored three times, the
@@ -4900,8 +4910,9 @@ TEST_F(ExtensionServiceTest, ExternalExtensionRemainsDisabledIfIgnored) {
   EXPECT_TRUE(registry()->disabled_extensions().Contains(good_crx));
   ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
   EXPECT_FALSE(prefs->IsExternalExtensionAcknowledged(good_crx));
-  EXPECT_EQ(disable_reason::DISABLE_EXTERNAL_EXTENSION,
-            prefs->GetDisableReasons(good_crx));
+  EXPECT_THAT(prefs->GetDisableReasons(good_crx),
+              testing::UnorderedElementsAre(
+                  disable_reason::DISABLE_EXTERNAL_EXTENSION));
 
   ExternalInstallManager* external_install_manager =
       service()->external_install_manager();
@@ -4926,15 +4937,17 @@ TEST_F(ExtensionServiceTest, ExternalExtensionRemainsDisabledIfIgnored) {
   EXPECT_TRUE(external_install_manager->GetErrorsForTesting().empty());
   EXPECT_TRUE(prefs->IsExternalExtensionAcknowledged(good_crx));
   EXPECT_TRUE(registry()->disabled_extensions().Contains(good_crx));
-  EXPECT_EQ(disable_reason::DISABLE_EXTERNAL_EXTENSION,
-            prefs->GetDisableReasons(good_crx));
+  EXPECT_THAT(prefs->GetDisableReasons(good_crx),
+              testing::UnorderedElementsAre(
+                  disable_reason::DISABLE_EXTERNAL_EXTENSION));
 
   // The extension should remain disabled.
   service()->ReloadExtensionsForTest();
   EXPECT_TRUE(prefs->IsExternalExtensionAcknowledged(good_crx));
   EXPECT_TRUE(registry()->disabled_extensions().Contains(good_crx));
-  EXPECT_EQ(disable_reason::DISABLE_EXTERNAL_EXTENSION,
-            prefs->GetDisableReasons(good_crx));
+  EXPECT_THAT(prefs->GetDisableReasons(good_crx),
+              testing::UnorderedElementsAre(
+                  disable_reason::DISABLE_EXTERNAL_EXTENSION));
 
   // Then re-enabling the extension (or otherwise causing the alert to be
   // updated again) should work. Regression test for https://crbug.com/736292.
@@ -4963,8 +4976,9 @@ TEST_F(ExtensionServiceTest, ExternalExtensionBecomesEnabledIfForceInstalled) {
   EXPECT_TRUE(registry()->disabled_extensions().Contains(good_crx));
   ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
   EXPECT_FALSE(prefs->IsExternalExtensionAcknowledged(good_crx));
-  EXPECT_EQ(disable_reason::DISABLE_EXTERNAL_EXTENSION,
-            prefs->GetDisableReasons(good_crx));
+  EXPECT_THAT(prefs->GetDisableReasons(good_crx),
+              testing::UnorderedElementsAre(
+                  disable_reason::DISABLE_EXTERNAL_EXTENSION));
 
   // Make the extension force-installed now. It should flip from disabled to
   // enabled.
@@ -4980,7 +4994,7 @@ TEST_F(ExtensionServiceTest, ExternalExtensionBecomesEnabledIfForceInstalled) {
 
   EXPECT_TRUE(registry()->enabled_extensions().Contains(good_crx));
   EXPECT_TRUE(prefs->IsExternalExtensionAcknowledged(good_crx));
-  EXPECT_EQ(disable_reason::DISABLE_NONE, prefs->GetDisableReasons(good_crx));
+  EXPECT_TRUE(prefs->GetDisableReasons(good_crx).empty());
 }
 
 #if !BUILDFLAG(IS_CHROMEOS)
@@ -5064,7 +5078,7 @@ TEST_F(ExtensionServiceTest, DisableRemotelyForMalware) {
   attributes.Set("_malware", false);
   service()->PerformActionBasedOnOmahaAttributes(good_crx, attributes);
   EXPECT_EQ(1u, registry()->enabled_extensions().size());
-  EXPECT_EQ(0, prefs->GetDisableReasons(good_crx));
+  EXPECT_TRUE(prefs->GetDisableReasons(good_crx).empty());
   EXPECT_FALSE(blocklist_prefs::IsExtensionBlocklisted(good_crx, prefs));
 }
 
@@ -5159,7 +5173,7 @@ TEST_F(ExtensionServiceTest,
   state_map[good_crx] = BlocklistState::NOT_BLOCKLISTED;
   service()->PerformActionBasedOnExtensionTelemetryServiceVerdicts(state_map);
   EXPECT_EQ(1u, registry()->enabled_extensions().size());
-  EXPECT_EQ(0, prefs->GetDisableReasons(good_crx));
+  EXPECT_TRUE(prefs->GetDisableReasons(good_crx).empty());
   EXPECT_FALSE(blocklist_prefs::IsExtensionBlocklisted(good_crx, prefs));
 }
 
@@ -5183,9 +5197,10 @@ TEST_F(ExtensionServiceTest,
   util::SetDeveloperModeForProfile(profile(), false);
   EXPECT_FALSE(registry()->enabled_extensions().Contains(unpacked_crx->id()));
   EXPECT_TRUE(registry()->disabled_extensions().Contains(unpacked_crx->id()));
-  EXPECT_EQ(
-      disable_reason::DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION,
-      ExtensionPrefs::Get(profile())->GetDisableReasons(unpacked_crx->id()));
+  EXPECT_THAT(
+      ExtensionPrefs::Get(profile())->GetDisableReasons(unpacked_crx->id()),
+      testing::UnorderedElementsAre(
+          disable_reason::DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION));
 
   // Turn developer mode ON. The unpacked extension should now be enabled.
   util::SetDeveloperModeForProfile(profile(), true);
@@ -5338,8 +5353,8 @@ TEST_F(ExtensionServiceTest, ReloadExtension) {
   // Extension should be disabled now, waiting to be reloaded.
   EXPECT_EQ(0u, registry()->enabled_extensions().size());
   EXPECT_EQ(1u, registry()->disabled_extensions().size());
-  EXPECT_EQ(disable_reason::DISABLE_RELOAD,
-            ExtensionPrefs::Get(profile())->GetDisableReasons(extension_id));
+  EXPECT_THAT(ExtensionPrefs::Get(profile())->GetDisableReasons(extension_id),
+              testing::UnorderedElementsAre(disable_reason::DISABLE_RELOAD));
 
   // Reloading again should not crash.
   service()->ReloadExtension(extension_id);
@@ -7993,7 +8008,7 @@ TEST_F(ExtensionServiceTest,
   EXPECT_TRUE(registry()->enabled_extensions().Contains(good_crx));
   ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
   EXPECT_FALSE(prefs->IsExternalExtensionAcknowledged(good_crx));
-  EXPECT_EQ(disable_reason::DISABLE_NONE, prefs->GetDisableReasons(good_crx));
+  EXPECT_TRUE(prefs->GetDisableReasons(good_crx).empty());
 
   // We explicitly reset the override first. ScopedOverrides reset the value
   // to the original value on destruction, but if we reset by passing a new
@@ -8328,7 +8343,7 @@ TEST_F(ExtensionServiceTest, UserInstalledExtensionThenRequiredByPolicy) {
 
   EXPECT_TRUE(registry()->enabled_extensions().GetByID(good_crx));
   ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
-  EXPECT_EQ(disable_reason::DISABLE_NONE, prefs->GetDisableReasons(good_crx));
+  EXPECT_TRUE(prefs->GetDisableReasons(good_crx).empty());
   EXPECT_FALSE(prefs->IsExtensionDisabled(good_crx));
 }
 
@@ -8384,7 +8399,7 @@ TEST_F(ExtensionServiceTest,
 
   EXPECT_TRUE(registry()->enabled_extensions().GetByID(good_crx));
   ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
-  EXPECT_EQ(disable_reason::DISABLE_NONE, prefs->GetDisableReasons(good_crx));
+  EXPECT_TRUE(prefs->GetDisableReasons(good_crx).empty());
   EXPECT_FALSE(prefs->IsExtensionDisabled(good_crx));
 
   // Simulate a chrome process restart.
@@ -8434,7 +8449,7 @@ TEST_F(ExtensionServiceTest, InstallingUnacknowledgedExternalExtension) {
   EXPECT_EQ(ExtensionManagement::INSTALLATION_RECOMMENDED, installation_mode);
   EXPECT_TRUE(registry()->enabled_extensions().Contains(good_crx));
   EXPECT_TRUE(prefs->IsExternalExtensionAcknowledged(extension->id()));
-  EXPECT_EQ(disable_reason::DISABLE_NONE, prefs->GetDisableReasons(good_crx));
+  EXPECT_TRUE(prefs->GetDisableReasons(good_crx).empty());
   EXPECT_FALSE(prefs->IsExtensionDisabled(good_crx));
 }
 

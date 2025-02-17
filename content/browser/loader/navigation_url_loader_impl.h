@@ -21,6 +21,7 @@
 #include "content/public/browser/weak_document_ptr.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/load_timing_info.h"
+#include "net/cookies/cookie_setting_override.h"
 #include "net/url_request/url_request.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
@@ -104,7 +105,9 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>
           header_client,
       network::URLLoaderFactoryBuilder factory_builder,
-      StoragePartitionImpl* partition);
+      StoragePartitionImpl* partition,
+      std::optional<net::CookieSettingOverrides> devtools_cookie_overrides,
+      std::optional<net::CookieSettingOverrides> cookie_overrides);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(NavigationURLLoaderImplTest,
@@ -183,7 +186,12 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
   // NavigationLoaderInterceptor::MaybeCreateLoader. It allows an interceptor
   // to initially elect to handle a request, and later decide to fallback to
   // the default behavior. This is needed for service worker network fallback.
-  void FallbackToNonInterceptedRequest(
+  //
+  // This is a static method + WeakPtr `self` argument, to return `nullptr` when
+  // `self` is destroyed (`base::BindOnce` + non-static member method +
+  // `WeakPtr` doesn't work if the return type is not `void`).
+  static network::mojom::URLLoaderFactory* FallbackToNonInterceptedRequest(
+      base::WeakPtr<NavigationURLLoaderImpl> self,
       ResponseHeadUpdateParams head_update_params);
 
   void CreateThrottlingLoaderAndStart(

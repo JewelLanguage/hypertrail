@@ -7,16 +7,25 @@
 
 #import <Foundation/Foundation.h>
 
-#import "ios/chrome/browser/supervised_user/ui/parent_access_consumer.h"
 #import "ios/web/public/web_state.h"
+
+class GURL;
+
+@protocol ParentAccessConsumer;
+@protocol ParentAccessMediatorDelegate;
 
 // Mediator for ParentAccessCoordinator.
 @interface ParentAccessMediator : NSObject
 
+// Consumer to reflect model changes in the UI.
 @property(nonatomic, weak) id<ParentAccessConsumer> consumer;
+
+// Delegate for this mediator.
+@property(nonatomic, weak) id<ParentAccessMediatorDelegate> delegate;
 
 - (instancetype)init NS_UNAVAILABLE;
 - (instancetype)initWithWebState:(std::unique_ptr<web::WebState>)webState
+                 parentAccessURL:(const GURL&)parentAccessURL
     NS_DESIGNATED_INITIALIZER;
 
 // Disconnects the mediator.

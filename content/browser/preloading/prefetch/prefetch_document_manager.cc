@@ -77,8 +77,8 @@ PrefetchDocumentManager::~PrefetchDocumentManager() {
     return;
 
   // Invalidate weak pointers to `this` a little earlier to avoid callbacks to
-  // `this` (especially `PrefetchWillBeDestroyed()`) during `ResetPrefetch()`
-  // below.
+  // `this` (especially `PrefetchWillBeDestroyed()`) during
+  // `MayReleasePrefetch()` below.
   weak_method_factory_.InvalidateWeakPtrs();
 
   // On destruction, removes any prefetches that not yet start prefetching from
@@ -91,7 +91,7 @@ PrefetchDocumentManager::~PrefetchDocumentManager() {
         case PrefetchContainer::LoadState::kEligible:
         case PrefetchContainer::LoadState::kFailedIneligible:
         case PrefetchContainer::LoadState::kFailedHeldback:
-          prefetch_service->ResetPrefetch(prefetch_iter.second);
+          prefetch_service->MayReleasePrefetch(prefetch_iter.second);
           break;
         case PrefetchContainer::LoadState::kStarted:
           break;
@@ -173,7 +173,7 @@ void PrefetchDocumentManager::ProcessCandidates(
             PrefetchStatus::kPrefetchEvictedAfterCandidateRemoved);
         break;
     }
-    GetPrefetchService()->ResetPrefetch(prefetch);
+    GetPrefetchService()->MayReleasePrefetch(prefetch);
   }
 
   auto should_process_entry =
@@ -197,10 +197,10 @@ void PrefetchDocumentManager::ProcessCandidates(
     // Eager candidates are enacted by the same predictor that creates them.
     const PreloadingPredictor enacting_predictor =
         GetPredictorForPreloadingTriggerType(prefetch_type.trigger_type());
-    PrefetchUrl(prefetch_url, prefetch_type, enacting_predictor,
-                /*planned_max_preloading_type=*/PreloadingType::kPrefetch,
-                referrer, no_vary_search_hint,
-                base::MakeRefCounted<PreloadPipelineInfo>());
+    PrefetchUrl(prefetch_url, prefetch_type, enacting_predictor, referrer,
+                no_vary_search_hint,
+                base::MakeRefCounted<PreloadPipelineInfo>(
+                    /*planned_max_preloading_type=*/PreloadingType::kPrefetch));
   }
 
   if (PrefetchService* prefetch_service = GetPrefetchService()) {
@@ -217,10 +217,10 @@ bool PrefetchDocumentManager::MaybePrefetch(
 
   auto [prefetch_url, prefetch_type, referrer, no_vary_search_hint] =
       SpeculationCandidateToPrefetchUrlParams(candidate);
-  PrefetchUrl(prefetch_url, prefetch_type, enacting_predictor,
-              /*planned_max_preloading_type=*/PreloadingType::kPrefetch,
-              referrer, no_vary_search_hint,
-              base::MakeRefCounted<PreloadPipelineInfo>());
+  PrefetchUrl(prefetch_url, prefetch_type, enacting_predictor, referrer,
+              no_vary_search_hint,
+              base::MakeRefCounted<PreloadPipelineInfo>(
+                  /*planned_max_preloading_type=*/PreloadingType::kPrefetch));
   return true;
 }
 
@@ -231,7 +231,6 @@ void PrefetchDocumentManager::PrefetchAheadOfPrerender(
   auto [prefetch_url, prefetch_type, referrer, no_vary_search_hint] =
       SpeculationCandidateToPrefetchUrlParams(candidate);
   PrefetchUrl(prefetch_url, prefetch_type, enacting_predictor,
-              /*planned_max_preloading_type=*/PreloadingType::kPrerender,
               referrer, no_vary_search_hint, std::move(preload_pipeline_info));
 }
 
@@ -239,12 +238,11 @@ void PrefetchDocumentManager::PrefetchUrl(
     const GURL& url,
     const PrefetchType& prefetch_type,
     const PreloadingPredictor& enacting_predictor,
-    PreloadingType planned_max_preloading_type,
     const blink::mojom::Referrer& referrer,
     const network::mojom::NoVarySearchPtr& mojo_no_vary_search_hint,
     scoped_refptr<PreloadPipelineInfo> preload_pipeline_info) {
   const std::pair<GURL, PreloadingType> all_prefetches_key =
-      std::make_pair(url, planned_max_preloading_type);
+      std::make_pair(url, preload_pipeline_info->planned_max_preloading_type());
 
   // Skip prefetches that have already been requested.
   auto prefetch_container_iter = all_prefetches_.find(all_prefetches_key);
@@ -287,7 +285,7 @@ void PrefetchDocumentManager::PrefetchUrl(
   auto* attempt =
       static_cast<PreloadingAttemptImpl*>(preloading_data->AddPreloadingAttempt(
           creating_predictor, enacting_predictor, PreloadingType::kPrefetch,
-          std::move(matcher), planned_max_preloading_type,
+          std::move(matcher),
           web_contents->GetPrimaryMainFrame()->GetPageUkmSourceId()));
 
   attempt->SetSpeculationEagerness(prefetch_type.GetEagerness());
@@ -400,7 +398,7 @@ void PrefetchDocumentManager::ResetPrefetchAheadOfPrerenderIfExist(
       break;
   }
 
-  GetPrefetchService()->ResetPrefetch(prefetch);
+  GetPrefetchService()->MayReleasePrefetch(prefetch);
   all_prefetches_.erase(it);
 }
 
@@ -477,8 +475,8 @@ void PrefetchDocumentManager::PrefetchWillBeDestroyed(
               blink::mojom::SpeculationEagerness::kEager
           ? completed_eager_prefetches_
           : completed_non_eager_prefetches_;
-  auto it = base::ranges::find(completed_prefetches, prefetch->key(),
-                               [&](const auto& p) { return p->key(); });
+  auto it = std::ranges::find(completed_prefetches, prefetch->key(),
+                              [&](const auto& p) { return p->key(); });
   if (it != completed_prefetches.end()) {
     completed_prefetches.erase(it);
   }

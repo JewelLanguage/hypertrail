@@ -513,12 +513,18 @@ cc::LayerTreeSettings GenerateLayerTreeSettings(
           ui::kFluentOverlayScrollbarThinningDuration;
       if (WebTestSupport::IsRunningWebTest()) {
         settings.scrollbar_thinning_duration = base::Milliseconds(0);
-        settings.scrollbar_fade_delay = base::Milliseconds(0);
+        settings.scrollbar_fade_delay = base::TimeDelta::Max();
         settings.scrollbar_fade_duration = base::Milliseconds(0);
       }
     }
   }
 #endif  // BUILDFLAG(IS_ANDROID)
+
+  if (!base::FeatureList::IsEnabled(::features::kScrollbarAnimations)) {
+    settings.scrollbar_thinning_duration = base::TimeDelta();
+    settings.scrollbar_fade_delay = base::TimeDelta::Max();
+    settings.scrollbar_fade_duration = base::TimeDelta();
+  }
 
   settings.decoded_image_working_set_budget_bytes =
       cc::ImageDecodeCacheUtils::GetWorkingSetBytesForImageDecode(
@@ -589,8 +595,7 @@ cc::LayerTreeSettings GenerateLayerTreeSettings(
   settings.disable_frame_rate_limit =
       cmd.HasSwitch(::switches::kDisableFrameRateLimit);
 
-  settings.enable_hit_test_opaqueness =
-      RuntimeEnabledFeatures::HitTestOpaquenessEnabled();
+  settings.enable_hit_test_opaqueness = true;
 
   settings.enable_variable_refresh_rate =
       ::features::IsVariableRefreshRateAlwaysOn();

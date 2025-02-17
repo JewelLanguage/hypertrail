@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/desktop_capture/desktop_media_picker_views.h"
 
+#include <algorithm>
 #include <string>
 #include <utility>
 
@@ -13,10 +14,7 @@
 #include "base/functional/callback.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
-#include "base/ranges/algorithm.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
-#include "chrome/browser/media/webrtc/desktop_capture_devices_util.h"
 #include "chrome/browser/media/webrtc/desktop_media_list.h"
 #include "chrome/browser/media/webrtc/desktop_media_picker_controller.h"
 #include "chrome/browser/media/webrtc/desktop_media_picker_manager.h"
@@ -92,7 +90,7 @@ enum class SelectedTabDiscardStatus {
   kMaxValue = kDiscarded
 };
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH) && defined(USE_AURA)
+#if !BUILDFLAG(IS_CHROMEOS) && defined(USE_AURA)
 DesktopMediaID::Id AcceleratedWidgetToDesktopMediaId(
     gfx::AcceleratedWidget accelerated_widget) {
 #if BUILDFLAG(IS_WIN)
@@ -619,7 +617,7 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
   previously_selected_category_ = GetSelectedTabIndex();
   ConfigureUIForNewPane(previously_selected_category_);
 
-  bool modal_dialog = IsMediaPickerModalWindow(params.web_contents);
+  bool modal_dialog = MediaPickerCanShowAsWebModal(params.web_contents);
   views::Widget* widget = CreateMediaPickerDialogWidget(
       modal_dialog ? chrome::FindBrowserWithTab(params.web_contents) : nullptr,
       params.web_contents,
@@ -641,7 +639,7 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
     dialog_window_id = DesktopMediaID::RegisterNativeWindow(
         DesktopMediaID::TYPE_WINDOW, widget->GetNativeWindow());
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH) && defined(USE_AURA)
+#if !BUILDFLAG(IS_CHROMEOS) && defined(USE_AURA)
     // Set native window ID if the windows is outside Ash.
     dialog_window_id.id = AcceleratedWidgetToDesktopMediaId(
         widget->GetNativeWindow()->GetHost()->GetAcceleratedWidget());
@@ -770,15 +768,8 @@ std::u16string DesktopMediaPickerDialogView::GetLabelForAudioToggle(
 
   switch (category.type) {
     case DesktopMediaList::Type::kScreen: {
-      bool show_warning = suppress_local_audio_playback_;
-      if (request_source_ == RequestSource::kGetDisplayMedia &&
-          !base::FeatureList::IsEnabled(
-              ::kSuppressLocalAudioPlaybackForSystemAudio)) {
-        // Suppression blocked by killswitch, so no need to show a warning.
-        show_warning = false;
-      }
       return l10n_util::GetStringUTF16(
-          show_warning
+          suppress_local_audio_playback_
               ? IDS_DESKTOP_MEDIA_PICKER_AUDIO_SHARE_SCREEN_WITH_MUTE_WARNING
               : IDS_DESKTOP_MEDIA_PICKER_ALSO_SHARE_SYSTEM_AUDIO);
     }
@@ -971,14 +962,15 @@ views::View* DesktopMediaPickerDialogView::GetInitiallyFocusedView() {
 }
 
 bool DesktopMediaPickerDialogView::Accept() {
-  DCHECK(IsDialogButtonEnabled(ui::mojom::DialogButton::kOk));
+  CHECK(IsDialogButtonEnabled(ui::mojom::DialogButton::kOk));
 
-  // Ok button should only be enabled when a source is selected.
-  std::optional<DesktopMediaID> source_optional =
-      accepted_source_.has_value() ? accepted_source_
-                                   : GetSelectedController()->GetSelection();
-  DesktopMediaID source = source_optional.value();
+  // Accept() can only be called if IsDialogButtonEnabled() for the OK button,
+  // which implies that at least one of these two options has_value().
+  DesktopMediaID source = accepted_source_.has_value()
+                              ? accepted_source_.value()
+                              : GetSelectedController()->GetSelection().value();
   source.audio_share = IsAudioSharingApprovedByUser();
+
   if (request_source_ == RequestSource::kGetDisplayMedia) {
     RecordUmaSelection(dialog_type_, capturer_global_id_, source,
                        GetSelectedSourceListType(), dialog_open_time_);
@@ -1022,6 +1014,17 @@ void DesktopMediaPickerDialogView::AcceptSource() {
 
 void DesktopMediaPickerDialogView::AcceptSpecificSource(
     const DesktopMediaID& source) {
+  VLOG(1) << "DMPDV::AcceptSpecificSource: source_id = " << source.id;
+
+  if (tabbed_pane_) {
+    for (size_t i = 0; i < categories_.size(); i++) {
+      if (AsDesktopMediaIdType(categories_[i].type) == source.type) {
+        tabbed_pane_->SelectTabAt(i, /*animate=*/false);
+        break;
+      }
+    }
+  }
+
   accepted_source_ = std::optional<DesktopMediaID>(source);
   AcceptSource();
 }
@@ -1050,8 +1053,8 @@ void DesktopMediaPickerDialogView::OnDelegatedSourceListDismissed() {
 
   size_t fallback_pane_index = std::distance(
       categories_.begin(),
-      base::ranges::find(categories_, DesktopMediaList::Type::kWebContents,
-                         &DisplaySurfaceCategory::type));
+      std::ranges::find(categories_, DesktopMediaList::Type::kWebContents,
+                        &DisplaySurfaceCategory::type));
 
   if (fallback_pane_index >= categories_.size()) {
     Reject();

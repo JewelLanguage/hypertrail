@@ -9,10 +9,12 @@
 #include "base/check.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/glic/glic_enabling.h"
+#include "chrome/browser/glic/glic_enums.h"
 #include "chrome/browser/glic/launcher/glic_controller.h"
 #include "chrome/browser/glic/launcher/glic_launcher_configuration.h"
 #include "chrome/browser/glic/launcher/glic_status_icon.h"
 #include "chrome/browser/global_features.h"
+#include "chrome/browser/profiles/nuke_profile_directory_utils.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
@@ -21,9 +23,12 @@
 
 namespace {
 bool IsEnabledInAnyLoadedProfile() {
-  return base::ranges::any_of(
+  return std::ranges::any_of(
       g_browser_process->profile_manager()->GetLoadedProfiles(),
-      GlicEnabling::IsEnabledForProfile);
+      [](Profile* profile) {
+        return !IsProfileDirectoryMarkedForDeletion(profile->GetPath()) &&
+               GlicEnabling::IsEnabledAndConsentForProfile(profile);
+      });
 }
 }  // namespace
 
@@ -69,7 +74,7 @@ void GlicBackgroundModeManager::OnKeyPressed(
     const ui::Accelerator& accelerator) {
   CHECK(accelerator == actual_registered_hotkey_);
   CHECK(actual_registered_hotkey_ == expected_registered_hotkey_);
-  controller_->Show();
+  controller_->Toggle(InvocationSource::kOsHotkey);
 }
 
 void GlicBackgroundModeManager::ExecuteCommand(
@@ -83,6 +88,15 @@ void GlicBackgroundModeManager::OnProfileAdded(Profile* profile) {
   // entered.
   if (!status_icon_) {
     CHECK(!keep_alive_);
+    UpdateState();
+  }
+}
+
+void GlicBackgroundModeManager::OnProfileMarkedForPermanentDeletion(
+    Profile* profile) {
+  // If a profile is removed while in background mode, check if it must now be
+  // exited.
+  if (status_icon_) {
     UpdateState();
   }
 }
@@ -123,9 +137,18 @@ void GlicBackgroundModeManager::RegisterHotkey(ui::Accelerator updated_hotkey) {
   CHECK(!updated_hotkey.IsEmpty());
   auto* const global_accelerator_listener =
       ui::GlobalAcceleratorListener::GetInstance();
-  if (global_accelerator_listener &&
-      global_accelerator_listener->RegisterAccelerator(updated_hotkey, this)) {
-    actual_registered_hotkey_ = updated_hotkey;
+  if (global_accelerator_listener) {
+    const bool shortcut_handling_suspended =
+        global_accelerator_listener->IsShortcutHandlingSuspended();
+    // Re-enable shortcut handling to allow the global accelerator listener to
+    // register the hotkey.
+    global_accelerator_listener->SetShortcutHandlingSuspended(false);
+    if (global_accelerator_listener->RegisterAccelerator(updated_hotkey,
+                                                         this)) {
+      actual_registered_hotkey_ = updated_hotkey;
+    }
+    global_accelerator_listener->SetShortcutHandlingSuspended(
+        shortcut_handling_suspended);
   }
 }
 

@@ -5,26 +5,24 @@
 #ifndef CHROME_BROWSER_UI_AUTOFILL_AUTOFILL_AI_SAVE_AUTOFILL_AI_DATA_CONTROLLER_H_
 #define CHROME_BROWSER_UI_AUTOFILL_AUTOFILL_AI_SAVE_AUTOFILL_AI_DATA_CONTROLLER_H_
 
-#include <vector>
+#include <string>
 
 #include "base/memory/weak_ptr.h"
+#include "base/types/optional_ref.h"
 #include "components/autofill/core/browser/integrators/autofill_ai_delegate.h"
+#include "components/autofill_ai/core/browser/autofill_ai_client.h"
 #include "components/user_annotations/user_annotations_types.h"
 #include "content/public/browser/web_contents.h"
 
-namespace optimization_guide::proto {
-class UserAnnotationsEntry;
+namespace autofill {
+class EntityInstance;
 }
-
 namespace autofill_ai {
 
 // Interface that exposes controller functionality to the save Autofill AI data
 // bubble.
 class SaveAutofillAiDataController {
  public:
-  using LearnMoreClickedCallback = base::RepeatingCallback<void()>;
-  using UserFeedbackCallback =
-      base::RepeatingCallback<void(autofill::AutofillAiDelegate::UserFeedback)>;
 
   enum class AutofillAiBubbleClosedReason {
     // Bubble closed reason not specified.
@@ -51,28 +49,18 @@ class SaveAutofillAiDataController {
       content::WebContents* web_contents);
 
   // Shows a save Autofill AI data bubble which the user can accept or decline.
-  virtual void OfferSave(
-      std::vector<optimization_guide::proto::UserAnnotationsEntry>
-          prediction_improvements,
-      user_annotations::PromptAcceptanceCallback prompt_acceptance_callback,
-      LearnMoreClickedCallback learn_more_clicked_callback,
-      UserFeedbackCallback user_feedback_callback) = 0;
+  virtual void OfferSave(autofill::EntityInstance entity,
+                         AutofillAiClient::SavePromptAcceptanceCallback
+                             save_prompt_acceptance_callback) = 0;
 
   // Called when the user accepts to save Autofill AI data.
   virtual void OnSaveButtonClicked() = 0;
 
-  // Called when the user clicks on the thumbs up button in the dialog.
-  virtual void OnThumbsUpClicked() = 0;
-
-  // Called when the user clicks on the thumbs down button in the dialog.
-  virtual void OnThumbsDownClicked() = 0;
-
-  // Called when the user clicks on the learn more button in the dialog.
-  virtual void OnLearnMoreClicked() = 0;
+  virtual std::u16string GetDialogTitle() const = 0;
 
   // Returns the Autofill AI data to be displayed in the UI.
-  virtual const std::vector<optimization_guide::proto::UserAnnotationsEntry>&
-  GetAutofillAiData() const = 0;
+  virtual base::optional_ref<const autofill::EntityInstance> GetAutofillAiData()
+      const = 0;
 
   // Called when the Autofill AI data bubble is closed.
   virtual void OnBubbleClosed(AutofillAiBubbleClosedReason closed_reason) = 0;

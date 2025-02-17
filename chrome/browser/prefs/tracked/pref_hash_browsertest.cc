@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/base_switches.h"
+#include "base/check_deref.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -32,6 +33,7 @@
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engine_choice/search_engine_choice_service_factory.h"
+#include "chrome/browser/search_engines/template_url_prepopulate_data_resolver_factory.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/chrome_constants.h"
@@ -42,6 +44,7 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/search_engines/default_search_manager.h"
 #include "components/search_engines/template_url_data.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "components/sync/base/features.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_launcher.h"
@@ -626,6 +629,8 @@ class PrefHashBrowserTestUntrustedInitialized : public PrefHashBrowserTestBase {
         profile()->GetPrefs(),
         search_engines::SearchEngineChoiceServiceFactory::GetForProfile(
             profile()),
+        CHECK_DEREF(TemplateURLPrepopulateData::ResolverFactory::GetForProfile(
+            profile())),
         DefaultSearchManager::ObserverCallback()
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
             ,
@@ -714,6 +719,8 @@ class PrefHashBrowserTestUntrustedInitialized : public PrefHashBrowserTestBase {
         profile()->GetPrefs(),
         search_engines::SearchEngineChoiceServiceFactory::GetForProfile(
             profile()),
+        CHECK_DEREF(TemplateURLPrepopulateData::ResolverFactory::GetForProfile(
+            profile())),
         DefaultSearchManager::ObserverCallback()
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
             ,
@@ -1188,6 +1195,8 @@ class PrefHashBrowserTestDefaultSearch : public PrefHashBrowserTestBase {
         profile()->GetPrefs(),
         search_engines::SearchEngineChoiceServiceFactory::GetForProfile(
             profile()),
+        CHECK_DEREF(TemplateURLPrepopulateData::ResolverFactory::GetForProfile(
+            profile())),
         DefaultSearchManager::ObserverCallback()
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
             ,
@@ -1261,6 +1270,8 @@ class PrefHashBrowserTestDefaultSearch : public PrefHashBrowserTestBase {
         profile()->GetPrefs(),
         search_engines::SearchEngineChoiceServiceFactory::GetForProfile(
             profile()),
+        CHECK_DEREF(TemplateURLPrepopulateData::ResolverFactory::GetForProfile(
+            profile())),
         DefaultSearchManager::ObserverCallback()
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
             ,
@@ -1359,7 +1370,7 @@ class PrefHashBrowserTestAccountValueUntrustedAddition
     : public PrefHashBrowserTestBase {
  public:
   PrefHashBrowserTestAccountValueUntrustedAddition()
-      : feature_list_(syncer::kEnablePreferencesAccountStorage) {}
+      : feature_list_(switches::kEnablePreferencesAccountStorage) {}
 
   void SetupPreferences() override {
     EXPECT_FALSE(profile()->GetPrefs()->GetBoolean(prefs::kShowHomeButton));

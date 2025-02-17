@@ -50,6 +50,7 @@ namespace {
 // in enums.xml.
 // The ID space is a bit stretched out to enable adding new failure testing
 // inside functions where needed without destroying the order of elements.
+// LINT.IfChange(Result) -->
 enum class Result {
   kAddFormElements_Success = 0,
   kAddFormElements_Failure = 1,
@@ -127,6 +128,7 @@ enum class Result {
   kRemoveEntityInstancesModifiedBetween_Failure = 311,
   kMaxValue = kRemoveEntityInstancesModifiedBetween_Failure,
 };
+// LINT.ThenChange(/tools/metrics/histograms/metadata/autofill/enums.xml:AutofillWebDataBackendImplOperationResult)
 
 // Reports the success or failure of various operations on the database via UMA.
 //
@@ -141,15 +143,19 @@ void ReportResult(Result result) {
 AutofillWebDataBackendImpl::AutofillWebDataBackendImpl(
     scoped_refptr<WebDatabaseBackend> web_database_backend,
     scoped_refptr<base::SequencedTaskRunner> ui_task_runner,
-    scoped_refptr<base::SequencedTaskRunner> db_task_runner,
-    const base::RepeatingCallback<void(syncer::DataType)>&
-        on_autofill_changed_by_sync_callback)
+    scoped_refptr<base::SequencedTaskRunner> db_task_runner)
     : base::RefCountedDeleteOnSequence<AutofillWebDataBackendImpl>(
           std::move(db_task_runner)),
       ui_task_runner_(ui_task_runner),
-      web_database_backend_(web_database_backend),
-      on_autofill_changed_by_sync_callback_(
-          on_autofill_changed_by_sync_callback) {}
+      web_database_backend_(web_database_backend) {}
+
+void AutofillWebDataBackendImpl::ShutdownOnUISequence() {
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
+  weak_ptr_factory_.InvalidateWeakPtrs();
+  owning_task_runner()->PostTask(
+      FROM_HERE, BindOnce(&AutofillWebDataBackendImpl::ResetUserData,
+                          scoped_refptr(this)));
+}
 
 void AutofillWebDataBackendImpl::AddObserver(
     AutofillWebDataServiceObserverOnDBSequence* observer) {
@@ -163,17 +169,20 @@ void AutofillWebDataBackendImpl::RemoveObserver(
   db_observer_list_.RemoveObserver(observer);
 }
 
-AutofillWebDataBackendImpl::~AutofillWebDataBackendImpl() {
-  DCHECK(!user_data_);  // Forgot to call ResetUserData?
+void AutofillWebDataBackendImpl::AddObserver(
+    AutofillWebDataServiceObserverOnUISequence* observer) {
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
+  ui_observer_list_.AddObserver(observer);
 }
 
-void AutofillWebDataBackendImpl::SetAutofillProfileChangedCallback(
-    base::RepeatingCallback<void(const AutofillProfileChange&)> change_cb) {
-  // The callback must be set only once, but it can be reset in tests.
-  if (!on_autofill_profile_changed_cb_.is_null()) {
-    CHECK_IS_TEST();
-  }
-  on_autofill_profile_changed_cb_ = std::move(change_cb);
+void AutofillWebDataBackendImpl::RemoveObserver(
+    AutofillWebDataServiceObserverOnUISequence* observer) {
+  DCHECK(ui_task_runner_->RunsTasksInCurrentSequence());
+  ui_observer_list_.RemoveObserver(observer);
+}
+
+AutofillWebDataBackendImpl::~AutofillWebDataBackendImpl() {
+  DCHECK(!user_data_);  // Forgot to call ResetUserData?
 }
 
 WebDatabase* AutofillWebDataBackendImpl::GetDatabase() {
@@ -235,11 +244,18 @@ void AutofillWebDataBackendImpl::NotifyOfIbanChanged(const IbanChange& change) {
 void AutofillWebDataBackendImpl::NotifyOnAutofillChangedBySync(
     syncer::DataType data_type) {
   DCHECK(owning_task_runner()->RunsTasksInCurrentSequence());
-
-  // UI sequence notification.
   ui_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(on_autofill_changed_by_sync_callback_, data_type));
+      FROM_HERE, base::BindOnce(
+                     [](base::WeakPtr<AutofillWebDataBackendImpl> self,
+                        syncer::DataType data_type) {
+                       if (!self) {
+                         return;
+                       }
+                       for (auto& ui_observer : self->ui_observer_list_) {
+                         ui_observer.OnAutofillChangedBySync(data_type);
+                       }
+                     },
+                     weak_ptr_factory_.GetWeakPtr(), data_type));
 }
 
 void AutofillWebDataBackendImpl::NotifyOnServerCvcChanged(
@@ -345,6 +361,7 @@ WebDatabase::State AutofillWebDataBackendImpl::RemoveFormValueForElementName(
 
 WebDatabase::State AutofillWebDataBackendImpl::AddAutofillProfile(
     const AutofillProfile& profile,
+    base::OnceCallback<void(const AutofillProfileChange&)> on_success,
     WebDatabase* db) {
   DCHECK(owning_task_runner()->RunsTasksInCurrentSequence());
   AddressAutofillTable* table = AddressAutofillTable::FromWebDatabase(db);
@@ -363,10 +380,8 @@ WebDatabase::State AutofillWebDataBackendImpl::AddAutofillProfile(
   for (auto& db_observer : db_observer_list_)
     db_observer.AutofillProfileChanged(change);
 
-  if (!on_autofill_profile_changed_cb_.is_null()) {
-    ui_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(on_autofill_profile_changed_cb_, change));
-  }
+  ui_task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(std::move(on_success), std::move(change)));
 
   ReportResult(Result::kAddAutofillProfile_Success);
   return WebDatabase::COMMIT_NEEDED;
@@ -374,6 +389,7 @@ WebDatabase::State AutofillWebDataBackendImpl::AddAutofillProfile(
 
 WebDatabase::State AutofillWebDataBackendImpl::UpdateAutofillProfile(
     const AutofillProfile& profile,
+    base::OnceCallback<void(const AutofillProfileChange&)> on_success,
     WebDatabase* db) {
   DCHECK(owning_task_runner()->RunsTasksInCurrentSequence());
   AddressAutofillTable* table = AddressAutofillTable::FromWebDatabase(db);
@@ -401,10 +417,8 @@ WebDatabase::State AutofillWebDataBackendImpl::UpdateAutofillProfile(
   for (auto& db_observer : db_observer_list_)
     db_observer.AutofillProfileChanged(change);
 
-  if (!on_autofill_profile_changed_cb_.is_null()) {
-    ui_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(on_autofill_profile_changed_cb_, change));
-  }
+  ui_task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(std::move(on_success), std::move(change)));
 
   ReportResult(Result::kUpdateAutofillProfile_Success);
   return WebDatabase::COMMIT_NEEDED;
@@ -412,6 +426,7 @@ WebDatabase::State AutofillWebDataBackendImpl::UpdateAutofillProfile(
 
 WebDatabase::State AutofillWebDataBackendImpl::RemoveAutofillProfile(
     const std::string& guid,
+    base::OnceCallback<void(const AutofillProfileChange&)> on_success,
     WebDatabase* db) {
   DCHECK(owning_task_runner()->RunsTasksInCurrentSequence());
   std::optional<AutofillProfile> profile =
@@ -433,10 +448,8 @@ WebDatabase::State AutofillWebDataBackendImpl::RemoveAutofillProfile(
   for (auto& db_observer : db_observer_list_)
     db_observer.AutofillProfileChanged(change);
 
-  if (!on_autofill_profile_changed_cb_.is_null()) {
-    ui_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(on_autofill_profile_changed_cb_, change));
-  }
+  ui_task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(std::move(on_success), std::move(change)));
 
   ReportResult(Result::kRemoveAutofillProfile_Success);
   return WebDatabase::COMMIT_NEEDED;
@@ -452,34 +465,29 @@ std::unique_ptr<WDTypedResult> AutofillWebDataBackendImpl::GetAutofillProfiles(
       AUTOFILL_PROFILES_RESULT, std::move(profiles));
 }
 
-WebDatabase::State AutofillWebDataBackendImpl::AddEntityInstance(
-    const EntityInstance& entity,
+WebDatabase::State AutofillWebDataBackendImpl::AddOrUpdateEntityInstance(
+    EntityInstance entity,
+    base::OnceCallback<void(EntityInstanceChange)> on_success,
     WebDatabase* db) {
   DCHECK(owning_task_runner()->RunsTasksInCurrentSequence());
   EntityTable* table = EntityTable::FromWebDatabase(db);
-  if (!table->AddEntityInstance(entity)) {
-    ReportResult(Result::kAddEntityInstance_Failure);
-    return WebDatabase::COMMIT_NOT_NEEDED;
-  }
-  ReportResult(Result::kAddEntityInstance_Success);
-  return WebDatabase::COMMIT_NEEDED;
-}
-
-WebDatabase::State AutofillWebDataBackendImpl::UpdateEntityInstance(
-    const EntityInstance& entity,
-    WebDatabase* db) {
-  DCHECK(owning_task_runner()->RunsTasksInCurrentSequence());
-  EntityTable* table = EntityTable::FromWebDatabase(db);
-  if (!table->UpdateEntityInstance(entity)) {
+  if (!table->AddOrUpdateEntityInstance(entity)) {
     ReportResult(Result::kUpdateEntityInstance_Failure);
     return WebDatabase::COMMIT_NOT_NEEDED;
   }
+  base::Uuid guid = entity.guid();
+  ui_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(on_success),
+                     EntityInstanceChange(EntityInstanceChange::UPDATE,
+                                          std::move(guid), std::move(entity))));
   ReportResult(Result::kUpdateEntityInstance_Success);
   return WebDatabase::COMMIT_NEEDED;
 }
 
 WebDatabase::State AutofillWebDataBackendImpl::RemoveEntityInstance(
-    const base::Uuid& guid,
+    base::Uuid guid,
+    base::OnceCallback<void(EntityInstanceChange)> on_success,
     WebDatabase* db) {
   DCHECK(owning_task_runner()->RunsTasksInCurrentSequence());
   EntityTable* table = EntityTable::FromWebDatabase(db);
@@ -487,6 +495,11 @@ WebDatabase::State AutofillWebDataBackendImpl::RemoveEntityInstance(
     ReportResult(Result::kRemoveEntityInstance_Failure);
     return WebDatabase::COMMIT_NOT_NEEDED;
   }
+  ui_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(on_success),
+                     EntityInstanceChange(EntityInstanceChange::REMOVE,
+                                          std::move(guid), std::nullopt)));
   ReportResult(Result::kRemoveEntityInstance_Success);
   return WebDatabase::COMMIT_NEEDED;
 }

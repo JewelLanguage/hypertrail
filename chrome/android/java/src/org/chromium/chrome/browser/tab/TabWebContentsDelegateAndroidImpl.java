@@ -5,36 +5,39 @@
 package org.chromium.chrome.browser.tab;
 
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.os.Build;
+import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.view.KeyEvent;
 
 import org.jni_zero.CalledByNative;
 import org.jni_zero.NativeMethods;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.BuildInfo;
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ObserverList.RewindableIterator;
+import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ZoomController;
 import org.chromium.chrome.browser.app.bluetooth.BluetoothNotificationService;
 import org.chromium.chrome.browser.app.usb.UsbNotificationService;
 import org.chromium.chrome.browser.bluetooth.BluetoothNotificationManager;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.gesturenav.NativePageBitmapCapturer;
 import org.chromium.chrome.browser.media.MediaCaptureNotificationServiceImpl;
 import org.chromium.chrome.browser.policy.PolicyAuditor;
 import org.chromium.chrome.browser.policy.PolicyAuditorJni;
 import org.chromium.chrome.browser.usb.UsbNotificationManager;
 import org.chromium.components.browser_ui.styles.ChromeColors;
+import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.find_in_page.FindMatchRectsDetails;
 import org.chromium.components.find_in_page.FindNotificationDetails;
 import org.chromium.content_public.browser.InvalidateTypes;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.common.ResourceRequestBody;
-import org.chromium.ui.UiUtils;
 import org.chromium.url.GURL;
 
 /** Implementation class of {@link TabWebContentsDelegateAndroid}. */
@@ -444,19 +447,31 @@ final class TabWebContentsDelegateAndroidImpl extends TabWebContentsDelegateAndr
     }
 
     @Override
-    public boolean supportsForwardTransitionAnimation() {
-        var window = mTab.getWindowAndroid().getWindow();
-        if (window == null) {
-            return true;
-        }
-        return (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
-                        && ChromeFeatureList.sRightEdgeGoesForwardGestureNav.isEnabled())
-                || !UiUtils.isGestureNavigationMode(window);
+    public Bitmap maybeCopyContentAreaAsBitmapSync() {
+        return NativePageBitmapCapturer.maybeCaptureNativeViewSync(mTab, getTopControlsHeight());
     }
 
     @Override
-    public Bitmap maybeCopyContentAreaAsBitmapSync() {
-        return NativePageBitmapCapturer.maybeCaptureNativeViewSync(mTab, getTopControlsHeight());
+    public Bitmap getBackForwardTransitionFallbackUXInternalPageIcon() {
+        Drawable drawable =
+                ApiCompatibilityUtils.getDrawable(
+                        mTab.getContext().getResources(), R.drawable.chromelogo16);
+
+        drawable.setColorFilter(
+                SemanticColorUtils.getDefaultIconColor(mTab.getContext()), PorterDuff.Mode.SRC_IN);
+
+        int idealNativeFaviconSize =
+                mTab.getContext()
+                        .getResources()
+                        .getDimensionPixelSize(R.dimen.navigation_transitions_favicon_size);
+
+        Bitmap bitmap =
+                Bitmap.createBitmap(
+                        idealNativeFaviconSize, idealNativeFaviconSize, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
+        drawable.draw(canvas);
+        return bitmap;
     }
 
     @Override

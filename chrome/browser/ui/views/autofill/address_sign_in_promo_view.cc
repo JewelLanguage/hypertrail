@@ -32,9 +32,12 @@ AddressSignInPromoView::AddressSignInPromoView(
       views::DISTANCE_BUBBLE_PREFERRED_WIDTH));
 
   // Show the sign in promo.
-  AddChildView(std::make_unique<AutofillBubbleSignInPromoView>(
-      web_contents, signin_metrics::AccessPoint::ACCESS_POINT_ADDRESS_BUBBLE,
-      syncer::LocalDataItemModel::DataId(autofill_profile.guid())));
+  auto* sign_in_promo =
+      AddChildView(std::make_unique<AutofillBubbleSignInPromoView>(
+          web_contents, signin_metrics::AccessPoint::kAddressBubble,
+          syncer::LocalDataItemModel::DataId(autofill_profile.guid())));
+
+  SetInitiallyFocusedView(sign_in_promo->GetSignInButton());
 }
 
 AddressSignInPromoView::~AddressSignInPromoView() = default;
@@ -46,7 +49,7 @@ void AddressSignInPromoView::AddedToWidget() {
       std::make_unique<ThemeTrackingNonAccessibleImageView>(
           ui::ImageModel::FromResourceId(IDR_SAVE_ADDRESS),
           ui::ImageModel::FromResourceId(IDR_SAVE_ADDRESS_DARK),
-          base::BindRepeating(&views::BubbleDialogDelegate::GetBackgroundColor,
+          base::BindRepeating(&views::BubbleDialogDelegate::background_color,
                               base::Unretained(this))));
 }
 

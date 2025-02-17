@@ -444,8 +444,8 @@ void AppsSizeCalculator::OnGetBorealisAppsSize(
     UpdateAppsAndExtensionsSize();
     return;
   }
-  auto image = base::ranges::find(response->images(), "borealis",
-                                  &vm_tools::concierge::VmDiskInfo::name);
+  auto image = std::ranges::find(response->images(), "borealis",
+                                 &vm_tools::concierge::VmDiskInfo::name);
   if (image == response->images().end()) {
     LOG(ERROR) << "Couldn't find Borealis VM";
     has_borealis_apps_size_ = true;
@@ -510,8 +510,8 @@ void CrostiniSizeCalculator::OnGetCrostiniSize(
   if (borealis::BorealisServiceFactory::GetForProfile(profile_)
           ->Features()
           .IsEnabled()) {
-    auto image = base::ranges::find(response->images(), "borealis",
-                                    &vm_tools::concierge::VmDiskInfo::name);
+    auto image = std::ranges::find(response->images(), "borealis",
+                                   &vm_tools::concierge::VmDiskInfo::name);
     if (image == response->images().end()) {
       LOG(ERROR) << "Couldn't find Borealis VM";
     } else {
@@ -532,7 +532,7 @@ void OtherUsersSizeCalculator::PerformCalculation() {
   other_users_.clear();
   user_sizes_.clear();
   const user_manager::UserList& users =
-      user_manager::UserManager::Get()->GetUsers();
+      user_manager::UserManager::Get()->GetPersistedUsers();
   for (user_manager::User* user : users) {
     if (user->is_active()) {
       continue;

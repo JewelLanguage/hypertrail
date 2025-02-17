@@ -49,6 +49,7 @@
 #include "chrome/browser/ui/views/side_panel/customize_chrome/side_panel_controller_views.h"
 #include "chrome/browser/ui/views/side_panel/extensions/extension_side_panel_manager.h"
 #include "chrome/browser/ui/views/side_panel/read_anything/read_anything_side_panel_controller.h"
+#include "chrome/browser/ui/views/translate/translate_page_action_controller.h"
 #include "chrome/browser/ui/webui/webui_embedding_context.h"
 #include "chrome/browser/web_applications/web_app_tab_helper.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
@@ -56,6 +57,7 @@
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/fingerprinting_protection_filter/common/fingerprinting_protection_filter_features.h"
 #include "components/image_fetcher/core/image_fetcher_service.h"
+#include "components/metrics/content/dwa_web_contents_observer.h"
 #include "components/permissions/permission_indicators_tab_data.h"
 
 #if BUILDFLAG(ENABLE_GLIC)
@@ -145,21 +147,16 @@ void TabFeatures::Init(TabInterface& tab, Profile* profile) {
         std::make_unique<privacy_sandbox::PrivacySandboxTabObserver>(
             tab.GetContents());
 
-    tab_groups::TabGroupSyncService* tab_group_sync_service =
-        tab_groups::SavedTabGroupUtils::GetServiceForProfile(profile);
-    if (tab_group_sync_service) {
+    dwa_web_contents_observer_ =
+        std::make_unique<metrics::DwaWebContentsObserver>(
+            tab.GetContents());
+
+    if (tab_groups::TabGroupSyncService* tab_group_sync_service =
+            tab_groups::SavedTabGroupUtils::GetServiceForProfile(profile)) {
       saved_tab_group_web_contents_listener_ =
           std::make_unique<tab_groups::SavedTabGroupWebContentsListener>(
               tab_group_sync_service, &tab);
     }
-
-    const auto* pinned_actions_model = PinnedToolbarActionsModel::Get(profile);
-    CHECK(pinned_actions_model);
-    page_action_controller_ =
-        std::make_unique<page_actions::PageActionController>(
-            pinned_actions_model);
-    page_action_controller_->Initialize(std::vector<actions::ActionId>(
-        page_actions::kActionIds.begin(), page_actions::kActionIds.end()));
 
     if (tab_groups::SavedTabGroupUtils::SupportsSharedTabGroups()) {
       collaboration_messaging_tab_data_ =
@@ -177,7 +174,18 @@ void TabFeatures::Init(TabInterface& tab, Profile* profile) {
           std::make_unique<glic::GlicTabIndicatorHelper>(&tab);
     }
 #endif  // BUILDFLAG(ENABLE_GLIC)
-  }
+  }     // IsInNormalWindow() end.
+
+  auto* pinned_actions_model = PinnedToolbarActionsModel::Get(profile);
+  CHECK(pinned_actions_model);
+  page_action_controller_ =
+      std::make_unique<page_actions::PageActionController>(
+          pinned_actions_model);
+  page_action_controller_->Initialize(
+      tab, std::vector<actions::ActionId>(page_actions::kActionIds.begin(),
+                                          page_actions::kActionIds.end()));
+  translate_page_action_controller_ =
+      std::make_unique<TranslatePageActionController>(tab);
 
   customize_chrome_side_panel_controller_ =
       std::make_unique<customize_chrome::SidePanelControllerViews>(tab);
@@ -197,7 +205,8 @@ void TabFeatures::Init(TabInterface& tab, Profile* profile) {
           &tab, side_panel_registry_.get());
 
   if (fingerprinting_protection_filter::features::
-          IsFingerprintingProtectionFeatureEnabled()) {
+          IsFingerprintingProtectionEnabledForIncognitoState(
+              profile->IsIncognitoProfile())) {
     CreateFingerprintingProtectionWebContentsHelper(
         tab.GetContents(), profile->GetPrefs(),
         HostContentSettingsMapFactory::GetForProfile(profile),
@@ -254,6 +263,8 @@ TabFeatures::CreateCommerceUiTabHelper(content::WebContents* web_contents,
 void TabFeatures::WillDiscardContents(tabs::TabInterface* tab,
                                       content::WebContents* old_contents,
                                       content::WebContents* new_contents) {
+  DCHECK_EQ(old_contents, tab->GetContents());
+
   Profile* profile = tab->GetBrowserWindowInterface()->GetProfile();
 
   // This method is transiently used to reset features that do not handle tab
@@ -283,7 +294,13 @@ void TabFeatures::WillDiscardContents(tabs::TabInterface* tab,
     privacy_sandbox_tab_observer_.reset();
     privacy_sandbox_tab_observer_ =
         std::make_unique<privacy_sandbox::PrivacySandboxTabObserver>(
-            tab->GetContents());
+            new_contents);
+  }
+
+  if (dwa_web_contents_observer_) {
+    dwa_web_contents_observer_.reset();
+    dwa_web_contents_observer_ =
+        std::make_unique<metrics::DwaWebContentsObserver>(new_contents);
   }
 
   if (web_app::AreWebAppsEnabled(
@@ -299,6 +316,12 @@ void TabFeatures::WillDiscardContents(tabs::TabInterface* tab,
               profile),
           ChromeTranslateClient::FromWebContents(new_contents),
           favicon::ContentFaviconDriver::FromWebContents(new_contents));
+
+  if (permission_indicators_tab_data_) {
+    permission_indicators_tab_data_ =
+        std::make_unique<permissions::PermissionIndicatorsTabData>(
+            new_contents);
+  }
 }
 
 }  // namespace tabs

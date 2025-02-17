@@ -52,7 +52,6 @@
 using chrome_test_util::BookmarksNavigationBarDoneButton;
 using chrome_test_util::ButtonWithAccessibilityLabelId;
 using chrome_test_util::GoogleServicesSettingsButton;
-using chrome_test_util::GoogleSyncSettingsButton;
 using chrome_test_util::IdentityCellMatcherForEmail;
 using chrome_test_util::PrimarySignInButton;
 using chrome_test_util::SecondarySignInButton;
@@ -80,8 +79,8 @@ NSString* const kLearnMoreLabel = @"Learn More";
 
 NSString* const kPassphrase = @"hello";
 
-// Timeout in seconds to wait for asynchronous sync operations.
-constexpr base::TimeDelta kSyncOperationTimeout = base::Seconds(5);
+// Timeout in seconds to wait for sync to become active.
+constexpr base::TimeDelta kSyncActiveTimeout = base::Seconds(5);
 
 // Sets parental control capability for the given identity.
 void SetParentalControlsCapabilityForIdentity(
@@ -197,9 +196,9 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
   // Sign in with fake identity.
   [SigninEarlGreyUI signinWithFakeIdentity:fakeIdentity];
 
-  // Add a bookmark after sync is initialized.
-  [ChromeEarlGrey waitForSyncEngineInitialized:YES
-                                   syncTimeout:kSyncOperationTimeout];
+  // Add a bookmark after sync is active.
+  [ChromeEarlGrey
+      waitForSyncTransportStateActiveWithTimeout:kSyncActiveTimeout];
   [BookmarkEarlGrey waitForBookmarkModelLoaded];
   [BookmarkEarlGrey
       setupStandardBookmarksInStorage:BookmarkStorageType::kLocalOrSyncable];
@@ -233,9 +232,9 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
   SetParentalControlsCapabilityForIdentity(fakeSupervisedIdentity);
   [SigninEarlGreyUI signinWithFakeIdentity:fakeSupervisedIdentity];
 
-  // Add a bookmark after sync is initialized.
-  [ChromeEarlGrey waitForSyncEngineInitialized:YES
-                                   syncTimeout:kSyncOperationTimeout];
+  // Add a bookmark after sync is active.
+  [ChromeEarlGrey
+      waitForSyncTransportStateActiveWithTimeout:kSyncActiveTimeout];
   [BookmarkEarlGrey waitForBookmarkModelLoaded];
   [BookmarkEarlGrey
       setupStandardBookmarksInStorage:BookmarkStorageType::kLocalOrSyncable];
@@ -257,9 +256,9 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
   SetParentalControlsCapabilityForIdentity(fakeSupervisedIdentity);
   [SigninEarlGreyUI signinWithFakeIdentity:fakeSupervisedIdentity];
 
-  // Add a bookmark after sync is initialized.
-  [ChromeEarlGrey waitForSyncEngineInitialized:YES
-                                   syncTimeout:kSyncOperationTimeout];
+  // Add a bookmark after sync is active.
+  [ChromeEarlGrey
+      waitForSyncTransportStateActiveWithTimeout:kSyncActiveTimeout];
   [BookmarkEarlGrey waitForBookmarkModelLoaded];
   [BookmarkEarlGrey
       setupStandardBookmarksInStorage:BookmarkStorageType::kAccount];
@@ -545,9 +544,9 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
   [ChromeEarlGreyUI waitForAppToIdle];
 
   ExpectedSigninHistograms* expecteds = [[ExpectedSigninHistograms alloc]
-      initWithAccessPoint:signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS];
-  // TODO(crbug.com/41493423): We should log Signin offered and
-  // Signin.SigninStartedAccessPoint.
+      initWithAccessPoint:signin_metrics::AccessPoint::kSettings];
+  // TODO(crbug.com/41493423): We should log Signin offered.
+  expecteds.signinSigninStartedAccessPoint = 1;
   expecteds.signinSignInStarted = 1;
   [SigninEarlGrey assertExpectedSigninHistograms:expecteds];
 }
@@ -562,7 +561,7 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
   // TODO(crbug.com/41493423): We should log signin started. Ideally that signin
   // was offered, but this is probably not possible on the web.
   ExpectedSigninHistograms* expecteds = [[ExpectedSigninHistograms alloc]
-      initWithAccessPoint:signin_metrics::AccessPoint::ACCESS_POINT_WEB_SIGNIN];
+      initWithAccessPoint:signin_metrics::AccessPoint::kWebSignin];
   [SigninEarlGrey assertExpectedSigninHistograms:expecteds];
 }
 
@@ -755,13 +754,7 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
   [[EarlGrey
       selectElementWithMatcher:grey_accessibilityID(kNTPFeedHeaderIdentityDisc)]
       performAction:grey_tap()];
-
-  // Ensure the fake add-account menu is displayed. The existence of the "add
-  // account" accessibility button on screen verifies that the screen
-  // was shown.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kFakeAuthAddAccountButtonIdentifier)]
-      assertWithMatcher:grey_notNil()];
+  [SigninEarlGreyUI assertFakeAddAccountMenuDisplayed];
 }
 
 // Tests that a signed-out user can open "Sign in and sync" screen from the NTP.
@@ -771,13 +764,7 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
                  grey_accessibilityLabel(GetNSString(
                      IDS_IOS_IDENTITY_DISC_SIGNED_OUT_ACCESSIBILITY_LABEL))]
       performAction:grey_tap()];
-
-  // Ensure the fake add-account menu is displayed. The existence of the "add
-  // account" accessibility button on screen verifies that the screen
-  // was shown.
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kFakeAuthAddAccountButtonIdentifier)]
-      assertWithMatcher:grey_notNil()];
+  [SigninEarlGreyUI assertFakeAddAccountMenuDisplayed];
 }
 
 // Tests that a signed-out user with device accounts can open "Sign in" sheet
@@ -915,9 +902,9 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
       assertWithMatcher:grey_sufficientlyVisible()];
 
   ExpectedSigninHistograms* expecteds = [[ExpectedSigninHistograms alloc]
-      initWithAccessPoint:signin_metrics::AccessPoint::
-                              ACCESS_POINT_NTP_SIGNED_OUT_ICON];
+      initWithAccessPoint:signin_metrics::AccessPoint::kNtpSignedOutIcon];
   expecteds.signinSignInStarted = 1;
+  expecteds.signinSigninStartedAccessPoint = 1;
   [SigninEarlGrey assertExpectedSigninHistograms:expecteds];
 }
 

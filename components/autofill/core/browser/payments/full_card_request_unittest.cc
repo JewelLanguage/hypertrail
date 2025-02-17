@@ -793,7 +793,7 @@ TEST_P(FullCardRequestCardMetadataTest, MetadataSignal) {
   if (MetadataEnabled() && CardNameAvailable() && CardArtAvailable()) {
     EXPECT_NE(
         signals.end(),
-        base::ranges::find(
+        std::ranges::find(
             signals,
             ClientBehaviorConstants::kShowingCardArtImageAndCardProductName));
   } else {
@@ -816,6 +816,8 @@ class FullCardRequestCardBenefitsTest
   void SetUp() override {
     scoped_feature_list_.InitWithFeatureStates(
         {{features::kAutofillEnableCardBenefitsForAmericanExpress,
+          IsCreditCardBenefitsEnabled()},
+         {features::kAutofillEnableCardBenefitsForBmo,
           IsCreditCardBenefitsEnabled()}});
 
     card_ = test::GetMaskedServerCard();
@@ -847,7 +849,7 @@ INSTANTIATE_TEST_SUITE_P(
                           &test::GetActiveCreditCardCategoryBenefit,
                           &test::GetActiveCreditCardMerchantBenefit),
         ::testing::Bool(),
-        ::testing::Values("amex")));
+        ::testing::Values("amex", "bmo")));
 
 // Checks that ClientBehaviorConstants::kShowingCardBenefits is populated as a
 // signal if a card benefit was shown when unmasking a credit card suggestion
@@ -857,8 +859,8 @@ TEST_P(FullCardRequestCardBenefitsTest, Benefits_ClientBehaviorConstants) {
   ASSERT_TRUE(request().GetShouldUnmaskCardForTesting());
   std::vector<ClientBehaviorConstants> signals =
       request().GetUnmaskRequestDetailsForTesting()->client_behavior_signals;
-  EXPECT_EQ(base::ranges::find(signals,
-                               ClientBehaviorConstants::kShowingCardBenefits) !=
+  EXPECT_EQ(std::ranges::find(signals,
+                              ClientBehaviorConstants::kShowingCardBenefits) !=
                 signals.end(),
             IsCreditCardBenefitsEnabled());
 }

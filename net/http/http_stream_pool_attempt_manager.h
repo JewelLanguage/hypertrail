@@ -208,9 +208,38 @@ class HttpStreamPool::AttemptManager
     return ip_endpoint_states_;
   }
 
+  bool HasSSLConfigForTesting() const { return ssl_config_.has_value(); }
+
  private:
   FRIEND_TEST_ALL_PREFIXES(HttpStreamPoolAttemptManagerTest,
                            GetIPEndPointToAttempt);
+
+  // Represents the initial attempt state of this manager.
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  //
+  // LINT.IfChange(InitialAttemptState)
+  enum class InitialAttemptState {
+    kOther = 0,
+    // CanUseQuic() && quic_version_.IsKnown() && !supports_spdy_
+    kCanUseQuicWithKnownVersion = 1,
+    // CanUseQuic() && quic_version_.IsKnown() && supports_spdy_
+    kCanUseQuicWithKnownVersionAndSupportsSpdy = 2,
+    // CanUseQuic() && !quic_version_.IsKnown() && !supports_spdy_
+    kCanUseQuicWithUnknownVersion = 3,
+    // CanUseQuic() && !quic_version_.IsKnown() && supports_spdy_
+    kCanUseQuicWithUnknownVersionAndSupportsSpdy = 4,
+    // !CanUseQuic() && quic_version_.IsKnown() && !supports_spdy_
+    kCannotUseQuicWithKnownVersion = 5,
+    // !CanUseQuic() && quic_version_.IsKnown() && supports_spdy_
+    kCannotUseQuicWithKnownVersionAndSupportsSpdy = 6,
+    // !CanUseQuic() && !quic_version_.IsKnown() && !supports_spdy_
+    kCannotUseQuicWithUnknownVersion = 7,
+    // !CanUseQuic() && !quic_version_.IsKnown() && supports_spdy_
+    kCannotUseQuicWithUnknownVersionAndSupportsSpdy = 8,
+    kMaxValue = kCannotUseQuicWithUnknownVersionAndSupportsSpdy,
+  };
+  // LINT.ThenChange(//tools/metrics/histograms/metadata/net/enums.xml:HttpStreamPoolInitialAttemptState)
 
   // Represents failure of connection attempts. Used to notify job of completion
   // for failure cases.
@@ -256,9 +285,9 @@ class HttpStreamPool::AttemptManager
 
   const QuicSessionAliasKey& quic_session_alias_key() const;
 
-  HttpNetworkSession* http_network_session();
-  SpdySessionPool* spdy_session_pool();
-  QuicSessionPool* quic_session_pool();
+  HttpNetworkSession* http_network_session() const;
+  SpdySessionPool* spdy_session_pool() const;
+  QuicSessionPool* quic_session_pool() const;
 
   HttpStreamPool* pool();
   const HttpStreamPool* pool() const;
@@ -272,6 +301,9 @@ class HttpStreamPool::AttemptManager
   }
 
   int WaitForSSLConfigReady();
+
+  void MaybeSetInitialAttemptState();
+  InitialAttemptState CalculateInitialAttemptState();
 
   base::expected<SSLConfig, TlsStreamAttempt::GetSSLConfigError> GetSSLConfig(
       InFlightAttempt* attempt);
@@ -294,11 +326,16 @@ class HttpStreamPool::AttemptManager
   // Returns true when there is an active SPDY/QUIC session that can be used for
   // on-going jobs after service endpoint results has changed. May notify jobs
   // of stream ready.
-  bool CanUseExistingSessionAfterEndpointChanges();
+  bool CanUseExistingQuicSessionAfterEndpointChanges();
+  bool CanUseExistingSpdySessionAfterEndpointChanges();
 
   // Calculate SSLConfig if it's not calculated yet and `this` has received
   // enough information to calculate it.
   void MaybeCalculateSSLConfig();
+
+  // When SSLConfig is ready and the notification has not yet been sent,
+  // notifies in-flight attempts that SSLConfig is ready.
+  void MaybeNotifySSLConfigReady();
 
   // Attempts QUIC sessions if QUIC can be used and `this` is ready to start
   // cryptographic connection handshakes.
@@ -393,7 +430,9 @@ class HttpStreamPool::AttemptManager
       StreamSocketHandle::SocketReuseType reuse_type,
       LoadTimingInfo::ConnectTiming connect_timing);
 
-  void CreateSpdyStreamAndNotify();
+  bool HasAvailableSpdySession() const;
+
+  void CreateSpdyStreamAndNotify(base::WeakPtr<SpdySession> spdy_session);
 
   void CreateQuicStreamAndNotify();
 
@@ -401,8 +440,9 @@ class HttpStreamPool::AttemptManager
                          NextProto negotiated_protocol);
 
   // Called when a SPDY session is ready to use. Cancels in-flight attempts.
-  // Closes idle streams. Completes preconnects.
-  void HandleSpdySessionReady(StreamSocketCloseReason refresh_group_reason);
+  // Closes idle streams. Completes preconnects and jobs.
+  void HandleSpdySessionReady(base::WeakPtr<SpdySession> spdy_session,
+                              StreamSocketCloseReason refresh_group_reason);
 
   // Called when a QUIC session is ready to use. Cancels in-flight attempts.
   // Closes idle streams. Completes preconnects.
@@ -480,6 +520,10 @@ class HttpStreamPool::AttemptManager
 
   const NetLogWithSource net_log_;
 
+  // Keeps the initial attempt state. Set when `this` starts a job or
+  // preconnect.
+  std::optional<InitialAttemptState> initial_attempt_state_;
+
   NextProtoSet allowed_alpns_ = NextProtoSet::All();
 
   // Holds jobs that are waiting for notifications.
@@ -540,6 +584,7 @@ class HttpStreamPool::AttemptManager
   // TODO(crbug.com/40812426): We need to have separate SSLConfigs when we
   // support multiple HTTPS RR that have different service endpoints.
   std::optional<SSLConfig> ssl_config_;
+  bool ssl_config_ready_notified_ = false;
 
   std::set<std::unique_ptr<InFlightAttempt>, base::UniquePtrComparator>
       in_flight_attempts_;
@@ -561,9 +606,6 @@ class HttpStreamPool::AttemptManager
   // The current state of TCP/TLS connection attempts.
   TcpBasedAttemptState tcp_based_attempt_state_ =
       TcpBasedAttemptState::kNotStarted;
-
-  // Initialized when one of an attempt is negotiated to use HTTP/2.
-  base::WeakPtr<SpdySession> spdy_session_;
 
   // QUIC version that is known to be used for the destination, usually coming
   // from Alt-Svc.

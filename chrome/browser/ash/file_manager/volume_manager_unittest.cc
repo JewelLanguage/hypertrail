@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <memory>
 #include <set>
 #include <string>
@@ -13,14 +14,12 @@
 #include <utility>
 #include <vector>
 
-#include "ash/components/arc/arc_prefs.h"
 #include "ash/constants/ash_switches.h"
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_command_line.h"
@@ -46,6 +45,7 @@
 #include "chromeos/ash/components/disks/disk.h"
 #include "chromeos/ash/components/disks/disk_mount_manager.h"
 #include "chromeos/ash/components/disks/fake_disk_mount_manager.h"
+#include "chromeos/ash/experiences/arc/arc_prefs.h"
 #include "chromeos/ash/experiences/arc/session/arc_bridge_service.h"
 #include "chromeos/ash/experiences/arc/session/arc_service_manager.h"
 #include "chromeos/ash/experiences/arc/test/connection_holder_util.h"
@@ -1071,22 +1071,30 @@ TEST_F(VolumeManagerTest, ExternalStorageDisabledPolicyMultiProfile) {
 }
 
 TEST_F(VolumeManagerTest, OnExternalStorageReadOnlyChanged) {
-  // Emulate updates of kExternalStorageReadOnly (change to true, then false).
+  // This subscribes to pref changes.
+  volume_manager()->Initialize();
+
+  // Set up some disks.
+  disk_mount_manager_->AddDiskForTest(
+      Disk::Builder().SetDevicePath("device1").Build());
+  disk_mount_manager_->AddDiskForTest(
+      Disk::Builder().SetDevicePath("device2").Build());
+
+  // Trigger pref updates.
   profile()->GetPrefs()->SetBoolean(disks::prefs::kExternalStorageReadOnly,
                                     true);
-  volume_manager()->OnExternalStorageReadOnlyChanged();
   profile()->GetPrefs()->SetBoolean(disks::prefs::kExternalStorageReadOnly,
                                     false);
-  volume_manager()->OnExternalStorageReadOnlyChanged();
 
-  // Verify that remount of removable disks is triggered for each update.
-  ASSERT_EQ(2U, disk_mount_manager_->remount_all_requests().size());
-  const FakeDiskMountManager::RemountAllRequest& remount_request1 =
-      disk_mount_manager_->remount_all_requests()[0];
-  EXPECT_EQ(ash::MountAccessMode::kReadOnly, remount_request1.access_mode);
-  const FakeDiskMountManager::RemountAllRequest& remount_request2 =
-      disk_mount_manager_->remount_all_requests()[1];
-  EXPECT_EQ(ash::MountAccessMode::kReadWrite, remount_request2.access_mode);
+  // Verify that removable disk remounts are triggered.
+  using ash::MountAccessMode;
+  std::vector<FakeDiskMountManager::RemountRequest> expected = {
+      {"device1", MountAccessMode::kReadOnly},
+      {"device2", MountAccessMode::kReadOnly},
+      {"device1", MountAccessMode::kReadWrite},
+      {"device2", MountAccessMode::kReadWrite},
+  };
+  EXPECT_EQ(expected, disk_mount_manager_->remount_requests());
 }
 
 TEST_F(VolumeManagerTest, GetVolumeList) {
@@ -1104,7 +1112,7 @@ TEST_F(VolumeManagerTest, VolumeManagerInitializeMyFilesVolume) {
       volume_manager()->GetVolumeList();
   ASSERT_GT(volume_list.size(), 0u);
   auto volume =
-      base::ranges::find(volume_list, "downloads:MyFiles", &Volume::volume_id);
+      std::ranges::find(volume_list, "downloads:MyFiles", &Volume::volume_id);
   EXPECT_FALSE(volume == volume_list.end());
   EXPECT_EQ(VOLUME_TYPE_DOWNLOADS_DIRECTORY, (*volume)->type());
 }
@@ -1523,8 +1531,8 @@ class VolumeManagerLocalUserFilesTest : public VolumeManagerArcTest {
     if (volume_list.size() == 0u) {
       return false;
     }
-    auto volume = base::ranges::find(volume_list, "downloads:MyFiles",
-                                     &Volume::volume_id);
+    auto volume =
+        std::ranges::find(volume_list, "downloads:MyFiles", &Volume::volume_id);
     return volume != volume_list.end() &&
            (*volume)->type() == VOLUME_TYPE_DOWNLOADS_DIRECTORY;
   }
@@ -1536,7 +1544,7 @@ class VolumeManagerLocalUserFilesTest : public VolumeManagerArcTest {
       return false;
     }
     auto volume =
-        base::ranges::find(volume_list, "android_files:0", &Volume::volume_id);
+        std::ranges::find(volume_list, "android_files:0", &Volume::volume_id);
     return volume != volume_list.end() &&
            (*volume)->type() == VOLUME_TYPE_ANDROID_FILES;
   }

@@ -755,8 +755,6 @@ _BANNED_CPP_FUNCTIONS: Sequence[BanRule] = (
             "third_party/blink/renderer/core/css/parser/css_proto_converter.cc",
             "third_party/blink/renderer/core/editing/ime/edit_context.cc",
             "third_party/blink/renderer/platform/graphics/bitmap_image_test.cc",
-            "tools/binary_size/libsupersize/viewer/caspian/diff_test.cc",
-            "tools/binary_size/libsupersize/viewer/caspian/tree_builder_test.cc",
             _THIRD_PARTY_EXCEPT_BLINK
         ],
     ),
@@ -873,7 +871,6 @@ _BANNED_CPP_FUNCTIONS: Sequence[BanRule] = (
             # migrated to the //base equivalent.
             r'ash/ambient/model/ambient_topic_queue\.cc',
             r'base/allocator/partition_allocator/src/partition_alloc/partition_alloc_unittest\.cc',
-            r'base/ranges/algorithm_unittest\.cc',
             r'base/test/launcher/test_launcher\.cc',
             r'cc/metrics/video_playback_roughness_reporter_unittest\.cc',
             r'chrome/browser/apps/app_service/metrics/website_metrics\.cc',
@@ -917,8 +914,7 @@ _BANNED_CPP_FUNCTIONS: Sequence[BanRule] = (
     BanRule(
         r'/\babsl::c_',
         (
-            'Abseil container utilities are banned. Use base/ranges/algorithm.h ',
-            'instead.',
+            'Abseil container utilities are banned. Use std::ranges:: instead.',
         ),
         True,
         [_THIRD_PARTY_EXCEPT_BLINK],  # Not an error in third_party folders.
@@ -1697,16 +1693,6 @@ _BANNED_CPP_FUNCTIONS: Sequence[BanRule] = (
         ),
     ),
     BanRule(
-        r'/\bbase::debug::DumpWithoutCrashingUnthrottled[(][)]',
-        (
-            'base::debug::DumpWithoutCrashingUnthrottled() does not throttle',
-            'dumps and may spam crash reports. Consider if the throttled',
-            'variants suffice instead.',
-        ),
-        False,
-        (),
-    ),
-    BanRule(
         'RoInitialize',
         ('Improper use of [base::win]::RoInitialize() has been implicated in a ',
          'few COM initialization leaks. Use base::win::ScopedWinrtInitializer ',
@@ -2127,6 +2113,19 @@ _BANNED_CPP_FUNCTIONS: Sequence[BanRule] = (
         ),
         treat_as_error=False,
     ),
+    BanRule(
+        pattern=(r'namespace {'),
+        explanation=
+        ('Anonymous namespaces are disallowed in C++ header files. See '
+         'https://google.github.io/styleguide/cppguide.html#Internal_Linkage '
+         ' for details.',
+        ),
+        treat_as_error=False,
+        excluded_paths=[
+          _THIRD_PARTY_EXCEPT_BLINK, # Don't warn in third_party folders.
+          r'^(?!.*\.h$).*$', # Exclude all files except those that end in .h
+        ],
+    ),
 )
 
 _DEPRECATED_SYNC_CONSENT_FUNCTION_WARNING = (
@@ -2267,10 +2266,12 @@ _GENERIC_PYDEPS_FILES = [
     'build/android/gyp/create_r_java.pydeps',
     'build/android/gyp/create_r_txt.pydeps',
     'build/android/gyp/create_size_info_files.pydeps',
+    'build/android/gyp/create_stub_manifest.pydeps',
     'build/android/gyp/create_test_apk_wrapper_script.pydeps',
     'build/android/gyp/create_ui_locale_resources.pydeps',
     'build/android/gyp/dex.pydeps',
     'build/android/gyp/dist_aar.pydeps',
+    'build/android/gyp/errorprone.pydeps',
     'build/android/gyp/filter_zip.pydeps',
     'build/android/gyp/flatc_java.pydeps',
     'build/android/gyp/gcc_preprocess.pydeps',
@@ -2291,6 +2292,7 @@ _GENERIC_PYDEPS_FILES = [
     'build/android/gyp/rename_java_classes.pydeps',
     'build/android/gyp/system_image_apks.pydeps',
     'build/android/gyp/trace_event_bytecode_rewriter.pydeps',
+    'build/android/gyp/tracereferences.pydeps',
     'build/android/gyp/turbine.pydeps',
     'build/android/gyp/unused_resources.pydeps',
     'build/android/gyp/validate_static_library_dex_references.pydeps',
@@ -2341,14 +2343,16 @@ _ALL_PYDEPS_FILES = _ANDROID_SPECIFIC_PYDEPS_FILES + _GENERIC_PYDEPS_FILES
 
 # Bypass the AUTHORS check for these accounts.
 _KNOWN_ROBOTS = set(
-  ) | set('%s@appspot.gserviceaccount.com' % s for s in ('findit-for-me', 'luci-bisection')
+  ) | set('%s@appspot.gserviceaccount.com' % s for s in ('findit-for-me',
+                                                         'luci-bisection',
+                                                         'predator-for-me-staging',
+                                                         'predator-for-me')
   ) | set('%s@developer.gserviceaccount.com' % s for s in ('3su6n15k.default',)
   ) | set('%s@chops-service-accounts.iam.gserviceaccount.com' % s
           for s in ('bling-autoroll-builder', 'v8-ci-autoroll-builder',
                     'wpt-autoroller', 'chrome-weblayer-builder',
-                    'lacros-version-skew-roller', 'skylab-test-cros-roller',
-                    'infra-try-recipes-tester', 'lacros-tracking-roller',
-                    'lacros-sdk-version-roller', 'chrome-automated-expectation',
+                    'skylab-test-cros-roller', 'infra-try-recipes-tester',
+                    'chrome-automated-expectation',
                     'chromium-automated-expectation', 'chrome-branch-day',
                     'chromium-autosharder')
   ) | set('%s@skia-public.iam.gserviceaccount.com' % s
@@ -2801,7 +2805,7 @@ def CheckCrosApiNeedBrowserTest(input_api, output_api):
     has_new_crosapi = False
     has_browser_test = False
     for f in input_api.AffectedFiles():
-        path = f.LocalPath()
+        path = f.UnixLocalPath()
         if (path.startswith('chromeos/crosapi/mojom') and
             _IsMojomFile(input_api, path) and f.Action() == 'A'):
             has_new_crosapi = True
@@ -2884,10 +2888,7 @@ def CheckNoBannedFunctions(input_api, output_api):
         if not excluded_paths:
             return False
 
-        local_path = affected_file.LocalPath()
-        # Consistently use / as path separator to simplify the writing of regex
-        # expressions.
-        local_path = local_path.replace(input_api.os_path.sep, '/')
+        local_path = affected_file.UnixLocalPath()
         for item in excluded_paths:
             if input_api.re.match(item, local_path):
                 return True
@@ -3223,11 +3224,9 @@ def CheckNoInternalHeapIncludes(input_api, output_api):
     v8_wrapper_pattern = input_api.re.compile(
         r'^\s*#include\s*"third_party/blink/renderer/platform/heap/v8_wrapper/.*"'
     )
-    # Consistently use / as path separator to simplify the writing of regex
-    # expressions.
     file_filter = lambda f: not input_api.re.match(
         r"^third_party/blink/renderer/platform/heap/.*",
-        f.LocalPath().replace(input_api.os_path.sep, '/'))
+        f.UnixLocalPath())
     errors = []
 
     for f in input_api.AffectedFiles(file_filter=file_filter):
@@ -3650,11 +3649,9 @@ def CheckAddedDepsHaveTargetApprovals(input_api, output_api):
     # (via lines like "+foo/bar/baz").
     depended_on_paths = set()
 
-    # Consistently use / as path separator to simplify the writing of regex
-    # expressions.
     file_filter = lambda f: not input_api.re.match(
         r"^third_party/blink/.*",
-        f.LocalPath().replace(input_api.os_path.sep, '/'))
+        f.UnixLocalPath())
     for f in input_api.AffectedFiles(include_deletes=False,
                                      file_filter=file_filter):
         filename = input_api.os_path.basename(f.LocalPath())
@@ -4117,7 +4114,7 @@ def CheckParseErrors(input_api, output_api):
         action = get_action(affected_file)
         if not action:
             return False
-        path = affected_file.LocalPath()
+        path = affected_file.UnixLocalPath()
 
         if _MatchesFile(input_api,
                         _KNOWN_TEST_DATA_AND_INVALID_JSON_FILE_PATTERNS, path):
@@ -4135,7 +4132,7 @@ def CheckParseErrors(input_api, output_api):
         kwargs = {}
         if (action == _GetJSONParseError
                 and _MatchesFile(input_api, json_no_comments_patterns,
-                                 affected_file.LocalPath())):
+                                 affected_file.UnixLocalPath())):
             kwargs['eat_comments'] = False
         parse_error = action(input_api, affected_file.AbsoluteLocalPath(),
                              **kwargs)
@@ -4212,9 +4209,6 @@ def CheckPythonDevilInit(input_api, output_api):
 
 
 def _MatchesFile(input_api, patterns, path):
-    # Consistently use / as path separator to simplify the writing of regex
-    # expressions.
-    path = path.replace(input_api.os_path.sep, '/')
     for pattern in patterns:
         if input_api.re.search(pattern, path):
             return True
@@ -4440,7 +4434,7 @@ def _CheckChangeForIpcSecurityOwners(input_api, output_api):
         # matching the above patterns, which trigger false positives.
         'third_party/crashpad/*',
         'third_party/blink/renderer/platform/bindings/*',
-        'third_party/protobuf/benchmarks/python/*',
+        'third_party/protobuf/*',
         'third_party/win_build_output/*',
         # Enum-only mojoms used for web metrics, so no security review needed.
         'third_party/blink/public/mojom/use_counter/metrics/*',
@@ -4661,7 +4655,7 @@ def CheckSetNoParent(input_api, output_api):
         # Check that every set noparent line has a corresponding file:// line
         # listed in build/OWNERS.setnoparent. An exception is made for top level
         # directories since src/OWNERS shouldn't review them.
-        linux_path = f.LocalPath().replace(input_api.os_path.sep, '/')
+        linux_path = f.UnixLocalPath()
         if (linux_path.count('/') != 1
                 and (not linux_path in _EXCLUDED_SET_NO_PARENT_PATHS)):
             for set_noparent_line in found_set_noparent_lines:
@@ -4696,12 +4690,12 @@ def CheckUselessForwardDeclarations(input_api, output_api):
     struct_pattern = input_api.re.compile(r'^struct\s+(\w+);$',
                                           input_api.re.MULTILINE)
     for f in input_api.AffectedFiles(include_deletes=False):
-        if (f.LocalPath().startswith('third_party')
-                and not f.LocalPath().startswith('third_party/blink')
-                and not f.LocalPath().startswith('third_party\\blink')):
+        local_path = f.UnixLocalPath()
+        if (local_path.startswith('third_party')
+                and not local_path.startswith('third_party/blink')):
             continue
 
-        if not f.LocalPath().endswith('.h'):
+        if not local_path.endswith('.h'):
             continue
 
         contents = input_api.ReadFile(f)
@@ -4950,10 +4944,9 @@ def _CheckAndroidTestAnnotationUsage(input_api, output_api):
 
 def _CheckAndroidNewMdpiAssetLocation(input_api, output_api):
     """Checks if MDPI assets are placed in a correct directory."""
-    file_filter = lambda f: (f.LocalPath().endswith(
-        '.png') and ('/res/drawable/'.replace('/', input_api.os_path.sep) in f.
-                     LocalPath() or '/res/drawable-ldrtl/'.replace(
-                         '/', input_api.os_path.sep) in f.LocalPath()))
+    file_filter = lambda f: (f.UnixLocalPath().endswith(
+        '.png') and ('/res/drawable/' in f.
+                     UnixLocalPath() or '/res/drawable-ldrtl/' in f.UnixLocalPath()))
     errors = []
     for f in input_api.AffectedFiles(include_deletes=False,
                                      file_filter=file_filter):
@@ -5363,9 +5356,8 @@ def CheckNoDeprecatedCss(input_api, output_api):
 def CheckForRelativeIncludes(input_api, output_api):
     bad_files = {}
     for f in input_api.AffectedFiles(include_deletes=False):
-        if (f.LocalPath().startswith('third_party')
-                and not f.LocalPath().startswith('third_party/blink')
-                and not f.LocalPath().startswith('third_party\\blink')):
+        if (f.UnixLocalPath().startswith('third_party')
+                and not f.LocalPath().startswith('third_party/blink')):
             continue
 
         if not _IsCPlusPlusFile(input_api, f.LocalPath()):
@@ -5408,9 +5400,8 @@ def CheckForCcIncludes(input_api, output_api):
     results = []
     for f in input_api.AffectedFiles(include_deletes=False):
         # We let third_party code do whatever it wants
-        if (f.LocalPath().startswith('third_party')
-                and not f.LocalPath().startswith('third_party/blink')
-                and not f.LocalPath().startswith('third_party\\blink')):
+        if (f.UnixLocalPath().startswith('third_party')
+                and not f.LocalPath().startswith('third_party/blink')):
             continue
 
         if not _IsCPlusPlusFile(input_api, f.LocalPath()):
@@ -5575,7 +5566,7 @@ def CheckWATCHLISTS(input_api, output_api):
     return []
 
 def CheckGnRebasePath(input_api, output_api):
-    """Checks that target_gen_dir is not used wtih "//" in rebase_path().
+    """Checks that target_gen_dir is not used with "//" in rebase_path().
 
     Developers should use root_build_dir instead of "//" when using target_gen_dir because
     Chromium is sometimes built outside of the source tree.
@@ -6250,7 +6241,7 @@ def CheckForInvalidIfDefinedMacros(input_api, output_api):
     def affected_files_filter(f):
         # Normalize the local path to Linux-style path separators so that the
         # path comparisons work on Windows as well.
-        path = f.LocalPath().replace('\\', '/')
+        path = f.UnixLocalPath()
 
         for skipped_path in SKIPPED_PATHS:
             if path.startswith(skipped_path):
@@ -6470,13 +6461,21 @@ def CheckForWindowsLineEndings(input_api, output_api):
     """
     known_text_files = r'.*\.(txt|html|htm|py|gyp|gypi|gn|isolate|icon)$'
 
+    _WEBUI_FILES_EXTENSIONS = r'\.(css|html|js|ts|svg)$'
+
     file_inclusion_pattern = (known_text_files,
                               r'.+%s' % _IMPLEMENTATION_EXTENSIONS,
-                              r'.+%s' % _HEADER_EXTENSIONS)
+                              r'.+%s' % _HEADER_EXTENSIONS,
+                              r'.+%s' % _WEBUI_FILES_EXTENSIONS)
+
+    # Exclude folder that contains .ts files that are actually binary video
+    # format and not TypeScript.
+    file_exclusion_pattern = (r'media/test/data/')
 
     problems = []
     source_file_filter = lambda f: input_api.FilterSourceFile(
-        f, files_to_check=file_inclusion_pattern, files_to_skip=None)
+        f, files_to_check=file_inclusion_pattern,
+        files_to_skip=file_exclusion_pattern)
     for f in input_api.AffectedSourceFiles(source_file_filter):
         # Ignore test files that contain crlf intentionally.
         if f.LocalPath().endswith('crlf.txt'):
@@ -6885,8 +6884,8 @@ def CheckStrings(input_api, output_api):
                                      (offset + start, offset + end + 1)))
         return variants, depth, offset + end + 1
 
+    old_sys_path = sys.path
     try:
-        old_sys_path = sys.path
         sys.path = sys.path + [
             input_api.os_path.join(input_api.PresubmitLocalPath(), 'tools',
                                    'translation')
@@ -7030,14 +7029,19 @@ def CheckTranslationExpectations(input_api, output_api,
     if not affected_grds:
         return []
 
+    old_sys_path = sys.path
     try:
-        old_sys_path = sys.path
         sys.path = sys.path + [
             input_api.os_path.join(input_api.PresubmitLocalPath(), 'tools',
                                    'translation')
         ]
+        sys.path = sys.path + [
+            input_api.os_path.join(input_api.PresubmitLocalPath(),
+                                   'third_party', 'depot_tools')
+        ]
         from helper import git_helper
         from helper import translation_helper
+        import gclient_utils
     finally:
         sys.path = old_sys_path
 
@@ -7049,8 +7053,12 @@ def CheckTranslationExpectations(input_api, output_api,
     if not translation_expectations_path:
         translation_expectations_path = input_api.os_path.join(
             repo_root, 'tools', 'gritsettings', 'translation_expectations.pyl')
-    if not grd_files:
+    is_cog = gclient_utils.IsEnvCog()
+    # Git is not available in cog workspaces.
+    if not grd_files and not is_cog:
         grd_files = git_helper.list_grds_in_repository(repo_root)
+    if not grd_files:
+        grd_files = []
 
     # Ignore bogus grd files used only for testing
     # ui/webui/resources/tools/generate_grd.py.
@@ -7060,7 +7068,7 @@ def CheckTranslationExpectations(input_api, output_api,
 
     try:
         translation_helper.get_translatable_grds(
-            repo_root, grd_files, translation_expectations_path)
+            repo_root, grd_files, translation_expectations_path, is_cog)
     except Exception as e:
         return [
             output_api.PresubmitNotifyResult(
@@ -7278,7 +7286,7 @@ def CheckAssertAshOnlyCode(input_api, output_api):
 
 
 def _IsMiraclePtrDisallowed(input_api, affected_file):
-    path = affected_file.LocalPath()
+    path = affected_file.UnixLocalPath()
     if not _IsCPlusPlusFile(input_api, path):
         return False
 
@@ -7463,123 +7471,6 @@ a subclass of it), or use "@Rule BaseRobolectricTestRule".
     return results
 
 
-def CheckMockAnnotation(input_api, output_api):
-    """Checks that we have annotated all Mockito.mock()-ed or Mockito.spy()-ed
-    classes with @Mock or @Spy. If this is not an instrumentation test,
-    disregard."""
-
-    # This is just trying to be approximately correct. We are not writing a
-    # Java parser, so special cases like statically importing mock() then
-    # calling an unrelated non-mockito spy() function will cause a false
-    # positive.
-    package_name = input_api.re.compile(r'^package\s+(\w+(?:\.\w+)+);')
-    mock_static_import = input_api.re.compile(
-        r'^import\s+static\s+org.mockito.Mockito.(?:mock|spy);')
-    import_class = input_api.re.compile(r'import\s+((?:\w+\.)+)(\w+);')
-    mock_annotation = input_api.re.compile(r'^\s*@(?:Mock|Spy)')
-    field_type = input_api.re.compile(r'(\w+)(?:<\w+>)?\s+\w+\s*(?:;|=)')
-    mock_or_spy_function_call = r'(?:mock|spy)\(\s*(?:new\s*)?(\w+)(?:\.class|\()'
-    fully_qualified_mock_function = input_api.re.compile(
-        r'Mockito\.' + mock_or_spy_function_call)
-    statically_imported_mock_function = input_api.re.compile(
-        r'\W' + mock_or_spy_function_call)
-    robolectric_test = input_api.re.compile(r'[rR]obolectric')
-    uiautomator_test = input_api.re.compile(r'[uU]i[aA]utomator')
-
-    def _DoClassLookup(class_name, class_name_map, package):
-        found = class_name_map.get(class_name)
-        if found is not None:
-            return found
-        else:
-            return package + '.' + class_name
-
-    def _FilterFile(affected_file):
-        return input_api.FilterSourceFile(
-            affected_file,
-            files_to_skip=input_api.DEFAULT_FILES_TO_SKIP,
-            files_to_check=[r'.*Test\.java$'])
-
-    mocked_by_function_classes = set()
-    mocked_by_annotation_classes = set()
-    class_to_filename = {}
-    for f in input_api.AffectedSourceFiles(_FilterFile):
-        mock_function_regex = fully_qualified_mock_function
-        next_line_is_annotated = False
-        fully_qualified_class_map = {}
-        package = None
-
-        for line in f.NewContents():
-            if robolectric_test.search(line) or uiautomator_test.search(line):
-                # Skip Robolectric and UiAutomator tests.
-                break
-
-            m = package_name.search(line)
-            if m:
-                package = m.group(1)
-                continue
-
-            if mock_static_import.search(line):
-                mock_function_regex = statically_imported_mock_function
-                continue
-
-            m = import_class.search(line)
-            if m:
-                fully_qualified_class_map[m.group(2)] = m.group(1) + m.group(2)
-                continue
-
-            if next_line_is_annotated:
-                next_line_is_annotated = False
-                fully_qualified_class = _DoClassLookup(
-                    field_type.search(line).group(1), fully_qualified_class_map,
-                    package)
-                mocked_by_annotation_classes.add(fully_qualified_class)
-                continue
-
-            if mock_annotation.search(line):
-                field_type_search = field_type.search(line)
-                if field_type_search:
-                    fully_qualified_class = _DoClassLookup(
-                        field_type_search.group(1), fully_qualified_class_map,
-                        package)
-                    mocked_by_annotation_classes.add(fully_qualified_class)
-                else:
-                    next_line_is_annotated = True
-                continue
-
-            m = mock_function_regex.search(line)
-            if m:
-                fully_qualified_class = _DoClassLookup(m.group(1),
-                    fully_qualified_class_map, package)
-                # Skipping builtin classes, since they don't get optimized.
-                if fully_qualified_class.startswith(
-                        'android.') or fully_qualified_class.startswith(
-                            'java.'):
-                    continue
-                class_to_filename[fully_qualified_class] = str(f.LocalPath())
-                mocked_by_function_classes.add(fully_qualified_class)
-
-    results = []
-    missed_classes = mocked_by_function_classes - mocked_by_annotation_classes
-    if missed_classes:
-        error_locations = []
-        for c in missed_classes:
-            error_locations.append(c + ' in ' + class_to_filename[c])
-        results.append(
-            output_api.PresubmitPromptWarning(
-                """
-Mockito.mock()/spy() cause issues with our Java optimizer. You have 3 options:
-1) If the mocked variable can be a class member, annotate the member with
-   @Mock/@Spy.
-2) If the mocked variable cannot be a class member, create a dummy member
-   variable of that type, annotated with @Mock/@Spy. This dummy does not need
-   to be used or initialized in any way.
-3) If the mocked type is definitely not going to be optimized, whether it's a
-   builtin type which we don't ship, or a class you know R8 will treat
-   specially, you can ignore this warning.
-""", error_locations))
-
-    return results
-
 def CheckNoJsInIos(input_api, output_api):
     """Checks to make sure that JavaScript files are not used on iOS."""
 
@@ -7650,8 +7541,7 @@ def CheckLibcxxRevisionsMatch(input_api, output_api):
 
     DEPS_FILES = [ 'DEPS', 'buildtools/deps_revisions.gni' ]
 
-    file_filter = lambda f: f.LocalPath().replace(
-            input_api.os_path.sep, '/') in DEPS_FILES
+    file_filter = lambda f: f.UnixLocalPath() in DEPS_FILES
     changed_deps_files = input_api.AffectedFiles(file_filter=file_filter)
     if not changed_deps_files:
         return []
@@ -7768,7 +7658,7 @@ def CheckInlineConstexprDefinitionsInHeaders(input_api, output_api):
 def CheckTodoBugReferences(input_api, output_api):
     """Checks that bugs in TODOs use updated issue tracker IDs."""
 
-    files_to_skip = ['PRESUBMIT_test.py']
+    files_to_skip = ['PRESUBMIT_test.py', r"^third_party/rust/chromium_crates_io/vendor/.*"]
 
     def _FilterFile(affected_file):
         return input_api.FilterSourceFile(
@@ -7777,7 +7667,7 @@ def CheckTodoBugReferences(input_api, output_api):
 
     # Monorail bug IDs are all less than or equal to 1524553 so check that all
     # bugs in TODOs are greater than that value.
-    pattern = input_api.re.compile(r'.*TODO\([^\)0-9]*([0-9]+)\).*')
+    pattern = input_api.re.compile(r'.*\bTODO\([^\)0-9]*([0-9]+)\).*')
     problems = []
     for f in input_api.AffectedSourceFiles(_FilterFile):
         for line_number, line in f.ChangedContents():

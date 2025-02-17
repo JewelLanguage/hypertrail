@@ -128,7 +128,7 @@ class CORE_EXPORT HTMLVideoElement final
   bool IsAccelerated() const override { return false; }
 
   // ImageBitmapSource implementation
-  gfx::Size BitmapSourceSize() const override;
+  ImageBitmapSourceStatus CheckUsability() const override;
   ScriptPromise<ImageBitmap> CreateImageBitmap(
       ScriptState*,
       std::optional<gfx::Rect> crop_rect,
@@ -275,7 +275,6 @@ class CORE_EXPORT HTMLVideoElement final
   // Used to fulfill blink::Image requests (CreateImage(),
   // GetSourceImageForCanvas(), etc). Created on demand.
   std::unique_ptr<CanvasResourceProvider> resource_provider_;
-  SkImageInfo resource_provider_info_;
   bool allow_accelerated_images_ = true;
   HeapTaskRunnerTimer<HTMLVideoElement> cache_deleting_timer_;
 

@@ -16,6 +16,7 @@
 #include "base/functional/callback_forward.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
@@ -49,6 +50,7 @@
 #include "media/cast/common/openscreen_conversion_helpers.h"
 #include "media/cast/common/packet.h"
 #include "media/cast/encoding/encoding_support.h"
+#include "media/cast/encoding/video_encoder.h"
 #include "media/cast/openscreen/config_conversions.h"
 #include "media/cast/sender/audio_sender.h"
 #include "media/cast/sender/video_sender.h"
@@ -69,12 +71,12 @@ using media::cast::FrameSenderConfig;
 using media::cast::OperationalStatus;
 using media::cast::Packet;
 using media::cast::PacketEvent;
-using media::mojom::RemotingSinkAudioCapability;
-using media::mojom::RemotingSinkVideoCapability;
+
 using mirroring::mojom::SessionError;
 using mirroring::mojom::SessionType;
 
 namespace mirroring {
+
 namespace {
 
 // The time between updating the bandwidth estimates.
@@ -100,72 +102,6 @@ int NumberOfEncodeThreads() {
   // with only 1 or 2 cores, use only one thread for encoding. On systems with
   // more cores, allow half of the cores to be used for encoding.
   return std::min(8, (base::SysInfo::NumberOfProcessors() + 1) / 2);
-}
-
-// Convert the sink capabilities to media::mojom::RemotingSinkMetadata.
-media::mojom::RemotingSinkMetadata ToRemotingSinkMetadata(
-    const openscreen::cast::RemotingCapabilities& capabilities,
-    const std::string& friendly_name) {
-  media::mojom::RemotingSinkMetadata sink_metadata;
-  sink_metadata.friendly_name = friendly_name;
-
-  for (const openscreen::cast::AudioCapability capability :
-       capabilities.audio) {
-    switch (capability) {
-      case openscreen::cast::AudioCapability::kBaselineSet:
-        sink_metadata.audio_capabilities.push_back(
-            RemotingSinkAudioCapability::CODEC_BASELINE_SET);
-        continue;
-
-      case openscreen::cast::AudioCapability::kAac:
-        sink_metadata.audio_capabilities.push_back(
-            RemotingSinkAudioCapability::CODEC_AAC);
-        continue;
-
-      case openscreen::cast::AudioCapability::kOpus:
-        sink_metadata.audio_capabilities.push_back(
-            RemotingSinkAudioCapability::CODEC_OPUS);
-        continue;
-    }
-    NOTREACHED();
-  }
-
-  for (const openscreen::cast::VideoCapability capability :
-       capabilities.video) {
-    switch (capability) {
-      case openscreen::cast::VideoCapability::kSupports4k:
-        sink_metadata.video_capabilities.push_back(
-            RemotingSinkVideoCapability::SUPPORT_4K);
-        continue;
-
-      case openscreen::cast::VideoCapability::kH264:
-        sink_metadata.video_capabilities.push_back(
-            RemotingSinkVideoCapability::CODEC_H264);
-        continue;
-
-      case openscreen::cast::VideoCapability::kVp8:
-        sink_metadata.video_capabilities.push_back(
-            RemotingSinkVideoCapability::CODEC_VP8);
-        continue;
-
-      case openscreen::cast::VideoCapability::kVp9:
-        sink_metadata.video_capabilities.push_back(
-            RemotingSinkVideoCapability::CODEC_VP9);
-        continue;
-
-      case openscreen::cast::VideoCapability::kHevc:
-        sink_metadata.video_capabilities.push_back(
-            RemotingSinkVideoCapability::CODEC_HEVC);
-        continue;
-
-      // TODO(crbug.com/40238534): remoting should support AV1.
-      case openscreen::cast::VideoCapability::kAv1:
-        continue;
-    }
-    NOTREACHED();
-  }
-
-  return sink_metadata;
 }
 
 void UpdateConfigUsingSessionParameters(
@@ -535,18 +471,23 @@ void OpenscreenSessionHost::OnNegotiated(
               media::cast::OperationalStatus::STATUS_CODEC_RUNTIME_ERROR));
       gpu_factories = &gpu_factories_factory_->GetInstance();
     }
-    auto video_sender = std::make_unique<media::cast::VideoSender>(
+
+    auto video_encoder = media::cast::VideoEncoder::Create(
         cast_environment_, *video_config,
+        base::MakeRefCounted<media::MojoVideoEncoderMetricsProviderFactory>(
+            media::mojom::VideoEncoderUseCase::kCastMirroring,
+            std::move(metrics_provider_pending_remote))
+            ->CreateVideoEncoderMetricsProvider(),
         base::BindRepeating(&OpenscreenSessionHost::OnVideoEncoderStatus,
                             weak_factory_.GetWeakPtr(), *video_config),
         base::BindRepeating(
             &OpenscreenSessionHost::CreateVideoEncodeAccelerator,
             weak_factory_.GetWeakPtr()),
+        gpu_factories);
+
+    auto video_sender = std::make_unique<media::cast::VideoSender>(
+        std::move(video_encoder), cast_environment_, *video_config,
         std::move(senders.video_sender),
-        base::MakeRefCounted<media::MojoVideoEncoderMetricsProviderFactory>(
-            media::mojom::VideoEncoderUseCase::kCastMirroring,
-            std::move(metrics_provider_pending_remote))
-            ->CreateVideoEncoderMetricsProvider(),
         base::BindRepeating(&OpenscreenSessionHost::SetTargetPlayoutDelay,
                             weak_factory_.GetWeakPtr()),
         base::BindRepeating(&OpenscreenSessionHost::ProcessFeedback,
@@ -554,8 +495,7 @@ void OpenscreenSessionHost::OnNegotiated(
         // This is safe since it is only called synchronously and we own
         // the video sender instance.
         base::BindRepeating(&OpenscreenSessionHost::GetVideoNetworkBandwidth,
-                            base::Unretained(this)),
-        gpu_factories);
+                            base::Unretained(this)));
     video_stream_ = std::make_unique<VideoRtpStream>(
         std::move(video_sender), weak_factory_.GetWeakPtr(),
         mirror_settings_.refresh_interval());
@@ -1149,8 +1089,8 @@ void OpenscreenSessionHost::InitMediaRemoter(
       std::make_unique<RpcDispatcherImpl>(session_->session_messenger());
   media_remoter_ = std::make_unique<MediaRemoter>(
       *this,
-      ToRemotingSinkMetadata(capabilities,
-                             session_params_.receiver_friendly_name),
+      media::cast::ToRemotingSinkMetadata(
+          capabilities, session_params_.receiver_friendly_name),
       *rpc_dispatcher_);
 }
 
@@ -1177,7 +1117,7 @@ void OpenscreenSessionHost::StartCapturingAudio() {
           SessionError::AUDIO_CAPTURE_ERROR)),
       observer_);
 
-  audio_input_device_ = new media::AudioInputDevice(
+  audio_input_device_ = base::MakeRefCounted<media::AudioInputDevice>(
       std::make_unique<CapturedAudioInput>(
           base::BindRepeating(&OpenscreenSessionHost::CreateAudioStream,
                               base::Unretained(this)),

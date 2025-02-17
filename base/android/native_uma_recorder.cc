@@ -14,14 +14,9 @@
 #include "base/metrics/user_metrics.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
-#include "build/robolectric_buildflags.h"
 
 // Must come after all headers that specialize FromJniType() / ToJniType().
-#if BUILDFLAG(IS_ROBOLECTRIC)
-#include "base/base_robolectric_jni/NativeUmaRecorder_jni.h"  // nogncheck
-#else
 #include "base/metrics_jni/NativeUmaRecorder_jni.h"
-#endif
 
 namespace base {
 namespace android {
@@ -281,7 +276,7 @@ JNI_NativeUmaRecorder_GetHistogramSamplesForTesting(JNIEnv* env,
        !sampleCountIterator->Done(); sampleCountIterator->Next()) {
     HistogramBase::Sample32 min;
     int64_t max;
-    HistogramBase::Count count;
+    HistogramBase::Count32 count;
     sampleCountIterator->Get(&min, &max, &count);
     buckets.push_back(min);
     buckets.push_back(max);

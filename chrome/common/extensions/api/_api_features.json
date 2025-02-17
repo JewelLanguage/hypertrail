@@ -336,7 +336,10 @@
   }],
   "debugger": {
     "dependencies": ["permission:debugger"],
-    "contexts": ["privileged_extension"]
+    "contexts": ["privileged_extension"],
+    // This restriction is not true for production. It is only true when the
+    // extensions_features::kDebuggerAPIRestrictedToDevMode feature is enabled.
+    "developer_mode_only" : true
   },
   "declarativeContent": {
     "dependencies": ["permission:declarativeContent"],
@@ -838,10 +841,6 @@
       "chrome://print/*"
     ]
   }],
-  "rtcPrivate": {
-    "dependencies": ["permission:rtcPrivate"],
-    "contexts": ["privileged_extension"]
-  },
   "safeBrowsingPrivate": {
     "dependencies": ["permission:safeBrowsingPrivate"],
     "contexts": ["privileged_extension"]
@@ -885,10 +884,6 @@
   },
   "speechRecognitionPrivate": {
     "dependencies": ["permission:speechRecognitionPrivate"],
-    "contexts": ["privileged_extension"]
-  },
-  "systemIndicator": {
-    "dependencies": ["manifest:system_indicator"],
     "contexts": ["privileged_extension"]
   },
   "systemLog": {

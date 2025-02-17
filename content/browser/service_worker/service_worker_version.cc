@@ -1249,8 +1249,7 @@ void ServiceWorkerVersion::InitializeGlobalScope() {
           std::move(registration)),
       worker_host_->container_host()->version_object_manager().CreateInfoToSend(
           this),
-      fetch_handler_existence(), std::move(reporting_observer_receiver_),
-      ancestor_frame_type_, key_);
+      fetch_handler_existence(), ancestor_frame_type_, key_);
 
   is_endpoint_ready_ = true;
   associated_registry_ = std::make_unique<blink::AssociatedInterfaceRegistry>();
@@ -3174,7 +3173,7 @@ ServiceWorkerVersion::SetupRouterEvaluator(
 
   // Check if we have fetch handler. This is a rare case, since this should have
   // been validated in the renderer already when adding a new router rule.
-  if (router_evaluator_->has_fetch_event_source() &&
+  if (router_evaluator_->require_fetch_handler() &&
       fetch_handler_existence() == FetchHandlerExistence::DOES_NOT_EXIST) {
     router_evaluator_.reset();
     return ServiceWorkerRouterEvaluatorErrorEnums::
@@ -3252,6 +3251,7 @@ ServiceWorkerVersion::GetRemoteCacheStorage() {
 
   mojo::PendingRemote<blink::mojom::CacheStorage> remote;
   control->AddReceiver(*coep, embedded_worker()->GetCoepReporter(), *dip,
+                       embedded_worker()->GetDipReporter(),
                        storage::BucketLocator::ForDefaultBucket(key()),
                        storage::mojom::CacheStorageOwner::kCacheAPI,
                        remote.InitWithNewPipeAndPassReceiver());

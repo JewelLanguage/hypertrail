@@ -353,6 +353,7 @@
       "chrome://apps/*",
       "chrome://bookmarks/*",
       "chrome://bookmarks-side-panel.top-chrome/*",
+      "chrome://certificate-manager/*",
       "chrome://compare/*",
       "chrome://customize-chrome-side-panel.top-chrome/*",
       "chrome://shopping-insights-side-panel.top-chrome/*",
@@ -388,7 +389,8 @@
       "chrome-untrusted://media-app/*",
       "chrome-untrusted://mako/*",
       "chrome-untrusted://projector/*",
-      "chrome-untrusted://read-anything-side-panel.top-chrome/*"
+      "chrome-untrusted://read-anything-side-panel.top-chrome/*",
+      "chrome-untrusted://data-sharing/*"
     ]
   }],
   "metricsPrivateIndividualApis": {
@@ -794,6 +796,8 @@
   "userScripts": {
     "dependencies": [ "permission:userScripts" ],
     "contexts": [ "privileged_extension" ],
+    // TODO(crbug.com/390138269): Remove developer mode only restriction once
+    // per extension toggle is launched.
     "developer_mode_only": true
   },
   "userScripts.getWorldConfigurations": {

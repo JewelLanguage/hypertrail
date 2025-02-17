@@ -21,6 +21,7 @@
 #include "components/live_caption/pref_names.h"
 #include "components/live_caption/translation_util.h"
 #include "components/live_caption/views/caption_bubble_model.h"
+#include "components/prefs/pref_service.h"
 #include "components/soda/constants.h"
 #include "media/audio/audio_device_description.h"
 #include "media/base/media_switches.h"
@@ -362,27 +363,18 @@ void SystemLiveCaptionService::AttemptDispatch(const std::string& text,
 }
 
 void SystemLiveCaptionService::BindToBrowserInterface() {
-  switch (source_) {
-    case AudioSource::kLoopback:
-      SpeechRecognitionClientBrowserInterfaceFactory::GetForProfile(profile_)
-          ->BindSpeechRecognitionBrowserObserver(
-              browser_observer_receiver_.BindNewPipeAndPassRemote());
-      break;
-    case AudioSource::kUserMicrophone:
-      SpeechRecognitionClientBrowserInterfaceFactory::GetForProfile(profile_)
-          ->BindBabelOrcaSpeechRecognitionBrowserObserver(
-              browser_observer_receiver_.BindNewPipeAndPassRemote());
-      break;
+  // The UserMicrophone source will ignore events from the
+  // RecognitionClientBrowserInterface. The BabelOrcaSpeechRecognizerImpl
+  // handles SODA installation itself.
+  if (source_ == AudioSource::kLoopback) {
+    SpeechRecognitionClientBrowserInterfaceFactory::GetForProfile(profile_)
+        ->BindSpeechRecognitionBrowserObserver(
+            browser_observer_receiver_.BindNewPipeAndPassRemote());
   }
 }
 
 std::string SystemLiveCaptionService::GetPrimaryLanguageCode() const {
-  switch (source_) {
-    case AudioSource::kLoopback:
-      return prefs::GetLiveCaptionLanguageCode(profile_->GetPrefs());
-    case AudioSource::kUserMicrophone:
-      return prefs::GetUserMicrophoneCaptionLanguage(profile_->GetPrefs());
-  }
+  return prefs::GetLiveCaptionLanguageCode(profile_->GetPrefs());
 }
 
 void SystemLiveCaptionService::OpenCaptionSettings() {

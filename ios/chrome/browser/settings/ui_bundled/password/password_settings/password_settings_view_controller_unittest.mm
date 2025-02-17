@@ -7,11 +7,13 @@
 #import "base/apple/foundation_util.h"
 #import "base/test/scoped_feature_list.h"
 #import "components/sync/base/features.h"
+#import "ios/chrome/browser/credential_provider/model/features.h"
+#import "ios/chrome/browser/settings/ui_bundled/password/password_manager_ui_features.h"
 #import "ios/chrome/browser/settings/ui_bundled/password/password_settings/password_settings_consumer.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
-#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_detail_icon_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_image_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_info_button_item.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_multi_detail_text_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_item.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -28,7 +30,18 @@ namespace {
 // displayed on top. This differs based on the addition of the automatic passkey
 // upgrades toggle. Should be cleaned up after the feature is launched.
 int ExpectedSectionAfterAlwaysVisibleTopSections() {
-  return IOSPasskeysM2Enabled() ? 3 : 2;
+  return base::FeatureList::IsEnabled(
+             kCredentialProviderAutomaticPasskeyUpgrade)
+             ? 3
+             : 2;
+}
+
+// Helper method that returns the expected title for the managed and unmanaged
+// "offer to save passwords" table view items.
+NSString* GetExpectedSavePasswordsItemTitle() {
+  return l10n_util::GetNSString(IOSPasskeysM2Enabled()
+                                    ? IDS_IOS_OFFER_TO_SAVE_PASSWORDS_PASSKEYS
+                                    : IDS_IOS_OFFER_TO_SAVE_PASSWORDS);
 }
 
 }  // namespace
@@ -59,8 +72,7 @@ class PasswordSettingsViewControllerTest : public PlatformTest {
 TEST_F(PasswordSettingsViewControllerTest, DisplaysOfferToSavePasswords) {
   TableViewSwitchItem* savePasswordsItem = static_cast<TableViewSwitchItem*>(
       GetTableViewItem(/*section=*/0, /*item=*/0));
-  EXPECT_NSEQ(savePasswordsItem.text,
-              l10n_util::GetNSString(IDS_IOS_OFFER_TO_SAVE_PASSWORDS));
+  EXPECT_NSEQ(savePasswordsItem.text, GetExpectedSavePasswordsItemTitle());
 }
 
 TEST_F(PasswordSettingsViewControllerTest,
@@ -71,7 +83,7 @@ TEST_F(PasswordSettingsViewControllerTest,
   TableViewInfoButtonItem* managedSavePasswordsItem =
       static_cast<TableViewInfoButtonItem*>(GetTableViewItem(/*section=*/0, 0));
   EXPECT_NSEQ(managedSavePasswordsItem.text,
-              l10n_util::GetNSString(IDS_IOS_OFFER_TO_SAVE_PASSWORDS));
+              GetExpectedSavePasswordsItemTitle());
 }
 
 TEST_F(PasswordSettingsViewControllerTest,
@@ -103,12 +115,12 @@ TEST_F(PasswordSettingsViewControllerTest,
       base::apple::ObjCCast<PasswordSettingsViewController>(controller());
   [consumer setPasswordsInOtherAppsEnabled:NO];
 
-  TableViewDetailIconItem* passwordsInOtherAppsItem =
-      static_cast<TableViewDetailIconItem*>(
+  TableViewMultiDetailTextItem* passwordsInOtherAppsItem =
+      static_cast<TableViewMultiDetailTextItem*>(
           GetTableViewItem(/*section=*/1, /*item=*/0));
   EXPECT_NSEQ(passwordsInOtherAppsItem.text,
               l10n_util::GetNSString(IDS_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS));
-  EXPECT_NSEQ(passwordsInOtherAppsItem.detailText,
+  EXPECT_NSEQ(passwordsInOtherAppsItem.trailingDetailText,
               l10n_util::GetNSString(IDS_IOS_SETTING_OFF));
 }
 
@@ -117,12 +129,12 @@ TEST_F(PasswordSettingsViewControllerTest, DisplaysPasswordInOtherAppsEnabled) {
       base::apple::ObjCCast<PasswordSettingsViewController>(controller());
   [consumer setPasswordsInOtherAppsEnabled:YES];
 
-  TableViewDetailIconItem* passwordsInOtherAppsItem =
-      static_cast<TableViewDetailIconItem*>(
+  TableViewMultiDetailTextItem* passwordsInOtherAppsItem =
+      static_cast<TableViewMultiDetailTextItem*>(
           GetTableViewItem(/*section=*/1, /*item=*/0));
   EXPECT_NSEQ(passwordsInOtherAppsItem.text,
               l10n_util::GetNSString(IDS_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS));
-  EXPECT_NSEQ(passwordsInOtherAppsItem.detailText,
+  EXPECT_NSEQ(passwordsInOtherAppsItem.trailingDetailText,
               l10n_util::GetNSString(IDS_IOS_SETTING_ON));
 }
 
@@ -133,7 +145,8 @@ TEST_F(PasswordSettingsViewControllerTest,
   }
 
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(kIOSPasskeysM2);
+  scoped_feature_list.InitAndEnableFeature(
+      kCredentialProviderAutomaticPasskeyUpgrade);
 
   // Re-create the controller so that the enabled flag is picked up.
   CreateController();
@@ -264,4 +277,44 @@ TEST_F(PasswordSettingsViewControllerTest,
                                 /*item=*/0)
                    .accessibilityTraits &
                UIAccessibilityTraitNotEnabled);
+}
+
+TEST_F(PasswordSettingsViewControllerTest,
+       DeleteAllDataDisabledWhenUserNotEligible) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      password_manager::features::kIOSEnableDeleteAllSavedCredentials);
+
+  // Re-create the controller so that the enabled flag is picked up.
+  CreateController();
+
+  id<PasswordSettingsConsumer> consumer =
+      base::apple::ObjCCast<PasswordSettingsViewController>(controller());
+  [consumer setCanDeleteAllCredentials:NO];
+  [consumer updateDeleteAllCredentialsSection];
+  EXPECT_TRUE(
+      GetTableViewItem(ExpectedSectionAfterAlwaysVisibleTopSections() + 1,
+                       /*item=*/0)
+          .accessibilityTraits &
+      UIAccessibilityTraitNotEnabled);
+}
+
+TEST_F(PasswordSettingsViewControllerTest,
+       DeleteAllDataButtonEnabledWhenUserEligible) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      password_manager::features::kIOSEnableDeleteAllSavedCredentials);
+
+  // Re-create the controller so that the enabled flag is picked up.
+  CreateController();
+
+  id<PasswordSettingsConsumer> consumer =
+      base::apple::ObjCCast<PasswordSettingsViewController>(controller());
+  [consumer setCanDeleteAllCredentials:YES];
+  [consumer updateDeleteAllCredentialsSection];
+  EXPECT_FALSE(
+      GetTableViewItem(ExpectedSectionAfterAlwaysVisibleTopSections() + 1,
+                       /*item=*/0)
+          .accessibilityTraits &
+      UIAccessibilityTraitNotEnabled);
 }

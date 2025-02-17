@@ -11,6 +11,7 @@
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/metrics/histogram_functions_internal_overloads.h"
 #include "base/notimplemented.h"
 #include "base/notreached.h"
 #include "base/observer_list.h"
@@ -272,6 +273,9 @@ void DataSharingServiceImpl::DeleteGroup(
     return;
   }
 
+  groups_attempted_to_leave_or_delete_by_current_user_in_current_session_
+      .insert(group_id);
+
   data_sharing_pb::DeleteGroupParams params;
   params.set_group_id(group_id.value());
   sdk_delegate_->DeleteGroup(
@@ -358,12 +362,20 @@ void DataSharingServiceImpl::LeaveGroup(
     return;
   }
 
+  groups_attempted_to_leave_or_delete_by_current_user_in_current_session_
+      .insert(group_id);
+
   data_sharing_pb::LeaveGroupParams params;
   params.set_group_id(group_id.value());
   sdk_delegate_->LeaveGroup(
       params,
       base::BindOnce(&DataSharingServiceImpl::OnSimpleGroupActionCompleted,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+bool DataSharingServiceImpl::IsLeavingOrDeletingGroup(const GroupId& group_id) {
+  return groups_attempted_to_leave_or_delete_by_current_user_in_current_session_
+      .contains(group_id);
 }
 
 std::vector<GroupEvent> DataSharingServiceImpl::GetGroupEventsSinceStartup() {
@@ -374,6 +386,12 @@ std::vector<GroupEvent> DataSharingServiceImpl::GetGroupEventsSinceStartup() {
 }
 
 void DataSharingServiceImpl::OnModelLoaded() {
+  std::set<GroupData> groups = ReadAllGroups();
+  for (const GroupData& group : groups) {
+    base::UmaHistogramCounts100("DataSharing.TotalMembersInGroup.AtStartup",
+                                group.members.size());
+  }
+
   for (auto& observer : observers_) {
     observer.OnGroupDataModelLoaded();
   }
@@ -382,7 +400,6 @@ void DataSharingServiceImpl::OnModelLoaded() {
 void DataSharingServiceImpl::OnGroupAdded(const GroupId& group_id,
                                           const base::Time& event_time) {
   CHECK(group_data_model_);
-
   std::optional<GroupData> group_data = group_data_model_->GetGroup(group_id);
   CHECK(group_data);
   for (auto& observer : observers_) {
@@ -427,6 +444,13 @@ void DataSharingServiceImpl::OnMemberRemoved(const GroupId& group_id,
                                              const base::Time& event_time) {
   for (auto& observer : observers_) {
     observer.OnGroupMemberRemoved(group_id, member_gaia_id, event_time);
+  }
+}
+
+void DataSharingServiceImpl::OnSyncBridgeUpdateTypeChanged(
+    SyncBridgeUpdateType sync_bridge_update_type) {
+  for (auto& observer : observers_) {
+    observer.OnSyncBridgeUpdateTypeChanged(sync_bridge_update_type);
   }
 }
 
@@ -642,6 +666,9 @@ void DataSharingServiceImpl::SetUIDelegate(
 }
 
 DataSharingUIDelegate* DataSharingServiceImpl::GetUiDelegate() {
+  if (sdk_delegate_) {
+    sdk_delegate_->ForceInitialize(data_sharing_network_loader_.get());
+  }
   return ui_delegate_.get();
 }
 

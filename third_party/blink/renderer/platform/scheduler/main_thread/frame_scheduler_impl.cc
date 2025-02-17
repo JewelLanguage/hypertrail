@@ -562,6 +562,7 @@ QueueTraits FrameSchedulerImpl::CreateQueueTraitsForTaskType(TaskType type) {
     case TaskType::kInternalMediaRealTime:
     case TaskType::kInternalUserInteraction:
     case TaskType::kInternalIntersectionObserver:
+    case TaskType::kInternalAutofill:
       return PausableTaskQueueTraits();
     case TaskType::kInternalFindInPage:
       return FindInPageTaskQueueTraits();
@@ -1431,6 +1432,36 @@ bool FrameSchedulerImpl::ComputeCanBeDeferredForRendering(
              task_type == TaskType::kPostedMessage;
     case features::TaskDeferralPolicy::kNonUserBlockingTypes:
     case features::TaskDeferralPolicy::kAllTypes:
+      // Devtools API calls typically use the default task queue because they
+      // use channel-associated interfaces, but some bounce through the IO
+      // thread and are posted using `TaskType::kInternalInspector`, so we don't
+      // want to defer these tasks.
+      if (task_type == TaskType::kInternalInspector) {
+        return false;
+      }
+      // This task type is used to inform the browser that a renderer-initiated
+      // cancellation is no longer possible. These tasks should be short and
+      // don't need to be deferred, and deferring them can cause headless to
+      // hang.
+      // TODO(crbug.com/350540984): Consider excluding navigation from this
+      // policy.
+      if (task_type == TaskType::kInternalNavigationCancellation) {
+        return false;
+      }
+      // This type is used to synchronize sending postMessage messages to the
+      // browser, which need to the wait until the initiating task has
+      // completed. These tasks should be short and don't need to be deferred.
+      if (task_type == TaskType::kInternalPostMessageForwarding) {
+        return false;
+      }
+      // TODO(crbug.com/382342234): This type is used to defer sending autofill
+      // IPCs to the browser until the current input event completes, but this
+      // races with submission, which happens synchronously in other input
+      // events. Exclude this type until that issue is fixed so as not to
+      // exacerbate the problem.
+      if (task_type == TaskType::kInternalAutofill) {
+        return false;
+      }
       return true;
   }
 }

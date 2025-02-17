@@ -21,7 +21,6 @@
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/connectors/analysis/content_analysis_dialog.h"
 #include "chrome/browser/enterprise/connectors/analysis/content_analysis_features.h"
@@ -312,7 +311,7 @@ class ContentAnalysisDelegateBrowserTestBase
   }
 
   void EnableUploadsScanningAndReporting() {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     SetDMTokenForTesting(policy::DMToken::CreateValidToken(kBrowserDMToken));
 #else
     if (machine_scope_) {
@@ -342,7 +341,7 @@ class ContentAnalysisDelegateBrowserTestBase
                                       /*enabled*/ true,
                                       /*enabled_event_names*/ {},
                                       /*enabled_opt_in_events*/ {},
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
                                       /*machine_scope*/ false);
 #else
                                       machine_scope_);
@@ -350,7 +349,7 @@ class ContentAnalysisDelegateBrowserTestBase
 
     client_ = std::make_unique<policy::MockCloudPolicyClient>();
     client_->SetDMToken(
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
         kBrowserDMToken);
 #else
         machine_scope() ? kBrowserDMToken : kProfileDMToken);
@@ -360,7 +359,7 @@ class ContentAnalysisDelegateBrowserTestBase
           ->SetBrowserCloudPolicyClientForTesting(client_.get());
     } else {
       RealtimeReportingClientFactory::GetForProfile(browser()->profile())
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
           ->SetBrowserCloudPolicyClientForTesting(client_.get());
 #else
           ->SetProfileCloudPolicyClientForTesting(client_.get());
@@ -385,7 +384,7 @@ class ContentAnalysisDelegateBrowserTestBase
   policy::MockCloudPolicyClient* client() { return client_.get(); }
 
   std::string GetProfileIdentifier() const {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     return browser()->profile()->GetPath().AsUTF8Unsafe();
 #else
     if (machine_scope_) {
@@ -546,7 +545,7 @@ IN_PROC_BROWSER_TEST_P(ContentAnalysisDelegateBrowserTest, Files) {
       /*mimetypes*/ ExeMimeTypes(),
       /*size*/ std::string("bad file content").size(),
       /*result*/
-      safe_browsing::EventResultToString(safe_browsing::EventResult::BLOCKED),
+      EventResultToString(EventResult::BLOCKED),
       /*username*/ kUserName,
       /*profile_identifier*/ GetProfileIdentifier(),
       /*scan_id*/ kScanId2);
@@ -649,7 +648,7 @@ IN_PROC_BROWSER_TEST_P(ContentAnalysisDelegateBrowserTest, ForFiles) {
       /*mimetypes*/ ExeMimeTypes(),
       /*size*/ std::string("bad file content").size(),
       /*result*/
-      safe_browsing::EventResultToString(safe_browsing::EventResult::BLOCKED),
+      EventResultToString(EventResult::BLOCKED),
       /*username*/ kUserName,
       /*profile_identifier*/ GetProfileIdentifier(),
       /*scan_id*/ kScanId2);
@@ -791,7 +790,7 @@ IN_PROC_BROWSER_TEST_P(ContentAnalysisDelegateBrowserTest, Texts) {
       /*mimetype*/ TextMimeTypes(),
       /*size*/ 200,
       /*result*/
-      safe_browsing::EventResultToString(safe_browsing::EventResult::BLOCKED),
+      EventResultToString(EventResult::BLOCKED),
       /*username*/ kUserName,
       /*profile_identifier*/ GetProfileIdentifier(),
       /*scan_id*/ kScanId1,
@@ -894,7 +893,7 @@ IN_PROC_BROWSER_TEST_P(ContentAnalysisDelegateBrowserTest,
       /*mimetype*/ TextMimeTypes(),
       /*size*/ 200,
       /*result*/
-      safe_browsing::EventResultToString(safe_browsing::EventResult::BLOCKED),
+      EventResultToString(EventResult::BLOCKED),
       /*username*/ kUserName,
       /*profile_identifier*/ GetProfileIdentifier(),
       /*scan_id*/ kScanId1,
@@ -1072,7 +1071,7 @@ IN_PROC_BROWSER_TEST_P(ContentAnalysisDelegateBrowserTest,
       /*mimetype*/ TextMimeTypes(),
       /*size*/ 100,
       /*result*/
-      safe_browsing::EventResultToString(safe_browsing::EventResult::BLOCKED),
+      EventResultToString(EventResult::BLOCKED),
       /*username*/ kUserName,
       /*profile_identifier*/ GetProfileIdentifier(),
       /*scan_id*/ kScanId1,
@@ -1179,7 +1178,7 @@ IN_PROC_BROWSER_TEST_P(ContentAnalysisDelegateBrowserTest,
       /*mimetype*/ TextMimeTypes(),
       /*size*/ 100,
       /*result*/
-      safe_browsing::EventResultToString(safe_browsing::EventResult::BLOCKED),
+      EventResultToString(EventResult::BLOCKED),
       /*username*/ kUserName,
       /*profile_identifier*/ GetProfileIdentifier(),
       /*scan_id*/ kScanId1,
@@ -1288,7 +1287,7 @@ IN_PROC_BROWSER_TEST_P(ContentAnalysisDelegateBrowserTest,
       /*mimetype*/ ImageMimeTypes(),
       /*size*/ 50,
       /*result*/
-      safe_browsing::EventResultToString(safe_browsing::EventResult::BLOCKED),
+      EventResultToString(EventResult::BLOCKED),
       /*username*/ kUserName,
       /*profile_identifier*/ GetProfileIdentifier(),
       /*scan_id*/ kScanId2,
@@ -1394,7 +1393,7 @@ IN_PROC_BROWSER_TEST_P(ContentAnalysisDelegateBrowserTest,
       /*mimetype*/ ImageMimeTypes(),
       /*size*/ 50,
       /*result*/
-      safe_browsing::EventResultToString(safe_browsing::EventResult::BLOCKED),
+      EventResultToString(EventResult::BLOCKED),
       /*username*/ kUserName,
       /*profile_identifier*/ GetProfileIdentifier(),
       /*scan_id*/ kScanId2,
@@ -1486,7 +1485,7 @@ IN_PROC_BROWSER_TEST_P(ContentAnalysisDelegateBrowserTest, Throttled) {
       /*mimetypes*/ ExeMimeTypes(),
       /*size*/ 9,
       /*result*/
-      safe_browsing::EventResultToString(safe_browsing::EventResult::ALLOWED),
+      EventResultToString(EventResult::ALLOWED),
       /*username*/ kUserName,
       /*profile_identifier*/ GetProfileIdentifier(),
       /*content_transfer_reason*/ "CONTENT_TRANSFER_METHOD_FILE_PICKER");
@@ -1637,10 +1636,8 @@ IN_PROC_BROWSER_TEST_P(ContentAnalysisDelegateBlockingSettingBrowserTest,
       // du chrome/test/data/safe_browsing/download_protection/encrypted.zip -b
       /*size*/ 20015,
       /*result*/
-      expected_result() ? safe_browsing::EventResultToString(
-                              safe_browsing::EventResult::ALLOWED)
-                        : safe_browsing::EventResultToString(
-                              safe_browsing::EventResult::BLOCKED),
+      expected_result() ? EventResultToString(EventResult::ALLOWED)
+                        : EventResultToString(EventResult::BLOCKED),
       /*username*/ kUserName,
       /*profile_identifier*/ GetProfileIdentifier(),
       /*content_transfer_reason*/ "CONTENT_TRANSFER_METHOD_DRAG_AND_DROP");
@@ -1739,10 +1736,8 @@ IN_PROC_BROWSER_TEST_P(ContentAnalysisDelegateBlockingSettingBrowserTest,
       /*mimetypes*/ DocMimeTypes(),
       /*size*/ kLargeSize,
       /*result*/
-      expected_result() ? safe_browsing::EventResultToString(
-                              safe_browsing::EventResult::ALLOWED)
-                        : safe_browsing::EventResultToString(
-                              safe_browsing::EventResult::BLOCKED),
+      expected_result() ? EventResultToString(EventResult::ALLOWED)
+                        : EventResultToString(EventResult::BLOCKED),
       /*username*/ kUserName,
       /*profile_identifier*/ GetProfileIdentifier(),
       /*content_transfer_method*/ "CONTENT_TRANSFER_METHOD_FILE_PICKER");
@@ -1837,10 +1832,8 @@ IN_PROC_BROWSER_TEST_P(ContentAnalysisDelegateBlockingSettingBrowserTest,
       /*mimetypes*/ DocMimeTypes(),
       /*size*/ std::nullopt,
       /*result*/
-      expected_result() ? safe_browsing::EventResultToString(
-                              safe_browsing::EventResult::ALLOWED)
-                        : safe_browsing::EventResultToString(
-                              safe_browsing::EventResult::BLOCKED),
+      expected_result() ? EventResultToString(EventResult::ALLOWED)
+                        : EventResultToString(EventResult::BLOCKED),
       /*username*/ kUserName,
       /*profile_identifier*/ GetProfileIdentifier(),
       /*content_transfer_method*/ std::nullopt);
@@ -1958,9 +1951,8 @@ IN_PROC_BROWSER_TEST_P(ContentAnalysisDelegateBlockingSettingBrowserTest,
       // If the policy allows immediate delivery of the file, then the result is
       // ALLOWED even if the verdict obtained afterwards is BLOCKED.
       /*result*/
-      safe_browsing::EventResultToString(
-          expected_result() ? safe_browsing::EventResult::ALLOWED
-                            : safe_browsing::EventResult::BLOCKED),
+      EventResultToString(expected_result() ? EventResult::ALLOWED
+                                            : EventResult::BLOCKED),
       /*username*/ kUserName,
       /*profile_identifier*/ GetProfileIdentifier(),
       /*scan_id*/ kScanId1,
@@ -2075,9 +2067,8 @@ IN_PROC_BROWSER_TEST_P(ContentAnalysisDelegateBlockingSettingBrowserTest,
       // If the policy allows immediate delivery of the file, then the result is
       // ALLOWED even if the verdict obtained afterwards is BLOCKED.
       /*result*/
-      safe_browsing::EventResultToString(
-          expected_result() ? safe_browsing::EventResult::ALLOWED
-                            : safe_browsing::EventResult::BLOCKED),
+      EventResultToString(expected_result() ? EventResult::ALLOWED
+                                            : EventResult::BLOCKED),
       /*username*/ kUserName,
       /*profile_identifier*/ GetProfileIdentifier(),
       /*scan_id*/ kScanId1,
@@ -2240,7 +2231,7 @@ class ContentAnalysisDelegateUnauthorizedBrowserTest
   }
 
   void SetUpScanning(bool file_scan) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     SetDMTokenForTesting(policy::DMToken::CreateValidToken(dm_token()));
 #else
     if (machine_scope()) {

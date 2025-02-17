@@ -12,6 +12,7 @@
 #include "ash/lobster/lobster_controller.h"
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/public/cpp/capture_mode/capture_mode_api.h"
+#include "ash/scanner/scanner_controller.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_util.h"
@@ -91,6 +92,12 @@ bool IsMagicBoostNoticeBannerVisible(Profile* profile) {
 bool IsLobsterSettingsToggleVisible(Profile* profile) {
   return ash::features::IsLobsterEnabled() &&
          LobsterServiceProvider::GetForProfile(profile) != nullptr;
+}
+
+bool IsScannerSettingsToggleVisible() {
+  ash::Shell* shell = ash::Shell::HasInstance() ? Shell::Get() : nullptr;
+  return shell && shell->scanner_controller() &&
+         shell->scanner_controller()->CanShowFeatureSettingsToggle();
 }
 
 base::span<const SearchConcept> GetSearchPageSearchConcepts() {
@@ -428,14 +435,24 @@ void SearchSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
                           IsLobsterSettingsToggleVisible(profile()));
 
   html_source->AddBoolean("isSunfishSettingsToggleVisible",
-                          ash::IsSunfishOrScannerEnabled());
+                          ash::features::IsSunfishFeatureEnabled() ||
+                              IsScannerSettingsToggleVisible());
+
+  html_source->AddBoolean("isScannerSettingsToggleVisible",
+                          IsScannerSettingsToggleVisible());
 
   const bool is_assistant_allowed = IsAssistantAllowed();
   html_source->AddBoolean("isAssistantAllowed", is_assistant_allowed);
-  html_source->AddLocalizedString("osSearchPageTitle",
-                                  is_assistant_allowed
-                                      ? IDS_SETTINGS_SEARCH_AND_ASSISTANT
-                                      : IDS_SETTINGS_SEARCH);
+
+  if (assistant::features::IsNewEntryPointEnabled()) {
+    html_source->AddLocalizedString(
+        "osSearchPageTitle", IDS_OS_SETTINGS_SEARCH_AND_SUGGESTIONS_TITLE);
+  } else {
+    html_source->AddLocalizedString(
+        "osSearchPageTitle", is_assistant_allowed
+                                 ? IDS_SETTINGS_SEARCH_AND_ASSISTANT
+                                 : IDS_SETTINGS_SEARCH);
+  }
   html_source->AddString("osSearchEngineDescription",
                          ui::SubstituteChromeOSDeviceType(
                              IDS_OS_SETTINGS_SEARCH_ENGINE_DESCRIPTION));
@@ -451,6 +468,10 @@ void SearchSection::AddHandlers(content::WebUI* web_ui) {
 }
 
 int SearchSection::GetSectionNameMessageId() const {
+  if (assistant::features::IsNewEntryPointEnabled()) {
+    return IDS_OS_SETTINGS_SEARCH_AND_SUGGESTIONS_TITLE;
+  }
+
   return IsAssistantAllowed() ? IDS_SETTINGS_SEARCH_AND_ASSISTANT
                               : IDS_SETTINGS_SEARCH;
 }
@@ -495,6 +516,11 @@ bool SearchSection::LogMetric(mojom::Setting setting,
                                 value.GetBool());
       return true;
 
+    case mojom::Setting::kScannerOnOff:
+      base::UmaHistogramBoolean("ChromeOS.Settings.ScannerEnabled",
+                                value.GetBool());
+      return true;
+
     default:
       return false;
   }
@@ -514,6 +540,7 @@ void SearchSection::RegisterHierarchy(HierarchyGenerator* generator) const {
   generator->RegisterTopLevelSetting(mojom::Setting::kMagicBoostOnOff);
   generator->RegisterTopLevelSetting(mojom::Setting::kLobsterOnOff);
   generator->RegisterTopLevelSetting(mojom::Setting::kSunfishOnOff);
+  generator->RegisterTopLevelSetting(mojom::Setting::kScannerOnOff);
 
   // Search.
   generator->RegisterTopLevelSubpage(

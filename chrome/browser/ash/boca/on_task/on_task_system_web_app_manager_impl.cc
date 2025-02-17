@@ -13,6 +13,7 @@
 #include "chrome/browser/apps/app_service/launch_result_type.h"
 #include "chrome/browser/ash/boca/on_task/locked_session_window_tracker_factory.h"
 #include "chrome/browser/ash/boca/on_task/on_task_locked_session_window_tracker.h"
+#include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/system_web_apps/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/browser.h"
@@ -101,6 +102,8 @@ void OnTaskSystemWebAppManagerImpl::CloseSystemWebAppWindow(
     window_tracker->InitializeBrowserInfoForTracking(nullptr);
   }
   if (browser) {
+    // Skips the tab unload process so that browser closes immediately.
+    browser->set_force_skip_warning_user_on_close(true);
     browser->window()->Close();
   }
 }
@@ -112,7 +115,9 @@ SessionID OnTaskSystemWebAppManagerImpl::GetActiveSystemWebAppWindowID() {
   // OnTask (for instance, those manually spawned by consumers).
   Browser* const browser =
       FindSystemWebAppBrowser(profile_, SystemWebAppType::BOCA);
-  if (!browser) {
+  // Verify that there is no browser instance and that there is no scheduled
+  // task to delete the browser instance following window close.
+  if (!browser || browser->IsBrowserClosing()) {
     return SessionID::InvalidValue();
   }
   return browser->session_id();
@@ -127,6 +132,10 @@ void OnTaskSystemWebAppManagerImpl::SetPinStateForSystemWebAppWindow(
     return;
   }
 
+  // Verify window pin state before we exit fullscreen mode. This helps us
+  // ensure we properly restore the window for subsequent updates.
+  bool currently_pinned = platform_util::IsBrowserLockedFullscreen(browser);
+
   // Exit fullscreen mode if necessary. This is especially needed for certain
   // cases where the web app window is in fullscreen mode but not pinned, like
   // on session restore.
@@ -136,12 +145,11 @@ void OnTaskSystemWebAppManagerImpl::SetPinStateForSystemWebAppWindow(
     fullscreen_controller->ToggleBrowserFullscreenMode(
         /*user_initiated=*/false);
   }
-  aura::Window* const native_window = browser->window()->GetNativeWindow();
-  bool currently_pinned = IsWindowPinned(native_window);
   if (pinned == currently_pinned) {
     // Nothing to do.
     return;
   }
+  aura::Window* const native_window = browser->window()->GetNativeWindow();
   if (pinned) {
     PinWindow(native_window, /*trusted=*/true);
     browser->command_controller()->LockedFullscreenStateChanged();
@@ -277,6 +285,26 @@ void OnTaskSystemWebAppManagerImpl::SwitchToTab(SessionID tab_id) {
     if (tab_id == id) {
       browser->tab_strip_model()->ActivateTabAt(idx);
       return;
+    }
+  }
+}
+
+void OnTaskSystemWebAppManagerImpl::SetAllChromeTabsMuted(bool muted) {
+  Browser* const boca_browser =
+      GetBrowserWindowWithID(GetActiveSystemWebAppWindowID());
+  if (!boca_browser) {
+    return;
+  }
+  for (Browser* const browser : *BrowserList::GetInstance()) {
+    if (!browser || browser == boca_browser) {
+      continue;
+    }
+    for (int idx = 0; idx < browser->tab_strip_model()->count(); ++idx) {
+      content::WebContents* const tab =
+          browser->tab_strip_model()->GetWebContentsAt(idx);
+      if (tab) {
+        tab->SetAudioMuted(muted);
+      }
     }
   }
 }

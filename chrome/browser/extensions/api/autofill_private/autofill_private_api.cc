@@ -114,7 +114,7 @@ bool HasNameSeparator(const std::string& name) {
   if (name.empty()) {
     return false;
   }
-  return re2::RE2::PartialMatch(name, autofill::kCjkNameSeperatorsRe);
+  return re2::RE2::PartialMatch(name, autofill::kCjkNameSeparatorsRe);
 }
 
 // Logs whether the alternative name in a new/updated profile contains a
@@ -288,6 +288,21 @@ ExtensionFunction::ResponseAction AutofillPrivateSaveAddressFunction::Run() {
             kSettings);
   }
 
+  return RespondNow(NoArguments());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// AutofillPrivateRemoveAddressFunction
+
+ExtensionFunction::ResponseAction AutofillPrivateRemoveAddressFunction::Run() {
+  std::optional<api::autofill_private::RemoveAddress::Params> parameters =
+      api::autofill_private::RemoveAddress::Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(parameters);
+  AddressDataManager* adm = address_data_manager();
+  if (!adm || !adm->has_initial_load_finished()) {
+    return RespondNow(Error(kErrorDataUnavailable));
+  }
+  adm->RemoveProfile(parameters->guid);
   return RespondNow(NoArguments());
 }
 
@@ -493,11 +508,13 @@ ExtensionFunction::ResponseAction AutofillPrivateSaveCreditCardFunction::Run() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// AutofillPrivateRemoveEntryFunction
+// AutofillPrivateRemovePaymentsEntityFunction
 
-ExtensionFunction::ResponseAction AutofillPrivateRemoveEntryFunction::Run() {
-  std::optional<api::autofill_private::RemoveEntry::Params> parameters =
-      api::autofill_private::RemoveEntry::Params::Create(args());
+ExtensionFunction::ResponseAction
+AutofillPrivateRemovePaymentsEntityFunction::Run() {
+  std::optional<api::autofill_private::RemovePaymentsEntity::Params>
+      parameters =
+          api::autofill_private::RemovePaymentsEntity::Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(parameters);
 
   PaymentsDataManager* paydm = payments_data_manager();
@@ -519,6 +536,7 @@ ExtensionFunction::ResponseAction AutofillPrivateRemoveEntryFunction::Run() {
           base::UserMetricsAction("AutofillCreditCardDeletedAndHadNickname"));
     }
   }
+
   paydm->RemoveByGUID(parameters->guid);
   return RespondNow(NoArguments());
 }
@@ -643,8 +661,7 @@ ExtensionFunction::ResponseAction AutofillPrivateSaveIbanFunction::Run() {
   autofill::Iban iban_to_write =
       existing_iban ? *existing_iban : autofill::Iban();
 
-  iban_to_write.SetRawInfo(autofill::IBAN_VALUE,
-                           base::UTF8ToUTF16(*iban_entry->value));
+  iban_to_write.set_value(base::UTF8ToUTF16(*iban_entry->value));
 
   if (iban_entry->nickname) {
     iban_to_write.set_nickname(base::UTF8ToUTF16(*iban_entry->nickname));
@@ -1028,62 +1045,6 @@ AutofillPrivateDeleteUserAnnotationsEntryFunction::Run() {
 
 void AutofillPrivateDeleteUserAnnotationsEntryFunction::OnEntryDeleted() {
   Respond(NoArguments());
-}
-
-// Triggers bootstrapping using `UserAnnotationsService`. On completion if
-// entries were added returns `true` and triggers `maybeShowHelpBubble`,
-// otherwise return `false`.
-ExtensionFunction::ResponseAction
-AutofillPrivateTriggerAnnotationsBootstrappingFunction::Run() {
-  AddressDataManager* adm = address_data_manager();
-  if (!adm || !adm->has_initial_load_finished()) {
-    return RespondNow(Error(kErrorDataUnavailable));
-  }
-
-  std::vector<const autofill::AutofillProfile*> autofill_profiles =
-      adm->GetProfiles(
-          autofill::AddressDataManager::ProfileOrder::kHighestFrecencyDesc);
-  if (autofill_profiles.size() == 0u) {
-    return RespondNow(WithArguments(false));
-  }
-
-  Profile* profile =
-      Profile::FromBrowserContext(GetSenderWebContents()->GetBrowserContext());
-  user_annotations::UserAnnotationsService* user_annotations_service =
-      profile ? UserAnnotationsServiceFactory::GetForProfile(profile) : nullptr;
-  if (!user_annotations_service) {
-    return RespondNow(WithArguments(false));
-  }
-
-  user_annotations_service->SaveAutofillProfile(
-      *autofill_profiles[0],
-      base::BindOnce(&AutofillPrivateTriggerAnnotationsBootstrappingFunction::
-                         OnBootstrappingComplete,
-                     this));
-
-  return did_respond() ? AlreadyResponded() : RespondLater();
-}
-
-void AutofillPrivateTriggerAnnotationsBootstrappingFunction::MaybeShowIPH() {
-  if (auto* const interface =
-          BrowserUserEducationInterface::MaybeGetForWebContentsInTab(
-              GetSenderWebContents())) {
-    interface->MaybeShowFeaturePromo(
-        feature_engagement::
-            kIPHAutofillPredictionImprovementsBootstrappingFeature);
-  }
-}
-
-void AutofillPrivateTriggerAnnotationsBootstrappingFunction::
-    OnBootstrappingComplete(
-        user_annotations::UserAnnotationsExecutionResult result) {
-  if (result == user_annotations::UserAnnotationsExecutionResult::kSuccess) {
-    // When the new data was added to memories, notify user with the IPH.
-    MaybeShowIPH();
-    Respond(WithArguments(true));
-    return;
-  }
-  Respond(WithArguments(false));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

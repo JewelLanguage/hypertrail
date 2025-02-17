@@ -17,7 +17,11 @@ struct ProfileQuery: EntityQuery {
   }
 
   func defaultResult() async -> ProfileDetail? {
-    try? await suggestedEntities().first
+    if let firstAccount = try? await suggestedEntities().first {
+      return firstAccount
+    } else {
+      return ProfileDetail(id: "No account", gaia: "Default")
+    }
   }
 }
 
@@ -78,5 +82,13 @@ struct SelectProfileIntent: WidgetConfigurationIntent {
       return nil
     }
     return Image(uiImage: uiImage)
+  }
+
+  // Returns the gaiaID linked to the account.
+  func gaiaForAccount(account: ProfileDetail?) -> String {
+    guard let gaia = profile?.gaia
+    else { return "" }
+
+    return gaia
   }
 }

@@ -103,10 +103,9 @@ bool ResultShouldAllowDataUse(
 // Calculates the event result that is experienced by the user.
 // If data is allowed to be accessed immediately, the result will indicate that
 // the user was allowed to use the data independent of the scanning result.
-safe_browsing::EventResult CalculateEventResult(
-    const AnalysisSettings& settings,
-    bool allowed_by_scan_result,
-    bool should_warn);
+EventResult CalculateEventResult(const AnalysisSettings& settings,
+                                 bool allowed_by_scan_result,
+                                 bool should_warn);
 #endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
 
 #if BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
@@ -147,11 +146,6 @@ void ReportDataMaskingEvent(
         data_masking_event);
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 #endif  // BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-// Returns the single main profile, or nullptr if none is found.
-Profile* GetMainProfileLacros();
-#endif
 
 }  // namespace enterprise_connectors
 

@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <algorithm>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -923,7 +924,12 @@ void FrameSinkManagerImpl::VerifySandboxedThreadIds(
     return;
   }
   // GPU check passed, now do an async check for the Browser process.
-  std::vector<int32_t> tids(thread_ids.begin(), thread_ids.end());
+  static_assert(
+      std::is_same_v<int32_t, base::PlatformThreadId::UnderlyingType>);
+  std::vector<int32_t> tids;
+  tids.reserve(thread_ids.size());
+  std::transform(thread_ids.begin(), thread_ids.end(), std::back_inserter(tids),
+                 [](const base::PlatformThreadId& tid) { return tid.raw(); });
   client_->VerifyThreadIdsDoNotBelongToHost(tids,
                                             std::move(verification_callback));
 #else
@@ -1178,6 +1184,15 @@ void FrameSinkManagerImpl::GetForceEnableZoomState(
   std::move(callback).Run(enabled);
 }
 
+void FrameSinkManagerImpl::WaitForSurfaceAnimationManager(
+    const FrameSinkId& frame_sink_id,
+    WaitForSurfaceAnimationManagerCallback callback) {
+  auto* support = FrameSinkManagerImpl::GetFrameSinkForId(frame_sink_id);
+  CHECK(support);
+
+  support->RegisterSurfaceAnimationManagerNotification(std::move(callback));
+}
+
 void FrameSinkManagerImpl::ClearUnclaimedViewTransitionResources(
     const blink::ViewTransitionToken& transition_token) {
   transition_token_to_animation_manager_.erase(transition_token);
@@ -1211,6 +1226,12 @@ void FrameSinkManagerImpl::NotifyRendererBlockStateChanged(
     const std::vector<FrameSinkId>& render_input_routers) {
   input_manager_->NotifyRendererBlockStateChanged(blocked,
                                                   render_input_routers);
+}
+
+void FrameSinkManagerImpl::RequestInputBack() {
+  bool success = input_manager_->ReturnInputBackToBrowser();
+  TRACE_EVENT_INSTANT("viz", "FrameSinkManagerImpl::RequestInputBack",
+                      "success", success);
 }
 
 void FrameSinkManagerImpl::RequestBeginFrameForGpuService(bool toggle) {

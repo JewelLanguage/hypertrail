@@ -32,27 +32,9 @@ id<GREYMatcher> WebSigninPrimaryButtonMatcher() {
       grey_sufficientlyVisible(), nil);
 }
 
-id<GREYMatcher> GoogleSyncSettingsButton() {
-  return grey_allOf(grey_kindOfClass([UITableViewCell class]),
-                    grey_accessibilityID(kSettingsGoogleSyncAndServicesCellId),
-                    grey_sufficientlyVisible(), nil);
-}
-
 id<GREYMatcher> SigninScreenPromoMatcher() {
   return grey_accessibilityID(
       first_run::kFirstRunSignInScreenAccessibilityIdentifier);
-}
-
-id<GREYMatcher> SigninScreenPromoPrimaryButtonMatcher() {
-  return grey_allOf(
-      grey_accessibilityID(kPromoStylePrimaryActionAccessibilityIdentifier),
-      grey_sufficientlyVisible(), nil);
-}
-
-id<GREYMatcher> SigninScreenPromoSecondaryButtonMatcher() {
-  return grey_allOf(
-      grey_accessibilityID(kPromoStyleSecondaryActionAccessibilityIdentifier),
-      grey_sufficientlyVisible(), nil);
 }
 
 id<GREYMatcher> SettingsSignInRowMatcher() {

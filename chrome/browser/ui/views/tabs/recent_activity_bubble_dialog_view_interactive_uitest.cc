@@ -18,6 +18,7 @@
 #include "components/saved_tab_groups/internal/tab_group_sync_service_impl.h"
 #include "components/saved_tab_groups/public/features.h"
 #include "components/saved_tab_groups/public/tab_group_sync_service.h"
+#include "components/signin/public/base/avatar_icon_util.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "content/public/test/browser_test.h"
 #include "net/dns/mock_host_resolver.h"
@@ -40,8 +41,7 @@ using data_sharing::MemberRole;
 
 namespace {
 
-const int kAvatarSize = 32;
-constexpr char kAvatarUrl[] = "/avatar=s32-cc-ns";
+const int kAvatarSize = signin::kAccountInfoImageSize;
 constexpr char kSkipPixelTestsReason[] = "Should only run in pixel_tests.";
 
 // Create mock gfx::Image and convert to a string.
@@ -124,7 +124,7 @@ class RecentActivityBubbleDialogViewInteractiveUiTest
   std::unique_ptr<net::test_server::HttpResponse> HandleRequest(
       const net::test_server::HttpRequest& request) {
     GURL absolute_url = embedded_test_server()->GetURL(request.relative_url);
-    if (absolute_url.path() != kAvatarUrl) {
+    if (absolute_url.path() != avatar_url_) {
       return nullptr;
     }
 
@@ -166,7 +166,7 @@ class RecentActivityBubbleDialogViewInteractiveUiTest
         WaitForState(kImagesLoaded, true), StopObservingState(kImagesLoaded));
   }
 
-  GURL GetAvatarURL() { return embedded_test_server()->GetURL(kAvatarUrl); }
+  GURL GetAvatarURL() { return embedded_test_server()->GetURL(avatar_url_); }
 
   tabs::TabInterface* CreateTab() {
     auto index = browser()->tab_strip_model()->count();
@@ -213,6 +213,15 @@ class RecentActivityBubbleDialogViewInteractiveUiTest
     });
   }
 
+  // Same as above, but for current tab version of the dialog.
+  auto TriggerCurrentTabDialog(std::vector<ActivityLogItem> activity_log) {
+    return WithView(kTabStripElementId, [&, activity_log](TabStrip* tab_strip) {
+      bubble_coordinator_.ShowForCurrentTab(
+          tab_strip, browser()->tab_strip_model()->GetWebContentsAt(0),
+          activity_log, browser()->profile());
+    });
+  }
+
   ActivityLogItem CreateActivityForTab(
       LocalTabGroupID group_id,
       tabs::TabInterface* tab,
@@ -250,6 +259,8 @@ class RecentActivityBubbleDialogViewInteractiveUiTest
   }
 
  private:
+  const std::string avatar_url_ =
+      base::StringPrintf("/avatar=s%d-cc-rp-ns", kAvatarSize);
   base::test::ScopedFeatureList scoped_feature_list_;
   RecentActivityBubbleCoordinator bubble_coordinator_;
 };
@@ -270,12 +281,37 @@ IN_PROC_BROWSER_TEST_F(RecentActivityBubbleDialogViewInteractiveUiTest,
 
   RunTestSequence(
       WaitForShow(kTabGroupHeaderElementId), FinishTabstripAnimations(),
-      TriggerDialog(std::move(activity_log)),
-      WaitForShow(kRecentActivityBubbleDialogId),
+      TriggerDialog(activity_log), WaitForShow(kRecentActivityBubbleDialogId),
       WaitForImages(activity_log_index),
       SetOnIncompatibleAction(OnIncompatibleAction::kIgnoreAndContinue,
                               kSkipPixelTestsReason),
       Screenshot(kRecentActivityBubbleDialogId, "", "6131072"), HoverTabAt(0),
+      ClickMouse(), WaitForHide(kRecentActivityBubbleDialogId));
+}
+
+IN_PROC_BROWSER_TEST_F(RecentActivityBubbleDialogViewInteractiveUiTest,
+                       ShowDialogForCurrentTab) {
+  // Set up tab group.
+  tabs::TabInterface* tab = CreateTab();
+  tabs::TabInterface* tab2 = CreateTab();
+  TabGroupId group_id = CreateTabGroup({tab, tab2});
+  std::string collaboration_id = "fake_collaboration_id";
+  ShareTabGroup(group_id, collaboration_id);
+
+  // Create mock activity log.
+  std::vector<ActivityLogItem> activity_log;
+  activity_log.emplace_back(CreateActivityForTab(group_id, tab));
+  activity_log.emplace_back(CreateActivityForTab(group_id, tab));
+  activity_log.emplace_back(CreateActivityForTab(group_id, tab2));
+
+  RunTestSequence(
+      WaitForShow(kTabGroupHeaderElementId), FinishTabstripAnimations(),
+      TriggerCurrentTabDialog(activity_log),
+      WaitForShow(kRecentActivityBubbleDialogId), WaitForImages(0),
+      WaitForImages(1), WaitForImages(2),
+      SetOnIncompatibleAction(OnIncompatibleAction::kIgnoreAndContinue,
+                              kSkipPixelTestsReason),
+      Screenshot(kRecentActivityBubbleDialogId, "", "6259060"), HoverTabAt(0),
       ClickMouse(), WaitForHide(kRecentActivityBubbleDialogId));
 }
 

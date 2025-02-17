@@ -94,35 +94,6 @@ constexpr wgpu::TextureUsage kAllowedReadableMailboxTextureUsages =
 constexpr wgpu::TextureUsage kAllowedMailboxTextureUsages =
     kAllowedWritableMailboxTextureUsages | kAllowedReadableMailboxTextureUsages;
 
-#ifndef WGPU_BREAKING_CHANGE_FUTURE_CALLBACK_TYPES
-template <typename T1, typename T2>
-struct AssignIfSameElseCrashFnImpl;
-
-template <typename T2, typename R, typename... Args>
-struct AssignIfSameElseCrashFnImpl<R (*)(Args...), T2> {
-  using T1 = R (*)(Args...);
-
-  void operator()(T1* out, T2 in) {
-    if constexpr (std::is_same_v<T1, T2>) {
-      *out = in;
-    } else if constexpr (std::is_same_v<R, void>) {
-      *out = [](Args... args) {
-        NOTREACHED() << "Invalid call to deprecated function.";
-      };
-    } else {
-      *out = [](Args... args) -> R {
-        NOTREACHED() << "Invalid call to deprecated function.";
-      };
-    }
-  }
-};
-
-template <typename T1, typename T2>
-void AssignIfSameElseCrashFn(T1* out, T2 in) {
-  AssignIfSameElseCrashFnImpl<T1, T2>{}(out, in);
-}
-#endif
-
 template <typename T1, typename T2>
 void ChainStruct(T1& head, T2* struct_to_chain) {
   DCHECK(struct_to_chain->nextInChain == nullptr);
@@ -726,7 +697,7 @@ class WebGPUDecoderImpl final : public WebGPUDecoder {
 
       wgpu::CommandEncoder encoder =
           device_.CreateCommandEncoder(&command_encoder_desc);
-      wgpu::ImageCopyBuffer buffer_copy = {
+      wgpu::TexelCopyBufferInfo buffer_copy = {
           .layout =
               {
                   .bytesPerRow = bytes_per_row,
@@ -734,7 +705,7 @@ class WebGPUDecoderImpl final : public WebGPUDecoder {
               },
           .buffer = buffer.Get(),
       };
-      wgpu::ImageCopyTexture texture_copy = {
+      wgpu::TexelCopyTextureInfo texture_copy = {
           .texture = texture_,
       };
       wgpu::Extent3D extent = {
@@ -768,10 +739,10 @@ class WebGPUDecoderImpl final : public WebGPUDecoder {
       };
       wgpu::Buffer buffer = device_.CreateBuffer(&buffer_desc);
 
-      wgpu::ImageCopyTexture texture_copy = {
+      wgpu::TexelCopyTextureInfo texture_copy = {
           .texture = texture_,
       };
-      wgpu::ImageCopyBuffer buffer_copy = {
+      wgpu::TexelCopyBufferInfo buffer_copy = {
           .layout =
               {
                   .bytesPerRow = bytes_per_row,
@@ -1146,14 +1117,8 @@ WebGPUDecoderImpl::WebGPUDecoderImpl(
   if (gpu_preferences.enable_unsafe_webgpu) {
     safety_level_ = webgpu::SafetyLevel::kUnsafe;
   }
-#ifdef WGPU_BREAKING_CHANGE_LOGGING_CALLBACK_TYPE
   dawn_instance_ = DawnInstance::Create(dawn_platform_.get(), gpu_preferences,
                                         safety_level_);
-#else
-  dawn_instance_ = DawnInstance::Create(
-      dawn_platform_.get(), gpu_preferences, safety_level_,
-      /*logging_callback=*/nullptr, /*logging_callback_userdata=*/nullptr);
-#endif
 
   use_webgpu_adapter_ = gpu_preferences.use_webgpu_adapter;
   use_webgpu_power_preference_ = gpu_preferences.use_webgpu_power_preference;
@@ -1174,23 +1139,11 @@ WebGPUDecoderImpl::WebGPUDecoderImpl(
   DawnProcTable wire_procs = dawn::native::GetProcs();
   wire_procs.createInstance =
       [](const WGPUInstanceDescriptor*) -> WGPUInstance { NOTREACHED(); };
-#ifdef WGPU_BREAKING_CHANGE_FUTURE_CALLBACK_TYPES
   wire_procs.instanceRequestAdapter = [](auto... args) {
     DCHECK(parent_decoder);
     return parent_decoder->RequestAdapterImpl(
         std::forward<decltype(args)>(args)...);
   };
-#else
-  wire_procs.instanceRequestAdapter2 = [](auto... args) {
-    DCHECK(parent_decoder);
-    return parent_decoder->RequestAdapterImpl(
-        std::forward<decltype(args)>(args)...);
-  };
-  AssignIfSameElseCrashFn(&wire_procs.instanceRequestAdapter,
-                          wire_procs.instanceRequestAdapter2);
-  AssignIfSameElseCrashFn(&wire_procs.instanceRequestAdapterF,
-                          wire_procs.instanceRequestAdapter2);
-#endif
   wire_procs.adapterHasFeature = [](auto... args) {
     DCHECK(parent_decoder);
     return parent_decoder->AdapterHasFeatureImpl(
@@ -1207,23 +1160,11 @@ WebGPUDecoderImpl::WebGPUDecoderImpl(
     // immediately.
     delete[] supported_features.features;
   };
-#ifdef WGPU_BREAKING_CHANGE_FUTURE_CALLBACK_TYPES
   wire_procs.adapterRequestDevice = [](auto... args) {
     DCHECK(parent_decoder);
     return parent_decoder->RequestDeviceImpl(
         std::forward<decltype(args)>(args)...);
   };
-#else
-  wire_procs.adapterRequestDevice2 = [](auto... args) {
-    DCHECK(parent_decoder);
-    return parent_decoder->RequestDeviceImpl(
-        std::forward<decltype(args)>(args)...);
-  };
-  AssignIfSameElseCrashFn(&wire_procs.adapterRequestDevice,
-                          wire_procs.adapterRequestDevice2);
-  AssignIfSameElseCrashFn(&wire_procs.adapterRequestDeviceF,
-                          wire_procs.adapterRequestDevice2);
-#endif
 
   wire_server_ = DawnWireServer::Create(
       this, wire_serializer_.get(), memory_transfer_service_.get(), wire_procs);
@@ -1327,8 +1268,7 @@ bool WebGPUDecoderImpl::IsFeatureExposed(wgpu::FeatureName feature) const {
     case wgpu::FeatureName::ClipDistances:
     case wgpu::FeatureName::DualSourceBlending:
     case wgpu::FeatureName::DawnMultiPlanarFormats:
-    case wgpu::FeatureName::Subgroups:
-    case wgpu::FeatureName::SubgroupsF16: {
+    case wgpu::FeatureName::Subgroups: {
       // Likely case when no features are blocked.
       if (runtime_unsafe_features_.empty() ||
           safety_level_ == webgpu::SafetyLevel::kUnsafe) {
@@ -1640,7 +1580,11 @@ struct WGPUDeviceDescriptorDeepCopy : WGPUDeviceDescriptor {
   std::optional<std::string> device_label_;
   std::optional<std::string> queue_label_;
   std::vector<WGPUFeatureName> required_features_;
+#ifdef WGPU_BREAKING_CHANGE_FLATTEN_LIMITS
+  WGPULimits required_limits_;
+#else
   WGPURequiredLimits required_limits_;
+#endif  // WGPU_BREAKING_CHANGE_FLATTEN_LIMITS
 };
 
 }  // namespace
@@ -1671,7 +1615,7 @@ WebGPUDecoderImpl::CreateQueuedRequestDeviceCallback(
                                      callback_info);
         } else {
           callback_info.callback(
-              WGPURequestDeviceStatus_Unknown, nullptr,
+              WGPURequestDeviceStatus_InstanceDropped, nullptr,
               MakeStringView("Queued device request cancelled."),
               callback_info.userdata1, callback_info.userdata2);
         }

@@ -42,7 +42,7 @@ class AIPageContentAgentTest : public testing::Test {
   ~AIPageContentAgentTest() override = default;
 
   void SetUp() override {
-    helper_.Initialize();
+    helper_.InitializeWithSettings(&UpdateWebSettings);
     helper_.Resize(kWindowSize);
     ASSERT_TRUE(helper_.LocalMainFrame());
   }
@@ -78,6 +78,13 @@ class AIPageContentAgentTest : public testing::Test {
     ASSERT_TRUE(attributes.text_info);
     EXPECT_EQ(attributes.text_info->text_style->has_emphasis,
               expected_has_emphasis);
+  }
+
+  void CheckTextColor(const mojom::blink::AIPageContentNode& node,
+                      RGBA32 expected_color) {
+    const auto& attributes = *node.content_attributes;
+    ASSERT_TRUE(attributes.text_info);
+    EXPECT_EQ(attributes.text_info->text_style->color, expected_color);
   }
 
   void CheckImageNode(const mojom::blink::AIPageContentNode& node,
@@ -188,6 +195,16 @@ class AIPageContentAgentTest : public testing::Test {
     EXPECT_EQ(geometry.visible_bounding_box, expected_visible_bounding_box);
   }
 
+  void CheckFormControlNode(
+      const mojom::blink::AIPageContentNode& node,
+      const mojom::blink::FormControlType& expected_form_control_type) {
+    const auto& attributes = *node.content_attributes;
+    EXPECT_EQ(attributes.attribute_type,
+              mojom::blink::AIPageContentAttributeType::kFormControl);
+    EXPECT_EQ(attributes.form_control_data->form_control_type,
+              expected_form_control_type);
+  }
+
   const mojom::blink::AIPageContentNode& GetSingleTableCell(
       const mojom::blink::AIPageContentNode& table) {
     CheckTableNode(table);
@@ -229,6 +246,11 @@ class AIPageContentAgentTest : public testing::Test {
   const mojom::blink::AIPageContentOptions default_options_;
   test::TaskEnvironment task_environment_;
   frame_test_helpers::WebViewHelper helper_;
+
+ private:
+  static void UpdateWebSettings(WebSettings* settings) {
+    settings->SetTextAreasAreResizable(true);
+  }
 };
 
 TEST_F(AIPageContentAgentTest, Basic) {
@@ -630,6 +652,39 @@ TEST_F(AIPageContentAgentTest, TextEmphasis) {
   CheckTextEmphasis(strong_text, true);
 }
 
+TEST_F(AIPageContentAgentTest, TextColor) {
+  frame_test_helpers::LoadHTMLString(
+      helper_.LocalMainFrame(),
+      "<body>"
+      "<p>Regular text</p>"
+      "<p style='color: red'>Red text</p>"
+      "</body>",
+      url_test_helpers::ToKURL("http://foobar.com"));
+
+  auto content = GetAIPageContent();
+  ASSERT_TRUE(content);
+  ASSERT_TRUE(content->root_node);
+
+  const auto& root = *content->root_node;
+  ASSERT_EQ(root.children_nodes.size(), 2u);
+
+  const auto& paragraph = *root.children_nodes[0];
+  CheckParagraphNode(paragraph);
+  ASSERT_EQ(paragraph.children_nodes.size(), 1u);
+
+  const auto& regular_text = *paragraph.children_nodes[0];
+  CheckTextNode(regular_text, "Regular text");
+  CheckTextColor(regular_text, Color(0, 0, 0).Rgb());
+
+  const auto& red_paragraph = *root.children_nodes[1];
+  CheckParagraphNode(paragraph);
+  ASSERT_EQ(paragraph.children_nodes.size(), 1u);
+
+  const auto& bolded_text = *red_paragraph.children_nodes[0];
+  CheckTextNode(bolded_text, "Red text");
+  CheckTextColor(bolded_text, Color(255, 0, 0).Rgb());
+}
+
 TEST_F(AIPageContentAgentTest, Table) {
   frame_test_helpers::LoadHTMLString(
       helper_.LocalMainFrame(),
@@ -1023,8 +1078,10 @@ TEST_F(AIPageContentAgentTest, FixedPosition) {
   CheckContainerNode(fixed_element);
   EXPECT_TRUE(
       fixed_element.content_attributes->geometry->is_fixed_or_sticky_position);
-  EXPECT_FALSE(fixed_element.content_attributes->geometry->scrolls_overflow_x);
-  EXPECT_FALSE(fixed_element.content_attributes->geometry->scrolls_overflow_y);
+  EXPECT_FALSE(
+      fixed_element.content_attributes->interaction_info->scrolls_overflow_x);
+  EXPECT_FALSE(
+      fixed_element.content_attributes->interaction_info->scrolls_overflow_y);
   CheckTextNode(*fixed_element.children_nodes[0],
                 "This element stays in place when the page is scrolled.");
 
@@ -1032,16 +1089,20 @@ TEST_F(AIPageContentAgentTest, FixedPosition) {
   CheckContainerNode(sticky_element);
   EXPECT_TRUE(
       sticky_element.content_attributes->geometry->is_fixed_or_sticky_position);
-  EXPECT_FALSE(sticky_element.content_attributes->geometry->scrolls_overflow_x);
-  EXPECT_FALSE(sticky_element.content_attributes->geometry->scrolls_overflow_y);
+  EXPECT_FALSE(
+      sticky_element.content_attributes->interaction_info->scrolls_overflow_x);
+  EXPECT_FALSE(
+      sticky_element.content_attributes->interaction_info->scrolls_overflow_y);
   CheckTextNode(*sticky_element.children_nodes[0],
                 "This element stays in place when the page is scrolled.");
 
   const auto& normal_element = *root.children_nodes[2];
   EXPECT_FALSE(
       normal_element.content_attributes->geometry->is_fixed_or_sticky_position);
-  EXPECT_FALSE(normal_element.content_attributes->geometry->scrolls_overflow_x);
-  EXPECT_FALSE(normal_element.content_attributes->geometry->scrolls_overflow_y);
+  EXPECT_FALSE(
+      normal_element.content_attributes->interaction_info->scrolls_overflow_x);
+  EXPECT_FALSE(
+      normal_element.content_attributes->interaction_info->scrolls_overflow_y);
   CheckTextNode(normal_element,
                 "This element flows naturally with the document.");
 }
@@ -1107,17 +1168,17 @@ TEST_F(AIPageContentAgentTest, ScrollContainer) {
   const auto& root = *content->root_node;
   ASSERT_EQ(root.children_nodes.size(), 4u);
 
-  EXPECT_TRUE(root.content_attributes->geometry->scrolls_overflow_x);
-  EXPECT_TRUE(root.content_attributes->geometry->scrolls_overflow_y);
+  EXPECT_TRUE(root.content_attributes->interaction_info->scrolls_overflow_x);
+  EXPECT_TRUE(root.content_attributes->interaction_info->scrolls_overflow_y);
 
   const auto& scrollable_x_element = *root.children_nodes[0];
   CheckContainerNode(scrollable_x_element);
   EXPECT_FALSE(scrollable_x_element.content_attributes->geometry
                    ->is_fixed_or_sticky_position);
-  EXPECT_TRUE(
-      scrollable_x_element.content_attributes->geometry->scrolls_overflow_x);
-  EXPECT_FALSE(
-      scrollable_x_element.content_attributes->geometry->scrolls_overflow_y);
+  EXPECT_TRUE(scrollable_x_element.content_attributes->interaction_info
+                  ->scrolls_overflow_x);
+  EXPECT_FALSE(scrollable_x_element.content_attributes->interaction_info
+                   ->scrolls_overflow_y);
   CheckTextNode(
       *scrollable_x_element.children_nodes[0],
       "ABCDEFGHIJKLMOPQRSTUVWXYZABCDEFGHIJKLMOPQRSTUVWXYZABCDEFGHIJKLMOPQRSTUVW"
@@ -1128,10 +1189,10 @@ TEST_F(AIPageContentAgentTest, ScrollContainer) {
   CheckContainerNode(scrollable_y_element);
   EXPECT_FALSE(scrollable_y_element.content_attributes->geometry
                    ->is_fixed_or_sticky_position);
-  EXPECT_FALSE(
-      scrollable_y_element.content_attributes->geometry->scrolls_overflow_x);
-  EXPECT_TRUE(
-      scrollable_y_element.content_attributes->geometry->scrolls_overflow_y);
+  EXPECT_FALSE(scrollable_y_element.content_attributes->interaction_info
+                   ->scrolls_overflow_x);
+  EXPECT_TRUE(scrollable_y_element.content_attributes->interaction_info
+                  ->scrolls_overflow_y);
   CheckTextNode(*scrollable_y_element.children_nodes[0],
                 "Some long text to make it scrollable. Some long text to make "
                 "it scrollable. Some long text to make it scrollable. Some "
@@ -1141,10 +1202,10 @@ TEST_F(AIPageContentAgentTest, ScrollContainer) {
   CheckContainerNode(auto_scroll_x_element);
   EXPECT_FALSE(auto_scroll_x_element.content_attributes->geometry
                    ->is_fixed_or_sticky_position);
-  EXPECT_TRUE(
-      auto_scroll_x_element.content_attributes->geometry->scrolls_overflow_x);
-  EXPECT_FALSE(
-      auto_scroll_x_element.content_attributes->geometry->scrolls_overflow_y);
+  EXPECT_TRUE(auto_scroll_x_element.content_attributes->interaction_info
+                  ->scrolls_overflow_x);
+  EXPECT_FALSE(auto_scroll_x_element.content_attributes->interaction_info
+                   ->scrolls_overflow_y);
   CheckTextNode(
       *auto_scroll_x_element.children_nodes[0],
       "ABCDEFGHIJKLMOPQRSTUVWXYZABCDEFGHIJKLMOPQRSTUVWXYZABCDEFGHIJKLMOPQRSTUVW"
@@ -1155,10 +1216,10 @@ TEST_F(AIPageContentAgentTest, ScrollContainer) {
   CheckContainerNode(auto_scroll_y_element);
   EXPECT_FALSE(auto_scroll_y_element.content_attributes->geometry
                    ->is_fixed_or_sticky_position);
-  EXPECT_FALSE(
-      auto_scroll_y_element.content_attributes->geometry->scrolls_overflow_x);
-  EXPECT_TRUE(
-      auto_scroll_y_element.content_attributes->geometry->scrolls_overflow_y);
+  EXPECT_FALSE(auto_scroll_y_element.content_attributes->interaction_info
+                   ->scrolls_overflow_x);
+  EXPECT_TRUE(auto_scroll_y_element.content_attributes->interaction_info
+                  ->scrolls_overflow_y);
   CheckTextNode(*auto_scroll_y_element.children_nodes[0],
                 "Some long text to make it scrollable. Some long text to make "
                 "it scrollable. Some long text to make it scrollable. Some "
@@ -1628,6 +1689,332 @@ TEST_F(AIPageContentAgentTest, NoHiddenButSearchableContent) {
 
   const auto& text_node = *content->root_node->children_nodes[1];
   CheckTextNode(text_node, "visible text");
+}
+
+TEST_F(AIPageContentAgentTest, FormWithTextInput) {
+  frame_test_helpers::LoadHTMLString(
+      helper_.LocalMainFrame(),
+      "<body>"
+      "  <form name='myform'>"
+      "    <label for='input1'>Lorem Ipsum</label>"
+      "    <input type='text' id='input1' name='LI' value='Lorem'>"
+      "    <label for='input2'>Ipsum Dolor</label>"
+      "    <input type='text' id='input2' name='ID' value='Ipsum' required>"
+      "  </form>"
+      "</body>",
+      url_test_helpers::ToKURL("http://foobar.com"));
+
+  auto* agent = AIPageContentAgent::GetOrCreateForTesting(
+      *helper_.LocalMainFrame()->GetFrame()->GetDocument());
+  ASSERT_TRUE(agent);
+
+  auto content = GetAIPageContent();
+  ASSERT_TRUE(content);
+  ASSERT_TRUE(content->root_node);
+
+  const auto& root = *content->root_node;
+  EXPECT_EQ(root.children_nodes.size(), 1u);
+
+  const auto& form = *root.children_nodes[0];
+  EXPECT_EQ(form.content_attributes->attribute_type,
+            mojom::blink::AIPageContentAttributeType::kForm);
+  EXPECT_EQ(form.content_attributes->form_data->form_name, "myform");
+  EXPECT_EQ(form.children_nodes.size(), 4u);
+
+  CheckTextNode(*form.children_nodes[0], "Lorem Ipsum");
+
+  const auto& text_input1 = *form.children_nodes[1];
+  CheckFormControlNode(text_input1, mojom::blink::FormControlType::kInputText);
+  EXPECT_EQ(text_input1.content_attributes->form_control_data->field_name,
+            "LI");
+  EXPECT_EQ(text_input1.content_attributes->form_control_data->field_value,
+            "Lorem");
+  EXPECT_FALSE(text_input1.content_attributes->form_control_data->is_required);
+  EXPECT_EQ(text_input1.children_nodes.size(), 1u);
+  CheckContainerNode(*text_input1.children_nodes[0]);
+  EXPECT_EQ(text_input1.children_nodes[0]->children_nodes.size(), 1u);
+  CheckTextNode(*text_input1.children_nodes[0]->children_nodes[0], "Lorem");
+
+  CheckTextNode(*form.children_nodes[2], "Ipsum Dolor");
+
+  const auto& text_input2 = *form.children_nodes[3];
+  CheckFormControlNode(text_input2, mojom::blink::FormControlType::kInputText);
+  EXPECT_EQ(text_input2.content_attributes->form_control_data->field_name,
+            "ID");
+  EXPECT_EQ(text_input2.content_attributes->form_control_data->field_value,
+            "Ipsum");
+  EXPECT_TRUE(text_input2.content_attributes->form_control_data->is_required);
+  EXPECT_EQ(text_input2.children_nodes.size(), 1u);
+  CheckContainerNode(*text_input2.children_nodes[0]);
+  EXPECT_EQ(text_input2.children_nodes[0]->children_nodes.size(), 1u);
+  CheckTextNode(*text_input2.children_nodes[0]->children_nodes[0], "Ipsum");
+}
+
+TEST_F(AIPageContentAgentTest, FormWithSelect) {
+  frame_test_helpers::LoadHTMLString(
+      helper_.LocalMainFrame(),
+      "<body>"
+      "  <form name='myform'>"
+      "    <select name='LI'>"
+      "      <option value='Lorem'>Lorem Text</option>"
+      "      <option value='Ipsum'>Ipsum Text</option>"
+      "    </select>"
+      "  </form>"
+      "</body>",
+      url_test_helpers::ToKURL("http://foobar.com"));
+
+  auto* agent = AIPageContentAgent::GetOrCreateForTesting(
+      *helper_.LocalMainFrame()->GetFrame()->GetDocument());
+  ASSERT_TRUE(agent);
+
+  auto content = GetAIPageContent();
+  ASSERT_TRUE(content);
+  ASSERT_TRUE(content->root_node);
+
+  const auto& root = *content->root_node;
+  EXPECT_EQ(root.children_nodes.size(), 1u);
+
+  const auto& form = *root.children_nodes[0];
+  EXPECT_EQ(form.content_attributes->attribute_type,
+            mojom::blink::AIPageContentAttributeType::kForm);
+  EXPECT_EQ(form.content_attributes->form_data->form_name, "myform");
+  EXPECT_EQ(form.children_nodes.size(), 1u);
+
+  const auto& select = *form.children_nodes[0];
+  CheckFormControlNode(select, mojom::blink::FormControlType::kSelectOne);
+
+  const auto& select_options =
+      select.content_attributes->form_control_data->select_options;
+  ASSERT_EQ(select_options.size(), 2u);
+
+  EXPECT_EQ(select_options[0]->value, "Lorem");
+  EXPECT_EQ(select_options[0]->text, "Lorem Text");
+  EXPECT_TRUE(select_options[0]->is_selected);
+
+  EXPECT_EQ(select_options[1]->value, "Ipsum");
+  EXPECT_EQ(select_options[1]->text, "Ipsum Text");
+  EXPECT_FALSE(select_options[1]->is_selected);
+
+  EXPECT_EQ(select.children_nodes.size(), 1u);
+  CheckTextNode(*select.children_nodes[0], "Lorem Text");
+}
+
+TEST_F(AIPageContentAgentTest, FormWithCheckbox) {
+  frame_test_helpers::LoadHTMLString(
+      helper_.LocalMainFrame(),
+      "<body>"
+      "  <form name='vehicles'>"
+      "    <input type='checkbox' id='vehicle1' name='vehicle1' value='Bike'>"
+      "    <label for='vehicle1'>I have a bike</label><br>"
+      "    <input type='checkbox' id='vehicle2' name='vehicle2' value='Car' "
+      "     checked>"
+      "    <label for='vehicle2'>I have a car</label><br>"
+      "  </form>"
+      "</body>",
+      url_test_helpers::ToKURL("http://foobar.com"));
+
+  auto* agent = AIPageContentAgent::GetOrCreateForTesting(
+      *helper_.LocalMainFrame()->GetFrame()->GetDocument());
+  ASSERT_TRUE(agent);
+
+  auto content = GetAIPageContent();
+  ASSERT_TRUE(content);
+  ASSERT_TRUE(content->root_node);
+
+  const auto& root = *content->root_node;
+  EXPECT_EQ(root.children_nodes.size(), 1u);
+
+  const auto& form = *root.children_nodes[0];
+  EXPECT_EQ(form.content_attributes->attribute_type,
+            mojom::blink::AIPageContentAttributeType::kForm);
+  EXPECT_EQ(form.content_attributes->form_data->form_name, "vehicles");
+  EXPECT_EQ(form.children_nodes.size(), 4u);
+
+  const auto& checkbox1 = *form.children_nodes[0];
+  CheckFormControlNode(checkbox1,
+                       mojom::blink::FormControlType::kInputCheckbox);
+  EXPECT_EQ(checkbox1.content_attributes->form_control_data->field_name,
+            "vehicle1");
+  EXPECT_EQ(checkbox1.content_attributes->form_control_data->field_value,
+            "Bike");
+  EXPECT_FALSE(checkbox1.content_attributes->form_control_data->is_checked);
+  EXPECT_EQ(checkbox1.children_nodes.size(), 0u);
+
+  CheckTextNode(*form.children_nodes[1], "I have a bike");
+
+  const auto& checkbox2 = *form.children_nodes[2];
+  CheckFormControlNode(checkbox2,
+                       mojom::blink::FormControlType::kInputCheckbox);
+  EXPECT_EQ(checkbox2.content_attributes->form_control_data->field_name,
+            "vehicle2");
+  EXPECT_EQ(checkbox2.content_attributes->form_control_data->field_value,
+            "Car");
+  EXPECT_TRUE(checkbox2.content_attributes->form_control_data->is_checked);
+  EXPECT_EQ(checkbox2.children_nodes.size(), 0u);
+
+  CheckTextNode(*form.children_nodes[3], "I have a car");
+}
+
+TEST_F(AIPageContentAgentTest, FormWithRadio) {
+  frame_test_helpers::LoadHTMLString(
+      helper_.LocalMainFrame(),
+      "<body>"
+      "  <form name='vehicles'>"
+      "    <input type='radio' id='vehicle1' name='vehicle1' value='Bike'>"
+      "    <label for='vehicle1'>I have a bike</label><br>"
+      "    <input type='radio' id='vehicle2' name='vehicle2' value='Car' "
+      "     checked>"
+      "    <label for='vehicle2'>I have a car</label><br>"
+      "  </form>"
+      "</body>",
+      url_test_helpers::ToKURL("http://foobar.com"));
+
+  auto* agent = AIPageContentAgent::GetOrCreateForTesting(
+      *helper_.LocalMainFrame()->GetFrame()->GetDocument());
+  ASSERT_TRUE(agent);
+
+  auto content = GetAIPageContent();
+  ASSERT_TRUE(content);
+  ASSERT_TRUE(content->root_node);
+
+  const auto& root = *content->root_node;
+  EXPECT_EQ(root.children_nodes.size(), 1u);
+
+  const auto& form = *root.children_nodes[0];
+  EXPECT_EQ(form.content_attributes->attribute_type,
+            mojom::blink::AIPageContentAttributeType::kForm);
+  EXPECT_EQ(form.content_attributes->form_data->form_name, "vehicles");
+  EXPECT_EQ(form.children_nodes.size(), 4u);
+
+  const auto& radio1 = *form.children_nodes[0];
+  CheckFormControlNode(radio1, mojom::blink::FormControlType::kInputRadio);
+  EXPECT_EQ(radio1.content_attributes->form_control_data->field_name,
+            "vehicle1");
+  EXPECT_EQ(radio1.content_attributes->form_control_data->field_value, "Bike");
+  EXPECT_FALSE(radio1.content_attributes->form_control_data->is_checked);
+  EXPECT_EQ(radio1.children_nodes.size(), 0u);
+
+  CheckTextNode(*form.children_nodes[1], "I have a bike");
+
+  const auto& radio2 = *form.children_nodes[2];
+  CheckFormControlNode(radio2, mojom::blink::FormControlType::kInputRadio);
+  EXPECT_EQ(radio2.content_attributes->form_control_data->field_name,
+            "vehicle2");
+  EXPECT_EQ(radio2.content_attributes->form_control_data->field_value, "Car");
+  EXPECT_TRUE(radio2.content_attributes->form_control_data->is_checked);
+  EXPECT_EQ(radio2.children_nodes.size(), 0u);
+
+  CheckTextNode(*form.children_nodes[3], "I have a car");
+}
+
+TEST_F(AIPageContentAgentTest, InteractiveElements) {
+  frame_test_helpers::LoadHTMLString(
+      helper_.LocalMainFrame(),
+      "<body>"
+      "  <style>"
+      "    div {"
+      "      resize: both;"
+      "      overflow: auto;"
+      "      border: 1px solid black;"
+      "      width: 200px;"
+      "    }"
+      "  </style>"
+      "  <textarea>text</textarea>"
+      "  <button>button</button>"
+      "  <div>resize</div>"
+      "</body>",
+      url_test_helpers::ToKURL("http://foobar.com"));
+
+  auto content = GetAIPageContent();
+  ASSERT_TRUE(content);
+  ASSERT_TRUE(content->root_node);
+
+  const auto& root = *content->root_node;
+  EXPECT_EQ(root.children_nodes.size(), 3u);
+
+  const auto& text_area = *root.children_nodes[0];
+  CheckFormControlNode(text_area, mojom::blink::FormControlType::kTextArea);
+  EXPECT_TRUE(text_area.content_attributes->interaction_info->is_selectable);
+  EXPECT_FALSE(text_area.content_attributes->interaction_info->is_editable);
+  EXPECT_TRUE(text_area.content_attributes->interaction_info->is_focusable);
+  EXPECT_FALSE(text_area.content_attributes->interaction_info->is_focused);
+  EXPECT_FALSE(text_area.content_attributes->interaction_info->is_draggable);
+  EXPECT_TRUE(text_area.content_attributes->interaction_info->is_clickable);
+  EXPECT_TRUE(
+      text_area.content_attributes->interaction_info->can_resize_vertical);
+  EXPECT_TRUE(
+      text_area.content_attributes->interaction_info->can_resize_horizontal);
+
+  EXPECT_EQ(text_area.children_nodes.size(), 1u);
+  const auto& text_area_text = *text_area.children_nodes[0];
+  CheckTextNode(text_area_text, "text");
+  EXPECT_TRUE(
+      text_area_text.content_attributes->interaction_info->is_selectable);
+  EXPECT_TRUE(text_area_text.content_attributes->interaction_info->is_editable);
+  EXPECT_FALSE(
+      text_area_text.content_attributes->interaction_info->is_focusable);
+  EXPECT_FALSE(text_area_text.content_attributes->interaction_info->is_focused);
+  EXPECT_FALSE(
+      text_area_text.content_attributes->interaction_info->is_draggable);
+  EXPECT_FALSE(
+      text_area_text.content_attributes->interaction_info->is_clickable);
+  EXPECT_FALSE(
+      text_area_text.content_attributes->interaction_info->can_resize_vertical);
+  EXPECT_FALSE(text_area_text.content_attributes->interaction_info
+                   ->can_resize_horizontal);
+
+  const auto& button = *root.children_nodes[1];
+  CheckFormControlNode(button, mojom::blink::FormControlType::kButtonSubmit);
+  EXPECT_TRUE(button.content_attributes->interaction_info->is_selectable);
+  EXPECT_FALSE(button.content_attributes->interaction_info->is_editable);
+  EXPECT_TRUE(button.content_attributes->interaction_info->is_focusable);
+  EXPECT_FALSE(button.content_attributes->interaction_info->is_focused);
+  EXPECT_FALSE(button.content_attributes->interaction_info->is_draggable);
+  EXPECT_TRUE(button.content_attributes->interaction_info->is_clickable);
+  EXPECT_FALSE(
+      button.content_attributes->interaction_info->can_resize_vertical);
+  EXPECT_FALSE(
+      button.content_attributes->interaction_info->can_resize_horizontal);
+
+  EXPECT_EQ(button.children_nodes.size(), 1u);
+  const auto& button_text = *button.children_nodes[0];
+  CheckTextNode(button_text, "button");
+  EXPECT_TRUE(button_text.content_attributes->interaction_info->is_selectable);
+  EXPECT_FALSE(button_text.content_attributes->interaction_info->is_editable);
+  EXPECT_FALSE(button_text.content_attributes->interaction_info->is_focusable);
+  EXPECT_FALSE(button_text.content_attributes->interaction_info->is_focused);
+  EXPECT_FALSE(button_text.content_attributes->interaction_info->is_draggable);
+  EXPECT_FALSE(button_text.content_attributes->interaction_info->is_clickable);
+  EXPECT_FALSE(
+      button_text.content_attributes->interaction_info->can_resize_vertical);
+  EXPECT_FALSE(
+      button_text.content_attributes->interaction_info->can_resize_horizontal);
+
+  const auto& resize = *root.children_nodes[2];
+  CheckContainerNode(resize);
+  EXPECT_TRUE(resize.content_attributes->interaction_info->is_selectable);
+  EXPECT_FALSE(resize.content_attributes->interaction_info->is_editable);
+  EXPECT_FALSE(resize.content_attributes->interaction_info->is_focusable);
+  EXPECT_FALSE(resize.content_attributes->interaction_info->is_focused);
+  EXPECT_FALSE(resize.content_attributes->interaction_info->is_draggable);
+  EXPECT_FALSE(resize.content_attributes->interaction_info->is_clickable);
+  EXPECT_TRUE(resize.content_attributes->interaction_info->can_resize_vertical);
+  EXPECT_TRUE(
+      resize.content_attributes->interaction_info->can_resize_horizontal);
+
+  EXPECT_EQ(resize.children_nodes.size(), 1u);
+  const auto& resize_text = *resize.children_nodes[0];
+  CheckTextNode(resize_text, "resize");
+  EXPECT_TRUE(resize_text.content_attributes->interaction_info->is_selectable);
+  EXPECT_FALSE(resize_text.content_attributes->interaction_info->is_editable);
+  EXPECT_FALSE(resize_text.content_attributes->interaction_info->is_focusable);
+  EXPECT_FALSE(resize_text.content_attributes->interaction_info->is_focused);
+  EXPECT_FALSE(resize_text.content_attributes->interaction_info->is_draggable);
+  EXPECT_FALSE(resize_text.content_attributes->interaction_info->is_clickable);
+  EXPECT_FALSE(
+      resize_text.content_attributes->interaction_info->can_resize_vertical);
+  EXPECT_FALSE(
+      resize_text.content_attributes->interaction_info->can_resize_horizontal);
 }
 
 }  // namespace

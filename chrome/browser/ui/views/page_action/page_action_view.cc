@@ -6,10 +6,10 @@
 
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/location_bar/icon_label_bubble_view.h"
-#include "chrome/browser/ui/views/page_action/page_action_constants.h"
 #include "chrome/browser/ui/views/page_action/page_action_controller.h"
 #include "chrome/browser/ui/views/page_action/page_action_model.h"
 #include "chrome/browser/ui/views/page_action/page_action_triggers.h"
+#include "chrome/browser/ui/views/page_action/page_action_view_params.h"
 #include "ui/actions/actions.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/font_list.h"
@@ -19,9 +19,11 @@
 namespace page_actions {
 
 PageActionView::PageActionView(actions::ActionItem* action_item,
-                               IconLabelBubbleView::Delegate* parent_delegate)
-    : IconLabelBubbleView(gfx::FontList(), parent_delegate),
-      action_item_(action_item->GetAsWeakPtr()) {
+                               const PageActionViewParams& params)
+    : IconLabelBubbleView(gfx::FontList(), params.icon_label_bubble_delegate),
+      action_item_(action_item->GetAsWeakPtr()),
+      icon_size_(params.icon_size),
+      icon_insets_(params.icon_insets) {
   CHECK(action_item_->GetActionId().has_value());
 
   image_container_view()->SetFlipCanvasOnPaintForRTLUI(true);
@@ -42,23 +44,33 @@ void PageActionView::OnNewActiveController(PageActionController* controller) {
     // observation. See bug for more explanation.
     action_item_controller_subscription_ =
         controller->CreateActionItemSubscription(action_item_.get());
+    OnPageActionModelChanged(*observation_.GetSource());
   } else {
     SetVisible(false);
   }
 }
 
-void PageActionView::OnPageActionModelChanged(PageActionModelInterface* model) {
-  SetEnabled(model->GetVisible());
-  SetVisible(model->GetVisible());
-  SetText(model->GetText());
-  SetTooltipText(model->GetTooltipText());
+void PageActionView::OnPageActionModelChanged(
+    const PageActionModelInterface& model) {
+  SetEnabled(model.GetVisible());
+  SetVisible(model.GetVisible());
+  SetText(model.GetText());
+  SetTooltipText(model.GetTooltipText());
+  label()->SetVisible(model.GetShowSuggestionChip());
 
   UpdateIconImage();
   UpdateBorder();
+  UpdateStyle(model.GetShowSuggestionChip());
+}
+
+void PageActionView::UpdateStyle(bool is_suggestion_chip) {
+  SetUseTonalColorsWhenExpanded(is_suggestion_chip);
+  SetBackgroundVisibility(is_suggestion_chip ? BackgroundVisibility::kAlways
+                                             : BackgroundVisibility::kNever);
 }
 
 void PageActionView::OnPageActionModelWillBeDeleted(
-    PageActionModelInterface* model) {
+    const PageActionModelInterface& model) {
   observation_.Reset();
   action_item_controller_subscription_ = {};
   SetVisible(false);
@@ -87,25 +99,17 @@ void PageActionView::ViewHierarchyChanged(
   }
 }
 
-bool PageActionView::ShouldShowLabel() const {
-  // TODO(382068900): Update this when the chip with a label state is
-  // implemented. In that state, the label should be displayed. However, if
-  // there isn't enough space for the label, it should remain hidden.
-  return should_show_label_;
-}
-
-void PageActionView::SetShouldShowLabelForTesting(bool should_show_label) {
-  should_show_label_ = should_show_label;
-}
-
 void PageActionView::UpdateBorder() {
-  gfx::Insets new_insets =
-      GetLayoutInsets(LOCATION_BAR_PAGE_ACTION_ICON_PADDING);
+  gfx::Insets insets = GetLayoutInsets(LOCATION_BAR_PAGE_ACTION_ICON_PADDING);
   if (ShouldShowLabel()) {
-    new_insets += gfx::Insets::TLBR(0, 4, 0, kPageActionBetweenIconSpacing);
+    constexpr int kInsetsLeftPadding = 4;
+    constexpr int kInsetsRightPadding = 8;
+    insets +=
+        gfx::Insets().set_left_right(kInsetsLeftPadding, kInsetsRightPadding);
   }
-  if (new_insets != GetInsets()) {
-    SetBorder(views::CreateEmptyBorder(new_insets));
+
+  if (GetInsets() != insets) {
+    SetBorder(views::CreateEmptyBorder(insets));
   }
 }
 
@@ -143,15 +147,10 @@ void PageActionView::UpdateIconImage() {
   }
 
   // Icon default size may be different from the size used in the location bar.
-  const int icon_size = GetLayoutConstant(LOCATION_BAR_TRAILING_ICON_SIZE);
   const auto& icon_image = observation_.GetSource()->GetImage();
-  if (icon_image.Size() == gfx::Size(icon_size, icon_size)) {
-    return;
-  }
-
   const gfx::ImageSkia image =
       gfx::CreateVectorIcon(*icon_image.GetVectorIcon().vector_icon(),
-                            icon_size, GetForegroundColor());
+                            icon_size_, GetForegroundColor());
 
   if (!image.isNull()) {
     SetImageModel(ui::ImageModel::FromImageSkia(image));
@@ -161,6 +160,19 @@ void PageActionView::UpdateIconImage() {
 void PageActionView::SetModel(PageActionModelInterface* model) {
   observation_.Reset();
   observation_.Observe(model);
+}
+
+gfx::Size PageActionView::GetMinimumSize() const {
+  const gfx::Insets insets =
+      GetLayoutInsets(LOCATION_BAR_PAGE_ACTION_ICON_PADDING);
+  gfx::Size icon_preferred_size = image_container_view()->GetPreferredSize();
+  icon_preferred_size.Enlarge(insets.width(), insets.height());
+
+  return icon_preferred_size;
+}
+
+views::View* PageActionView::GetLabelForTesting() {
+  return label();
 }
 
 BEGIN_METADATA(PageActionView)

@@ -4,8 +4,10 @@
 
 #include "components/autofill/content/renderer/password_generation_agent.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/auto_reset.h"
 #include "base/check_op.h"
@@ -13,7 +15,6 @@
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
-#include "base/ranges/algorithm.h"
 #include "base/task/single_thread_task_runner.h"
 #include "components/autofill/content/renderer/form_autofill_util.h"
 #include "components/autofill/content/renderer/password_autofill_agent.h"
@@ -29,7 +30,6 @@
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
-#include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_form_control_element.h"
 #include "third_party/blink/public/web/web_form_element.h"
@@ -60,7 +60,7 @@ using Logger = ::autofill::SavePasswordProgressLogger;
 FieldRendererId FindConfirmationPasswordFieldId(
     const std::vector<WebFormControlElement>& control_elements,
     const WebFormControlElement& new_password) {
-  auto iter = base::ranges::find(control_elements, new_password);
+  auto iter = std::ranges::find(control_elements, new_password);
 
   if (iter == control_elements.end())
     return FieldRendererId();
@@ -138,6 +138,16 @@ class PasswordGenerationAgent::DeferringPasswordGenerationDriver
     DeferMsg(&mojom::PasswordGenerationDriver::AutomaticGenerationAvailable,
              password_generation_ui_data);
   }
+  void PresaveGeneratedPassword(const FormData& form_data,
+                                const std::u16string& password_value) override {
+    DeferMsg(&mojom::PasswordGenerationDriver::PresaveGeneratedPassword,
+             form_data, password_value);
+  }
+  void PasswordNoLongerGenerated(const FormData& form_data) override {
+    DeferMsg(&mojom::PasswordGenerationDriver::PasswordNoLongerGenerated,
+             form_data);
+  }
+#if !BUILDFLAG(IS_ANDROID)
   void ShowPasswordEditingPopup(const gfx::RectF& bounds,
                                 const FormData& form_data,
                                 FieldRendererId field_renderer_id,
@@ -149,21 +159,13 @@ class PasswordGenerationAgent::DeferringPasswordGenerationDriver
     DeferMsg(
         &mojom::PasswordGenerationDriver::PasswordGenerationRejectedByTyping);
   }
-  void PresaveGeneratedPassword(const FormData& form_data,
-                                const std::u16string& password_value) override {
-    DeferMsg(&mojom::PasswordGenerationDriver::PresaveGeneratedPassword,
-             form_data, password_value);
-  }
-  void PasswordNoLongerGenerated(const FormData& form_data) override {
-    DeferMsg(&mojom::PasswordGenerationDriver::PasswordNoLongerGenerated,
-             form_data);
-  }
   void FrameWasScrolled() override {
     DeferMsg(&mojom::PasswordGenerationDriver::FrameWasScrolled);
   }
   void GenerationElementLostFocus() override {
     DeferMsg(&mojom::PasswordGenerationDriver::GenerationElementLostFocus);
   }
+#endif  // !BUILDFLAG(IS_ANDROID)
 
   raw_ptr<PasswordGenerationAgent> agent_ = nullptr;
   base::WeakPtrFactory<DeferringPasswordGenerationDriver> weak_ptr_factory_{
@@ -286,9 +288,11 @@ void PasswordGenerationAgent::DidCommitProvisionalLoad(
 }
 
 void PasswordGenerationAgent::DidChangeScrollOffset() {
+#if !BUILDFLAG(IS_ANDROID)
   if (!current_generation_item_)
     return;
   GetPasswordGenerationDriver().FrameWasScrolled();
+#endif  // !BUILDFLAG(IS_ANDROID)
 }
 
 void PasswordGenerationAgent::OnDestruct() {
@@ -561,7 +565,9 @@ bool PasswordGenerationAgent::ShowPasswordGenerationSuggestions(
       return MaybeOfferAutomaticGeneration();
     }
     current_generation_item_->generation_element_.SetShouldRevealPassword(true);
+#if !BUILDFLAG(IS_ANDROID)
     ShowEditingPopup(form_cache);
+#endif  // !BUILDFLAG(IS_ANDROID)
     return true;
   }
 
@@ -580,7 +586,9 @@ void PasswordGenerationAgent::DidEndTextFieldEditing(
     const blink::WebInputElement& element) {
   if (element && current_generation_item_ &&
       element == current_generation_item_->generation_element_) {
+#if !BUILDFLAG(IS_ANDROID)
     GetPasswordGenerationDriver().GenerationElementLostFocus();
+#endif  // !BUILDFLAG(IS_ANDROID)
     current_generation_item_->password_revealed_after_editing_ = false;
     current_generation_item_->generation_element_.SetShouldRevealPassword(
         false);
@@ -634,7 +642,9 @@ bool PasswordGenerationAgent::TextDidChangeInTextField(
       MaybeOfferAutomaticGeneration();
     } else {
       // User has rejected the feature and has started typing a password.
-      GenerationRejectedByTyping();
+#if !BUILDFLAG(IS_ANDROID)
+      GetPasswordGenerationDriver().PasswordGenerationRejectedByTyping();
+#endif  // !BUILDFLAG(IS_ANDROID)
       // If the user is still modifying the field after leaving the editing
       // state without fully clearing, it should remain revealed.
       current_generation_item_->generation_element_.SetShouldRevealPassword(
@@ -734,6 +744,7 @@ void PasswordGenerationAgent::AutomaticGenerationAvailable() {
       password_generation_ui_data);
 }
 
+#if !BUILDFLAG(IS_ANDROID)
 void PasswordGenerationAgent::ShowEditingPopup(
     const SynchronousFormCache& form_cache) {
   if (!render_frame())
@@ -755,10 +766,7 @@ void PasswordGenerationAgent::ShowEditingPopup(
       bounding_box, *form_data, generation_element_renderer_id, password_value);
   current_generation_item_->editing_popup_shown_ = true;
 }
-
-void PasswordGenerationAgent::GenerationRejectedByTyping() {
-  GetPasswordGenerationDriver().PasswordGenerationRejectedByTyping();
-}
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 void PasswordGenerationAgent::PasswordNoLongerGenerated() {
   DCHECK(current_generation_item_);

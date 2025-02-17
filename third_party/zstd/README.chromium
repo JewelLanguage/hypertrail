@@ -1,7 +1,7 @@
 Name: Zstandard
 Short Name: zstd
 URL: https://github.com/facebook/zstd
-Version: 80af41e08a630946a75a5cda9e4cdf192247f20a
+Version: ef2bf5781112a4cd6b62ac1817f7842bbdc7ea8f
 License: BSD-3-Clause
 License File: src/LICENSE
 CPEPrefix: cpe:/a:facebook:zstandard:1.5.5

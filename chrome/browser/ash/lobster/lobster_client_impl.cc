@@ -9,6 +9,7 @@
 
 #include "ash/public/cpp/lobster/lobster_enums.h"
 #include "ash/public/cpp/lobster/lobster_system_state.h"
+#include "ash/public/cpp/lobster/lobster_text_input_context.h"
 #include "chrome/browser/ash/lobster/lobster_service.h"
 #include "chrome/browser/ash/lobster/lobster_system_state_provider.h"
 #include "components/account_id/account_id.h"
@@ -22,8 +23,9 @@ void LobsterClientImpl::SetActiveSession(ash::LobsterSession* session) {
   service_->SetActiveSession(session);
 }
 
-ash::LobsterSystemState LobsterClientImpl::GetSystemState() {
-  return service_->system_state_provider()->GetSystemState();
+ash::LobsterSystemState LobsterClientImpl::GetSystemState(
+    const ash::LobsterTextInputContext& text_input_context) {
+  return service_->system_state_provider()->GetSystemState(text_input_context);
 }
 
 void LobsterClientImpl::RequestCandidates(
@@ -38,6 +40,10 @@ void LobsterClientImpl::InflateCandidate(
     const std::string& query,
     ash::InflateCandidateCallback callback) {
   service_->InflateCandidate(seed, query, std::move(callback));
+}
+
+void LobsterClientImpl::ShowDisclaimerUI() {
+  return service_->ShowDisclaimerUI();
 }
 
 void LobsterClientImpl::LoadUI(std::optional<std::string> query,

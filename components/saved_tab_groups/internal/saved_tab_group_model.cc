@@ -161,7 +161,7 @@ void SavedTabGroupModel::AddedLocally(SavedTabGroup saved_group) {
   InsertGroupImpl(std::move(saved_group));
 
   for (auto& observer : observers_) {
-    observer.SavedTabGroupAddedLocally(Get(group_guid)->saved_guid());
+    observer.SavedTabGroupAddedLocally(group_guid);
   }
 }
 
@@ -452,6 +452,7 @@ void SavedTabGroupModel::RemoveTabFromGroupLocally(const base::Uuid& group_id,
 void SavedTabGroupModel::RemoveTabFromGroupFromSync(
     const base::Uuid& group_id,
     const base::Uuid& tab_id,
+    GaiaId removed_by,
     bool prevent_group_destruction_for_testing) {
   std::optional<int> index = GetIndexOf(group_id);
   CHECK(index.has_value());
@@ -463,7 +464,7 @@ void SavedTabGroupModel::RemoveTabFromGroupFromSync(
 
   const base::Uuid copy_tab_id = tab_id;
   saved_tab_groups_[index.value()].RemoveTabFromSync(
-      tab_id, prevent_group_destruction_for_testing);
+      tab_id, std::move(removed_by), prevent_group_destruction_for_testing);
 
   // The group became empty because of last tab deletion from sync. It could be
   // a transient state. Create a pending NTP since UI can't handle empty
@@ -728,7 +729,8 @@ void SavedTabGroupModel::MergePendingNtpWithIncomingTabIfAny(
   // Copy over local tab ID of the pending NTP to the incoming sync tab and then
   // delete it from the group.
   tab->SetLocalTabID(pending_ntp->local_tab_id());
-  group.RemoveTabFromSync(pending_ntp->saved_tab_guid());
+  group.RemoveTabFromSync(pending_ntp->saved_tab_guid(),
+                          /*removed_by=*/GaiaId());
 }
 
 SavedTabGroupTab* SavedTabGroupModel::FindPendingNtpInGroup(
@@ -829,6 +831,35 @@ void SavedTabGroupModel::MigrateTabGroupSavesUIUpdate() {
       observer.SavedTabGroupUpdatedLocally(saved_tab_groups_[i].saved_guid(),
                                            /*tab_guid=*/std::nullopt);
     }
+  }
+}
+
+void SavedTabGroupModel::MarkTransitionedToShared(
+    const base::Uuid& shared_group_id) {
+  SavedTabGroup* group = GetMutableGroup(shared_group_id);
+  CHECK(group);
+  group->MarkTransitionedToShared();
+  for (SavedTabGroupModelObserver& observer : observers_) {
+    observer.SavedTabGroupUpdatedLocally(group->saved_guid(),
+                                         /*tab_guid=*/std::nullopt);
+  }
+}
+
+void SavedTabGroupModel::SetGroupHidden(
+    const base::Uuid& originating_group_id) {
+  SavedTabGroup* group = GetMutableGroup(originating_group_id);
+  CHECK(group);
+  group->SetIsHidden(true);
+  for (SavedTabGroupModelObserver& observer : observers_) {
+    observer.SavedTabGroupUpdatedLocally(group->saved_guid(),
+                                         /*tab_guid=*/std::nullopt);
+  }
+}
+
+void SavedTabGroupModel::OnSyncBridgeUpdateTypeChanged(
+    SyncBridgeUpdateType sync_bridge_update_type) {
+  for (SavedTabGroupModelObserver& observer : observers_) {
+    observer.OnSyncBridgeUpdateTypeChanged(sync_bridge_update_type);
   }
 }
 

@@ -2,11 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// https://github.com/explainers-by-googlers/prompt-api
+// https://github.com/webmachinelearning/prompt-api
 
-enum AILanguageModelInitialPromptRole { "system", "user", "assistant" };
-enum AILanguageModelPromptRole { "user", "assistant" };
-
+// TODO(crbug.com/390459309): remove `AILanguageModelCapabilities`.
 [
   Exposed=(Window,Worker),
   SecureContext,
@@ -25,6 +23,8 @@ interface AILanguageModelCapabilities {
   readonly attribute unsigned long? maxTopK;
   [Measure]
   readonly attribute float? defaultTemperature;
+  [Measure]
+  readonly attribute float? maxTemperature;
 };
 
 [
@@ -33,6 +33,7 @@ interface AILanguageModelCapabilities {
   RuntimeEnabled=AIPromptAPI
 ]
 interface AILanguageModelFactory {
+  // TODO(crbug.com/390459309): remove `capabilities()`.
   [
     Measure,
     CallWith=ScriptState,
@@ -47,4 +48,18 @@ interface AILanguageModelFactory {
   Promise<AILanguageModel> create(
     optional AILanguageModelCreateOptions options = {}
   );
+  [
+    Measure,
+    CallWith=ScriptState,
+    RaisesException
+  ]
+  Promise<AIAvailability> availability(
+    optional AILanguageModelCreateCoreOptions options = {}
+  );
+  [
+    Measure,
+    CallWith=ScriptState,
+    RaisesException
+  ]
+  Promise<AILanguageModelParams?> params();
 };

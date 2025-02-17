@@ -72,6 +72,7 @@ class CORE_EXPORT StyleRuleBase : public GarbageCollected<StyleRuleBase> {
     kLayerBlock,
     kLayerStatement,
     kNestedDeclarations,
+    kFunctionDeclarations,
     kNamespace,
     kContainer,
     kCounterStyle,
@@ -108,6 +109,9 @@ class CORE_EXPORT StyleRuleBase : public GarbageCollected<StyleRuleBase> {
   bool IsKeyframeRule() const { return GetType() == kKeyframe; }
   bool IsLayerBlockRule() const { return GetType() == kLayerBlock; }
   bool IsLayerStatementRule() const { return GetType() == kLayerStatement; }
+  bool IsFunctionDeclarationsRule() const {
+    return GetType() == kFunctionDeclarations;
+  }
   bool IsNestedDeclarationsRule() const {
     return GetType() == kNestedDeclarations;
   }
@@ -621,8 +625,14 @@ class StyleRuleCharset : public StyleRuleBase {
 class CORE_EXPORT StyleRuleFunction : public StyleRuleGroup {
  public:
   struct Parameter {
+    DISALLOW_NEW();
+
+   public:
+    void Trace(blink::Visitor*) const;
+
     String name;
     CSSSyntaxDefinition type;
+    Member<CSSVariableData> default_value;
   };
 
   // The body of the function is represented by `child_rules`.
@@ -647,20 +657,20 @@ class CORE_EXPORT StyleRuleFunction : public StyleRuleGroup {
   //
   // TODO(crbug.com/325504770): Support parsing/evaluation of conditionals.
   StyleRuleFunction(AtomicString name,
-                    Vector<Parameter> parameters,
+                    HeapVector<Parameter> parameters,
                     HeapVector<Member<StyleRuleBase>> child_rules,
                     CSSSyntaxDefinition return_type);
   StyleRuleFunction(const StyleRuleFunction&) = delete;
 
   const AtomicString& GetName() const { return name_; }
-  const Vector<Parameter>& GetParameters() const { return parameters_; }
+  const HeapVector<Parameter>& GetParameters() const { return parameters_; }
   const CSSSyntaxDefinition& GetReturnType() const { return return_type_; }
 
   void TraceAfterDispatch(blink::Visitor*) const;
 
  private:
   AtomicString name_;
-  Vector<Parameter> parameters_;
+  HeapVector<Parameter> parameters_;
   CSSSyntaxDefinition return_type_;
 };
 
@@ -817,5 +827,8 @@ struct DowncastTraits<StyleRuleApplyMixin> {
 };
 
 }  // namespace blink
+
+WTF_ALLOW_CLEAR_UNUSED_SLOTS_WITH_MEM_FUNCTIONS(
+    blink::StyleRuleFunction::Parameter)
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_CORE_CSS_STYLE_RULE_H_

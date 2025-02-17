@@ -17,6 +17,8 @@
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "chrome/browser/new_tab_page/feature_promo_helper/new_tab_page_feature_promo_helper.h"
+#include "chrome/browser/new_tab_page/microsoft_auth/microsoft_auth_service.h"
+#include "chrome/browser/new_tab_page/microsoft_auth/microsoft_auth_service_observer.h"
 #include "chrome/browser/new_tab_page/modules/new_tab_page_modules.h"
 #include "chrome/browser/new_tab_page/promos/promo_service.h"
 #include "chrome/browser/new_tab_page/promos/promo_service_observer.h"
@@ -28,6 +30,7 @@
 #include "chrome/browser/themes/theme_service_observer.h"
 #include "chrome/browser/ui/search/ntp_user_data_logger.h"
 #include "chrome/browser/ui/webui/new_tab_page/new_tab_page.mojom.h"
+#include "chrome/browser/ui/webui/ntp_microsoft_auth/ntp_microsoft_auth_shared_ui.mojom.h"
 #include "chrome/common/search/ntp_logging_events.h"
 #include "components/optimization_guide/core/model_execution/settings_enabled_observer.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -45,6 +48,7 @@
 class GURL;
 class NtpBackgroundService;
 class Profile;
+class MicrosoftAuthService;
 class NTPUserDataLogger;
 class NewTabPageFeaturePromoHelper;
 
@@ -79,7 +83,8 @@ class NewTabPageHandler : public new_tab_page::mojom::PageHandler,
                           public NtpBackgroundServiceObserver,
                           public ui::SelectFileDialog::Listener,
                           public PromoServiceObserver,
-                          public optimization_guide::SettingsEnabledObserver {
+                          public optimization_guide::SettingsEnabledObserver,
+                          public MicrosoftAuthServiceObserver {
  public:
   NewTabPageHandler(mojo::PendingReceiver<new_tab_page::mojom::PageHandler>
                         pending_page_handler,
@@ -151,6 +156,7 @@ class NewTabPageHandler : public new_tab_page::mojom::PageHandler,
   void GetModulesIdNames(GetModulesIdNamesCallback callback) override;
   void SetModulesOrder(const std::vector<std::string>& module_ids) override;
   void GetModulesOrder(GetModulesOrderCallback callback) override;
+  void UpdateModulesLoadable() override;
   void SetCustomizeChromeSidePanelVisible(
       bool visible,
       new_tab_page::mojom::CustomizeChromeSection section) override;
@@ -204,6 +210,9 @@ class NewTabPageHandler : public new_tab_page::mojom::PageHandler,
 
   // SettingsEnabledObserver:
   void OnChangeInFeatureCurrentlyEnabledState(bool is_now_enabled) override;
+
+  // MicrosoftAuthServiceObserver:
+  void OnAuthStateUpdated() override;
 
   // SelectFileDialog::Listener:
   void FileSelected(const ui::SelectedFileInfo& file, int index) override;
@@ -263,6 +272,12 @@ class NewTabPageHandler : public new_tab_page::mojom::PageHandler,
 
   void SetCustomizeChromeSidePanelController(
       customize_chrome::SidePanelController* side_panel_controller);
+  void SetModuleHidden(const std::string& module_id, bool hidden);
+
+  // Synchronizes Microsoft module enablement with their current authentication
+  // state. The return value indicates whether the modules should be considered
+  // loadable.
+  bool SyncMicrosoftModulesWithAuth();
 
   ChooseLocalCustomBackgroundCallback choose_local_custom_background_callback_;
   raw_ptr<NtpBackgroundService> ntp_background_service_;
@@ -292,6 +307,7 @@ class NewTabPageHandler : public new_tab_page::mojom::PageHandler,
       loader_map_;
   PrefChangeRegistrar pref_change_registrar_;
   raw_ptr<PromoService> promo_service_;
+  raw_ptr<MicrosoftAuthService> microsoft_auth_service_;
   raw_ptr<OptimizationGuideKeyedService> optimization_guide_keyed_service_;
   base::ScopedObservation<ui::NativeTheme, ui::NativeThemeObserver>
       native_theme_observation_{this};
@@ -302,6 +318,8 @@ class NewTabPageHandler : public new_tab_page::mojom::PageHandler,
       ntp_custom_background_service_observation_{this};
   base::ScopedObservation<PromoService, PromoServiceObserver>
       promo_service_observation_{this};
+  base::ScopedObservation<MicrosoftAuthService, MicrosoftAuthServiceObserver>
+      microsoft_auth_service_observation_{this};
   std::optional<base::TimeTicks> promo_load_start_time_;
   base::Value::Dict interaction_module_id_trigger_dict_;
 

@@ -8,14 +8,12 @@
 
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
-#include "base/functional/callback_helpers.h"
 #include "base/memory/weak_ptr.h"
 #include "base/power_monitor/battery_state_sampler.h"
 #include "base/power_monitor/power_monitor_buildflags.h"
 #include "base/system/sys_info.h"
 #include "base/time/default_tick_clock.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/performance_manager/decorators/helpers/page_live_state_decorator_helper.h"
 #include "chrome/browser/performance_manager/execution_context_priority/side_panel_loading_voter.h"
@@ -24,6 +22,7 @@
 #include "chrome/browser/performance_manager/policies/background_tab_loading_policy.h"
 #include "chrome/browser/performance_manager/policies/frame_throttling_policy.h"
 #include "chrome/browser/performance_manager/policies/freezing_opt_out_checker.h"
+#include "chrome/browser/performance_manager/policies/keep_alive_dse_policy.h"
 #include "chrome/browser/performance_manager/policies/policy_features.h"
 #include "chrome/browser/performance_manager/policies/working_set_trimmer_policy.h"
 #include "chrome/browser/performance_manager/user_tuning/profile_discard_opt_out_list_helper.h"
@@ -33,6 +32,7 @@
 #include "components/performance_manager/embedder/graph_features.h"
 #include "components/performance_manager/embedder/performance_manager_lifetime.h"
 #include "components/performance_manager/embedder/performance_manager_registry.h"
+#include "components/performance_manager/embedder/scoped_global_scenario_memory.h"
 #include "components/performance_manager/graph/policies/bfcache_policy.h"
 #include "components/performance_manager/graph/policies/process_priority_policy.h"
 #include "components/performance_manager/performance_manager_feature_observer_client.h"
@@ -43,15 +43,16 @@
 #include "components/performance_manager/public/features.h"
 #include "components/performance_manager/public/graph/graph.h"
 #include "components/performance_manager/public/metrics/page_resource_monitor.h"
-#include "components/performance_manager/public/scenarios/performance_scenarios.h"
 #include "components/performance_manager/public/user_tuning/tab_revisit_tracker.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_features.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "base/allocator/buildflags.h"
+#include "chrome/browser/performance_manager/policies/oom_score_policy_chromeos.h"
+#include "chrome/browser/performance_manager/policies/report_page_processes_policy.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "components/performance_manager/power/battery_level_provider_chromeos.h"
 #include "components/performance_manager/power/dbus_power_manager_sampling_event_source.h"
@@ -60,11 +61,6 @@
 #include "chrome/browser/performance_manager/policies/userspace_swap_policy_chromeos.h"
 #endif  // defined(ARCH_CPU_X86_64)
 
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
-#if BUILDFLAG(IS_CHROMEOS)
-#include "chrome/browser/performance_manager/policies/oom_score_policy_chromeos.h"
-#include "chrome/browser/performance_manager/policies/report_page_processes_policy.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -87,7 +83,6 @@
 
 #if BUILDFLAG(IS_WIN)
 #include "base/path_service.h"
-#include "components/performance_manager/graph/policies/prefetch_virtual_memory_policy.h"
 #endif
 
 namespace {
@@ -116,8 +111,7 @@ class FreezingDiscarder : public performance_manager::freezing::Discarder {
     CHECK(helper);
     helper->ImmediatelyDiscardMultiplePages(
         page_nodes,
-        ::mojom::LifecycleUnitDiscardReason::FROZEN_WITH_GROWING_MEMORY,
-        base::DoNothing());
+        ::mojom::LifecycleUnitDiscardReason::FROZEN_WITH_GROWING_MEMORY);
   }
 };
 
@@ -164,7 +158,7 @@ void ChromeBrowserMainExtraPartsPerformanceManager::CreatePoliciesAndDecorators(
                            CreatePolicyForPlatform());
   }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 #if defined(ARCH_CPU_X86_64)
   if (performance_manager::policies::UserspaceSwapPolicy::
           UserspaceSwapSupportedAndEnabled()) {
@@ -173,9 +167,6 @@ void ChromeBrowserMainExtraPartsPerformanceManager::CreatePoliciesAndDecorators(
   }
 #endif  // defined(ARCH_CPU_X86_64)
 
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
-#if BUILDFLAG(IS_CHROMEOS)
   graph->PassToGraph(std::make_unique<
                      performance_manager::policies::OomScorePolicyChromeOS>());
   graph->PassToGraph(
@@ -253,19 +244,6 @@ void ChromeBrowserMainExtraPartsPerformanceManager::CreatePoliciesAndDecorators(
   }
 #endif  // !BUILDFLAG(IS_ANDROID)
 
-#if BUILDFLAG(IS_WIN)
-  if (base::FeatureList::IsEnabled(
-          performance_manager::features::kPrefetchVirtualMemoryPolicy)) {
-    base::FilePath current_module_path;
-    if (base::PathService::Get(base::FILE_MODULE, &current_module_path)) {
-      graph->PassToGraph(
-          std::make_unique<
-              performance_manager::policies::PrefetchVirtualMemoryPolicy>(
-              std::move(current_module_path)));
-    }
-  }
-#endif  // BUILDFLAG(IS_WIN)
-
 #if !BUILDFLAG(IS_ANDROID)
   if (auto* voting_system = graph->GetRegisteredObjectAs<
                             performance_manager::execution_context_priority::
@@ -277,6 +255,12 @@ void ChromeBrowserMainExtraPartsPerformanceManager::CreatePoliciesAndDecorators(
                                SidePanelLoadingVoter>();
   }
 #endif  // !BUILDFLAG(IS_ANDROID)
+
+  if (base::FeatureList::IsEnabled(performance_manager::features::
+                                       kKeepDefaultSearchEngineRendererAlive)) {
+    graph->PassToGraph(
+        std::make_unique<performance_manager::policies::KeepAliveDSEPolicy>());
+  }
 }
 
 content::FeatureObserverClient*
@@ -350,7 +334,7 @@ void ChromeBrowserMainExtraPartsPerformanceManager::PostCreateThreads() {
     // TODO(crbug.com/40871810): All of the battery level machinery should be in
     // the same location, and the ifdefs should be contained to the
     // `BatteryLevelProvider` and SamplingEventSource` instantiation functions.
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     battery_state_sampler_ = std::make_unique<base::BatteryStateSampler>(
         std::make_unique<
             performance_manager::power::DbusPowerManagerSamplingEventSource>(

@@ -21,14 +21,16 @@
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
 #import "ios/chrome/browser/shared/public/commands/popup_menu_commands.h"
+#import "ios/chrome/browser/shared/public/commands/settings_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/adaptive_toolbar_coordinator+subclassing.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/primary_toolbar_mediator.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/primary_toolbar_view_controller.h"
+#import "ios/chrome/browser/toolbar/ui_bundled/primary_toolbar_view_controller_delegate.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/tab_groups/coordinator/tab_group_indicator_coordinator.h"
 
-@interface PrimaryToolbarCoordinator ()
+@interface PrimaryToolbarCoordinator () <PrimaryToolbarViewControllerDelegate>
 
 // Whether the coordinator is started.
 @property(nonatomic, assign, getter=isStarted) BOOL started;
@@ -55,24 +57,18 @@
     return;
   }
 
-  BOOL isOffTheRecord = self.browser->GetProfile()->IsOffTheRecord();
+  CommandDispatcher* dispatcher = self.browser->GetCommandDispatcher();
 
-  if (!isOffTheRecord) {
-    DefaultBrowserBannerPromoAppAgent* agent =
-        [DefaultBrowserBannerPromoAppAgent
-            agentFromApp:self.browser->GetSceneState().profileState.appState];
-    _mediator = [[PrimaryToolbarMediator alloc]
-        initWithDefaultBrowserBannerPromoAppAgent:agent];
-  }
+  BOOL isOffTheRecord = self.browser->GetProfile()->IsOffTheRecord();
 
   self.viewController = [[PrimaryToolbarViewController alloc] init];
   self.viewController.shouldHideOmniboxOnNTP = !isOffTheRecord;
   self.viewController.omniboxCommandsHandler =
-      HandlerForProtocol(self.browser->GetCommandDispatcher(), OmniboxCommands);
-  self.viewController.popupMenuCommandsHandler = HandlerForProtocol(
-      self.browser->GetCommandDispatcher(), PopupMenuCommands);
+      HandlerForProtocol(dispatcher, OmniboxCommands);
+  self.viewController.popupMenuCommandsHandler =
+      HandlerForProtocol(dispatcher, PopupMenuCommands);
   CHECK(self.viewControllerDelegate);
-  self.viewController.delegate = self.viewControllerDelegate;
+  self.viewController.delegate = self;
   self.viewController.toolbarHeightDelegate = self.toolbarHeightDelegate;
   self.viewController.layoutGuideCenter =
       LayoutGuideCenterForBrowser(self.browser);
@@ -82,7 +78,18 @@
   self.viewController.buttonFactory =
       [self buttonFactoryWithType:ToolbarType::kPrimary];
 
-  _mediator.consumer = self.viewController;
+  if (DefaultBrowserBannerPromoAppAgent* agent =
+          [self activeBannerPromoAppAgent]) {
+    _mediator = [[PrimaryToolbarMediator alloc]
+        initWithDefaultBrowserBannerPromoAppAgent:agent];
+    _mediator.settingsHandler =
+        HandlerForProtocol(dispatcher, SettingsCommands);
+    self.viewController.bannerPromoDelegate = _mediator;
+
+    agent.UICurrentlySupportsPromo = [self viewControllerSupportsBannerPromo];
+
+    _mediator.consumer = self.viewController;
+  }
 
   [super start];
   self.started = YES;
@@ -127,10 +134,70 @@
   return self.viewController;
 }
 
+#pragma mark - Private
+
+// Returns whether the banner promo is supported given the current view
+// controller state.
+- (BOOL)viewControllerSupportsBannerPromo {
+  if (self.viewController.locationBarIsExpanded) {
+    return NO;
+  }
+
+  // iPad screen is always large enough to show the banner.
+  BOOL isIPad =
+      UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad;
+  // On smaller iPhone screens, the promo is only supported in split toolbar
+  // mode. Otherwise, it takes up too much space.
+  return isIPad || IsSplitToolbarMode(self.viewController);
+}
+
+// Returns the active banner promo app agent if it is available currently.
+- (DefaultBrowserBannerPromoAppAgent*)activeBannerPromoAppAgent {
+  if (self.browser->GetProfile()->IsOffTheRecord()) {
+    return nil;
+  }
+
+  return [DefaultBrowserBannerPromoAppAgent
+      agentFromApp:self.browser->GetSceneState().profileState.appState];
+}
+
 #pragma mark - ToolbarCommands
 
 - (void)triggerToolbarSlideInAnimation {
   [self.viewController triggerToolbarSlideInAnimationFromBelow:NO];
+}
+
+#pragma mark - PrimaryToolbarViewControllerDelegate
+
+- (void)viewControllerTraitCollectionDidChange:
+    (UITraitCollection*)previousTraitCollection {
+  [self.viewControllerDelegate
+      viewControllerTraitCollectionDidChange:previousTraitCollection];
+
+  [self activeBannerPromoAppAgent].UICurrentlySupportsPromo =
+      [self viewControllerSupportsBannerPromo];
+}
+
+- (void)close {
+  [self.viewControllerDelegate close];
+}
+
+- (void)locationBarExpandedInViewController:
+    (PrimaryToolbarViewController*)viewController {
+  [self.viewControllerDelegate
+      locationBarExpandedInViewController:viewController];
+
+  [self activeBannerPromoAppAgent].UICurrentlySupportsPromo =
+      [self viewControllerSupportsBannerPromo];
+}
+
+- (void)locationBarContractedInViewController:
+    (PrimaryToolbarViewController*)viewController {
+  [self.viewControllerDelegate
+      locationBarContractedInViewController:viewController];
+
+  [self activeBannerPromoAppAgent].UICurrentlySupportsPromo =
+      [self viewControllerSupportsBannerPromo];
 }
 
 @end

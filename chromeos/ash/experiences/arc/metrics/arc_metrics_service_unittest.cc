@@ -4,22 +4,22 @@
 
 #include "chromeos/ash/experiences/arc/metrics/arc_metrics_service.h"
 
+#include <algorithm>
 #include <array>
 #include <map>
 #include <optional>
 #include <utility>
 #include <vector>
 
-#include "ash/components/arc/arc_prefs.h"
 #include "base/command_line.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_samples.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "chromeos/ash/components/dbus/concierge/fake_concierge_client.h"
 #include "chromeos/ash/components/dbus/session_manager/fake_session_manager_client.h"
+#include "chromeos/ash/experiences/arc/arc_prefs.h"
 #include "chromeos/ash/experiences/arc/metrics/arc_metrics_constants.h"
 #include "chromeos/ash/experiences/arc/metrics/stability_metrics_manager.h"
 #include "chromeos/ash/experiences/arc/session/arc_service_manager.h"
@@ -342,7 +342,7 @@ TEST_F(ArcMetricsServiceTest, GetArcStartTimeFromEvents) {
 
   // Check that the upgrade event was removed from events.
   EXPECT_TRUE(
-      base::ranges::none_of(events, [](const mojom::BootProgressEventPtr& ev) {
+      std::ranges::none_of(events, [](const mojom::BootProgressEventPtr& ev) {
         return ev->event.compare(kBootProgressArcUpgraded) == 0;
       }));
 }
@@ -626,7 +626,7 @@ void ExpectOneSampleAppKillCountsForVm(
   for (const auto counter : kKillCounterInfo) {
     const auto name = base::StringPrintf(
         "Arc.App.LowMemoryKills%s.%sCount10Minutes", vm_prefix, counter.name);
-    base::Histogram::Count value =
+    base::Histogram::Count32 value =
         (*c1).*(counter.member) - (*c0).*(counter.member);
     tester.ExpectUniqueSample(name, value, 1);
   }

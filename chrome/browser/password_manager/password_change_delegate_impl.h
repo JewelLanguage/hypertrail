@@ -10,23 +10,22 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/time/time.h"
 #include "chrome/browser/password_manager/password_change_delegate.h"
-#include "components/autofill/core/common/form_data.h"
-#include "components/optimization_guide/core/model_quality/model_quality_log_entry.h"
-#include "components/optimization_guide/core/optimization_guide_model_executor.h"
-#include "components/password_manager/core/browser/password_form.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "ui/accessibility/ax_tree_update.h"
 #include "url/gurl.h"
 
 namespace content {
 class WebContents;
+enum class Visibility;
 }
 
 namespace password_manager {
 class PasswordFormManager;
-class PasswordManagerDriver;
 }  // namespace password_manager
+
+class ChangeFormSubmissionVerifier;
 
 namespace {
 class ParsedPasswordFormWaiter;
@@ -44,6 +43,10 @@ class PasswordChangeDelegateImpl : public PasswordChangeDelegate,
 
   static constexpr base::TimeDelta kChangePasswordFormWaitingTimeout =
       base::Seconds(10);
+  static constexpr char kFinalPasswordChangeStatusHistogram[] =
+      "PasswordManager.FinalPasswordChangeStatus";
+  static constexpr char kWasPasswordChangeNewTabFocused[] =
+      "PasswordManager.WasPasswordChangeNewTabFocused";
 
   PasswordChangeDelegateImpl(GURL change_password_url,
                              std::u16string username,
@@ -56,24 +59,23 @@ class PasswordChangeDelegateImpl : public PasswordChangeDelegate,
   PasswordChangeDelegateImpl& operator=(const PasswordChangeDelegateImpl&) =
       delete;
 
+  // Sets `kOfferingPasswordChange` state and triggers the leak check bubble.
+  void OfferPasswordChangeUi();
+
   base::WeakPtr<PasswordChangeDelegate> AsWeakPtr() override;
 
  private:
   // PasswordChangeDelegate Impl
+  void StartPasswordChangeFlow() override;
   bool IsPasswordChangeOngoing(content::WebContents* web_contents) override;
   State GetCurrentState() const override;
   void Stop() override;
+  void Restart() override;
 #if !BUILDFLAG(IS_ANDROID)
   void OpenPasswordChangeTab() override;
 #endif
-  void SuccessfulSubmissionDetected();
   void OnPasswordFormSubmission(content::WebContents* web_contents) override;
-  void ProcessTree(ui::AXTreeUpdate& ax_tree_update);
   void OnPrivacyNoticeAccepted() override;
-  void OnExecutionResponseCallback(
-      optimization_guide::OptimizationGuideModelExecutionResult
-          execution_result,
-      std::unique_ptr<optimization_guide::ModelQualityLogEntry> log_entry);
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
   std::u16string GetDisplayOrigin() const override;
@@ -82,6 +84,7 @@ class PasswordChangeDelegateImpl : public PasswordChangeDelegate,
 
   // content::WebContentsObserver Impl
   void WebContentsDestroyed() override;
+  void OnVisibilityChanged(content::Visibility visibility) override;
 
   // Opens the tab for password change and start looking for change password
   // form.
@@ -93,17 +96,13 @@ class PasswordChangeDelegateImpl : public PasswordChangeDelegate,
   void OnPasswordChangeFormParsed(
       password_manager::PasswordFormManager* form_manager);
 
-  void FillChangePasswordForm(
-      password_manager::PasswordForm form,
-      base::WeakPtr<password_manager::PasswordManagerDriver> driver);
-  void ChangePasswordFormFilled(const autofill::FormData& submitted_form);
+  void OnChangeFormSubmissionVerified(bool result);
 
   bool IsPrivacyNoticeAcknowledged() const;
 
   const GURL change_password_url_;
   const std::u16string username_;
   const std::u16string original_password_;
-  bool submission_detected_ = false;
 
   std::u16string generated_password_;
 
@@ -111,15 +110,18 @@ class PasswordChangeDelegateImpl : public PasswordChangeDelegate,
   OpenPasswordChangeTabCallback open_password_change_tab_callback_;
   base::WeakPtr<content::WebContents> executor_;
 
-  State current_state_ = State::kWaitingForChangePasswordForm;
+  State current_state_ = static_cast<State>(-1);
 
   // Class which awaits for change password form to appear.
   std::unique_ptr<ParsedPasswordFormWaiter> form_waiter_;
 
-  // Form manager for displayed change password form.
-  std::unique_ptr<password_manager::PasswordFormManager> form_manager_;
+  // Helper class which submits a form and verifies submission.
+  std::unique_ptr<ChangeFormSubmissionVerifier> submission_verifier_;
 
   base::ObserverList<Observer, /*check_empty=*/true> observers_;
+
+  base::Time flow_start_time_;
+  bool was_password_change_tab_focused_ = false;
 
   base::WeakPtrFactory<PasswordChangeDelegateImpl> weak_ptr_factory_{this};
 };

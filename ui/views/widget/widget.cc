@@ -5,6 +5,7 @@
 #include "ui/views/widget/widget.h"
 
 #include <algorithm>
+#include <optional>
 #include <set>
 #include <utility>
 
@@ -15,7 +16,6 @@
 #include "base/i18n/rtl.h"
 #include "base/notreached.h"
 #include "base/observer_list.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/current_thread.h"
 #include "base/trace_event/base_tracing.h"
@@ -36,12 +36,14 @@
 #include "ui/color/color_provider_manager.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/layer.h"
+#include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/image_skia.h"
+#include "ui/gfx/native_widget_types.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/drag_controller.h"
 #include "ui/views/event_monitor.h"
@@ -115,6 +117,19 @@ void NotifyCaretBoundsChanged(ui::InputMethod* input_method) {
     input_method->OnCaretBoundsChanged(client);
   }
 }
+
+#if BUILDFLAG(IS_WIN)
+ui::mojom::WindowShowState GetShowState(views::Widget* widget) {
+  if (widget->IsMaximized()) [[unlikely]] {
+    return ui::mojom::WindowShowState::kMaximized;
+  } else if (widget->IsMinimized()) [[unlikely]] {
+    return ui::mojom::WindowShowState::kMinimized;
+  } else if (widget->IsFullscreen()) [[unlikely]] {
+    return ui::mojom::WindowShowState::kFullscreen;
+  }
+  return ui::mojom::WindowShowState::kNormal;
+}
+#endif
 
 }  // namespace
 
@@ -219,6 +234,14 @@ bool Widget::InitParams::ShouldInitAsHeadless() const {
   return false;
 }
 
+void Widget::InitParams::SetParent(Widget* parent_widget) {
+  SetParent(parent_widget->GetNativeView());
+}
+
+void Widget::InitParams::SetParent(gfx::NativeView parent_view) {
+  parent = parent_view;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Widget, public:
 
@@ -232,6 +255,7 @@ Widget::~Widget() {
   // DestroyRootView() will cause InvalidateLayout() to ScheduleLayout() which
   // is unnecessary.
   widget_closed_ = true;
+  autosize_task_factory_.InvalidateWeakPtrs();
 
   // The following Notification order is preserved here:
   //   1. WidgetObserver::OnWidgetDestroying
@@ -373,7 +397,7 @@ void Widget::ReparentNativeView(gfx::NativeView native_view,
   Widget* parent_widget =
       new_parent ? GetWidgetForNativeView(new_parent) : nullptr;
   if (child_widget) {
-    child_widget->SetParent(parent_widget);
+    child_widget->HandleNativeWidgetReparented(parent_widget);
   }
 }
 
@@ -621,6 +645,13 @@ gfx::NativeWindow Widget::GetNativeWindow() const {
                         : gfx::NativeWindow();
 }
 
+std::optional<display::Display> Widget::GetNearestDisplay() {
+  if (auto native_view = GetNativeView()) {
+    return display::Screen::GetScreen()->GetDisplayNearestView(native_view);
+  }
+  return std::nullopt;
+}
+
 void Widget::AddObserver(WidgetObserver* observer) {
   // Make sure that there is no nullptr in observer list. crbug.com/471649.
   CHECK(observer);
@@ -649,6 +680,14 @@ bool Widget::HasRemovalsObserver(const WidgetRemovalsObserver* observer) const {
 
 bool Widget::GetAccelerator(int cmd_id, ui::Accelerator* accelerator) const {
   return false;
+}
+
+void Widget::Reparent(Widget* parent) {
+  gfx::NativeView child_view = GetNativeView();
+  gfx::NativeView parent_view =
+      parent ? parent->GetNativeView() : gfx::NativeView();
+  internal::NativeWidgetPrivate::ReparentNativeView(child_view, parent_view);
+  HandleNativeWidgetReparented(parent);
 }
 
 void Widget::ViewHierarchyChanged(const ViewHierarchyChangedDetails& details) {
@@ -1316,14 +1355,13 @@ void Widget::OnRootViewLayoutInvalidated() {
     return;
   }
 
-  // Check if the widget needs to be auto resized based on its content's size.
-  if (is_autosized() && IsNativeWidgetInitialized() && GetContentsView() &&
-      widget_delegate_) {
-    if (gfx::Rect desired_bounds = widget_delegate_->GetDesiredWidgetBounds();
-        !desired_bounds.IsEmpty() &&
-        desired_bounds != GetWindowBoundsInScreen()) {
-      SetBounds(desired_bounds);
-      return;
+  if (is_autosized()) {
+    // There is no need to post another async auto-resize task when there is
+    // already one.
+    if (!autosize_task_factory_.HasWeakPtrs()) {
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE, base::BindOnce(&Widget::ResizeToDelegateDesiredBounds,
+                                    autosize_task_factory_.GetWeakPtr()));
     }
   }
 
@@ -1850,6 +1888,7 @@ void Widget::OnNativeWidgetVisibilityChanged(bool visible) {
   if (GetCompositor() && root && root->layer()) {
     root->layer()->SetVisible(visible);
   }
+  MaybeNotifyWindowModalVisibilityChanged(visible);
 }
 
 void Widget::OnNativeWidgetCreated() {
@@ -1880,7 +1919,7 @@ void Widget::OnNativeWidgetDestroyed() {
 
 void Widget::OnNativeWidgetParentChanged(gfx::NativeView parent) {
   Widget* parent_widget = parent ? GetWidgetForNativeView(parent) : nullptr;
-  SetParent(parent_widget);
+  HandleNativeWidgetReparented(parent_widget);
 }
 
 gfx::Size Widget::GetMinimumSize() const {
@@ -1912,16 +1951,26 @@ void Widget::OnNativeWidgetSizeChanged(const gfx::Size& new_size) {
   }
 
   NotifyCaretBoundsChanged(GetInputMethod());
-  SaveWindowPlacementIfInitialized();
+  SaveWindowPlacementIfNeeded();
+
+  base::AutoReset auto_reset(&save_window_placement_allowed_, false);
 
   observers_.Notify(&WidgetObserver::OnWidgetBoundsChanged, this,
                     GetWindowBoundsInScreen());
+
+#if BUILDFLAG(IS_WIN)
+  ui::mojom::WindowShowState show_state = GetShowState(this);
+  if (saved_show_state_ != show_state) {
+    OnNativeWidgetWindowShowStateChanged();
+    saved_show_state_ = show_state;
+  }
+#endif
 }
 
 void Widget::OnNativeWidgetWorkspaceChanged() {}
 
 void Widget::OnNativeWidgetWindowShowStateChanged() {
-  SaveWindowPlacementIfInitialized();
+  SaveWindowPlacementIfNeeded();
 
   observers_.Notify(&WidgetObserver::OnWidgetShowStateChanged, this);
 }
@@ -2197,7 +2246,7 @@ bool Widget::ShouldDescendIntoChildForEventHandling(
   // Don't descend into |child| if there is a view with a Layer that contains
   // the point and is stacked above |child_layer|.
   auto child_layer_iter =
-      base::ranges::find(root_layer->children(), child_layer);
+      std::ranges::find(root_layer->children(), child_layer);
   if (child_layer_iter == root_layer->children().end()) {
     return true;
   }
@@ -2210,7 +2259,7 @@ bool Widget::ShouldDescendIntoChildForEventHandling(
     ui::Layer* layer = view->layer();
     DCHECK(layer);
     if (layer->visible() && layer->bounds().Contains(location)) {
-      auto root_layer_iter = base::ranges::find(root_layer->children(), layer);
+      auto root_layer_iter = std::ranges::find(root_layer->children(), layer);
       if (child_layer_iter > root_layer_iter) {
         // |child| is on top of the remaining layers, no need to continue.
         return true;
@@ -2236,6 +2285,13 @@ bool Widget::ShouldDescendIntoChildForEventHandling(
 }
 
 void Widget::LayoutRootViewIfNecessary() {
+  if (is_autosized() && autosize_task_factory_.HasWeakPtrs()) {
+    // If there is an autosize task in the task queue, consume it before layout.
+    // Otherwise this layout may be incorrect.
+    autosize_task_factory_.InvalidateWeakPtrs();
+    ResizeToDelegateDesiredBounds();
+  }
+
   if (root_view_ && root_view_->needs_layout()) {
     // Widget name is only collected in local traces.
     TRACE_EVENT1("ui", "Widget::LayoutRootViewIfNecessary", "widget name",
@@ -2358,6 +2414,12 @@ void Widget::UpdateAccessibleNameForRootView() {
   }
 }
 
+void Widget::UpdateAccessibleURLForRootView(const GURL& url) {
+  if (root_view_) {
+    root_view_->UpdateAccessibleURL(url);
+  }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Widget, protected:
 
@@ -2417,8 +2479,8 @@ void Widget::SaveWindowPlacement() {
   widget_delegate_->SaveWindowPlacement(bounds, show_state);
 }
 
-void Widget::SaveWindowPlacementIfInitialized() {
-  if (native_widget_initialized_) {
+void Widget::SaveWindowPlacementIfNeeded() {
+  if (native_widget_initialized_ && save_window_placement_allowed_) {
     SaveWindowPlacement();
   }
 }
@@ -2473,7 +2535,7 @@ void Widget::SetInitialBoundsForFramelessWindow(const gfx::Rect& bounds) {
   }
 }
 
-void Widget::SetParent(Widget* parent) {
+void Widget::HandleNativeWidgetReparented(Widget* parent) {
   if (parent == parent_.get()) {
     return;
   }
@@ -2563,6 +2625,24 @@ void Widget::ClearFocusFromWidget() {
   }
 }
 
+void Widget::MaybeNotifyWindowModalVisibilityChanged(bool visible) {
+  if (!widget_delegate()) {
+    return;
+  }
+
+  if (widget_delegate()->GetModalType() != ui::mojom::ModalType::kWindow) {
+    return;
+  }
+
+  if (!parent_) {
+    return;
+  }
+
+  parent_->observers_.Notify(
+      &WidgetObserver::OnWidgetWindowModalVisibilityChanged, parent_.get(),
+      visible);
+}
+
 void Widget::HandleShowRequested() {
   sublevel_manager_->EnsureOwnerSublevel();
   internal::AnyWidgetObserverSingleton::GetInstance()->OnAnyWidgetShown(this);
@@ -2590,6 +2670,13 @@ void Widget::HandleWidgetDestroying() {
 void Widget::HandleWidgetDestroyed() {
   if (native_widget_destroyed_) {
     return;
+  }
+
+  // The widget can still be visible. This happens on macOS when
+  // the client destroys a CLIENT_OWNS_WIDGET widget. The OS has no
+  // chance to send us a visibility change event.
+  if (IsVisible()) {
+    MaybeNotifyWindowModalVisibilityChanged(false);
   }
 
   ax_mode_observation_.Reset();
@@ -2628,8 +2715,22 @@ void Widget::OnChildRemoved(Widget* child_widget) {
   observers_.Notify(&WidgetObserver::OnWidgetChildRemoved, this, child_widget);
 }
 
+void Widget::ResizeToDelegateDesiredBounds() {
+  if (!IsNativeWidgetInitialized() || !widget_delegate_ || !GetContentsView()) {
+    return;
+  }
+
+  gfx::Rect desired_bounds = widget_delegate_->GetDesiredWidgetBounds();
+  if (desired_bounds.IsEmpty() || desired_bounds == GetWindowBoundsInScreen()) {
+    return;
+  }
+
+  // Size to contents view.
+  SetBounds(desired_bounds);
+}
+
 BEGIN_METADATA_BASE(Widget)
-ADD_READONLY_PROPERTY_METADATA(const char*, ClassName)
+ADD_READONLY_PROPERTY_METADATA(std::string_view, ClassName)
 ADD_READONLY_PROPERTY_METADATA(gfx::Rect, ClientAreaBoundsInScreen)
 ADD_READONLY_PROPERTY_METADATA(std::string, Name)
 ADD_READONLY_PROPERTY_METADATA(gfx::Rect, RestoredBounds)

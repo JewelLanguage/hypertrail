@@ -5,6 +5,7 @@
 #include "ui/views/accessibility/view_accessibility.h"
 
 #include "base/test/gtest_util.h"
+#include "ui/accessibility/ax_tree_id.h"
 #include "ui/accessibility/platform/ax_platform_for_test.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -239,6 +240,19 @@ TEST_F(ViewAccessibilityTest, ViewUsesChildViewCharacterOffsets) {
       data.GetIntListAttribute(ax::mojom::IntListAttribute::kCharacterOffsets),
       data_2.GetIntListAttribute(
           ax::mojom::IntListAttribute::kCharacterOffsets));
+}
+
+TEST_F(ViewAccessibilityTest, AccessibleURL) {
+  const std::string& test_url("https://example.com");
+  view()->GetViewAccessibility().SetRootViewURL(test_url);
+  ui::AXNodeData node_data;
+  view()->GetViewAccessibility().GetAccessibleNodeData(&node_data);
+  EXPECT_EQ(node_data.GetStringAttribute(ax::mojom::StringAttribute::kUrl),
+            test_url);
+
+  // Setting the root view URL is only supported on the root view.
+  EXPECT_DCHECK_DEATH(
+      child_view()->GetViewAccessibility().SetRootViewURL(test_url));
 }
 
 TEST_F(ViewAccessibilityTest, LazyLoadingNoOverlap) {

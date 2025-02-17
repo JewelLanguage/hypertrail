@@ -4,21 +4,27 @@
 
 #include "chrome/browser/ui/ash/wm/coral_delegate_impl.h"
 
+#include "ash/constants/generative_ai_country_restrictions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "chrome/browser/ash/app_restore/full_restore_app_launch_handler.h"
 #include "chrome/browser/ash/app_restore/full_restore_service.h"
 #include "chrome/browser/ash/app_restore/full_restore_service_factory.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/ash/desks/desks_templates_app_launch_handler.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/webui/ash/scanner_feedback_dialog/scanner_feedback_dialog.h"
 #include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
 #include "chromeos/ash/services/coral/public/mojom/coral_service.mojom.h"
 #include "chromeos/ui/wm/desks/desks_helper.h"
 #include "components/app_constants/constants.h"
 #include "components/app_restore/restore_data.h"
+#include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/user_manager/user_manager.h"
+#include "components/variations/service/variations_service.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 
@@ -110,16 +116,21 @@ std::unique_ptr<app_restore::RestoreData> CoralGroupToRestoreData(
   return restore_data;
 }
 
-// Gets profile from the active user.
-Profile* GetActiveUserProfile() {
+content::BrowserContext* GetActiveUserBrowserContext() {
   const auto* active_user = user_manager::UserManager::Get()->GetActiveUser();
   if (!active_user) {
     return nullptr;
   }
 
-  auto* browser_context =
-      ash::BrowserContextHelper::Get()->GetBrowserContextByUser(active_user);
-  return Profile::FromBrowserContext(browser_context);
+  return ash::BrowserContextHelper::Get()->GetBrowserContextByUser(active_user);
+}
+
+// Gets profile from the active user.
+Profile* GetActiveUserProfile() {
+  if (auto* browser_context = GetActiveUserBrowserContext()) {
+    return Profile::FromBrowserContext(browser_context);
+  }
+  return nullptr;
 }
 
 // Creates a browser on the active desk.
@@ -162,6 +173,15 @@ Browser* FindTabOnDeskAtIndex(const GURL& url,
     }
   }
   return nullptr;
+}
+
+// Returns empty string on failure case, which would not pass
+// IsGenerativeAiAllowedForCountry check.
+std::string GetCountryCode() {
+  return (g_browser_process != nullptr &&
+          g_browser_process->variations_service() != nullptr)
+             ? g_browser_process->variations_service()->GetLatestCountry()
+             : "";
 }
 
 }  // namespace
@@ -236,4 +256,39 @@ void CoralDelegateImpl::MoveTabsInGroupToNewDesk(
 
 int CoralDelegateImpl::GetChromeDefaultRestoreId() {
   return Browser::kDefaultRestoreId;
+}
+
+void CoralDelegateImpl::OpenFeedbackDialog(
+    const std::string& group_description,
+    ash::ScannerDelegate::SendFeedbackCallback send_feedback_callback) {
+  auto* dialog = new ash::ScannerFeedbackDialog(
+      ash::ScannerFeedbackInfo(group_description, nullptr),
+      std::move(send_feedback_callback));
+  dialog->ShowSystemDialogForBrowserContext(GetActiveUserBrowserContext());
+}
+
+bool CoralDelegateImpl::CanUseGenerativeAiForCurrentProfile() {
+  // Check age restriction using account capabilities.
+  Profile* profile = GetActiveUserProfile();
+  if (!profile) {
+    return false;
+  }
+  auto* identity_manager = IdentityManagerFactory::GetForProfile(profile);
+  if (identity_manager == nullptr) {
+    return false;
+  }
+  const auto account_id =
+      identity_manager->GetPrimaryAccountId(signin::ConsentLevel::kSignin);
+  if (account_id.empty()) {
+    return false;
+  }
+  const AccountInfo extended_account_info =
+      identity_manager->FindExtendedAccountInfoByAccountId(account_id);
+  if (extended_account_info.capabilities.can_use_chromeos_generative_ai() !=
+      signin::Tribool::kTrue) {
+    return false;
+  }
+
+  // Check location restrictions.
+  return ash::IsGenerativeAiAllowedForCountry(GetCountryCode());
 }

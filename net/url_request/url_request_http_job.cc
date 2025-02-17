@@ -344,7 +344,8 @@ std::unique_ptr<URLRequestJob> URLRequestHttpJob::Create(URLRequest* request) {
           request->context()->transport_security_state()) {
     upgrade_decision = hsts->GetSSLUpgradeDecision(
         url.host(),
-        /*is_top_level_nav=*/request->isolation_info().IsMainFrameRequest(),
+        /*is_top_level_nav=*/
+        request->isolation_info().IsOutermostMainFrameRequest(),
         request->net_log());
   }
 
@@ -824,7 +825,7 @@ void URLRequestHttpJob::SetCookieHeaderAndStart(
     maybe_included_cookies.clear();
     for (auto& cookie : excluded_cookies) {
       cookie.access_result.status.AddExclusionReason(
-          CookieInclusionStatus::EXCLUDE_USER_PREFERENCES);
+          CookieInclusionStatus::ExclusionReason::EXCLUDE_USER_PREFERENCES);
     }
   } else {
     // Consult the delegate to ensure that they have the correct exclusion
@@ -938,8 +939,8 @@ void URLRequestHttpJob::SetCookieHeaderAndStart(
   if (service) {
     std::optional<device_bound_sessions::Session::Id> id =
         service->GetAnySessionRequiringDeferral(request_);
-    // If the request needs to be deferred while waiting for refresh,
-    // do not start the transaction at this time.
+    // If the request needs to be deferred while waiting for refresh, do not
+    // start the transaction at this time. This may also kick off a refresh.
     if (id) {
       service->DeferRequestForRefresh(
           request_, *id,
@@ -1081,12 +1082,13 @@ void URLRequestHttpJob::SaveCookiesAndNotifyHeadersComplete(int result) {
       // in this case.
       if (returned_status.IsInclude()) {
         returned_status.AddExclusionReason(
-            net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES);
+            net::CookieInclusionStatus::ExclusionReason::
+                EXCLUDE_USER_PREFERENCES);
       }
     }
     if (clear_site_data_prevents_cookies_from_being_stored) {
       returned_status.AddExclusionReason(
-          CookieInclusionStatus::EXCLUDE_FAILURE_TO_STORE);
+          CookieInclusionStatus::ExclusionReason::EXCLUDE_FAILURE_TO_STORE);
     }
     if (!returned_status.IsInclude()) {
       OnSetCookieResult(options, cookie_to_return, std::move(cookie_string),
@@ -1118,7 +1120,8 @@ void URLRequestHttpJob::OnSetCookieResult(const CookieOptions& options,
         NetLogEventType::COOKIE_INCLUSION_STATUS,
         [&](NetLogCaptureMode capture_mode) {
           return CookieInclusionStatusNetLogParams(
-              "store", cookie ? cookie.value().Name() : "",
+              cookie && cookie->IsExpired(base::Time::Now()) ? "expire" : "store",
+              cookie ? cookie.value().Name() : "",
               cookie ? cookie.value().Domain() : "",
               cookie ? cookie.value().Path() : "",
               cookie ? cookie.value().PartitionKey() : std::nullopt,
@@ -1146,6 +1149,9 @@ void URLRequestHttpJob::ProcessDeviceBoundSessionsHeader() {
     return;
   }
 
+  // If response header Sec-Session-Registration is present and configured
+  // appropriately, trigger a registration request per header value to attempt
+  // to create a new session.
   const auto& request_url = request_->url();
   auto* headers = GetResponseHeaders();
   std::vector<device_bound_sessions::RegistrationFetcherParam> params =
@@ -1154,9 +1160,13 @@ void URLRequestHttpJob::ProcessDeviceBoundSessionsHeader() {
   for (auto& param : params) {
     service->RegisterBoundSession(
         request_->device_bound_session_access_callback(), std::move(param),
-        request_->isolation_info(), request_->net_log());
+        request_->isolation_info(), request_->net_log(), request_->initiator());
   }
 
+  // If response header Sec-Session-Challenge is present and configured
+  // appropriately, for each header value, store the challenge in advance for
+  // the next relevant refresh request that gets triggered. This is to help
+  // avoid a round-trip for when the next refresh request is required.
   std::vector<device_bound_sessions::SessionChallengeParam> challenge_params =
       device_bound_sessions::SessionChallengeParam::CreateIfValid(request_url,
                                                                   headers);
@@ -1341,8 +1351,6 @@ void URLRequestHttpJob::RestartTransaction() {
   override_response_headers_ = nullptr;  // See https://crbug.com/801237.
   receive_headers_end_ = base::TimeTicks();
 
-  ResetTimer();
-
   // Update the cookies, since the cookie store may have been updated from the
   // headers in the 401/407. Since cookies were already appended to
   // extra_headers, we need to strip them out before adding them again.
@@ -1370,6 +1378,7 @@ void URLRequestHttpJob::RestartTransactionForRefresh() {
 void URLRequestHttpJob::RestartTransactionWithAuth(
     const AuthCredentials& credentials) {
   auth_credentials_ = credentials;
+  ResetTimer();
   RestartTransaction();
 }
 

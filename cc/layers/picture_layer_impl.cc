@@ -26,6 +26,7 @@
 #include "cc/base/math_util.h"
 #include "cc/benchmarks/micro_benchmark_impl.h"
 #include "cc/debug/debug_colors.h"
+#include "cc/layers/append_quads_context.h"
 #include "cc/layers/append_quads_data.h"
 #include "cc/layers/solid_color_layer_impl.h"
 #include "cc/paint/display_item_list.h"
@@ -203,7 +204,8 @@ void PictureLayerImpl::PushPropertiesTo(LayerImpl* base_layer) {
   layer_impl->SanityCheckTilingState();
 }
 
-void PictureLayerImpl::AppendQuads(viz::CompositorRenderPass* render_pass,
+void PictureLayerImpl::AppendQuads(const AppendQuadsContext& context,
+                                   viz::CompositorRenderPass* render_pass,
                                    AppendQuadsData* append_quads_data) {
   // RenderSurfaceImpl::AppendQuads sets mask properties in the DrawQuad for
   // the masked surface, which will apply to both the backdrop filter and the
@@ -284,7 +286,7 @@ void PictureLayerImpl::AppendQuads(viz::CompositorRenderPass* render_pass,
           .occlusion_in_content_space.GetOcclusionWithGivenDrawTransform(
               shared_quad_state->quad_to_target_transform);
 
-  if (current_draw_mode_ == DRAW_MODE_RESOURCELESS_SOFTWARE) {
+  if (context.draw_mode == DRAW_MODE_RESOURCELESS_SOFTWARE) {
     DCHECK(shared_quad_state->quad_layer_rect.origin() == gfx::Point(0, 0));
     AppendDebugBorderQuad(
         render_pass, shared_quad_state->quad_layer_rect, shared_quad_state,
@@ -439,6 +441,9 @@ void PictureLayerImpl::AppendQuads(viz::CompositorRenderPass* render_pass,
               scroll_tree.ScrollingContentsCullRect(element_id)) {
         if (const auto* scroll_node =
                 scroll_tree.FindNodeFromElementId(element_id)) {
+          if (!scroll_tree.CanRealizeScrollsOnPendingTree(*scroll_node)) {
+            continue;
+          }
           gfx::RectF visible_rect(
               gfx::Rect(scroll_node->container_origin,
                         scroll_tree.container_bounds(scroll_node->id)));
@@ -930,8 +935,8 @@ LCDTextDisallowedReason PictureLayerImpl::ComputeLCDTextDisallowedReason(
   }
 
   EffectNode* effect_node = GetEffectTree().Node(effect_tree_index());
-  if (effect_node->node_or_ancestor_has_filters ||
-      effect_node->affected_by_backdrop_filter) {
+  if (effect_node->lcd_text_disallowed_by_filter ||
+      effect_node->lcd_text_disallowed_by_backdrop_filter) {
     return LCDTextDisallowedReason::kPixelOrColorEffect;
   }
 

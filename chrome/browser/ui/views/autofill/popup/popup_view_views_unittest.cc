@@ -1409,7 +1409,7 @@ TEST_F(PopupViewViewsTest, CellSubPopupResetAfterSuggestionsUpdates) {
 
 // TODO(crbug.com/41487832): Enable on ChromeOS when test setup in the death
 // subprocess is fixed.
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS)
 // `PopupViewViewsTest` is not used in death tests because it sets up a complex
 // environment (namely creates a `TestingProfile`) that fails to be created in
 // the sub-process (see `EXPECT_CHECK_DEATH_WITH` doc for details). This fail
@@ -2015,27 +2015,6 @@ TEST_F(PopupViewViewsTest, AutofillAiLoadingOnSuggestionsChangedA11yFocus) {
   ASSERT_TRUE(row_view);
 
   EXPECT_EQ(1, counter.GetCount(ax::mojom::Event::kFocus, *row_view));
-}
-
-TEST_F(PopupViewViewsTest, AutofillAiSuggestionsLoadedAnnounced) {
-  views::test::AXEventCounter counter(views::AXEventManager::Get());
-  CreateAndShowView({SuggestionType::kAutofillAiLoadingState});
-  MockFunction<PopupViewViewsTestApi::A11yAnnouncer::RunType> a11y_announcer;
-  test_api(view()).SetA11yAnnouncer(
-      base::BindLambdaForTesting(a11y_announcer.AsStdFunction()));
-
-  EXPECT_CALL(
-      a11y_announcer,
-      Call(
-          l10n_util::GetStringUTF16(
-              IDS_AUTOFILL_PREDICTION_IMPROVEMENTS_SUGGESTIONS_LOADED_A11Y_HINT),
-          /*polite=*/true));
-
-  Suggestion feedback_suggestion(SuggestionType::kAutofillAiFeedback);
-  feedback_suggestion.voice_over = u"Required a11y message";
-  controller().set_suggestions({std::move(feedback_suggestion)});
-  static_cast<AutofillPopupView&>(view()).OnSuggestionsChanged(
-      /*prefer_prev_arrow_side=*/false);
 }
 
 TEST_F(PopupViewViewsTest, WarningOnShowA11yFocus) {

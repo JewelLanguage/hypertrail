@@ -34,11 +34,9 @@
 #include "chrome/browser/ash/app_mode/kiosk_app_launcher.h"
 #include "chrome/browser/ash/app_mode/kiosk_chrome_app_manager.h"
 #include "chrome/browser/ash/app_mode/test_kiosk_extension_builder.h"
-#include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/ash/crosapi/chrome_app_kiosk_service_ash.h"
 #include "chrome/browser/ash/crosapi/crosapi_ash.h"
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
-#include "chrome/browser/ash/crosapi/fake_browser_manager.h"
 #include "chrome/browser/ash/crosapi/idle_service_ash.h"
 #include "chrome/browser/ash/extensions/external_cache.h"
 #include "chrome/browser/ash/extensions/test_external_cache.h"
@@ -981,9 +979,10 @@ TEST_F(StartupAppLauncherTest, LaunchWithSecondaryApps) {
   EXPECT_TRUE(registry()->enabled_extensions().Contains(kTestPrimaryAppId));
   EXPECT_TRUE(registry()->enabled_extensions().Contains(kSecondaryAppId));
   EXPECT_TRUE(registry()->disabled_extensions().Contains(kExtraSecondaryAppId));
-  EXPECT_EQ(extensions::disable_reason::DISABLE_USER_ACTION,
-            extensions::ExtensionPrefs::Get(browser_context())
-                ->GetDisableReasons(kExtraSecondaryAppId));
+  EXPECT_THAT(extensions::ExtensionPrefs::Get(browser_context())
+                  ->GetDisableReasons(kExtraSecondaryAppId),
+              testing::UnorderedElementsAre(
+                  extensions::disable_reason::DISABLE_USER_ACTION));
 
   EXPECT_EQ(startup_launch_delegate_.WaitForNextLaunchState(),
             LaunchState::kLaunchSucceeded);
@@ -992,9 +991,10 @@ TEST_F(StartupAppLauncherTest, LaunchWithSecondaryApps) {
   EXPECT_TRUE(registry()->enabled_extensions().Contains(kTestPrimaryAppId));
   EXPECT_TRUE(registry()->enabled_extensions().Contains(kSecondaryAppId));
   EXPECT_TRUE(registry()->disabled_extensions().Contains(kExtraSecondaryAppId));
-  EXPECT_EQ(extensions::disable_reason::DISABLE_USER_ACTION,
-            extensions::ExtensionPrefs::Get(browser_context())
-                ->GetDisableReasons(kExtraSecondaryAppId));
+  EXPECT_THAT(extensions::ExtensionPrefs::Get(browser_context())
+                  ->GetDisableReasons(kExtraSecondaryAppId),
+              testing::UnorderedElementsAre(
+                  extensions::disable_reason::DISABLE_USER_ACTION));
 }
 
 TEST_F(StartupAppLauncherTest, LaunchWithSecondaryExtension) {
@@ -1365,9 +1365,8 @@ TEST_F(StartupAppLauncherTest,
   // Disable the secodnary app for a reason different than user action - that
   // disable reason should not be overriden during the kiosk launch.
   service()->DisableExtension(
-      kSecondaryAppId,
-      extensions::disable_reason::DISABLE_USER_ACTION |
-          extensions::disable_reason::DISABLE_BLOCKED_BY_POLICY);
+      kSecondaryAppId, {extensions::disable_reason::DISABLE_USER_ACTION,
+                        extensions::disable_reason::DISABLE_BLOCKED_BY_POLICY});
 
   InitializeLauncherWithNetworkReady();
   ASSERT_TRUE(DownloadAndInstallPrimaryApp(*primary_app));
@@ -1384,9 +1383,10 @@ TEST_F(StartupAppLauncherTest,
 
   EXPECT_TRUE(registry()->enabled_extensions().Contains(kTestPrimaryAppId));
   EXPECT_TRUE(registry()->disabled_extensions().Contains(kSecondaryAppId));
-  EXPECT_EQ(extensions::disable_reason::DISABLE_BLOCKED_BY_POLICY,
-            extensions::ExtensionPrefs::Get(browser_context())
-                ->GetDisableReasons(kSecondaryAppId));
+  EXPECT_THAT(extensions::ExtensionPrefs::Get(browser_context())
+                  ->GetDisableReasons(kSecondaryAppId),
+              testing::UnorderedElementsAre(
+                  extensions::disable_reason::DISABLE_BLOCKED_BY_POLICY));
 }
 
 TEST_F(StartupAppLauncherTest, PrimaryAppUpdatesToDisabledOnLaunch) {
@@ -1415,9 +1415,10 @@ TEST_F(StartupAppLauncherTest, PrimaryAppUpdatesToDisabledOnLaunch) {
 
   EXPECT_TRUE(registry()->enabled_extensions().Contains(kTestPrimaryAppId));
   EXPECT_TRUE(registry()->disabled_extensions().Contains(kSecondaryAppId));
-  EXPECT_EQ(extensions::disable_reason::DISABLE_USER_ACTION,
-            extensions::ExtensionPrefs::Get(browser_context())
-                ->GetDisableReasons(kSecondaryAppId));
+  EXPECT_THAT(extensions::ExtensionPrefs::Get(browser_context())
+                  ->GetDisableReasons(kSecondaryAppId),
+              testing::UnorderedElementsAre(
+                  extensions::disable_reason::DISABLE_USER_ACTION));
 }
 
 TEST_F(StartupAppLauncherTest, PrimaryAppUpdatesToEnabledOnLaunch) {

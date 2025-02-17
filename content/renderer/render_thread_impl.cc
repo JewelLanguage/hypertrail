@@ -9,6 +9,7 @@
 
 #include "content/renderer/render_thread_impl.h"
 
+#include <algorithm>
 #include <atomic>
 #include <limits>
 #include <map>
@@ -42,7 +43,6 @@
 #include "base/path_service.h"
 #include "base/process/process.h"
 #include "base/process/process_metrics.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -915,9 +915,9 @@ void RenderThreadImpl::InitializeRenderer(
   user_agent_metadata_ = user_agent_metadata;
   cors_exempt_header_list_ = cors_exempt_header_list;
 
-  blink::WebVector<blink::WebString> web_cors_exempt_header_list(
+  std::vector<blink::WebString> web_cors_exempt_header_list(
       cors_exempt_header_list.size());
-  base::ranges::transform(
+  std::ranges::transform(
       cors_exempt_header_list, web_cors_exempt_header_list.begin(),
       [](const auto& header) { return blink::WebString::FromLatin1(header); });
   blink::SetCorsExemptHeaderList(web_cors_exempt_header_list);
@@ -963,6 +963,12 @@ void RenderThreadImpl::RegisterSchemes() {
   if (base::FeatureList::IsEnabled(features::kWebUICodeCache)) {
     WebSecurityPolicy::RegisterURLSchemeAsCodeCacheWithHashing(chrome_scheme);
     WebSecurityPolicy::RegisterURLSchemeAsCodeCacheWithHashing(
+        chrome_untrusted_scheme);
+  }
+
+  if (base::FeatureList::IsEnabled(features::kWebUIBundledCodeCache)) {
+    WebSecurityPolicy::RegisterURLSchemeAsWebUIBundledBytecode(chrome_scheme);
+    WebSecurityPolicy::RegisterURLSchemeAsWebUIBundledBytecode(
         chrome_untrusted_scheme);
   }
 
@@ -1084,9 +1090,9 @@ media::GpuVideoAcceleratorFactories* RenderThreadImpl::GetGpuFactories() {
       std::move(gpu_channel_host),
       base::SingleThreadTaskRunner::GetCurrentDefault(),
       GetMediaSequencedTaskRunner(), std::move(media_context_provider),
-      std::move(codec_factory), GetGpuMemoryBufferManager(),
-      enable_video_gpu_memory_buffers, enable_media_stream_gpu_memory_buffers,
-      enable_video_decode_accelerator, enable_video_encode_accelerator));
+      std::move(codec_factory), enable_video_gpu_memory_buffers,
+      enable_media_stream_gpu_memory_buffers, enable_video_decode_accelerator,
+      enable_video_encode_accelerator));
 
   gpu_factories_.back()->SetRenderingColorSpace(rendering_color_space_);
   return gpu_factories_.back().get();

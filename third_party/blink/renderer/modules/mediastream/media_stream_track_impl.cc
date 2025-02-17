@@ -29,6 +29,7 @@
 
 #include "base/check_op.h"
 #include "base/functional/callback_helpers.h"
+#include "base/strings/to_string.h"
 #include "build/build_config.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/modules/mediastream/web_media_stream_track.h"
@@ -297,6 +298,17 @@ MediaStreamTrackImpl::MediaStreamTrackImpl(
   if (ready_state_ != MediaStreamSource::kReadyStateEnded) {
     EnsureFeatureHandleForScheduler();
   }
+  const std::optional<const MediaStreamDevice> source_device = device();
+  if (source_device && source_device->display_media_info) {
+    zoom_level_ = source_device->display_media_info->initial_zoom_level;
+  }
+
+  if (video_track) {
+    video_track->RegisterCaptureSurfaceResolutionChangeCallback(
+        WTF::BindRepeating(
+            &MediaStreamTrackImpl::MaybeDispatchConfigurationChange,
+            WrapWeakPersistent(this)));
+  }
 }
 
 MediaStreamTrackImpl::~MediaStreamTrackImpl() = default;
@@ -334,8 +346,8 @@ void MediaStreamTrackImpl::setEnabled(bool enabled) {
 
   component_->SetEnabled(enabled);
 
-  SendLogMessage(
-      String::Format("%s({enabled=%s})", __func__, enabled ? "true" : "false"));
+  SendLogMessage(String::Format("%s({enabled=%s})", __func__,
+                                base::ToString(enabled).c_str()));
 }
 
 bool MediaStreamTrackImpl::muted() const {
@@ -672,6 +684,33 @@ MediaTrackSettings* MediaStreamTrackImpl::getSettings() const {
     settings->setCursor(value);
   }
 
+#if BUILDFLAG(IS_WIN)
+  if (RuntimeEnabledFeatures::CapturedSurfaceResolutionEnabled(
+          execution_context_) &&
+      platform_settings.display_surface) {
+    std::optional<float> ratio = platform_settings.device_scale_factor;
+    if (platform_settings.display_surface ==
+            media::mojom::DisplayCaptureSurfaceType::BROWSER &&
+        zoom_level_ && ratio) {
+      ratio = zoom_level_.value() * ratio.value();
+      ratio = ratio.value() / 100.0f;
+    }
+
+    if (platform_settings.physical_frame_size) {
+      settings->setPhysicalWidth(
+          platform_settings.physical_frame_size->width());
+      settings->setPhysicalHeight(
+          platform_settings.physical_frame_size->height());
+      if (ratio) {
+        settings->setLogicalWidth(
+            platform_settings.physical_frame_size->width() / ratio.value());
+        settings->setLogicalHeight(
+            platform_settings.physical_frame_size->height() / ratio.value());
+      }
+    }
+  }
+#endif
+
   if (suppress_local_audio_playback_setting_.has_value()) {
     settings->setSuppressLocalAudioPlayback(
         suppress_local_audio_playback_setting_.value());
@@ -924,6 +963,21 @@ void MediaStreamTrackImpl::SourceChangedCaptureHandle() {
 
   DispatchEvent(*Event::Create(event_type_names::kCapturehandlechange));
 }
+
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+void MediaStreamTrackImpl::SourceChangedZoomLevel(int zoom_level) {
+  DCHECK(IsMainThread());
+  if (Ended()) {
+    return;
+  }
+
+  const bool zoom_level_changed = (zoom_level_ != zoom_level);
+  zoom_level_ = zoom_level;
+  if (zoom_level_changed) {
+    MaybeDispatchConfigurationChange(true);
+  }
+}
+#endif
 
 void MediaStreamTrackImpl::PropagateTrackEnded() {
   CHECK(!is_iterating_registered_media_streams_);

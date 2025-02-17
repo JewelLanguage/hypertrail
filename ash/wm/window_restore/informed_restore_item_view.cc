@@ -156,10 +156,10 @@ void InformedRestoreItemView::OnOneFaviconLoaded(IndexedImageCallback callback,
 
 void InformedRestoreItemView::OnAllFaviconsLoaded(
     std::vector<IndexedImagePair> indexed_favicons) {
-  base::ranges::sort(indexed_favicons,
-                     [](const auto& element_a, const auto& element_b) {
-                       return element_a.first < element_b.first;
-                     });
+  std::ranges::sort(indexed_favicons,
+                    [](const auto& element_a, const auto& element_b) {
+                      return element_a.first < element_b.first;
+                    });
 
   bool needs_layout = false;
   const size_t elements = indexed_favicons.size();
@@ -195,8 +195,10 @@ void InformedRestoreItemView::OnAllFaviconsLoaded(
           .SetBackground(views::CreateThemedRoundedRectBackground(
               cros_tokens::kCrosSysPrimary, kFaviconPreferredSize.width()));
     } else {
-      builder.SetImage(gfx::ImageSkiaOperations::CreateResizedImage(
-          favicon, skia::ImageOperations::RESIZE_BEST, kFaviconPreferredSize));
+      builder.SetImage(ui::ImageModel::FromImageSkia(
+          gfx::ImageSkiaOperations::CreateResizedImage(
+              favicon, skia::ImageOperations::RESIZE_BEST,
+              kFaviconPreferredSize)));
     }
 
     favicon_container_view_->AddChildView(std::move(builder).Build());

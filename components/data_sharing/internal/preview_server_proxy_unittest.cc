@@ -41,28 +41,28 @@ const char kExpectedUrl[] =
     "collaborations/"
     "cmVzb3VyY2VzLzEyMzQ1NjcvZS8xMTExMTExMTExMTExMTE/dataTypes/"
     "-/"
-    "sharedEntities:preview?accessToken=abcdefg&pageToken=&pageSize=100";
+    "sharedEntities:preview?accessToken=abcdefg&pageToken=&pageSize=550";
 const char kExpectedUrlSharedTabGroupsOnly[] =
     "https://staging-chromesyncsharedentities-pa.googleapis.com/v1/"
     "collaborations/"
     "cmVzb3VyY2VzLzEyMzQ1NjcvZS8xMTExMTExMTExMTExMTE/dataTypes/"
     "1239418/"
-    "sharedEntities:preview?accessToken=abcdefg&pageToken=&pageSize=100";
+    "sharedEntities:preview?accessToken=abcdefg&pageToken=&pageSize=550";
 const char kExpectedUrlStableAndBeta[] =
     "https://chromesyncsharedentities-pa.googleapis.com/v1/"
     "collaborations/"
     "cmVzb3VyY2VzLzEyMzQ1NjcvZS8xMTExMTExMTExMTExMTE/dataTypes/-/"
-    "sharedEntities:preview?accessToken=abcdefg&pageToken=&pageSize=100";
+    "sharedEntities:preview?accessToken=abcdefg&pageToken=&pageSize=550";
 const char kExpectedUrlAutopush[] =
     "https://autopush-chromesyncsharedentities-pa.sandbox.googleapis.com/v1/"
     "collaborations/"
     "cmVzb3VyY2VzLzEyMzQ1NjcvZS8xMTExMTExMTExMTExMTE/dataTypes/-/"
-    "sharedEntities:preview?accessToken=abcdefg&pageToken=&pageSize=100";
+    "sharedEntities:preview?accessToken=abcdefg&pageToken=&pageSize=550";
 const char kExpectedUrlFieldTrial[] =
     "https://test.com/"
     "collaborations/"
     "cmVzb3VyY2VzLzEyMzQ1NjcvZS8xMTExMTExMTExMTExMTE/dataTypes/-/"
-    "sharedEntities:preview?accessToken=abcdefg&pageToken=&pageSize=100";
+    "sharedEntities:preview?accessToken=abcdefg&pageToken=&pageSize=550";
 
 const std::string kTabGroupResponse = R"(
   {
@@ -99,7 +99,10 @@ const std::string kTabGroupResponse = R"(
             "tab":{
               "sharedTabGroupGuid":"33333",
               "title":"foo",
-              "url":"https://www.foo.com/"
+              "url":"https://www.foo.com/",
+              "uniquePosition":{
+                "customCompressedV1":"////3y9yTGFOaG80WEZacWlyNFZQUWkvWGlZME84cz0="
+              }
             },
             "updateTimeWindowsEpochMicros":"200"
           }

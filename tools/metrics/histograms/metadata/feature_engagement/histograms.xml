@@ -28,6 +28,9 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <variants name="IPHFeature">
+  <variant name="IPH_AccountSettingsHistorySync"
+      summary="educate users about the history opt-in toggle in account
+               settings on Android"/>
   <variant name="IPH_AdaptiveButtonInTopToolbarCustomization_AddToBookmarks"
       summary="the add to bookmarks adaptive button in the top toolbar"/>
   <variant name="IPH_AdaptiveButtonInTopToolbarCustomization_NewTab"
@@ -74,10 +77,6 @@ chromium-metrics-reviews@google.com.
   <variant name="IPH_AutofillPredictionImprovements"
       summary="snooze educating users about the possibility of turning on the
                prediction improvements feature from the settings page"/>
-  <variant name="IPH_AutofillPredictionImprovementsBootstrapping"
-      summary="message shown to user after they have turned on the prediction
-               improvements feature from the settings page and bootrapping
-               has finished successfully"/>
   <variant name="IPH_AutofillVirtualCardCVCSuggestion"
       summary="message shown to users that have saved a virtual card on an
                online merchant website to educate users on how to fill in
@@ -302,6 +301,9 @@ chromium-metrics-reviews@google.com.
       summary="showing generic default browser promo"/>
   <variant name="IPH_iOSPromoMadeForIOS"
       summary="showing Made for iOS default browser promo"/>
+  <variant name="IPH_iOSPromoNonModalUrlPasteDefaultBrowser"
+      summary="showing the non-modal Default Browser Promo from omnibox paste
+               on iOS"/>
   <variant name="IPH_iOSPromoPasswordManagerWidget"
       summary="showing the Password Manager widget promo on iOS"/>
   <variant name="IPH_iOSPromoPostRestore"
@@ -314,6 +316,8 @@ chromium-metrics-reviews@google.com.
       summary="showing the Whats New Promo on iOS"/>
   <variant name="IPH_iOSPullToRefreshFeature"
       summary="the full screen IPH for pull to refresh"/>
+  <variant name="IPH_iOSReminderNotificationsOverflowMenuBubbleFeature"
+      summary="Overflow menu bubble IPH to schedule tab reminders"/>
   <variant name="IPH_iOSReplaceSyncPromosWithSignInPromos"
       summary="account row in settings page"/>
   <variant name="IPH_iOSSavedTabGroupClosed"
@@ -563,6 +567,10 @@ chromium-metrics-reviews@google.com.
       summary="IPH for tab group closing adding them to a new location"/>
   <variant name="IPH_TabGroupsSaveV2Intro"
       summary="IPH for tab groups defaulting to saved"/>
+  <variant name="IPH_TabGroupsSharedTabChanged"
+      summary="IPH for the first time a shared tab is changed"/>
+  <variant name="IPH_TabGroupsSharedTabFeedback"
+      summary="IPH for the first time a shared tab becomes the active tab"/>
   <variant name="IPH_TabGroupsSurface" summary="IPH for tab groups surface"/>
   <variant name="IPH_TabGroupsSurfaceOnHide"
       summary="IPH for tab groups surface after hiding a tab group while on
@@ -618,7 +626,7 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <histogram name="InProductHelp.Config.ParsingEvent" enum="ConfigParsingEvent"
-    expires_after="2025-05-25">
+    expires_after="2025-07-27">
   <owner>nyquist@chromium.org</owner>
   <summary>
     Records if in-product help configuration is parsed correctly, and the

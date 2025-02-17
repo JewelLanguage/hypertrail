@@ -38,9 +38,15 @@ class MockMessagingBackendService : public MessagingBackendService {
               GetActivityLog,
               (const ActivityLogQueryParams&));
   MOCK_METHOD(void,
+              ClearDirtyTabMessagesForGroup,
+              (const data_sharing::GroupId&));
+  MOCK_METHOD(void,
+              ClearPersistentMessage,
+              (const base::Uuid&, std::optional<PersistentNotificationType>));
+  MOCK_METHOD(void, RemoveMessages, (const std::vector<base::Uuid>&));
+  MOCK_METHOD(void,
               AddActivityLogForTesting,
-              (data_sharing::GroupId collaboration_id,
-               const std::vector<ActivityLogItem>& activity_log));
+              (data_sharing::GroupId, const std::vector<ActivityLogItem>&));
 };
 
 }  // namespace collaboration::messaging

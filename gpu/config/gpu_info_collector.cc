@@ -322,6 +322,20 @@ void ReportWebGPUAdapterMetrics(dawn::native::Instance* instance) {
       continue;
     }
 
+#ifdef WGPU_BREAKING_CHANGE_FLATTEN_LIMITS
+    wgpu::Limits limits;
+    limits.nextInChain = nullptr;
+    if (adapter.GetLimits(&limits) != wgpu::Status::Success) {
+      continue;
+    }
+
+    // Prefer the adapter with larger buffer binding size.
+    if (limits.maxStorageBufferBindingSize >
+        max_limits.maxStorageBufferBindingSize) {
+      max_limits = limits;
+      adapter_type = info.adapterType;
+    }
+#else
     wgpu::SupportedLimits limits;
     limits.nextInChain = nullptr;
     if (adapter.GetLimits(&limits) != wgpu::Status::Success) {
@@ -334,6 +348,7 @@ void ReportWebGPUAdapterMetrics(dawn::native::Instance* instance) {
       max_limits = limits.limits;
       adapter_type = info.adapterType;
     }
+#endif  // WGPU_BREAKING_CHANGE_FLATTEN_LIMITS
 
     supports_shader_f16 |=
         wgpu::Adapter(adapter.Get()).HasFeature(wgpu::FeatureName::ShaderF16);
@@ -584,11 +599,6 @@ bool CollectGraphicsInfoGL(GPUInfo* gpu_info, gl::GLDisplay* display) {
   GPU_STARTUP_TRACE_EVENT("gpu_info_collector::CollectGraphicsInfoGL");
   DCHECK_NE(gl::GetGLImplementationParts(), gl::kGLImplementationNone);
   gl::GLDisplayEGL* egl_display = display->GetAs<gl::GLDisplayEGL>();
-
-  // Now that we can check GL extensions, update passthrough support info.
-  if (!gl::PassthroughCommandDecoderSupported()) {
-    gpu_info->passthrough_cmd_decoder = false;
-  }
 
   scoped_refptr<gl::GLSurface> surface(InitializeGLSurface(display));
   if (!surface.get()) {

@@ -189,8 +189,8 @@ bool AddLegacyAutofillProfileNamesToProfile(sql::Database* db,
     for (FieldType type :
          {NAME_FIRST, NAME_MIDDLE, NAME_LAST_FIRST, NAME_LAST_CONJUNCTION,
           NAME_LAST_SECOND, NAME_LAST, NAME_FULL}) {
-      profile->SetRawInfoWithVerificationStatusInt(
-          type, s.ColumnString16(index), s.ColumnInt(index + 1));
+      profile->SetRawInfoWithVerificationStatus(
+          type, s.ColumnString16(index), static_cast<VerificationStatus>(s.ColumnInt(index + 1)));
       index += 2;
     }
   }
@@ -268,8 +268,8 @@ bool AddLegacyAutofillProfileAddressesToProfile(sql::Database* db,
             ADDRESS_HOME_DEPENDENT_LOCALITY, ADDRESS_HOME_CITY,
             ADDRESS_HOME_STATE, ADDRESS_HOME_ZIP, ADDRESS_HOME_SORTING_CODE,
             ADDRESS_HOME_COUNTRY, ADDRESS_HOME_APT_NUM, ADDRESS_HOME_FLOOR}) {
-        profile->SetRawInfoWithVerificationStatusInt(
-            type, s.ColumnString16(index), s.ColumnInt(index + 1));
+        profile->SetRawInfoWithVerificationStatus(
+            type, s.ColumnString16(index), static_cast<VerificationStatus>(s.ColumnInt(index + 1)));
         index += 2;
       }
     } else {
@@ -386,7 +386,7 @@ bool AddProfileMetadataToTable(sql::Database* db,
 // if the write succeeded.
 bool AddProfileTypeTokensToTable(sql::Database* db,
                                  const AutofillProfile& profile) {
-  for (FieldType type : GetDatabaseStoredTypesOfAutofillProfile()) {
+  for (FieldType type : AutofillProfile::kDatabaseStoredTypes) {
     std::u16string value = profile.GetRawInfo(type);
     if (!base::FeatureList::IsEnabled(features::kAutofillUseINAddressModel) &&
         type == ADDRESS_HOME_STREET_LOCATION_AND_LOCALITY) {
@@ -409,7 +409,7 @@ bool AddProfileTypeTokensToTable(sql::Database* db,
     s.BindString(0, profile.guid());
     s.BindInt(1, type);
     s.BindString16(2, Truncate(value));
-    s.BindInt(3, profile.GetVerificationStatusInt(type));
+    s.BindInt(3, static_cast<int>(profile.GetVerificationStatus(type)));
     s.BindBlob(
         4, profile.token_quality().SerializeObservationsForStoredType(type));
     if (!s.Run()) {
@@ -445,16 +445,16 @@ bool AddAutofillProfileToTableVersion113(sql::Database* db,
   if (!s.Run()) {
     return false;
   }
-  // Note that `GetDatabaseStoredTypesOfAutofillProfile()` might change in
+  // Note that `AutofillProfile::kDatabaseStoredTypes` might change in
   // future versions. Due to the flexible layout of the type tokens table, this
   // is not a problem.
-  for (FieldType type : GetDatabaseStoredTypesOfAutofillProfile()) {
+  for (FieldType type : AutofillProfile::kDatabaseStoredTypes) {
     InsertBuilder(db, s, GetLegacyProfileTypeTokensTable(profile.record_type()),
                   {kGuid, kType, kValue, kVerificationStatus});
     s.BindString(0, profile.guid());
     s.BindInt(1, type);
     s.BindString16(2, Truncate(profile.GetRawInfo(type)));
-    s.BindInt(3, profile.GetVerificationStatusInt(type));
+    s.BindInt(3, static_cast<int>(profile.GetVerificationStatus(type)));
     if (!s.Run()) {
       return false;
     }
@@ -489,7 +489,7 @@ std::optional<std::vector<FieldTypeData>> ReadProfileTypeTokens(
   // As `SelectByGuid()` already calls `s.Step()`, do-while is used here.
   do {
     FieldType type = ToSafeFieldType(s.ColumnInt(0), UNKNOWN_TYPE);
-    if (!GetDatabaseStoredTypesOfAutofillProfile().contains(type)) {
+    if (!AutofillProfile::kDatabaseStoredTypes.contains(type)) {
       // This is possible in two cases:
       // - The database was tampered with by external means.
       // - The type corresponding to `s.ColumnInt(0)` was deprecated. In this
@@ -722,8 +722,8 @@ std::optional<AutofillProfile> AddressAutofillTable::GetAutofillProfile(
     return std::nullopt;
   }
   for (const FieldTypeData& data : *field_type_data) {
-    profile->SetRawInfoWithVerificationStatusInt(data.type, data.value,
-                                                 data.status);
+    profile->SetRawInfoWithVerificationStatus(data.type, data.value,
+                                                 static_cast<VerificationStatus>(data.status));
     profile->token_quality().LoadSerializedObservationsForStoredType(
         data.type, data.serialized_data);
   }

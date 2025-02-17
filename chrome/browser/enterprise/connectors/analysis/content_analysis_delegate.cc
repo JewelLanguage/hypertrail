@@ -44,6 +44,8 @@
 #include "components/enterprise/common/files_scan_data.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
 #include "components/enterprise/connectors/core/analysis_settings.h"
+#include "components/enterprise/connectors/core/common.h"
+#include "components/enterprise/connectors/core/reporting_utils.h"
 #include "components/policy/core/common/chrome_schema.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/content/browser/web_ui/safe_browsing_ui.h"
@@ -793,9 +795,8 @@ ContentAnalysisDelegate::UploadData() {
     // Passing the settings using a reference is safe here, because
     // MultiFileRequestHandler is owned by this class.
     files_request_handler_ = FilesRequestHandler::Create(
-        GetBinaryUploadService(), profile_, data_.settings, url_, "", "",
-        user_action_id_, title_, GetContentTransferMethod(), access_point_,
-        data_.reason, data_.paths,
+        this, GetBinaryUploadService(), profile_, url_, "", "",
+        GetContentTransferMethod(), access_point_, data_.paths,
         base::BindOnce(&ContentAnalysisDelegate::FilesRequestCallback,
                        GetWeakPtr()));
     files_request_complete_ = !files_request_handler_->UploadData();
@@ -841,12 +842,7 @@ void ContentAnalysisDelegate::PrepareTextRequest() {
     full_text.append(text);
   }
 
-  // The request is considered complete if there is no text or if the text is
-  // too small compared to the minimum size. This means a minimum_data_size of
-  // 0 is equivalent to no minimum, as the second part of the "or" will always
-  // be false.
-  text_request_complete_ =
-      full_text.empty() || full_text.size() < data_.settings.minimum_data_size;
+  text_request_complete_ = !text_request_required();
 
   if (!full_text.empty()) {
     base::UmaHistogramCustomCounts("Enterprise.OnBulkDataEntry.DataSize",
@@ -862,7 +858,8 @@ void ContentAnalysisDelegate::PrepareTextRequest() {
         base::BindOnce(&ContentAnalysisDelegate::StringRequestCallback,
                        weak_ptr_factory_.GetWeakPtr()));
 
-    PrepareRequest(BULK_DATA_ENTRY, request.get());
+    InitializeRequest(request.get());
+    request->set_analysis_connector(BULK_DATA_ENTRY);
     request->set_destination(url_.spec());
     std::string source_string =
         data_controls::ReportingService::GetClipboardSourceString(
@@ -887,12 +884,7 @@ bool ContentAnalysisDelegate::ShouldNotUploadLargePage(size_t page_size) {
 }
 
 void ContentAnalysisDelegate::PrepareImageRequest() {
-  // The request is considered complete if there is no image or if the image is
-  // too large compared to the maximum size.
-  image_request_complete_ =
-      data_.image.empty() ||
-      data_.image.size() >
-          data_.settings.cloud_or_local_settings.max_file_size();
+  image_request_complete_ = !image_request_required();
 
   if (!data_.image.empty()) {
     base::UmaHistogramCustomCounts("Enterprise.OnBulkDataEntry.DataSize",
@@ -908,7 +900,8 @@ void ContentAnalysisDelegate::PrepareImageRequest() {
         base::BindOnce(&ContentAnalysisDelegate::ImageRequestCallback,
                        weak_ptr_factory_.GetWeakPtr()));
 
-    PrepareRequest(BULK_DATA_ENTRY, request.get());
+    InitializeRequest(request.get());
+    request->set_analysis_connector(BULK_DATA_ENTRY);
     UploadImageForDeepScanning(std::move(request));
   }
 }
@@ -925,7 +918,8 @@ void ContentAnalysisDelegate::PreparePageRequest() {
         base::BindOnce(&ContentAnalysisDelegate::PageRequestCallback,
                        weak_ptr_factory_.GetWeakPtr()));
 
-    PrepareRequest(PRINT, request.get());
+    InitializeRequest(request.get());
+    request->set_analysis_connector(PRINT);
     request->set_filename(title_);
     if (!data_.printer_name.empty()) {
       request->set_printer_name(data_.printer_name);
@@ -948,48 +942,6 @@ void ContentAnalysisDelegate::PreparePageRequest() {
   }
 }
 
-// This method only prepares requests for print and paste events. File events
-// are handled by
-// chrome/browser/enterprise/connectors/analysis/files_request_handler.h
-void ContentAnalysisDelegate::PrepareRequest(
-    AnalysisConnector connector,
-    BinaryUploadService::Request* request) {
-  if (data_.settings.cloud_or_local_settings.is_cloud_analysis()) {
-    request->set_device_token(
-        data_.settings.cloud_or_local_settings.dm_token());
-  }
-
-  // Include tab page title, user action id, and count of requests per user
-  // action in local content analysis requests.
-  if (data_.settings.cloud_or_local_settings.is_local_analysis()) {
-    // Increment the total number of user action requests by 1.
-    total_requests_count_++;
-    request->set_tab_title(title_);
-    request->set_user_action_id(user_action_id_);
-  }
-
-  request->set_analysis_connector(connector);
-  request->set_email(GetProfileEmail(profile_));
-  request->set_url(data_.url.spec());
-  request->set_tab_url(data_.url);
-  request->set_per_profile_request(data_.settings.per_profile);
-
-  for (const auto& tag : data_.settings.tags) {
-    request->add_tag(tag.first);
-  }
-
-  if (data_.settings.client_metadata) {
-    request->set_client_metadata(*data_.settings.client_metadata);
-  }
-
-  if (data_.reason != ContentAnalysisRequest::UNKNOWN) {
-    request->set_reason(data_.reason);
-  }
-
-  request->set_blocking(data_.settings.block_until_verdict !=
-                        BlockUntilVerdict::kNoBlock);
-}
-
 void ContentAnalysisDelegate::FillAllResultsWith(bool status) {
   std::fill(result_.text_results.begin(), result_.text_results.end(), status);
   result_.image_result = status;
@@ -1004,7 +956,6 @@ BinaryUploadService* ContentAnalysisDelegate::GetBinaryUploadService() {
 
 void ContentAnalysisDelegate::UploadTextForDeepScanning(
     std::unique_ptr<BinaryUploadService::Request> request) {
-  request->set_user_action_requests_count(total_requests_count_);
   BinaryUploadService* upload_service = GetBinaryUploadService();
   if (upload_service) {
     upload_service->MaybeUploadForDeepScanning(std::move(request));
@@ -1014,7 +965,6 @@ void ContentAnalysisDelegate::UploadTextForDeepScanning(
 void ContentAnalysisDelegate::UploadImageForDeepScanning(
     std::unique_ptr<BinaryUploadService::Request> request) {
   BinaryUploadService* upload_service = GetBinaryUploadService();
-  request->set_user_action_requests_count(total_requests_count_);
   if (upload_service) {
     upload_service->MaybeUploadForDeepScanning(std::move(request));
   }
@@ -1023,7 +973,6 @@ void ContentAnalysisDelegate::UploadImageForDeepScanning(
 void ContentAnalysisDelegate::UploadPageForDeepScanning(
     std::unique_ptr<BinaryUploadService::Request> request) {
   BinaryUploadService* upload_service = GetBinaryUploadService();
-  request->set_user_action_requests_count(total_requests_count_);
   if (upload_service) {
     upload_service->MaybeUploadForDeepScanning(std::move(request));
   }
@@ -1186,6 +1135,63 @@ std::string ContentAnalysisDelegate::GetContentTransferMethod() const {
   }
 
   return "";
+}
+
+bool ContentAnalysisDelegate::text_request_required() const {
+  size_t total = 0;
+  for (const std::string& text : data_.text) {
+    total += text.size();
+  }
+
+  return total != 0 && total >= data_.settings.minimum_data_size;
+}
+
+bool ContentAnalysisDelegate::image_request_required() const {
+  return !data_.image.empty() &&
+         data_.image.size() <=
+             data_.settings.cloud_or_local_settings.max_file_size();
+}
+
+const AnalysisSettings& ContentAnalysisDelegate::settings() const {
+  return data_.settings;
+}
+
+int ContentAnalysisDelegate::user_action_requests_count() const {
+  int count = data_.paths.size();
+  if (data_.page.IsValid()) {
+    ++count;
+  }
+  if (image_request_required()) {
+    ++count;
+  }
+  if (text_request_required()) {
+    ++count;
+  }
+  return count;
+}
+
+std::string ContentAnalysisDelegate::tab_title() const {
+  return title_;
+}
+
+std::string ContentAnalysisDelegate::user_action_id() const {
+  return user_action_id_;
+}
+
+std::string ContentAnalysisDelegate::email() const {
+  return GetProfileEmail(profile_);
+}
+
+std::string ContentAnalysisDelegate::url() const {
+  return data_.url.spec();
+}
+
+const GURL& ContentAnalysisDelegate::tab_url() const {
+  return data_.url;
+}
+
+ContentAnalysisRequest::Reason ContentAnalysisDelegate::reason() const {
+  return data_.reason;
 }
 
 }  // namespace enterprise_connectors

@@ -182,6 +182,18 @@ class CORE_EXPORT Animation : public EventTarget,
            !Limited() && !is_paused_for_testing_;
   }
 
+  // Differs from Playing() in the case of a non-monotonic timeline outside the
+  // active range. A finished animation is not Playing since no update is
+  // required due to passage of time. This behavior also works for scroll-linked
+  // animations since until the animation exits the finished state, no updates
+  // are required.  When in the before phase, the normal passage of time will
+  // trigger an effect change; however, the same is not true for scroll-linked
+  // animations.
+  bool EffectivelyPlaying() const;
+
+  // Notification that the animation is entering or exiting the active phase.
+  void OnActivePhaseStateChange(bool in_active_phase);
+
   bool Limited() const { return Limited(CurrentTimeInternal()); }
   bool FinishedInternal() const { return finished_; }
 
@@ -620,25 +632,17 @@ class CORE_EXPORT Animation : public EventTarget,
     USING_FAST_MALLOC(CompositorState);
 
    public:
-    // TODO(https://crbug.com/1166397): Convert composited animations to use
-    // AnimationTimeDelta for start_time_ and hold_time_.
     explicit CompositorState(Animation& animation)
-        : start_time(animation.start_time_
-                         ? std::make_optional(
-                               animation.start_time_.value().InSecondsF())
-                         : std::nullopt),
-          hold_time(animation.hold_time_
-                        ? std::make_optional(
-                              animation.hold_time_.value().InSecondsF())
-                        : std::nullopt),
+        : start_time(animation.start_time_),
+          hold_time(animation.hold_time_),
           playback_rate(animation.EffectivePlaybackRate()),
           pending_action(animation.start_time_ ? CompositorAction::kNone
                                                : CompositorAction::kStart) {}
     CompositorState(const CompositorState&) = delete;
     CompositorState& operator=(const CompositorState&) = delete;
 
-    std::optional<double> start_time;
-    std::optional<double> hold_time;
+    std::optional<AnimationTimeDelta> start_time;
+    std::optional<AnimationTimeDelta> hold_time;
     double playback_rate;
     bool effect_changed = false;
     CompositorAction pending_action;

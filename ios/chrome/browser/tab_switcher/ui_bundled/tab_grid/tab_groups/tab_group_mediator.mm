@@ -7,6 +7,7 @@
 #import <algorithm>
 
 #import "base/check.h"
+#import "base/i18n/message_formatter.h"
 #import "base/memory/raw_ptr.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/scoped_observation.h"
@@ -14,15 +15,18 @@
 #import "components/collaboration/public/collaboration_service.h"
 #import "components/collaboration/public/messaging/message.h"
 #import "components/collaboration/public/messaging/messaging_backend_service.h"
+#import "components/data_sharing/public/data_sharing_service.h"
 #import "components/data_sharing/public/group_data.h"
 #import "ios/chrome/browser/collaboration/model/features.h"
 #import "ios/chrome/browser/collaboration/model/messaging/messaging_backend_service_bridge.h"
+#import "ios/chrome/browser/data_sharing/model/data_sharing_service_observer_bridge.h"
 #import "ios/chrome/browser/drag_and_drop/model/drag_item_util.h"
 #import "ios/chrome/browser/saved_tab_groups/model/ios_tab_group_sync_util.h"
 #import "ios/chrome/browser/saved_tab_groups/model/tab_group_sync_service_factory.h"
 #import "ios/chrome/browser/share_kit/model/share_kit_avatar_configuration.h"
 #import "ios/chrome/browser/share_kit/model/share_kit_face_pile_configuration.h"
 #import "ios/chrome/browser/share_kit/model/share_kit_service.h"
+#import "ios/chrome/browser/share_kit/model/sharing_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
@@ -47,11 +51,15 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/web/public/web_state.h"
 #import "ios/web/public/web_state_id.h"
-#import "ui/base/l10n/l10n_util_mac.h"
+#import "ui/base/l10n/l10n_util.h"
 
 using ScopedTabGroupSyncObservation =
     base::ScopedObservation<tab_groups::TabGroupSyncService,
                             tab_groups::TabGroupSyncService::Observer>;
+using ScopedDataSharingSyncObservation =
+    base::ScopedObservation<data_sharing::DataSharingService,
+                            data_sharing::DataSharingService::Observer>;
+using tab_groups::SharingState;
 
 namespace {
 // The preferred size in points for the avatar icons.
@@ -60,20 +68,28 @@ constexpr CGFloat kFacePileAvatarSize = 24;
 constexpr CGFloat kActivityLabelAvatarSize = 16;
 }  // namespace
 
-@interface TabGroupMediator () <MessagingBackendServiceObserving,
+@interface TabGroupMediator () <DataSharingServiceObserverDelegate,
+                                MessagingBackendServiceObserving,
                                 TabGroupSyncServiceObserverDelegate>
 @end
 
 @implementation TabGroupMediator {
-  // The service to observe.
+  // The tab group sync service.
   raw_ptr<tab_groups::TabGroupSyncService> _tabGroupSyncService;
   // The share kit service.
   raw_ptr<ShareKitService> _shareKitService;
   // The collaboration service.
   raw_ptr<collaboration::CollaborationService> _collaborationService;
-  // The bridge between the service C++ observer and this Objective-C class.
-  std::unique_ptr<TabGroupSyncServiceObserverBridge> _syncServiceObserver;
-  std::unique_ptr<ScopedTabGroupSyncObservation> _scopedSyncServiceObservation;
+  // The data sharing service.
+  raw_ptr<data_sharing::DataSharingService> _dataSharingService;
+  // Bridges between C++ service observers and this Objective-C class.
+  std::unique_ptr<TabGroupSyncServiceObserverBridge>
+      _tabGroupSyncServiceObserver;
+  std::unique_ptr<ScopedTabGroupSyncObservation>
+      _scopedTabGroupSyncServiceObservation;
+  std::unique_ptr<DataSharingServiceObserverBridge> _dataSharingServiceObserver;
+  std::unique_ptr<ScopedDataSharingSyncObservation>
+      _scopedDataSharingServiceObservation;
   // Tab group consumer.
   __weak id<TabGroupConsumer> _groupConsumer;
   // Current group.
@@ -95,6 +111,7 @@ constexpr CGFloat kActivityLabelAvatarSize = 16;
          shareKitService:(ShareKitService*)shareKitService
     collaborationService:
         (collaboration::CollaborationService*)collaborationService
+      dataSharingService:(data_sharing::DataSharingService*)dataSharingService
                 tabGroup:(base::WeakPtr<const TabGroup>)tabGroup
                 consumer:(id<TabGroupConsumer>)groupConsumer
             gridConsumer:(id<TabCollectionConsumer>)gridConsumer
@@ -111,15 +128,24 @@ constexpr CGFloat kActivityLabelAvatarSize = 16;
     _tabGroupSyncService = tabGroupSyncService;
     _shareKitService = shareKitService;
     _collaborationService = collaborationService;
-    _syncServiceObserver =
+    _dataSharingService = dataSharingService;
+    _tabGroupSyncServiceObserver =
         std::make_unique<TabGroupSyncServiceObserverBridge>(self);
 
     // The `_tabGroupSyncService` is nil in incognito.
     if (_tabGroupSyncService) {
-      _scopedSyncServiceObservation =
+      _scopedTabGroupSyncServiceObservation =
           std::make_unique<ScopedTabGroupSyncObservation>(
-              _syncServiceObserver.get());
-      _scopedSyncServiceObservation->Observe(_tabGroupSyncService);
+              _tabGroupSyncServiceObserver.get());
+      _scopedTabGroupSyncServiceObservation->Observe(_tabGroupSyncService);
+    }
+    if (_dataSharingService) {
+      _dataSharingServiceObserver =
+          std::make_unique<DataSharingServiceObserverBridge>(self);
+      _scopedDataSharingServiceObservation =
+          std::make_unique<ScopedDataSharingSyncObservation>(
+              _dataSharingServiceObserver.get());
+      _scopedDataSharingServiceObservation->Observe(_dataSharingService);
     }
 
     self.webStateList = webStateList;
@@ -140,7 +166,10 @@ constexpr CGFloat kActivityLabelAvatarSize = 16;
       [self fetchMessages];
     }
 
+    BOOL shareAvailable = _shareKitService && _shareKitService->IsSupported();
+    [_groupConsumer setShareAvailable:shareAvailable];
     [self updateFacePileUI];
+    [self updateTabGroupSharingState];
     [self populateConsumerItems];
   }
   return self;
@@ -199,12 +228,16 @@ constexpr CGFloat kActivityLabelAvatarSize = 16;
     _messagingService->RemovePersistentMessageObserver(
         _messagingBackendServiceBridge.get());
     _messagingBackendServiceBridge.reset();
+    _messagingService = nullptr;
   }
-  _scopedSyncServiceObservation.reset();
-  _syncServiceObserver.reset();
+  _scopedTabGroupSyncServiceObservation.reset();
+  _tabGroupSyncServiceObserver.reset();
+  _scopedDataSharingServiceObservation.reset();
+  _dataSharingServiceObserver.reset();
   _tabGroupSyncService = nullptr;
   _collaborationService = nullptr;
   _shareKitService = nullptr;
+  _dataSharingService = nullptr;
   [super disconnect];
 }
 
@@ -375,6 +408,35 @@ constexpr CGFloat kActivityLabelAvatarSize = 16;
   data.avatarPrimitive = _shareKitService->AvatarImage(config);
 
   return data;
+}
+
+#pragma mark - GridViewControllerMutator override
+
+- (void)closeItemWithIdentifier:(GridItemIdentifier*)identifier {
+  CHECK_EQ(identifier.type, GridItemType::kTab);
+  web::WebStateID webStateID = identifier.tabSwitcherItem.identifier;
+  if (_tabGroup->range().count() > 1 || ![self isShared] ||
+      !_collaborationService) {
+    [self closeItemWithID:webStateID];
+    return;
+  }
+
+  data_sharing::MemberRole userRole = tab_groups::utils::GetUserRoleForGroup(
+      _tabGroup.get(), _tabGroupSyncService, _collaborationService);
+
+  switch (userRole) {
+    case data_sharing::MemberRole::kOwner:
+      [self.tabGroupDelegate tabGroupMediatorCloseLastTabAsOwner:self
+                                               lastTabIdentifier:webStateID];
+      break;
+    case data_sharing::MemberRole::kMember:
+      [self.tabGroupDelegate tabGroupMediatorCloseLastTabAsMember:self
+                                                lastTabIdentifier:webStateID];
+      break;
+    case data_sharing::MemberRole::kInvitee:
+    case data_sharing::MemberRole::kUnknown:
+      NOTREACHED();
+  }
 }
 
 #pragma mark - TabCollectionDragDropHandler override
@@ -598,6 +660,35 @@ constexpr CGFloat kActivityLabelAvatarSize = 16;
   [self updateFacePileUI];
 }
 
+#pragma mark DataSharingServiceObserverDelegate
+
+- (void)dataSharingServiceInitialized {
+  [self updateTabGroupSharingState];
+  [self updateFacePileUI];
+}
+
+- (void)dataSharingServiceDidAddGroup:(const data_sharing::GroupData&)groupData
+                               atTime:(base::Time)eventTime {
+  [self handleDataSharingUpdateForGroupId:groupData.group_token.group_id];
+}
+
+- (void)dataSharingServiceDidRemoveGroup:(const data_sharing::GroupId&)groupId
+                                  atTime:(base::Time)eventTime {
+  [self handleDataSharingUpdateForGroupId:groupId];
+}
+
+- (void)dataSharingServiceDidAddMember:(const GaiaId&)memberId
+                               toGroup:(const data_sharing::GroupId&)groupId
+                                atTime:(base::Time)eventTime {
+  [self handleDataSharingUpdateForGroupId:groupId];
+}
+
+- (void)dataSharingServiceDidRemoveMember:(const GaiaId&)memberId
+                                  toGroup:(const data_sharing::GroupId&)groupId
+                                   atTime:(base::Time)eventTime {
+  [self handleDataSharingUpdateForGroupId:groupId];
+}
+
 #pragma mark - Private
 
 // Updates the facePile UI and the share state of the consumer.
@@ -611,7 +702,6 @@ constexpr CGFloat kActivityLabelAvatarSize = 16;
       tab_groups::utils::GetTabGroupCollabID(_tabGroup.get(),
                                              _tabGroupSyncService);
   BOOL isShared = !savedCollabID.value().empty();
-  [_groupConsumer setGroupShared:isShared];
 
   // Prevent the face pile from being set up for tab groups that are not shared
   // and cannot be shared.
@@ -686,9 +776,8 @@ constexpr CGFloat kActivityLabelAvatarSize = 16;
 // Updates the activity summary by setting a new text. Hides the summary if
 // there is no message to be displayed.
 - (void)updateActivitySummaryCell {
-  if (!_messagingService) {
-    return;
-  }
+  CHECK(_messagingService);
+  CHECK(_messagingService->IsInitialized());
 
   int numOfTabsAdded = 0;
   int numOfTabsRemoved = 0;
@@ -718,25 +807,14 @@ constexpr CGFloat kActivityLabelAvatarSize = 16;
     return;
   }
 
-  if (numOfTabsAdded == 0) {
-    [_groupConsumer
-        setActivitySummaryCellText:
-            l10n_util::GetNSStringF(
-                IDS_IOS_TAB_GROUP_ACTIVITY_SUMMARY_ACTIVITY_TEXT_CLOSED_TABS_ONLY,
-                base::NumberToString16(numOfTabsRemoved))];
-  } else if (numOfTabsRemoved == 0) {
-    [_groupConsumer
-        setActivitySummaryCellText:
-            l10n_util::GetNSStringF(
-                IDS_IOS_TAB_GROUP_ACTIVITY_SUMMARY_ACTIVITY_TEXT_NEW_TABS_ONLY,
-                base::NumberToString16(numOfTabsAdded))];
-  } else {
-    [_groupConsumer setActivitySummaryCellText:
-                        l10n_util::GetNSStringF(
-                            IDS_IOS_TAB_GROUP_ACTIVITY_SUMMARY_ACTIVITY_TEXT,
-                            base::NumberToString16(numOfTabsAdded),
-                            base::NumberToString16(numOfTabsRemoved))];
-  }
+  [_groupConsumer
+      setActivitySummaryCellText:
+          base::SysUTF16ToNSString(
+              base::i18n::MessageFormatter::FormatWithNamedArgs(
+                  l10n_util::GetStringUTF16(
+                      IDS_IOS_TAB_GROUP_ACTIVITY_SUMMARY_ACTIVITY_TEXT),
+                  "count_tab_added", numOfTabsAdded, "count_tab_removed",
+                  numOfTabsRemoved))];
 }
 
 // Returns YES if the tab specified by `localTabID` exists in the group.
@@ -751,6 +829,66 @@ constexpr CGFloat kActivityLabelAvatarSize = 16;
     }
   }
   return NO;
+}
+
+// Returns YES if the group is shared.
+- (BOOL)isShared {
+  CHECK(_tabGroup);
+  BOOL isSharedTabGroupSupported =
+      _shareKitService && _shareKitService->IsSupported();
+
+  if (!isSharedTabGroupSupported || !_tabGroupSyncService) {
+    return NO;
+  }
+
+  return tab_groups::utils::IsTabGroupShared(_tabGroup.get(),
+                                             _tabGroupSyncService);
+}
+
+// Updates the consumer after a data sharing service update for the current tab
+// group. `groupId` The ID of the group that was updated.
+- (void)handleDataSharingUpdateForGroupId:
+    (const data_sharing::GroupId&)groupId {
+  const TabGroup* tabGroup = _tabGroup.get();
+  if (!tabGroup) {
+    return;
+  }
+
+  std::optional<tab_groups::SavedTabGroup> savedGroup =
+      _tabGroupSyncService->GetGroup(tabGroup->tab_group_id());
+
+  // Early return if the current group is not shared.
+  if (!savedGroup || !savedGroup->collaboration_id().has_value()) {
+    return;
+  }
+
+  // Group Ids doesn't match.
+  if (savedGroup->collaboration_id().value() !=
+      tab_groups::CollaborationId(groupId.value())) {
+    return;
+  }
+
+  [self updateTabGroupSharingState];
+  [self updateFacePileUI];
+}
+
+// Updates the sharing state for the current `_tabGroup`.
+- (void)updateTabGroupSharingState {
+  CHECK(_tabGroup);
+  BOOL shared = tab_groups::utils::IsTabGroupShared(_tabGroup.get(),
+                                                    _tabGroupSyncService);
+  if (!shared) {
+    [_groupConsumer setSharingState:SharingState::kNotShared];
+    return;
+  }
+
+  data_sharing::MemberRole userRole = tab_groups::utils::GetUserRoleForGroup(
+      _tabGroup.get(), _tabGroupSyncService, _collaborationService);
+
+  SharingState state = userRole == data_sharing::MemberRole::kOwner
+                           ? SharingState::kSharedAndOwned
+                           : SharingState::kShared;
+  [_groupConsumer setSharingState:state];
 }
 
 #pragma mark - MessagingBackendServiceObserving

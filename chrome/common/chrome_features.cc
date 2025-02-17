@@ -35,7 +35,20 @@ BASE_FEATURE(kAppPreloadService,
 // as long as the PWA is on the start menu.  b/40285965.
 BASE_FEATURE(kAppSpecificNotifications,
              "AppSpecificNotifications",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// When enabled, invokes `SetProcessPriorityBoost` to disable priority boosting
+// when a thread is taken out of the wait state. The default Windows behavior is
+// to boost when taking a thread out of waking state. On other platforms, the
+// default is not to boost and implementing boosting regresses input and page
+// load metrics. Therefore, we experiment on Windows to determine if operating
+// without boosting improves these metrics. This is a field-sampling experiment
+// and is not intended to be shipped as is regardless of the outcome but rather
+// to gather data before the design phase of enhanced cross-platform scheduling
+// primitives.
+BASE_FEATURE(kDisableBoostPriority,
+             "DisableBoostPriority",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_WIN)
 
 #if BUILDFLAG(IS_MAC)
@@ -305,22 +318,48 @@ BASE_FEATURE(kGlicDevelopmentSyncGoogleCookies,
 const base::FeatureParam<bool> kGlicStatusIconOpenMenuWithSecondaryClick{
     &kGlic, "open-status-icon-menu-with-secondary-click", true};
 
+const base::FeatureParam<int> kGlicPreLoadingTimeMs{
+    &kGlic, "glic-pre-loading-time-ms", 200};
+
+const base::FeatureParam<int> kGlicMinLoadingTimeMs{
+    &kGlic, "glic-min-loading-time-ms", 1000};
+
+const base::FeatureParam<int> kGlicMaxLoadingTimeMs{
+    &kGlic, "glic-max-loading-time-ms", 15000};
+
 BASE_FEATURE(kGlicURLConfig,
              "GlicURLConfig",
              base::FEATURE_DISABLED_BY_DEFAULT);
 const base::FeatureParam<std::string> kGlicGuestURL{&kGlicURLConfig,
                                                     "glic-guest-url", ""};
 
+BASE_FEATURE(kGlicFreURLConfig,
+             "GlicFreURLConfig",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE_PARAM(std::string,
+                   kGlicFreURL,
+                   &kGlicFreURLConfig,
+                   "glic-fre-url",
+                   "");
+
 BASE_FEATURE(kGlicCSPConfig,
              "GlicCSPConfig",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// TODO(crbug.com/378951332): Configure an approved CSP.
-const base::FeatureParam<std::string> kGlicWebUICSPOverride{
-    &kGlicCSPConfig, "glic-webui-csp-override",
-    "child-src 'self'"
-    " https://*.google.com/"
-    " https://*.googleplex.com/;"};
+BASE_FEATURE(kGlicKeyboardShortcutNewBadge,
+             "GlicKeyboardShortcutNewBadge",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kGlicDebugWebview,
+             "GlicDebugWebview",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+// TODO(crbug.com/378951332): Set appropriate default.
+const base::FeatureParam<std::string> kGlicAllowedOriginsOverride{
+    &kGlicCSPConfig, "glic-allowed-origins-override",
+    // Space-delimited set of allowed origins.
+    "https://*.google.com"};
+
+BASE_FEATURE(kGlicScrollTo, "GlicScrollTo", base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kTabstripComboButton,
              "TabstripComboButton",
@@ -331,7 +370,7 @@ bool IsTabstripComboButtonEnabled() {
 }
 
 const base::FeatureParam<bool> kTabstripComboButtonHasBackground{
-    &kTabstripComboButton, "has_background", true};
+    &kTabstripComboButton, "has_background", false};
 
 const base::FeatureParam<bool> kTabstripComboButtonHasReverseButtonOrder{
     &kTabstripComboButton, "reverse_button_order", false};
@@ -345,6 +384,8 @@ bool HasTabstripComboButtonWithReverseButtonOrder() {
   return IsTabstripComboButtonEnabled() &&
          features::kTabstripComboButtonHasReverseButtonOrder.Get();
 }
+
+BASE_FEATURE(kGlicWarming, "GlicWarming", base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Force Privacy Guide to be available even if it would be unavailable
 // otherwise. This is meant for development and test purposes only.
@@ -633,7 +674,7 @@ BASE_FEATURE(kHttpsFirstModeForAdvancedProtectionUsers,
 // HTTPS-Upgrades is disabled.
 BASE_FEATURE(kHttpsFirstModeV2ForEngagedSites,
              "HttpsFirstModeV2ForEngagedSites",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables HTTPS-First Mode for typically secure users. No-op if
 // HttpsFirstModeV2 or HTTPS-Upgrades is disabled.
@@ -703,10 +744,6 @@ BASE_FEATURE(kIncompatibleApplicationsWarning,
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
-BASE_FEATURE(kInternalOnlyUisPref,
-             "InternalOnlyUisPref",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Enables Isolated Web App Developer Mode, which allows developers to
 // install untrusted Isolated Web Apps.
 BASE_FEATURE(kIsolatedWebAppDevMode,
@@ -722,6 +759,12 @@ BASE_FEATURE(kIsolatedWebAppUnmanagedInstall,
 // Enables users to install isolated web apps in managed guest sessions.
 BASE_FEATURE(kIsolatedWebAppManagedGuestSessionInstall,
              "IsolatedWebAppManagedGuestSessionInstall",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables bundle cache for isolated web apps in kiosk and managed guest
+// session.
+BASE_FEATURE(kIsolatedWebAppBundleCache,
+             "IsolatedWebAppBundleCache",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
@@ -795,6 +838,14 @@ constexpr base::FeatureParam<int> kLinuxLowMemoryMonitorCriticalLevel{
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 BASE_FEATURE(kListWebAppsSwitch,
              "ListWebAppsSwitch",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
+
+#if BUILDFLAG(IS_MAC)
+// If enabled, emails links directly instead of going through the macOS share
+// extension system. Speculative fix for https://crbug.com/356643975.
+BASE_FEATURE(kMacDirectEmailShare,
+             "DirectEmailShare",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
@@ -954,6 +1005,10 @@ BASE_FEATURE(kSafetyHubExtensionsOffStoreTrigger,
 // Enables Safety Hub feature.
 BASE_FEATURE(kSafetyHub, "SafetyHub", base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kSafetyHubThreeDotDetails,
+             "SafetyHubThreeDotDetails",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 #if BUILDFLAG(IS_ANDROID)
 // Enables Safety Hub card in magic stack.
 BASE_FEATURE(kSafetyHubMagicStack,
@@ -963,7 +1018,7 @@ BASE_FEATURE(kSafetyHubMagicStack,
 // Enables Safety Hub followup work.
 BASE_FEATURE(kSafetyHubFollowup,
              "SafetyHubFollowup",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables Safety Hub organic HaTS survey on Android.
 BASE_FEATURE(kSafetyHubAndroidOrganicSurvey,
@@ -994,6 +1049,11 @@ BASE_FEATURE(kSafetyHubAndroidSurveyV2,
 // Enables Weak and Reused passwords in Safety Hub.
 BASE_FEATURE(kSafetyHubWeakAndReusedPasswords,
              "SafetyHubWeakAndReusedPasswords",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables the local passwords module in Safety Hub.
+BASE_FEATURE(kSafetyHubLocalPasswordsModule,
+             "SafetyHubLocalPasswordsModule",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_ANDROID)
 
@@ -1114,13 +1174,6 @@ const base::FeatureParam<base::TimeDelta>
 const base::FeatureParam<base::TimeDelta> kSafeBrowsingNotificationInterval{
     &kSafetyHub, kSafeBrowsingNotificationIntervalName, base::Days(90)};
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-// Enable support for multiple scheduler configurations.
-BASE_FEATURE(kSchedulerConfiguration,
-             "SchedulerConfiguration",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
 // Controls whether SCT audit reports are queued and the rate at which they
 // should be sampled. Default sampling rate is 1/10,000 certificates.
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_ANDROID)
@@ -1195,6 +1248,10 @@ BASE_FEATURE(kSkyVault, "SkyVault", base::FEATURE_ENABLED_BY_DEFAULT);
 // Enables the SkyVault V2 changes, which are also controlled by policies:
 // LocalUserFilesAllowed, DownloadDirectory and ScreenCaptureLocation.
 BASE_FEATURE(kSkyVaultV2, "SkyVaultV2", base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Enables the SkyVault V3 changes, which improve the resilience of file uploads
+// and error handling.
+BASE_FEATURE(kSkyVaultV3, "SkyVaultV3", base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -1426,7 +1483,7 @@ BASE_FEATURE(kUseChromiumUpdater,
 #if !BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kWebAppDontAddExistingAppsToSync,
              "WebAppDontAddExistingAppsToSync",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kWebAppManifestIconUpdating,
              "WebAppManifestIconUpdating",

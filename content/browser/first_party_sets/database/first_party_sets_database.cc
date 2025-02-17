@@ -659,7 +659,7 @@ FirstPartySetsDatabase::FetchPolicyConfigurations(
     return std::nullopt;
   }
 
-  return net::FirstPartySetsContextConfig(std::move(results));
+  return net::FirstPartySetsContextConfig::Create(std::move(results));
 }
 
 bool FirstPartySetsDatabase::HasEntryInBrowserContextsClearedForTesting(
@@ -739,7 +739,7 @@ FirstPartySetsDatabase::FetchManualConfiguration(
     return std::nullopt;
   }
 
-  return net::FirstPartySetsContextConfig(std::move(results));
+  return net::FirstPartySetsContextConfig::Create(std::move(results));
 }
 
 bool FirstPartySetsDatabase::LazyInit() {
@@ -750,7 +750,7 @@ bool FirstPartySetsDatabase::LazyInit() {
 
   CHECK_EQ(db_.get(), nullptr);
   db_ = std::make_unique<sql::Database>(
-      sql::DatabaseOptions{.page_size = 4096, .cache_size = 32},
+      sql::DatabaseOptions().set_page_size(4096).set_cache_size(32),
       sql::Database::Tag("FirstPartySets"));
   // base::Unretained is safe here because this FirstPartySetsDatabase owns
   // the sql::Database instance that stores and uses the callback. So,

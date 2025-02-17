@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <map>
 #include <memory>
+#include <string_view>
 #include <utility>
 
 #include "base/containers/adapters.h"
@@ -18,10 +19,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
-#include "chrome/browser/apps/link_capturing/link_capturing_features.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/command_updater.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -73,6 +72,7 @@
 #include "chrome/browser/ui/views/page_action/page_action_icon_container.h"
 #include "chrome/browser/ui/views/page_action/page_action_icon_controller.h"
 #include "chrome/browser/ui/views/page_action/page_action_icon_params.h"
+#include "chrome/browser/ui/views/page_action/page_action_view_params.h"
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
 #include "chrome/browser/ui/views/passwords/manage_passwords_icon_views.h"
 #include "chrome/browser/ui/views/permissions/chip/permission_chip_view.h"
@@ -81,6 +81,7 @@
 #include "chrome/browser/ui/views/toolbar/pinned_toolbar_actions_container.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
+#include "chrome/browser/web_applications/link_capturing_features.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -280,7 +281,8 @@ void LocationBarView::Init() {
   location_icon_view->set_drag_controller(this);
   location_icon_view_ = AddChildView(std::move(location_icon_view));
 
-  if (page_info::IsMerchantTrustFeatureEnabled()) {
+  if (page_info::IsMerchantTrustFeatureEnabled() &&
+      page_info::kMerchantTrustEnableOmniboxChip.Get()) {
     merchant_trust_chip_ = AddChildView(std::make_unique<OmniboxChipButton>());
     merchant_trust_chip_controller_ =
         std::make_unique<MerchantTrustChipButtonController>(
@@ -375,9 +377,15 @@ void LocationBarView::Init() {
     }
   }
 
+  static constexpr int kBetweenIconSpacing = 8;
+  const page_actions::PageActionViewParams page_action_params{
+      .icon_size = GetLayoutConstant(LOCATION_BAR_TRAILING_ICON_SIZE),
+      .icon_insets = GetLayoutInsets(LOCATION_BAR_PAGE_ACTION_ICON_PADDING),
+      .between_icon_spacing = kBetweenIconSpacing,
+      .icon_label_bubble_delegate = this};
   page_action_container_ =
       AddChildView(std::make_unique<page_actions::PageActionContainerView>(
-          page_action_items, this));
+          page_action_items, page_action_params));
 
   PageActionIconParams params;
   // |browser_| may be null when LocationBarView is used for non-Browser windows
@@ -448,7 +456,7 @@ void LocationBarView::Init() {
   }
 
   params.icon_color = color_provider->GetColor(kColorOmniboxActionIcon);
-  params.between_icon_spacing = 8;
+  params.between_icon_spacing = kBetweenIconSpacing;
   params.font_list = &page_action_font_list;
   params.browser = browser_;
   params.command_updater = command_updater();
@@ -512,28 +520,28 @@ gfx::Point LocationBarView::GetOmniboxViewOrigin() const {
   return origin;
 }
 
-void LocationBarView::SetImePrefixAutocompletion(const std::u16string& text) {
+void LocationBarView::SetImePrefixAutocompletion(std::u16string_view text) {
   DCHECK(OmniboxPrefixRichAutocompletionEnabled() || text.empty());
   if (OmniboxPrefixRichAutocompletionEnabled()) {
     SetOmniboxAdjacentText(ime_prefix_autocomplete_view_, text);
   }
 }
 
-std::u16string LocationBarView::GetImePrefixAutocompletion() const {
+std::u16string_view LocationBarView::GetImePrefixAutocompletion() const {
   return OmniboxPrefixRichAutocompletionEnabled()
              ? ime_prefix_autocomplete_view_->GetText()
-             : u"";
+             : std::u16string_view();
 }
 
-void LocationBarView::SetImeInlineAutocompletion(const std::u16string& text) {
+void LocationBarView::SetImeInlineAutocompletion(std::u16string_view text) {
   SetOmniboxAdjacentText(ime_inline_autocomplete_view_, text);
 }
 
-std::u16string LocationBarView::GetImeInlineAutocompletion() const {
+std::u16string_view LocationBarView::GetImeInlineAutocompletion() const {
   return ime_inline_autocomplete_view_->GetText();
 }
 
-void LocationBarView::SetOmniboxAdditionalText(const std::u16string& text) {
+void LocationBarView::SetOmniboxAdditionalText(std::u16string_view text) {
   DCHECK(OmniboxFieldTrial::IsRichAutocompletionEnabled() || text.empty());
   if (!OmniboxFieldTrial::RichAutocompletionShowAdditionalText()) {
     return;
@@ -546,21 +554,22 @@ void LocationBarView::SetOmniboxAdditionalText(const std::u16string& text) {
                 .Get()
             ? IDS_OMNIBOX_ADDITIONAL_TEXT_PARENTHESIS_TEMPLATE
             : IDS_OMNIBOX_ADDITIONAL_TEXT_DASH_TEMPLATE;
-    adjusted_text = text;
+    adjusted_text = std::u16string(text);
     base::i18n::AdjustStringForLocaleDirection(&adjusted_text);
-    adjusted_text = l10n_util::GetStringFUTF16(message_id, u"", adjusted_text);
+    adjusted_text =
+        l10n_util::GetStringFUTF16(message_id, std::u16string(), adjusted_text);
   }
   SetOmniboxAdjacentText(omnibox_additional_text_view_, adjusted_text);
 }
 
-std::u16string LocationBarView::GetOmniboxAdditionalText() const {
+std::u16string_view LocationBarView::GetOmniboxAdditionalText() const {
   return OmniboxFieldTrial::RichAutocompletionShowAdditionalText()
              ? omnibox_additional_text_view_->GetText()
-             : u"";
+             : std::u16string_view();
 }
 
 void LocationBarView::SetOmniboxAdjacentText(views::Label* label,
-                                             const std::u16string& text) {
+                                             std::u16string_view text) {
   if (text == label->GetText()) {
     return;
   }
@@ -825,6 +834,14 @@ void LocationBarView::Layout(PassKey) {
           (template_url->type() == TemplateURL::OMNIBOX_API_EXTENSION)) {
         image = extensions::OmniboxAPI::Get(profile_)->GetOmniboxIcon(
             template_url->GetExtensionId());
+      } else if (template_url &&
+                 template_url->policy_origin() ==
+                     TemplateURLData::PolicyOrigin::kSearchAggregator) {
+        const SkBitmap* bitmap =
+            omnibox_view_->model()->GetPopupRichSuggestionBitmap(keyword);
+        if (bitmap) {
+          image = gfx::Image(gfx::ImageSkia::CreateFrom1xBitmap(*bitmap));
+        }
       }
       selected_keyword_view_->SetCustomImage(image);
     }
@@ -1335,7 +1352,10 @@ void LocationBarView::RefreshPageActionContainerView() {
   page_actions::PageActionController* controller = nullptr;
   if (browser_) {
     if (tabs::TabInterface* active_tab = browser_->GetActiveTabInterface()) {
-      controller = active_tab->GetTabFeatures()->page_action_controller();
+      // Tab features may be null while the tab is being destroyed.
+      if (tabs::TabFeatures* tab_features = active_tab->GetTabFeatures()) {
+        controller = tab_features->page_action_controller();
+      }
     }
   }
   page_action_container_->SetController(controller);
@@ -1575,8 +1595,8 @@ void LocationBarView::OnPopupVisibilityChanged() {
   }
 
   // We indent the textfield when the popup is open to align to suggestions.
-  omnibox_view_->NotifyAccessibilityEvent(ax::mojom::Event::kControlsChanged,
-                                          true);
+  omnibox_view_->NotifyAccessibilityEventDeprecated(
+      ax::mojom::Event::kControlsChanged, true);
 }
 
 const LocationBarModel* LocationBarView::GetLocationBarModel() const {
@@ -1671,9 +1691,7 @@ void LocationBarView::OnLocationIconDragged(const ui::MouseEvent& event) {
 SkColor LocationBarView::GetSecurityChipColor(
     security_state::SecurityLevel security_level) const {
   ui::ColorId id = kColorOmniboxText;
-  if (security_level == security_state::SECURE_WITH_POLICY_INSTALLED_CERT) {
-    id = kColorOmniboxTextDimmed;
-  } else if (security_level == security_state::DANGEROUS) {
+  if (security_level == security_state::DANGEROUS) {
     id = kColorOmniboxSecurityChipDangerous;
   }
 
@@ -1704,7 +1722,7 @@ bool LocationBarView::ShowPageInfoDialog() {
           entry->GetVirtualURL(), std::move(initialized_callback),
           base::BindOnce(&LocationBarView::OnPageInfoBubbleClosed,
                          weak_factory_.GetWeakPtr()),
-          /*allow_about_this_site=*/true);
+          /*allow_extended_site_info=*/true);
   bubble->SetHighlightedButton(location_icon_view_);
   bubble->GetWidget()->Show();
   RecordPageInfoMetrics();
@@ -1810,9 +1828,9 @@ void LocationBarView::OnAppShimChanged(const webapps::AppId& app_id) {
 BEGIN_METADATA(LocationBarView)
 ADD_READONLY_PROPERTY_METADATA(int, BorderRadius)
 ADD_READONLY_PROPERTY_METADATA(gfx::Point, OmniboxViewOrigin)
-ADD_PROPERTY_METADATA(std::u16string, ImePrefixAutocompletion)
-ADD_PROPERTY_METADATA(std::u16string, ImeInlineAutocompletion)
-ADD_PROPERTY_METADATA(std::u16string, OmniboxAdditionalText)
+ADD_PROPERTY_METADATA(std::u16string_view, ImePrefixAutocompletion)
+ADD_PROPERTY_METADATA(std::u16string_view, ImeInlineAutocompletion)
+ADD_PROPERTY_METADATA(std::u16string_view, OmniboxAdditionalText)
 ADD_READONLY_PROPERTY_METADATA(int, MinimumLeadingWidth)
 ADD_READONLY_PROPERTY_METADATA(int, MinimumTrailingWidth)
 ADD_READONLY_PROPERTY_METADATA(gfx::Rect, LocalBoundsWithoutEndcaps)

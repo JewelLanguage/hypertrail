@@ -73,11 +73,10 @@ NSString* const kAuthenticationSnackbarCategory =
 void AuthenticationFlowContinuation(OnProfileSwitchCompletion completion,
                                     SceneState* scene_state,
                                     base::OnceClosure closure) {
-  UIViewController* view_controller = scene_state.rootViewController;
   Browser* new_browser =
       scene_state.browserProviderInterface.currentBrowserProvider.browser;
 
-  std::move(completion).Run(/*success=*/true, new_browser, view_controller);
+  std::move(completion).Run(/*success=*/true, new_browser);
   std::move(closure).Run();
 }
 
@@ -163,27 +162,21 @@ void AuthenticationFlowContinuation(OnProfileSwitchCompletion completion,
           GetApplicationContext()->GetSharedURLLoaderFactory());
 
   auto* identity_manager = IdentityManagerFactory::GetForProfile(profile);
-
-  __weak __typeof(_delegate) weakDelegate = _delegate;
-
+  __weak __typeof(self) weakSelf = self;
+  base::OnceCallback<void(const policy::ProfileSeparationPolicies&)> callback =
+      base::BindOnce(
+          [](__typeof(self) strongSelf,
+             const policy::ProfileSeparationPolicies& policies) {
+            [strongSelf didFetchProfileSeparationPolicies:policies];
+          },
+          weakSelf);
   _accountLevelSigninRestrictionPolicyFetcher
       ->GetManagedAccountsSigninRestriction(
           identity_manager,
           identity_manager->PickAccountIdForAccount(
               GaiaId(identity.gaiaID),
               base::SysNSStringToUTF8(identity.userEmail)),
-          base::BindOnce(^(const policy::ProfileSeparationPolicies& policies) {
-            auto profile_separation_data_migration_settings =
-                policy::ProfileSeparationDataMigrationSettings::USER_OPT_IN;
-            if (policies.profile_separation_data_migration_settings()) {
-              profile_separation_data_migration_settings =
-                  static_cast<policy::ProfileSeparationDataMigrationSettings>(
-                      *policies.profile_separation_data_migration_settings());
-            }
-            [weakDelegate didFetchProfileSeparationPolicies:
-                              profile_separation_data_migration_settings];
-            self->_accountLevelSigninRestrictionPolicyFetcher.reset();
-          }));
+          std::move(callback));
 }
 
 - (void)signInIdentity:(id<SystemIdentity>)identity
@@ -203,8 +196,8 @@ void AuthenticationFlowContinuation(OnProfileSwitchCompletion completion,
           ->FindProfileNameForGaiaID(GaiaId(identity.gaiaID));
   if (!profileName.has_value()) {
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE,
-        base::BindOnce(std::move(completion), /*success=*/false, nullptr, nil));
+        FROM_HERE, base::BindOnce(std::move(completion), /*success=*/false,
+                                  /*new_profile_browser=*/nullptr));
     return;
   }
 
@@ -230,16 +223,14 @@ void AuthenticationFlowContinuation(OnProfileSwitchCompletion completion,
   // different profile.
   __weak __typeof(_delegate) weakDelegate = _delegate;
   AuthenticationServiceFactory::GetForProfile(profile)->SignOut(
-      signin_metrics::ProfileSignout::kUserClickedSignoutSettings,
-      /*force_clear_browsing_data=*/false, ^{
+      signin_metrics::ProfileSignout::kUserClickedSignoutSettings, ^{
         [weakDelegate didSignOut];
       });
 }
 
 - (void)signOutImmediatelyFromProfile:(ProfileIOS*)profile {
   AuthenticationServiceFactory::GetForProfile(profile)->SignOut(
-      signin_metrics::ProfileSignout::kAbortSignin,
-      /*force_clear_browsing_data=*/false, nil);
+      signin_metrics::ProfileSignout::kAbortSignin, nil);
 }
 
 - (void)showManagedConfirmationForHostedDomain:(NSString*)hostedDomain
@@ -247,8 +238,9 @@ void AuthenticationFlowContinuation(OnProfileSwitchCompletion completion,
                                 viewController:(UIViewController*)viewController
                                        browser:(Browser*)browser
                      skipBrowsingDataMigration:(BOOL)skipBrowsingDataMigration
-                    mergeBrowsingDataByDefault:
-                        (BOOL)mergeBrowsingDataByDefault {
+                    mergeBrowsingDataByDefault:(BOOL)mergeBrowsingDataByDefault
+         browsingDataMigrationDisabledByPolicy:
+             (BOOL)browsingDataMigrationDisabledByPolicy {
   DCHECK(!_managedConfirmationScreenCoordinator);
   DCHECK(!_managedConfirmationAlertCoordinator);
   DCHECK(!_errorAlertCoordinator);
@@ -260,12 +252,14 @@ void AuthenticationFlowContinuation(OnProfileSwitchCompletion completion,
   if (AreSeparateProfilesForManagedAccountsEnabled()) {
     _managedConfirmationScreenCoordinator =
         [[ManagedProfileCreationCoordinator alloc]
-            initWithBaseViewController:viewController
-                             userEmail:userEmail
-                          hostedDomain:hostedDomain
-                               browser:browser
-             skipBrowsingDataMigration:skipBrowsingDataMigration
-            mergeBrowsingDataByDefault:mergeBrowsingDataByDefault];
+                       initWithBaseViewController:viewController
+                                        userEmail:userEmail
+                                     hostedDomain:hostedDomain
+                                          browser:browser
+                        skipBrowsingDataMigration:skipBrowsingDataMigration
+                       mergeBrowsingDataByDefault:mergeBrowsingDataByDefault
+            browsingDataMigrationDisabledByPolicy:
+                browsingDataMigrationDisabledByPolicy];
     _managedConfirmationScreenCoordinator.delegate = self;
     [_managedConfirmationScreenCoordinator start];
     return;
@@ -336,7 +330,7 @@ void AuthenticationFlowContinuation(OnProfileSwitchCompletion completion,
       signin::MultiProfileSignOut(
           browser,
           signin_metrics::ProfileSignout::kUserTappedUndoRightAfterSignIn,
-          /*force_clear_data=*/false, /*force_snackbar_over_toolbar=*/false,
+          /*force_snackbar_over_toolbar=*/false,
           /*snackbar_message=*/nil, /*signout_completion=*/nil);
     }
   };
@@ -467,6 +461,22 @@ void AuthenticationFlowContinuation(OnProfileSwitchCompletion completion,
 }
 
 #pragma mark - Private
+
+// Called when separation policies have been fetched, and calls the delegate.
+- (void)didFetchProfileSeparationPolicies:
+    (const policy::ProfileSeparationPolicies&)policies {
+  CHECK(_accountLevelSigninRestrictionPolicyFetcher);
+  _accountLevelSigninRestrictionPolicyFetcher.reset();
+  auto profile_separation_data_migration_settings =
+      policy::ProfileSeparationDataMigrationSettings::USER_OPT_IN;
+  if (policies.profile_separation_data_migration_settings()) {
+    profile_separation_data_migration_settings =
+        static_cast<policy::ProfileSeparationDataMigrationSettings>(
+            *policies.profile_separation_data_migration_settings());
+  }
+  [_delegate didFetchProfileSeparationPolicies:
+                 profile_separation_data_migration_settings];
+}
 
 - (void)updateUserPolicyNotificationStatusIfNeeded:(PrefService*)prefService {
   if (!policy::IsAnyUserPolicyFeatureEnabled()) {

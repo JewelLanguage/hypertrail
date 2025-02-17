@@ -131,6 +131,9 @@ NET_ERROR(BLOCKED_BY_ORB, -32)
 // network access.
 NET_ERROR(NETWORK_ACCESS_REVOKED, -33)
 
+// The request was blocked by fingerprinting protections.
+NET_ERROR(BLOCKED_BY_FINGERPRINTING_PROTECTION, -34)
+
 // A connection was closed (corresponding to a TCP FIN).
 NET_ERROR(CONNECTION_CLOSED, -100)
 
@@ -753,6 +756,9 @@ NET_ERROR(PROXY_HTTP_1_1_REQUIRED, -366)
 
 // The PAC script terminated fatally and must be reloaded.
 NET_ERROR(PAC_SCRIPT_TERMINATED, -367)
+
+// Signals that the request requires the IPP proxy.
+NET_ERROR(PROXY_REQUIRED, -368)
 
 // Obsolete. Kept here to avoid reuse.
 // Request is throttled because of a Backoff header.

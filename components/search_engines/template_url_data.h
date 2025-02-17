@@ -53,8 +53,6 @@ struct TemplateURLData {
                   std::string_view search_url_post_params,
                   std::string_view suggest_url_post_params,
                   std::string_view image_url_post_params,
-                  std::string_view side_search_param,
-                  std::string_view side_image_search_param,
                   std::string_view image_translate_source_language_param_key,
                   std::string_view image_translate_target_language_param_key,
                   std::vector<std::string> search_intent_params,
@@ -105,6 +103,9 @@ struct TemplateURLData {
   // Returns whether this search engine was created by an Enterprise policy that
   // doesn't define the Default Search Provider.
   bool CreatedByNonDefaultSearchProviderPolicy() const;
+  // Returns whether this search engine was created by the
+  // EnterpriseSearchAggregatorSettings policy.
+  bool CreatedByEnterpriseSearchAggregatorPolicy() const;
 
   // Optional additional raw URLs.
   std::string suggestions_url;
@@ -124,14 +125,6 @@ struct TemplateURLData {
   std::string search_url_post_params;
   std::string suggestions_url_post_params;
   std::string image_url_post_params;
-
-  // The parameter appended to the engine's search URL when constructing the URL
-  // for the side search side panel.
-  std::string side_search_param;
-
-  // The parameter appended to the engine's image URL when constructing the
-  // URL for the image search entry in the side panel.
-  std::string side_image_search_param;
 
   // The key of the parameter identifying the source language for an image
   // translation.
@@ -251,6 +244,9 @@ struct TemplateURLData {
   // This TemplateURL is part of the built-in "starter pack" if
   // starter_pack_id > 0.
   int starter_pack_id{0};
+
+  friend bool operator==(const TemplateURLData&,
+                         const TemplateURLData&) = default;
 
  private:
   // Private so we can enforce using the setters and thus enforce that these

@@ -5,17 +5,12 @@
 #ifndef CHROMEOS_CONSTANTS_CHROMEOS_FEATURES_H_
 #define CHROMEOS_CONSTANTS_CHROMEOS_FEATURES_H_
 
-#include "base/auto_reset.h"
 #include "base/component_export.h"
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "build/buildflag.h"
 
-// This file is only for the feature flags that are shared between ash-chrome
-// and lacros-chrome that are not common. For ash features, please add them
-// in //ash/constants/ash_features.h.
 namespace chromeos {
-
 namespace features {
 
 // All features in alphabetical order. The features should be documented
@@ -56,7 +51,6 @@ BASE_DECLARE_FEATURE(kEnablePkcs12ToChapsDualWrite);
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) BASE_DECLARE_FEATURE(kEssentialSearch);
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 BASE_DECLARE_FEATURE(kGeminiAppPreinstall);
-#if BUILDFLAG(IS_CHROMEOS_ASH)
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 BASE_DECLARE_FEATURE(kKioskHeartbeatsViaERP);
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) BASE_DECLARE_FEATURE(kMahi);
@@ -68,7 +62,7 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS) BASE_DECLARE_FEATURE(kMahiManaged);
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) BASE_DECLARE_FEATURE(kPompano);
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 BASE_DECLARE_FEATURE(kMahiSummarizeSelected);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS) BASE_DECLARE_FEATURE(kMagicBoostRevamp);
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) BASE_DECLARE_FEATURE(kMahiDebugging);
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) BASE_DECLARE_FEATURE(kOrca);
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) BASE_DECLARE_FEATURE(kOrcaDogfood);
@@ -98,8 +92,6 @@ extern const base::FeatureParam<std::string> kMicrosoft365ScopeExtensionsURLs;
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 extern const base::FeatureParam<std::string>
     kMicrosoft365ScopeExtensionsDomains;
-COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
-BASE_DECLARE_FEATURE(kOverviewSessionInitOptimizations);
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 BASE_DECLARE_FEATURE(kPlatformKeysChangesWave1);
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
@@ -153,6 +145,7 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 bool IsGeminiAppPreinstallFeatureManagementEnabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 bool IsGeminiAppPreinstallEnabled();
+COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsMagicBoostRevampEnabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsMahiEnabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsMahiSendingUrl();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS) bool IsMahiManagedEnabled();
@@ -195,8 +188,7 @@ COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 bool IsMicrosoftOneDriveIntegrationForEnterpriseEnabled();
 COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
 bool IsFeatureManagementHistoryEmbeddingEnabled();
-COMPONENT_EXPORT(CHROMEOS_CONSTANTS)
-bool AreOverviewSessionInitOptimizationsEnabled();
+
 }  // namespace features
 }  // namespace chromeos
 

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #ifndef NET_SOCKET_SOCKET_TEST_UTIL_H_
 #define NET_SOCKET_SOCKET_TEST_UTIL_H_
 
@@ -1209,7 +1214,9 @@ class ClientSocketPoolTest {
     int rv = request->handle()->Init(
         group_id, socket_params, std::nullopt /* proxy_annotation_tag */,
         priority, SocketTag(), respect_limits, request->callback(),
-        ClientSocketPool::ProxyAuthCallback(), socket_pool, NetLogWithSource());
+        ClientSocketPool::ProxyAuthCallback(),
+        /*fail_if_alias_requires_proxy_override=*/false, socket_pool,
+        NetLogWithSource());
     if (rv != ERR_IO_PENDING)
       request_order_.push_back(request);
     return rv;
@@ -1322,6 +1329,7 @@ class MockTransportClientSocketPool : public TransportClientSocketPool {
       ClientSocketHandle* handle,
       CompletionOnceCallback callback,
       const ProxyAuthCallback& on_auth_callback,
+      bool fail_if_alias_requires_proxy_override,
       const NetLogWithSource& net_log) override;
   void SetPriority(const GroupId& group_id,
                    ClientSocketHandle* handle,

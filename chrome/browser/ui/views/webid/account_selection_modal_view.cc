@@ -142,11 +142,9 @@ AccountSelectionModalView::AccountSelectionModalView(
     const std::u16string& rp_for_display,
     const std::optional<std::u16string>& idp_title,
     blink::mojom::RpContext rp_context,
-    content::WebContents* web_contents,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     FedCmAccountSelectionView* owner)
-    : AccountSelectionViewBase(web_contents,
-                               owner,
+    : AccountSelectionViewBase(owner,
                                std::move(url_loader_factory),
                                rp_for_display) {
   SetModalType(ui::mojom::ModalType::kChild);
@@ -175,7 +173,7 @@ AccountSelectionModalView::~AccountSelectionModalView() = default;
 std::unique_ptr<views::View>
 AccountSelectionModalView::CreatePlaceholderAccountRow() {
   const SkColor kPlaceholderColor =
-      color_utils::IsDark(web_contents_->GetColorProvider().GetColor(
+      color_utils::IsDark(owner_->web_contents()->GetColorProvider().GetColor(
           ui::kColorDialogBackground))
           ? gfx::kGoogleGrey800
           : gfx::kGoogleGrey200;
@@ -393,11 +391,11 @@ void AccountSelectionModalView::ShowAccounts(
     bool is_single_account_chooser) {
   RemoveNonHeaderChildViewsAndUpdateHeaderIfNeeded();
 
-  const IdentityProviderDataPtr& idp = accounts[0]->identity_provider;
-  GURL idp_brand_icon_url = idp->idp_metadata.brand_icon_url;
-  // If `idp_brand_icon_url` is invalid, a globe icon is shown instead.
-  if (idp_brand_icon_url.is_valid()) {
-    ConfigureBrandImageView(idp_brand_icon_, idp_brand_icon_url);
+  const content::IdentityProviderMetadata& idp_metadata =
+      accounts[0]->identity_provider->idp_metadata;
+  // If `brand_decoded_icon` is empty, a globe icon is shown instead.
+  if (!idp_metadata.brand_decoded_icon.IsEmpty()) {
+    idp_brand_icon_->CropAndSetImage(idp_metadata.brand_decoded_icon);
   } else {
     idp_brand_icon_->SetImage(ui::ImageModel::FromVectorIcon(
         kWebidGlobeIcon, ui::kColorIconSecondary, kModalIdpIconSize));
@@ -428,12 +426,12 @@ void AccountSelectionModalView::ShowAccounts(
       std::nullopt;
 
   // TODO(crbug.com/324052630): Support add account with multi IDP API.
-  if (idp->idp_metadata.supports_add_account ||
-      idp->idp_metadata.has_filtered_out_account) {
+  if (idp_metadata.supports_add_account ||
+      idp_metadata.has_filtered_out_account) {
     use_other_account_callback = base::BindRepeating(
         &AccountSelectionModalView::OnUseOtherAccountButtonClicked,
-        base::Unretained(this), idp->idp_metadata.config_url,
-        idp->idp_metadata.idp_login_url);
+        base::Unretained(this), idp_metadata.config_url,
+        idp_metadata.idp_login_url);
   }
   AddChildView(CreateButtonRow(/*continue_callback=*/std::nullopt,
                                std::move(use_other_account_callback),
@@ -458,7 +456,7 @@ void AccountSelectionModalView::ShowVerifyingSheet(
   for (const auto& child : account_chooser_->children()) {
     // If one of the immediate children is HoverButton, this is a single account
     // chooser.
-    if (std::string(child->GetClassName()) == "HoverButton") {
+    if (child->GetClassName() == "HoverButton") {
       is_single_account_chooser = true;
       AccountHoverButton* button = static_cast<AccountHoverButton*>(child);
       if (button->HasBeenClicked()) {
@@ -479,7 +477,7 @@ void AccountSelectionModalView::ShowVerifyingSheet(
     views::View* wrapper = account_chooser_->children()[0];
     views::View* contents = wrapper->children()[0];
     for (const auto& child : contents->children()) {
-      if (std::string(child->GetClassName()) == "HoverButton") {
+      if (child->GetClassName() == "HoverButton") {
         AccountHoverButton* button = static_cast<AccountHoverButton*>(child);
         if (button->HasBeenClicked()) {
           has_spinner_ = true;
@@ -603,19 +601,24 @@ void AccountSelectionModalView::ShowRequestPermissionDialog(
   RemoveNonHeaderChildViewsAndUpdateHeaderIfNeeded();
 
   const content::IdentityProviderData& idp_data = *account->identity_provider;
-  GURL idp_brand_icon_url = idp_data.idp_metadata.brand_icon_url;
-  GURL rp_brand_icon_url = idp_data.client_metadata.brand_icon_url;
+  const gfx::Image& idp_brand_icon = idp_data.idp_metadata.brand_decoded_icon;
+  const gfx::Image& rp_brand_icon = idp_data.client_metadata.brand_decoded_icon;
   // Show RP icon if and only if both IDP and RP icons are available. The
   // combined icons view is only made visible when both IDP and RP icon fetches
   // succeed.
-  if (idp_brand_icon_url.is_valid() && rp_brand_icon_url.is_valid()) {
+  if (!idp_brand_icon.IsEmpty() && !rp_brand_icon.IsEmpty()) {
     combined_icons_ =
         header_icon_view_->AddChildView(CreateCombinedIconsView());
-    ConfigureBrandImageView(combined_icons_idp_brand_icon_, idp_brand_icon_url);
-    ConfigureBrandImageView(combined_icons_rp_brand_icon_, rp_brand_icon_url);
+    combined_icons_idp_brand_icon_->CropAndSetImage(idp_brand_icon);
+    combined_icons_rp_brand_icon_->CropAndSetImage(rp_brand_icon);
   } else {
-    // If `idp_brand_icon_url` is invalid, a globe icon is shown instead.
-    ConfigureBrandImageView(idp_brand_icon_, idp_brand_icon_url);
+    // If `idp_brand_icon` is empty, a globe icon is shown instead.
+    if (!idp_brand_icon.IsEmpty()) {
+      idp_brand_icon_->CropAndSetImage(idp_brand_icon);
+    } else {
+      idp_brand_icon_->SetImage(ui::ImageModel::FromVectorIcon(
+          kWebidGlobeIcon, ui::kColorIconSecondary, kModalIdpIconSize));
+    }
     idp_brand_icon_->SetVisible(/*visible=*/true);
   }
 
@@ -699,7 +702,8 @@ void AccountSelectionModalView::ShowSingleReturningAccountDialog(
 std::unique_ptr<views::View> AccountSelectionModalView::CreateIconHeaderView() {
   // Create background image view.
   std::unique_ptr<BackgroundImageView> background_image_view =
-      std::make_unique<BackgroundImageView>(web_contents_);
+      std::make_unique<BackgroundImageView>(
+          owner_->web_contents()->GetWeakPtr());
 
   // Put background image view into a FillLayout container.
   std::unique_ptr<views::View> background_container =
@@ -747,8 +751,6 @@ AccountSelectionModalView::CreateIdpIconView() {
   // Create IDP brand icon image view.
   std::unique_ptr<BrandIconImageView> idp_brand_icon_image_view =
       std::make_unique<BrandIconImageView>(
-          base::BindOnce(&AccountSelectionViewBase::AddIdpImage,
-                         weak_ptr_factory_.GetWeakPtr()),
           kModalIdpIconSize, /*should_circle_crop=*/true,
           /*background_color=*/std::nullopt, on_image_set);
   idp_brand_icon_image_view->SetImageSize(
@@ -778,8 +780,6 @@ AccountSelectionModalView::CreateCombinedIconsView() {
   // Create IDP brand icon image view.
   std::unique_ptr<BrandIconImageView> idp_brand_icon_image_view =
       std::make_unique<BrandIconImageView>(
-          base::BindOnce(&AccountSelectionViewBase::AddIdpImage,
-                         weak_ptr_factory_.GetWeakPtr()),
           kModalCombinedIconSize, /*should_circle_crop=*/true,
           /*background_color=*/std::nullopt, on_image_set);
   combined_icons_idp_brand_icon_ = idp_brand_icon_image_view.get();
@@ -796,8 +796,6 @@ AccountSelectionModalView::CreateCombinedIconsView() {
   // Create RP brand icon image view.
   std::unique_ptr<BrandIconImageView> rp_brand_icon_image_view =
       std::make_unique<BrandIconImageView>(
-          base::BindOnce(&AccountSelectionViewBase::AddIdpImage,
-                         weak_ptr_factory_.GetWeakPtr()),
           kModalCombinedIconSize, /*should_circle_crop=*/true,
           /*background_color=*/std::nullopt, on_image_set);
   combined_icons_rp_brand_icon_ = rp_brand_icon_image_view.get();

@@ -149,10 +149,12 @@ class GpuIntegrationTest(
 
   # Used for storing the contents of about:gpu between test runs and for
   # determining whether the contents need to be retrieved again after a browser
-  # restart.
+  # restart. This caching is also shared with the tag generation code to avoid
+  # unnecessary communication with the browser when args did not change.
   _about_gpu_content = None
   _test_that_started_browser = None
   _args_changed_this_browser_start = True
+  _cached_platform_tags: Optional[List[str]] = None
 
   tab: Optional[ct.Tab] = None
 
@@ -160,6 +162,7 @@ class GpuIntegrationTest(
     super().__init__(*args, **kwargs)
     if self.artifacts is None:
       self.set_artifacts(None)
+    self._skip_was_due_to_expectation = False
 
   def set_artifacts(self,
                     artifacts: Optional[Type[acw.ArtifactCompatibilityWrapper]]
@@ -460,10 +463,9 @@ class GpuIntegrationTest(
     if args_differ:
       expected_results, _ = self.GetExpectationsForTest()
       if ResultType.Skip in expected_results:
-        message = (
+        self._skip_was_due_to_expectation = True
+        self.skipTest(
             'Determined that Skip expectation applies after browser restart')
-        logging.warning(message)
-        self.skipTest(message)
     # pylint: enable=protected-access
 
   def RestartBrowserWithArgs(self,
@@ -834,9 +836,17 @@ class GpuIntegrationTest(
     try:
       expected_crashes = self.GetExpectedCrashes(args)
       self.RunActualGpuTest(url, args)
-    except unittest.SkipTest:
+    except unittest.SkipTest as e:
+      # The re-raised exception isn't actually logged anywhere, so log it now
+      # in order to notify users of why the test was skipped.
+      logging.info('Programmatic skip reason: %s', e)
       # pylint: disable=attribute-defined-outside-init
       self.programmaticSkipIsExpected = True
+      # Only output associated bugs if the skip was due to an expectation, as
+      # otherwise incorrect/confusing bugs can be associated with the skip. See
+      # crbug.com/395919007 for more information.
+      if not self._skip_was_due_to_expectation:
+        self.shouldNotOutputAssociatedBugs = True
       # pylint: enable=attribute-defined-outside-init
       raise
     except Exception as e:
@@ -1165,6 +1175,9 @@ class GpuIntegrationTest(
     angle renderer, and command line decoder tags to that list before
     returning it.
     """
+    if not cls._args_changed_this_browser_start and cls._cached_platform_tags:
+      return cls._cached_platform_tags
+
     tags = super(GpuIntegrationTest, cls).GetPlatformTags(browser)
     system_info = browser.GetSystemInfo()
     if system_info:
@@ -1216,6 +1229,8 @@ class GpuIntegrationTest(
     if display_server:
       tags.append(display_server)
     tags = gpu_helper.ReplaceTags(tags)
+
+    cls._cached_platform_tags = tags
     return tags
 
   @classmethod
@@ -1311,7 +1326,7 @@ class GpuIntegrationTest(
         'arm-mali-t860',  # chromeos-board-kevin
         'qualcomm-adreno-(tm)-418',  # android-nexus-5x
         'qualcomm-adreno-(tm)-540',  # android-pixel-2
-        'qualcomm-adreno-(tm)-610',  # android-sm-a235m
+        'qualcomm-adreno-(tm)-610',  # android-sm-a236b
         'qualcomm-adreno-(tm)-640',  # android-pixel-4
         'qualcomm-adreno-(tm)-740',  # android-sm-s911u1
         'arm-mali-g78',  # android-pixel-6

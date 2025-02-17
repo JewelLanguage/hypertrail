@@ -2,16 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {DynamicColorElement, getThemeProvider, GooglePhotosAlbumsElement, GooglePhotosCollectionElement, GooglePhotosSharedAlbumDialogElement, PersonalizationRouterElement, PersonalizationThemeElement, SeaPenFeedbackElement, SeaPenFreeformElement, SeaPenImagesElement, SeaPenInputQueryElement, SeaPenPaths, SeaPenRecentWallpapersElement, SeaPenRouterElement, SeaPenSamplesElement, SeaPenTemplateQueryElement, setTransitionsEnabled, WallpaperCollectionsElement, WallpaperGridItemElement, WallpaperImagesElement} from 'chrome://personalization/js/personalization_app.js';
-import {CrButtonElement} from 'chrome://resources/ash/common/cr_elements/cr_button/cr_button.js';
-import {CrDialogElement} from 'chrome://resources/ash/common/cr_elements/cr_dialog/cr_dialog.js';
-import {CrIconButtonElement} from 'chrome://resources/ash/common/cr_elements/cr_icon_button/cr_icon_button.js';
-import {CrInputElement} from 'chrome://resources/ash/common/cr_elements/cr_input/cr_input.js';
+import type {DynamicColorElement, GooglePhotosAlbumsElement, GooglePhotosCollectionElement, GooglePhotosSharedAlbumDialogElement, PersonalizationThemeElement, SeaPenFeedbackElement, SeaPenImagesElement, SeaPenRecentWallpapersElement, SeaPenTemplateQueryElement, WallpaperCollectionsElement, WallpaperImagesElement} from 'chrome://personalization/js/personalization_app.js';
+import {getThemeProvider, PersonalizationRouterElement, SeaPenFreeformElement, SeaPenInputQueryElement, SeaPenPaths, SeaPenRouterElement, SeaPenSamplesElement, setTransitionsEnabled, WallpaperGridItemElement} from 'chrome://personalization/js/personalization_app.js';
+import type {CrButtonElement} from 'chrome://resources/ash/common/cr_elements/cr_button/cr_button.js';
+import type {CrDialogElement} from 'chrome://resources/ash/common/cr_elements/cr_dialog/cr_dialog.js';
+import type {CrIconButtonElement} from 'chrome://resources/ash/common/cr_elements/cr_icon_button/cr_icon_button.js';
+import type {CrInputElement} from 'chrome://resources/ash/common/cr_elements/cr_input/cr_input.js';
 import {SeaPenTemplateId} from 'chrome://resources/ash/common/sea_pen/sea_pen_generated.mojom-webui.js';
 import {assertInstanceof} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
-import {SkColor} from 'chrome://resources/mojo/skia/public/mojom/skcolor.mojom-webui.js';
-import {IronSelectorElement} from 'chrome://resources/polymer/v3_0/iron-selector/iron-selector.js';
+import type {SkColor} from 'chrome://resources/mojo/skia/public/mojom/skcolor.mojom-webui.js';
+import type {IronSelectorElement} from 'chrome://resources/polymer/v3_0/iron-selector/iron-selector.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertGT, assertLE, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 
 /**
@@ -610,7 +611,7 @@ suite('sea pen', () => {
     loadTimeData.overrideValues({isSeaPenTextInputEnabled: false});
   });
 
-  suite('feedback', async () => {
+  suite('feedback', () => {
     // At the end of this test, a feedback dialog is expected to be opened in an
     // external window.
     test(`open feedback dialog`, async () => {
@@ -685,7 +686,7 @@ suite('sea pen', () => {
     assertTrue(!!seaPenTemplateQuery, 'Characters template should show up');
 
     const seaPenChips = await waitUntil(
-        () => seaPenTemplateQuery.shadowRoot?.querySelectorAll<HTMLDivElement>(
+        () => seaPenTemplateQuery.shadowRoot?.querySelectorAll<HTMLElement>(
             '#template > .chip-container > .chip-text'),
         'waiting for chips');
     assertEquals(
@@ -1161,7 +1162,7 @@ suite('sea pen', () => {
     setTransitionsEnabled(true);
 
     const seaPenChips = await waitUntil(
-        () => seaPenTemplateQuery.shadowRoot?.querySelectorAll<HTMLDivElement>(
+        () => seaPenTemplateQuery.shadowRoot?.querySelectorAll<HTMLElement>(
             '#template > .chip-container > .chip-text'),
         'waiting for chips');
     assertEquals(
@@ -1326,7 +1327,7 @@ suite('dynamic color', () => {
     }
   });
 
-  test('shows color scheme options', async () => {
+  test('shows color scheme options', () => {
     setDynamicColorToggle(true);
 
     assertTrue(getDynamicColorToggle().checked);
@@ -1378,7 +1379,7 @@ suite('dynamic color', () => {
     assertEquals(4, seenTextColors.size, '4 unique colors seen');
   });
 
-  test('shows static color options', async () => {
+  test('shows static color options', () => {
     const toggleButton = getDynamicColorToggle();
 
     setDynamicColorToggle(false);

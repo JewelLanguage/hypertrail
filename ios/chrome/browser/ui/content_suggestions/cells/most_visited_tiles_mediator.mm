@@ -44,7 +44,7 @@
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_consumer.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_delegate.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_menu_provider.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_menu_elements_provider.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_metrics_recorder.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
@@ -63,9 +63,9 @@ const CGFloat kMagicStackMostVisitedFaviconMinimalSize = 18;
 }  // namespace
 
 @interface MostVisitedTilesMediator () <BooleanObserver,
+                                        ContentSuggestionsMenuElementsProvider,
                                         MostVisitedSitesObserving,
-                                        MostVisitedTilesStackViewConsumerSource,
-                                        ContentSuggestionsMenuProvider>
+                                        MostVisitedTilesStackViewConsumerSource>
 @end
 
 @implementation MostVisitedTilesMediator {
@@ -85,6 +85,7 @@ const CGFloat kMagicStackMostVisitedFaviconMinimalSize = 18;
   // Consumer of model updates when MVTs are in the Magic Stack.
   id<MostVisitedTilesStackViewConsumer> _stackViewConsumer;
   PrefBackedBoolean* _mostVisitedTilesInMagicStackEnabled;
+  raw_ptr<ChromeAccountManagerService> _accountManagerService;
 }
 
 @synthesize inMagicStack = _inMagicStack;
@@ -95,12 +96,15 @@ const CGFloat kMagicStackMostVisitedFaviconMinimalSize = 18;
                 prefService:(PrefService*)prefService
            largeIconService:(favicon::LargeIconService*)largeIconService
              largeIconCache:(LargeIconCache*)largeIconCache
-     URLLoadingBrowserAgent:(UrlLoadingBrowserAgent*)URLLoadingBrowserAgent {
+     URLLoadingBrowserAgent:(UrlLoadingBrowserAgent*)URLLoadingBrowserAgent
+      accountManagerService:
+          (ChromeAccountManagerService*)accountManagerService {
   self = [super init];
   if (self) {
     _prefService = prefService;
     _prefChangeRegistrar.Init(_prefService);
     _URLLoadingBrowserAgent = URLLoadingBrowserAgent;
+    _accountManagerService = accountManagerService;
     _incognitoAvailable = !IsIncognitoModeDisabled(prefService);
     _inMagicStack = ShouldPutMostVisitedSitesInMagicStack(
         FeedActivityBucketForPrefs(prefService));
@@ -161,7 +165,7 @@ const CGFloat kMagicStackMostVisitedFaviconMinimalSize = 18;
   // This is used by the content widget.
   content_suggestions_tile_saver::SaveMostVisitedToDisk(
       mostVisited, _mostVisitedAttributesProvider,
-      app_group::ShortcutsWidgetFaviconsFolder());
+      app_group::ShortcutsWidgetFaviconsFolder(), _accountManagerService);
 
   _freshMostVisitedItems = [NSMutableArray array];
   int index = 0;
@@ -170,7 +174,7 @@ const CGFloat kMagicStackMostVisitedFaviconMinimalSize = 18;
     item.commandHandler = self;
     item.incognitoAvailable = _incognitoAvailable;
     item.index = index;
-    item.menuProvider = self;
+    item.menuElementsProvider = self;
     DCHECK(index < kShortcutMinimumIndex);
     index++;
     [_freshMostVisitedItems addObject:item];
@@ -189,7 +193,7 @@ const CGFloat kMagicStackMostVisitedFaviconMinimalSize = 18;
   // This is used by the content widget.
   content_suggestions_tile_saver::UpdateSingleFavicon(
       siteURL, _mostVisitedAttributesProvider,
-      app_group::ShortcutsWidgetFaviconsFolder());
+      app_group::ShortcutsWidgetFaviconsFolder(), _accountManagerService);
 
   for (ContentSuggestionsMostVisitedItem* item in _mostVisitedConfig
            .mostVisitedItems) {
@@ -285,40 +289,9 @@ const CGFloat kMagicStackMostVisitedFaviconMinimalSize = 18;
 
 #pragma mark - ContentSuggestionsMenuProvider
 
-- (UIContextMenuConfiguration*)contextMenuConfigurationForItem:
-                                   (ContentSuggestionsMostVisitedItem*)item
-                                                      fromView:(UIView*)view {
-  __weak __typeof(self) weakSelf = self;
-
-  UIContextMenuActionProvider actionProvider =
-      ^(NSArray<UIMenuElement*>* suggestedActions) {
-        MostVisitedTilesMediator* strongSelf = weakSelf;
-        if (!strongSelf) {
-          // Return an empty menu.
-          return [UIMenu menuWithTitle:@"" children:@[]];
-        }
-        return [strongSelf contextMenuActionProviderForItem:item fromView:view];
-      };
-  return
-      [UIContextMenuConfiguration configurationWithIdentifier:nil
-                                              previewProvider:nil
-                                               actionProvider:actionProvider];
-}
-
-#pragma mark - MostVisitedTilesStackViewConsumerSource
-
-- (void)addConsumer:(id<MostVisitedTilesStackViewConsumer>)consumer {
-  if (_stackViewConsumer == consumer) {
-    return;
-  }
-  _stackViewConsumer = consumer;
-}
-
-#pragma mark - Private
-
-- (UIMenu*)contextMenuActionProviderForItem:
-               (ContentSuggestionsMostVisitedItem*)item
-                                   fromView:(UIView*)view {
+- (NSArray<UIMenuElement*>*)defaultContextMenuElementsForItem:
+                                (ContentSuggestionsMostVisitedItem*)item
+                                                     fromView:(UIView*)view {
   // Record that this context menu was shown to the user.
   RecordMenuShown(kMenuScenarioHistogramMostVisitedEntry);
 
@@ -369,9 +342,19 @@ const CGFloat kMagicStackMostVisitedFaviconMinimalSize = 18;
   [menuElements addObject:[self.actionFactory actionToRemoveWithBlock:^{
                   [weakSelf removeMostVisited:item];
                 }]];
-
-  return [UIMenu menuWithTitle:@"" children:menuElements];
+  return menuElements;
 }
+
+#pragma mark - MostVisitedTilesStackViewConsumerSource
+
+- (void)addConsumer:(id<MostVisitedTilesStackViewConsumer>)consumer {
+  if (_stackViewConsumer == consumer) {
+    return;
+  }
+  _stackViewConsumer = consumer;
+}
+
+#pragma mark - Private
 
 // Replaces the Most Visited items currently displayed by the most recent ones.
 - (void)useFreshMostVisited {

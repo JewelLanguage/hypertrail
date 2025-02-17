@@ -18,6 +18,7 @@ import tempfile
 import time
 
 import requests
+import reversion_glibc
 
 DISTRO = "debian"
 RELEASE = "bullseye"
@@ -25,7 +26,7 @@ RELEASE = "bullseye"
 # This number is appended to the sysroot key to cause full rebuilds.  It
 # should be incremented when removing packages or patching existing packages.
 # It should not be incremented when adding packages.
-SYSROOT_RELEASE = 2
+SYSROOT_RELEASE = 1
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -35,7 +36,7 @@ BUILD_DIR = os.path.join(CHROME_DIR, "out", "sysroot-build", RELEASE)
 # gpg keyring file generated using generate_keyring.sh
 KEYRING_FILE = os.path.join(SCRIPT_DIR, "keyring.gpg")
 
-ARCHIVE_TIMESTAMP = "20230611T210420Z"
+ARCHIVE_TIMESTAMP = "20250129T203412Z"
 
 ARCHIVE_URL = f"https://snapshot.debian.org/archive/debian/{ARCHIVE_TIMESTAMP}/"
 APT_SOURCES_LIST = [
@@ -56,6 +57,7 @@ TRIPLES = {
     "arm64": "aarch64-linux-gnu",
     "mipsel": "mipsel-linux-gnu",
     "mips64el": "mips64el-linux-gnuabi64",
+    "ppc64el": "powerpc64le-linux-gnu",
 }
 
 REQUIRED_TOOLS = [
@@ -79,6 +81,7 @@ DEBIAN_PACKAGES = [
     "libbluetooth-dev",
     "libc6-dev",
     "libcap-dev",
+    "libcolord-dev",
     "libcups2-dev",
     "libcupsimage2-dev",
     "libcurl4-gnutls-dev",
@@ -96,8 +99,10 @@ DEBIAN_PACKAGES = [
     "libjpeg-dev",
     "libjsoncpp-dev",
     "libkrb5-dev",
+    "liblcms2-dev",
     "liblzma-dev",
     "libminizip-dev",
+    "libmtdev-dev",
     "libncurses-dev",
     "libnss3-dev",
     "libopus-dev",
@@ -360,6 +365,34 @@ def hacks_and_patches(install_root: str, script_dir: str, arch: str) -> None:
                      "symbols"),
     )
 
+    # __GLIBC_MINOR__ is used as a feature test macro. Replace it with the
+    # earliest supported version of glibc (2.26).
+    features_h = os.path.join(install_root, "usr", "include", "features.h")
+    replace_in_file(features_h, r"(#define\s+__GLIBC_MINOR__)", r"\1 26 //")
+
+    # fcntl64() was introduced in glibc 2.28. Make sure to use fcntl() instead.
+    fcntl_h = os.path.join(install_root, "usr", "include", "fcntl.h")
+    replace_in_file(
+        fcntl_h,
+        r"#ifndef __USE_FILE_OFFSET64(\nextern int fcntl)",
+        r"#if 1\1",
+    )
+
+    # Do not use pthread_cond_clockwait as it was introduced in glibc 2.30.
+    cppconfig_h = os.path.join(
+        install_root,
+        "usr",
+        "include",
+        TRIPLES[arch],
+        "c++",
+        "10",
+        "bits",
+        "c++config.h",
+    )
+    replace_in_file(cppconfig_h,
+                    r"(#define\s+_GLIBCXX_USE_PTHREAD_COND_CLOCKWAIT)",
+                    r"// \1")
+
     # Include limits.h in stdlib.h to fix an ODR issue.
     stdlib_h = os.path.join(install_root, "usr", "include", "stdlib.h")
     replace_in_file(stdlib_h, r"(#include <stddef.h>)",
@@ -375,12 +408,20 @@ def hacks_and_patches(install_root: str, script_dir: str, arch: str) -> None:
             shutil.move(os.path.join(triple_pkgconfig_dir, file),
                         pkgconfig_dir)
 
+    # Avoid requiring unsupported glibc versions.
+    for lib in ["libc.so.6", "libm.so.6", "libcrypt.so.1"]:
+        lib_path = os.path.join(install_root, "lib", TRIPLES[arch], lib)
+        reversion_glibc.reversion_glibc(lib_path)
+
     # GTK4 is provided by bookworm (12), but pango is provided by bullseye
     # (11).  Fix the GTK4 pkgconfig file to relax the pango version
     # requirement.
     gtk4_pc = os.path.join(pkgconfig_dir, "gtk4.pc")
     replace_in_file(gtk4_pc, r"pango [>=0-9. ]*", "pango")
     replace_in_file(gtk4_pc, r"pangocairo [>=0-9. ]*", "pangocairo")
+
+    # Remove a cyclic symlink: /usr/bin/X11 -> /usr/bin
+    os.remove(os.path.join(install_root, "usr/bin/X11"))
 
 
 def replace_in_file(file_path: str, search_pattern: str,
@@ -470,7 +511,9 @@ def cleanup_jail_symlinks(install_root: str) -> None:
             if os.path.islink(full_path):
                 target_path = os.readlink(full_path)
                 if target_path == "/dev/null":
-                    # Don't relativize this link.
+                    # Some systemd services get masked by symlinking them to
+                    # /dev/null. It's safe to remove these.
+                    os.remove(full_path)
                     continue
 
                 # If the link's target does not exist, remove this broken link.
@@ -505,12 +548,16 @@ def removing_unnecessary_files(install_root, arch):
     Minimizes the sysroot by removing unnecessary files.
     """
     # Preserve these files.
+    gcc_triple = "i686-linux-gnu" if arch == "i386" else TRIPLES[arch]
     ALLOWLIST = {
         "usr/bin/cups-config",
-        f"usr/lib/gcc/{TRIPLES[arch]}/10/libgcc.a",
+        f"usr/lib/gcc/{gcc_triple}/10/libgcc.a",
         f"usr/lib/{TRIPLES[arch]}/libc_nonshared.a",
         f"usr/lib/{TRIPLES[arch]}/libffi_pic.a",
     }
+
+    for file in ALLOWLIST:
+        assert os.path.exists(os.path.join(install_root, file))
 
     # Remove all executables and static libraries, and any symlinks that
     # were pointing to them.
@@ -536,7 +583,7 @@ def removing_unnecessary_files(install_root, arch):
             os.remove(link)
 
 
-def strip_sections(install_root: str):
+def strip_sections(install_root: str, arch: str):
     """
     Strips all sections from ELF files except for dynamic linking and
     essential sections. Skips static libraries (.a) and object files (.o).
@@ -584,7 +631,9 @@ def strip_sections(install_root: str):
 
             sections_to_remove = sections - PRESERVED_SECTIONS
             if sections_to_remove:
-                objcopy_cmd = (["objcopy"] + [
+                objcopy_arch = "amd64" if arch == "i386" else arch
+                objcopy_bin = TRIPLES[objcopy_arch] + "-objcopy"
+                objcopy_cmd = ([objcopy_bin] + [
                     f"--remove-section={section}"
                     for section in sections_to_remove
                 ] + [file_path])
@@ -646,7 +695,7 @@ def build_sysroot(arch: str) -> None:
     hacks_and_patches(install_root, SCRIPT_DIR, arch)
     cleanup_jail_symlinks(install_root)
     removing_unnecessary_files(install_root, arch)
-    strip_sections(install_root)
+    strip_sections(install_root, arch)
     restore_metadata(install_root, old_metadata)
     create_tarball(install_root, arch)
 

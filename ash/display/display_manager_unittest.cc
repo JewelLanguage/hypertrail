@@ -4,6 +4,8 @@
 
 #include "ui/display/manager/display_manager.h"
 
+#include <algorithm>
+
 #include "ash/accelerators/accelerator_commands.h"
 #include "ash/accelerometer/accelerometer_reader.h"
 #include "ash/accelerometer/accelerometer_types.h"
@@ -35,10 +37,10 @@
 #include "base/format_macros.h"
 #include "base/memory/raw_ptr.h"
 #include "base/numerics/math_constants.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chromeos/ui/base/app_types.h"
 #include "chromeos/ui/base/window_properties.h"
@@ -49,6 +51,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/display.h"
+#include "ui/display/display_features.h"
 #include "ui/display/display_layout.h"
 #include "ui/display/display_layout_builder.h"
 #include "ui/display/display_observer.h"
@@ -69,6 +72,7 @@
 #include "ui/events/devices/touchscreen_device.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/font_render_params.h"
+#include "ui/gfx/font_render_params_linux.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/overlay_transform.h"
 #include "ui/wm/core/compound_event_filter.h"
@@ -146,9 +150,9 @@ class DisplayManagerObserverValidator : public display::DisplayObserver,
       const DisplayConfigurationChange& configuration_change) override {
     EXPECT_TRUE(processing_display_changes_);
 
-    EXPECT_TRUE(base::ranges::is_permutation(
+    EXPECT_TRUE(std::ranges::is_permutation(
         added_displays_, configuration_change.added_displays));
-    EXPECT_TRUE(base::ranges::is_permutation(
+    EXPECT_TRUE(std::ranges::is_permutation(
         removed_displays_, configuration_change.removed_displays));
 
     EXPECT_EQ(changed_metrics_.size(),
@@ -5441,18 +5445,18 @@ TEST_F(DisplayManagerTest, DisplayManagerObserverNestedChangesOrdering) {
 
       // Update the set of tracked display ids communicated through did
       // process changes.
-      base::ranges::transform(
+      std::ranges::transform(
           configuration_change.added_displays,
           std::inserter(tracked_display_ids_, tracked_display_ids_.begin()),
           [](const display::Display& display) { return display.id(); });
 
       // If correctly ordered observers should be notified of added displays
       // before any changes to the metrics for these displays.
-      base::ranges::for_each(configuration_change.display_metrics_changes,
-                             [this](const auto& change) {
-                               EXPECT_TRUE(base::Contains(
-                                   tracked_display_ids_, change.display->id()));
-                             });
+      std::ranges::for_each(configuration_change.display_metrics_changes,
+                            [this](const auto& change) {
+                              EXPECT_TRUE(base::Contains(tracked_display_ids_,
+                                                         change.display->id()));
+                            });
 
       if (on_processed_cb_) {
         std::move(on_processed_cb_).Run();
@@ -5527,6 +5531,27 @@ TEST_F(DisplayManagerTest, VirtualDisplayUtilAddRemove) {
   EXPECT_FALSE(screen->GetDisplayWithDisplayId(display_id[1], &d));
   EXPECT_FALSE(screen->GetDisplayWithDisplayId(display_id[2], &d));
   EXPECT_EQ(screen->GetNumDisplays(), initial_display_count);
+}
+
+TEST_F(DisplayManagerTest, FontConfig) {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  command_line->AppendSwitchASCII("form-factor", "CHROMEBOX");
+  display_manager()->RefreshFontParams();
+  EXPECT_TRUE(gfx::GetFontRenderParamsSubpixelRenderingEnabledForTesting());
+
+  command_line->AppendSwitchASCII("form-factor", "CLAMSHELL");
+  display_manager()->RefreshFontParams();
+  EXPECT_FALSE(gfx::GetFontRenderParamsSubpixelRenderingEnabledForTesting());
+
+  {
+    base::test::ScopedFeatureList feature_list_;
+    feature_list_.InitAndEnableFeature(
+        display::features::kOledScaleFactorEnabled);
+    display_manager()->RefreshFontParams();
+    EXPECT_TRUE(gfx::GetFontRenderParamsSubpixelRenderingEnabledForTesting());
+  }
+  display_manager()->RefreshFontParams();
+  EXPECT_FALSE(gfx::GetFontRenderParamsSubpixelRenderingEnabledForTesting());
 }
 
 }  // namespace ash

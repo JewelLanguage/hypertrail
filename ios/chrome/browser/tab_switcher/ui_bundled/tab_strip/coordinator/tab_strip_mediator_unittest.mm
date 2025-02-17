@@ -9,6 +9,9 @@
 #import "base/test/ios/wait_util.h"
 #import "base/test/metrics/histogram_tester.h"
 #import "base/test/scoped_feature_list.h"
+#import "components/collaboration/test_support/mock_messaging_backend_service.h"
+#import "components/data_sharing/public/features.h"
+#import "components/data_sharing/test_support/mock_data_sharing_service.h"
 #import "components/favicon/core/favicon_service.h"
 #import "components/favicon/core/favicon_url.h"
 #import "components/favicon/ios/web_favicon_driver.h"
@@ -102,7 +105,13 @@ class TabStripMediatorTest : public PlatformTest {
  public:
   TabStripMediatorTest() {
     feature_list_.InitWithFeatures(
-        {kTabGroupsIPad, kModernTabStrip, kTabGroupSync}, {});
+        {
+            kTabGroupsIPad,
+            kModernTabStrip,
+            kTabGroupSync,
+            data_sharing::features::kDataSharingFeature,
+        },
+        {});
     TestProfileIOS::Builder profile_builder;
     profile_builder.AddTestingFactory(
         ios::FaviconServiceFactory::GetInstance(),
@@ -113,6 +122,8 @@ class TabStripMediatorTest : public PlatformTest {
 
     tab_group_sync_service_ = std::make_unique<
         ::testing::NiceMock<tab_groups::MockTabGroupSyncService>>();
+    data_sharing_service_ = std::make_unique<
+        ::testing::NiceMock<data_sharing::MockDataSharingService>>();
 
     profile_ = std::move(profile_builder).Build();
     browser_ = std::make_unique<TestBrowser>(
@@ -152,8 +163,10 @@ class TabStripMediatorTest : public PlatformTest {
     mediator_ =
         [[TabStripMediator alloc] initWithConsumer:consumer_
                                tabGroupSyncService:tab_group_sync_service_.get()
+                                dataSharingService:data_sharing_service_.get()
                                        browserList:browser_list
-                                  messagingService:nil];
+                                  messagingService:&messaging_backend_
+                              collaborationService:nil];
 
     mediator_.profile = profile_.get();
     mediator_.webStateList = web_state_list_;
@@ -200,9 +213,11 @@ class TabStripMediatorTest : public PlatformTest {
   FakeTabStripConsumer* consumer_;
   base::HistogramTester histogram_tester_;
   std::unique_ptr<tab_groups::MockTabGroupSyncService> tab_group_sync_service_;
+  std::unique_ptr<data_sharing::MockDataSharingService> data_sharing_service_;
   std::unique_ptr<TestSceneUrlLoadingService> scene_loader_;
   raw_ptr<UrlLoadingBrowserAgent> loader_;
   FakeURLLoadingDelegate* url_loading_delegate_;
+  collaboration::messaging::MockMessagingBackendService messaging_backend_;
 };
 
 // Tests that the mediator correctly populates the consumer at startup and after
@@ -280,6 +295,10 @@ TEST_F(TabStripMediatorTest, ConsumerPopulated) {
 
 // Test that `TabStripItemData` elements are updated accordingly.
 TEST_F(TabStripMediatorTest, TabStripItemDataUpdated) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   WebStateListBuilderFromDescription builder(web_state_list_);
   ASSERT_TRUE(builder.BuildWebStateListFromDescription(
       "a b | c* [ 0 d e ] f [ 1 g h ]"));
@@ -461,6 +480,10 @@ TEST_F(TabStripMediatorTest, TabStripItemDataUpdated) {
 
 // Test that parent elements are updated accordingly.
 TEST_F(TabStripMediatorTest, ItemParentsUpdated) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   WebStateListBuilderFromDescription builder(web_state_list_);
   ASSERT_TRUE(builder.BuildWebStateListFromDescription(
       "a b | c* [ 0 d e ] f [ 1 g h ]"));
@@ -728,6 +751,10 @@ TEST_F(TabStripMediatorTest, CloseTab) {
 
 // Tests that removing a tab from its group works.
 TEST_F(TabStripMediatorTest, RemoveTabFromGroup) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   AddWebState();
   AddWebState();
   AddWebState();
@@ -750,6 +777,10 @@ TEST_F(TabStripMediatorTest, RemoveTabFromGroup) {
 
 // Tests that closing all non-pinned tabs except a pinned tab works.
 TEST_F(TabStripMediatorTest, CloseAllNonPinnedTabsExceptPinned) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   WebStateList* web_state_list = browser_->GetWebStateList();
   WebStateListBuilderFromDescription builder(web_state_list);
   ASSERT_TRUE(builder.BuildWebStateListFromDescription(
@@ -775,6 +806,10 @@ TEST_F(TabStripMediatorTest, CloseAllNonPinnedTabsExceptPinned) {
 
 // Tests that closing all non-pinned tabs except a non-active tab works.
 TEST_F(TabStripMediatorTest, CloseAllNonPinnedTabsExceptNonActive) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   WebStateList* web_state_list = browser_->GetWebStateList();
   WebStateListBuilderFromDescription builder(web_state_list);
   ASSERT_TRUE(builder.BuildWebStateListFromDescription(
@@ -800,6 +835,10 @@ TEST_F(TabStripMediatorTest, CloseAllNonPinnedTabsExceptNonActive) {
 
 // Tests that closing all non-pinned tabs except an active tab works.
 TEST_F(TabStripMediatorTest, CloseAllNonPinnedTabsExceptActive) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   WebStateList* web_state_list = browser_->GetWebStateList();
   WebStateListBuilderFromDescription builder(web_state_list);
   ASSERT_TRUE(builder.BuildWebStateListFromDescription(
@@ -929,6 +968,10 @@ TEST_F(TabStripMediatorTest, CreateNewGroupWithItem) {
 // Tests that the consumer is correctly updated after collapsing/expanding a
 // group.
 TEST_F(TabStripMediatorTest, CollapseExpandGroup) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   AddWebState();
   AddWebState();
   AddWebState();
@@ -986,8 +1029,9 @@ TEST_F(TabStripMediatorTest, RenameGroup) {
   EXPECT_EQ(group, tab_strip_handler_.groupForTabGroupEdition);
 }
 
-// Tests that adding a new tab in a group works.
-TEST_F(TabStripMediatorTest, AddTabInGroup) {
+// Tests that adding a new tab in a group works while the active web state is
+// part of the group.
+TEST_F(TabStripMediatorTest, AddTabInGroupFromGroup) {
   AddWebState();
   AddWebState();
   const TabGroup* group =
@@ -1009,6 +1053,38 @@ TEST_F(TabStripMediatorTest, AddTabInGroup) {
   EXPECT_EQ(web_state_list_->GetWebStateAt(2)->GetUniqueIdentifier(),
             consumer_.selectedItem.identifier);
   EXPECT_EQ(group, web_state_list_->GetGroupOfWebStateAt(2));
+}
+
+// Tests that adding a new tab in a group works while the active web state is
+// not part of the group.
+TEST_F(TabStripMediatorTest, AddTabInGroupOutsideOfGroup) {
+  AddWebState();
+  AddWebState();
+  AddWebState();
+  const TabGroup* group =
+      web_state_list_->CreateGroup({0, 1}, {}, TabGroupId::GenerateNew());
+  TabGroupItem* groupItem =
+      [[TabGroupItem alloc] initWithTabGroup:group
+                                webStateList:web_state_list_];
+
+  InitializeMediator();
+
+  int active_index = web_state_list_->active_index();
+  web::WebState* original_web_state =
+      web_state_list_->GetWebStateAt(active_index);
+  ASSERT_EQ(2, active_index);
+  ASSERT_EQ(3, web_state_list_->count());
+
+  [mediator_ addNewTabInGroup:groupItem];
+
+  // Check model is updated.
+  EXPECT_EQ(2, web_state_list_->active_index());
+  EXPECT_EQ(4, web_state_list_->count());
+  EXPECT_EQ(web_state_list_->GetWebStateAt(2)->GetUniqueIdentifier(),
+            consumer_.selectedItem.identifier);
+  EXPECT_EQ(group, web_state_list_->GetGroupOfWebStateAt(2));
+  EXPECT_EQ(original_web_state, web_state_list_->GetWebStateAt(3));
+  EXPECT_EQ(nullptr, web_state_list_->GetGroupOfWebStateAt(3));
 }
 
 // Tests that ungrouping tabs in a group works.
@@ -1195,6 +1271,10 @@ TEST_F(TabStripMediatorTest, DropTab) {
 
 // Tests dragging the last tab out of a group.
 TEST_F(TabStripMediatorTest, DropLastTabOfGroup) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   WebStateList* web_state_list = browser_->GetWebStateList();
   CloseAllWebStates(*web_state_list, WebStateList::CLOSE_NO_FLAGS);
   WebStateListBuilderFromDescription builder(web_state_list);
@@ -1242,6 +1322,10 @@ TEST_F(TabStripMediatorTest, DropLastTabOfGroup) {
 
 // Tests dragging the last tab out of a group from another browser.
 TEST_F(TabStripMediatorTest, DropLastTabOfGroupDifferentBrowser) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   WebStateList* web_state_list = browser_->GetWebStateList();
   CloseAllWebStates(*web_state_list, WebStateList::CLOSE_NO_FLAGS);
   WebStateListBuilderFromDescription builder(web_state_list);
@@ -1296,6 +1380,10 @@ TEST_F(TabStripMediatorTest, DropLastTabOfGroupDifferentBrowser) {
 
 // Tests dragging the a tab out of a group containing several tabs.
 TEST_F(TabStripMediatorTest, DropTabOutOfGroup) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
   WebStateList* web_state_list = browser_->GetWebStateList();
   CloseAllWebStates(*web_state_list, WebStateList::CLOSE_NO_FLAGS);
   WebStateListBuilderFromDescription builder(web_state_list);
@@ -1571,4 +1659,82 @@ TEST_F(TabStripMediatorTest, CancelTabMoveDifferentBrowser) {
   EXPECT_EQ(visual_data,
             other_web_state_list->GetGroupOfWebStateAt(3)->visual_data());
   EXPECT_EQ(web_state, other_web_state_list->GetWebStateAt(3));
+}
+
+// Tests that the group item in the tab strip has the notification dot in its
+// item data.
+TEST_F(TabStripMediatorTest, TabGroupItemHasNotificationDot) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
+  CloseAllWebStates(*web_state_list_, WebStateList::CLOSE_NO_FLAGS);
+  WebStateListBuilderFromDescription builder(web_state_list_);
+  ASSERT_TRUE(builder.BuildWebStateListFromDescription("| [ 0 a* b ] c ",
+                                                       browser_->GetProfile()));
+  ASSERT_EQ(1u, web_state_list_->GetGroups().size());
+
+  const TabGroup* local_group = builder.GetTabGroupForIdentifier('0');
+  tab_groups::LocalTabGroupID local_tab_group_id = local_group->tab_group_id();
+
+  collaboration::messaging::PersistentMessage message;
+  collaboration::messaging::TabGroupMessageMetadata metadata;
+  metadata.local_tab_group_id = std::make_optional(local_tab_group_id);
+  message.type =
+      collaboration::messaging::PersistentNotificationType::DIRTY_TAB_GROUP;
+  message.attribution.tab_group_metadata = std::make_optional(metadata);
+
+  ON_CALL(messaging_backend_, IsInitialized).WillByDefault(Return(true));
+  ON_CALL(messaging_backend_, GetMessages(_))
+      .WillByDefault(Return(std::vector{message}));
+
+  // The item data doesn't have the notification dot by default.
+  EXPECT_EQ(consumer_.itemData[consumer_.items[0]].hasNotificationDot, NO);
+
+  // Initialize mediator and start fetching messages.
+  InitializeMediator();
+
+  // The group item has the notification dot.
+  EXPECT_EQ(consumer_.itemData[consumer_.items[0]].hasNotificationDot, YES);
+  EXPECT_EQ(consumer_.itemData[consumer_.items[1]].hasNotificationDot, NO);
+  EXPECT_EQ(consumer_.itemData[consumer_.items[2]].hasNotificationDot, NO);
+  EXPECT_EQ(consumer_.itemData[consumer_.items[3]].hasNotificationDot, NO);
+}
+
+// Tests that the tab strip has the notification dot in its item data.
+TEST_F(TabStripMediatorTest, TabStripItemHasNotificationDot) {
+  if (!IsTabGroupInGridEnabled()) {
+    // Disabled on iPadOS 16.
+    return;
+  }
+  CloseAllWebStates(*web_state_list_, WebStateList::CLOSE_NO_FLAGS);
+  WebStateListBuilderFromDescription builder(web_state_list_);
+  ASSERT_TRUE(builder.BuildWebStateListFromDescription("|[ 0 a* b ] c ",
+                                                       browser_->GetProfile()));
+  ASSERT_EQ(1u, web_state_list_->GetGroups().size());
+
+  web::WebState* web_state = web_state_list_->GetWebStateAt(0);
+
+  collaboration::messaging::PersistentMessage message;
+  collaboration::messaging::TabMessageMetadata metadata;
+  metadata.local_tab_id = web_state->GetUniqueIdentifier().identifier();
+  message.type =
+      collaboration::messaging::PersistentNotificationType::DIRTY_TAB;
+  message.attribution.tab_metadata = std::make_optional(metadata);
+
+  ON_CALL(messaging_backend_, IsInitialized).WillByDefault(Return(true));
+  ON_CALL(messaging_backend_, GetMessages(_))
+      .WillByDefault(Return(std::vector{message}));
+
+  // The item data doesn't have the notification dot by default.
+  EXPECT_EQ(consumer_.itemData[consumer_.items[1]].hasNotificationDot, NO);
+
+  // Initialize mediator and start fetching messages.
+  InitializeMediator();
+
+  // The first tab in the group has the notification dot.
+  EXPECT_EQ(consumer_.itemData[consumer_.items[0]].hasNotificationDot, NO);
+  EXPECT_EQ(consumer_.itemData[consumer_.items[1]].hasNotificationDot, YES);
+  EXPECT_EQ(consumer_.itemData[consumer_.items[2]].hasNotificationDot, NO);
+  EXPECT_EQ(consumer_.itemData[consumer_.items[3]].hasNotificationDot, NO);
 }

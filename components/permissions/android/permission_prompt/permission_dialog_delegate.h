@@ -43,7 +43,9 @@ class PermissionDialogJavaDelegate {
 
   virtual void DismissDialog();
 
-  virtual void UpdateDialogWithNewScreenVariant();
+  virtual void UpdateDialog();
+
+  virtual void NotifyPermissionAllowed();
 
  private:
   base::android::ScopedJavaGlobalRef<jobject> j_delegate_;
@@ -81,22 +83,36 @@ class PermissionDialogDelegate : public content::WebContentsObserver {
   // JNI methods.
   void Accept(JNIEnv* env, const JavaParamRef<jobject>& obj);
   void AcceptThisTime(JNIEnv* env, const JavaParamRef<jobject>& obj);
-  void Cancel(JNIEnv* env, const JavaParamRef<jobject>& obj);
+  void Acknowledge(JNIEnv* env, const JavaParamRef<jobject>& obj);
+  void Deny(JNIEnv* env, const JavaParamRef<jobject>& obj);
   void Dismissed(JNIEnv* env,
                  const JavaParamRef<jobject>& obj,
                  int dismissalType);
+  void Resumed(JNIEnv* env, const JavaParamRef<jobject>& obj);
+  void SystemSettingsShown(JNIEnv* env, const JavaParamRef<jobject>& obj);
+  void SystemPermissionResolved(JNIEnv* env,
+                                const JavaParamRef<jobject>& obj,
+                                bool accepted);
 
   // Reset the java JNI object object. Called from Java once the permission
   // dialog has been responded to.
   void Destroy(JNIEnv* env, const JavaParamRef<jobject>& obj);
+  bool IsJavaDelegateDestroyed() const { return !java_delegate_; }
 
   // Notify Java side to update content view of the dialog associated with this
   // object.
-  void UpdateDialogWithNewScreenVariant();
+  void UpdateDialog();
+
+  // Notify Java side that the permission has been allowed. It's basically the
+  // end if a permission flow and Java side can perform next task, such as
+  // update permission icon or showing next dialog.
+  void NotifyPermissionAllowed();
 
  private:
   // On navigation or page destruction, hide the dialog.
   void DismissDialog();
+
+  void DestroyJavaDelegate() { java_delegate_.reset(); }
 
   // WebContentsObserver:
   void PrimaryPageChanged(content::Page&) override;

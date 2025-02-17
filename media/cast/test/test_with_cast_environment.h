@@ -49,11 +49,11 @@ class WithCastEnvironment {
     return task_environment_.GetMainThreadTaskRunner();
   }
 
-  [[nodiscard]] const base::TickClock* GetMockTickClock() {
+  [[nodiscard]] const base::TickClock* GetMockTickClock() const {
     return task_environment_.GetMockTickClock();
   }
 
-  [[nodiscard]] const base::TimeTicks NowTicks() {
+  [[nodiscard]] const base::TimeTicks NowTicks() const {
     return task_environment_.GetMockTickClock()->NowTicks();
   }
 
@@ -84,6 +84,7 @@ class TestWithCastEnvironment : public ::testing::Test,
   TestWithCastEnvironment(const TestWithCastEnvironment&) = delete;
   TestWithCastEnvironment& operator=(const TestWithCastEnvironment&) = delete;
   TestWithCastEnvironment& operator=(TestWithCastEnvironment&&) = delete;
+  ~TestWithCastEnvironment() override;
 
  protected:
   using WithCastEnvironment::WithCastEnvironment;

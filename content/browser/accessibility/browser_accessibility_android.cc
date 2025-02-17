@@ -390,6 +390,16 @@ bool BrowserAccessibilityAndroid::IsInterestingOnAndroid() const {
   // when swiping by heading, landmark, etc. So we will also mark the
   // children of a link as not interesting to prevent double utterances.
   const BrowserAccessibility* parent = PlatformGetParent();
+
+  // Should not read options in a multiselect combobox as it is invisible.
+  // TODO(crbug.com/395134019): We should be able to select options in
+  // aria list box.
+  if (parent && parent->GetRole() == ax::mojom::Role::kListBox &&
+      parent->HasState(ax::mojom::State::kMultiselectable) &&
+      GetRole() == ax::mojom::Role::kListBoxOption) {
+    return false;
+  }
+
   while (parent) {
     if (ui::IsControl(parent->GetRole()) && !IsFocusable()) {
       return false;
@@ -2128,12 +2138,11 @@ int BrowserAccessibilityAndroid::CountChildrenWithRole(
 
 std::u16string BrowserAccessibilityAndroid::GetContentInvalidErrorMessage()
     const {
-  int message_id = -1;
-
   if (!IsContentInvalid()) {
     return std::u16string();
   }
 
+  int message_id = -1;
   switch (GetData().GetInvalidState()) {
     case ax::mojom::InvalidState::kNone:
     case ax::mojom::InvalidState::kFalse:
@@ -2170,11 +2179,28 @@ std::u16string BrowserAccessibilityAndroid::GetContentInvalidErrorMessage()
       break;
   }
 
+  std::vector<std::u16string> error_messages;
   if (message_id != -1) {
-    return GetLocalizedString(message_id);
+    error_messages.push_back(GetLocalizedString(message_id));
   }
 
-  return std::u16string();
+  for (int error_message_id :
+       GetIntListAttribute(ax::mojom::IntListAttribute::kErrormessageIds)) {
+    BrowserAccessibility* node = manager()->GetFromID(error_message_id);
+    if (!node || !node->HasStringAttribute(ax::mojom::StringAttribute::kName)) {
+      continue;
+    }
+
+    const auto& name =
+        node->GetString16Attribute(ax::mojom::StringAttribute::kName);
+    if (name.empty()) {
+      continue;
+    }
+
+    error_messages.push_back(name);
+  }
+
+  return base::JoinString(error_messages, u" ");
 }
 
 std::u16string

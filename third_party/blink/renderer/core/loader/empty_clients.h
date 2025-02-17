@@ -272,7 +272,7 @@ class EmptyWebWorkerFetchContext : public WebWorkerFetchContext {
     return nullptr;
   }
   void FinalizeRequest(WebURLRequest&) override {}
-  WebVector<std::unique_ptr<URLLoaderThrottle>> CreateThrottles(
+  std::vector<std::unique_ptr<URLLoaderThrottle>> CreateThrottles(
       const network::ResourceRequest&) override {
     return {};
   }
@@ -287,7 +287,6 @@ class EmptyWebWorkerFetchContext : public WebWorkerFetchContext {
     return std::nullopt;
   }
   blink::WebString GetAcceptLanguages() const override { return ""; }
-  void SetIsOfflineMode(bool is_offline_mode) override {}
   bool IsDedicatedWorkerOrSharedWorkerFetchContext() const override {
     return true;
   }

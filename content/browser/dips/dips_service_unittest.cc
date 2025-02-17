@@ -275,7 +275,7 @@ class BtmServiceStateRemovalTest : public testing::Test {
     browser_client_.GrantCookieAccessDueToHeuristic(
         profile_.get(), net::SchemefulSite(first_party_url),
         net::SchemefulSite(third_party_url), base::Days(1),
-        /*ignore_schemas=*/false);
+        /*ignore_schemes=*/false);
 
     auto* client = GetContentClientForTesting()->browser();
     EXPECT_TRUE(client->IsFullCookieAccessAllowed(
@@ -576,7 +576,7 @@ TEST_F(BtmServiceStateRemovalTest,
                increment_bounce);
   GetService()
       ->storage()
-      ->AsyncCall(&BtmStorage::RecordInteraction)
+      ->AsyncCall(&BtmStorage::RecordUserActivation)
       .WithArgs(redirect_url_3, bounce, GetService()->GetCookieMode());
   WaitOnStorage(GetService());
 
@@ -663,7 +663,7 @@ TEST_F(BtmServiceStateRemovalTest,
                increment_bounce);
   GetService()
       ->storage()
-      ->AsyncCall(&BtmStorage::RecordInteraction)
+      ->AsyncCall(&BtmStorage::RecordUserActivation)
       .WithArgs(redirect_url_3, bounce, GetService()->GetCookieMode());
   WaitOnStorage(GetService());
 
@@ -711,7 +711,7 @@ TEST_F(
   GURL redirect_url_3("https://redirect-3.com");
   GURL redirect_url_4("https://redirect-4.com");
 
-  // // Exceptions to block third-party cookies.
+  // Exceptions to block third-party cookies.
   browser_client_.BlockThirdPartyCookiesOnSite(blocked_1p_url);
   browser_client_.BlockThirdPartyCookies(redirect_url_1, scoped_blocked_1p_url);
 
@@ -731,7 +731,7 @@ TEST_F(
                increment_bounce);
   GetService()
       ->storage()
-      ->AsyncCall(&BtmStorage::RecordInteraction)
+      ->AsyncCall(&BtmStorage::RecordUserActivation)
       .WithArgs(redirect_url_2, bounce, GetService()->GetCookieMode());
   WaitOnStorage(GetService());
   // Record a bounce through redirect_url_3 that starts on a non-blocked URL.

@@ -13,7 +13,6 @@
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/rand_util.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/levenshtein_distance.h"
 #include "base/strings/string_util.h"
 #include "base/types/cxx23_to_underlying.h"
@@ -32,12 +31,6 @@ namespace autofill {
 namespace {
 
 using ObservationType = ProfileTokenQuality::ObservationType;
-
-FieldTypeSet GetSupportedTypes(const AutofillProfile& profile) {
-  FieldTypeSet types;
-  profile.GetSupportedTypes(&types);
-  return types;
-}
 
 // Computes the `ObservationType` if a field of the given `type` was autofilled
 // with the `profile`, but the autofilled value was edited to `edited_value`
@@ -73,7 +66,7 @@ ObservationType GetObservationTypeForEditedField(
 
   // Returns all supported types of the `profile` except for `type`.
   auto other_types = [&](const AutofillProfile& profile) {
-    FieldTypeSet other_types = GetSupportedTypes(profile);
+    FieldTypeSet other_types = profile.GetSupportedTypes();
     other_types.erase(type);
     return other_types;
   };
@@ -117,11 +110,11 @@ bool ProfileTokenQuality::operator==(const ProfileTokenQuality& other) const {
   // Element-wise comparison between `observations_` and `other.observations_`.
   // base::circular_deque<> intentionally doesn't define a comparison operator.
   using map_entry_t = std::pair<FieldType, base::circular_deque<Observation>>;
-  return base::ranges::equal(observations_, other.observations_,
-                             [](const map_entry_t& a, const map_entry_t& b) {
-                               return a.first == b.first &&
-                                      base::ranges::equal(a.second, b.second);
-                             });
+  return std::ranges::equal(observations_, other.observations_,
+                            [](const map_entry_t& a, const map_entry_t& b) {
+                              return a.first == b.first &&
+                                     std::ranges::equal(a.second, b.second);
+                            });
 }
 
 bool ProfileTokenQuality::AddObservationsForFilledForm(
@@ -135,7 +128,7 @@ bool ProfileTokenQuality::AddObservationsForFilledForm(
     return p->guid() == profile_->guid();
   });
 
-  const FieldTypeSet supported_types = GetSupportedTypes(*profile_);
+  const FieldTypeSet supported_types = profile_->GetSupportedTypes();
   std::vector<std::pair<FieldType, Observation>> possible_observations;
   for (size_t i = 0; i < form_structure.field_count(); i++) {
     const AutofillField& field = *form_structure.field(i);
@@ -279,7 +272,7 @@ ObservationType ProfileTokenQuality::GetObservationTypeFromField(
   const FieldType type = field.Type().GetStorableType();
   if (field.is_autofilled()) {
     // The filled value was accepted without editing.
-    return GetDatabaseStoredTypesOfAutofillProfile().contains(type)
+    return AutofillProfile::kDatabaseStoredTypes.contains(type)
                ? ObservationType::kAccepted
                : ObservationType::kPartiallyAccepted;
   }
@@ -292,7 +285,7 @@ ObservationType ProfileTokenQuality::GetObservationTypeFromField(
 
 std::vector<uint8_t> ProfileTokenQuality::SerializeObservationsForStoredType(
     FieldType type) const {
-  CHECK(GetDatabaseStoredTypesOfAutofillProfile().contains(type));
+  CHECK(AutofillProfile::kDatabaseStoredTypes.contains(type));
   std::vector<uint8_t> serialized_data;
   if (auto it = observations_.find(type); it != observations_.end()) {
     for (const Observation& observation : it->second) {
@@ -306,7 +299,7 @@ std::vector<uint8_t> ProfileTokenQuality::SerializeObservationsForStoredType(
 void ProfileTokenQuality::LoadSerializedObservationsForStoredType(
     FieldType type,
     base::span<const uint8_t> serialized_data) {
-  if (!GetSupportedTypes(*profile_).contains(type)) {
+  if (!profile_->GetSupportedTypes().contains(type)) {
     // Observations only get stored for supported types. However, due to changes
     // in the data model, it is possible for types to become unsupported.
     return;
@@ -332,7 +325,7 @@ void ProfileTokenQuality::LoadSerializedObservationsForStoredType(
 void ProfileTokenQuality::CopyObservationsForStoredType(
     FieldType type,
     const ProfileTokenQuality& other) {
-  CHECK(GetDatabaseStoredTypesOfAutofillProfile().contains(type));
+  CHECK(AutofillProfile::kDatabaseStoredTypes.contains(type));
   if (auto it = other.observations_.find(type);
       it != other.observations_.end()) {
     observations_[type] = it->second;
@@ -342,13 +335,13 @@ void ProfileTokenQuality::CopyObservationsForStoredType(
 }
 
 void ProfileTokenQuality::ResetObservationsForStoredType(FieldType type) {
-  CHECK(GetDatabaseStoredTypesOfAutofillProfile().contains(type));
+  CHECK(AutofillProfile::kDatabaseStoredTypes.contains(type));
   observations_.erase(type);
 }
 
 void ProfileTokenQuality::ResetObservationsForDifferingTokens(
     const AutofillProfile& other) {
-  for (FieldType type : GetDatabaseStoredTypesOfAutofillProfile()) {
+  for (FieldType type : AutofillProfile::kDatabaseStoredTypes) {
     if (profile_->GetRawInfo(type) != other.GetRawInfo(type)) {
       ResetObservationsForStoredType(type);
     }

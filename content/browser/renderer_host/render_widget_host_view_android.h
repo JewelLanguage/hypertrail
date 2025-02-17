@@ -54,8 +54,8 @@
 #include "ui/touch_selection/touch_selection_controller.h"
 
 namespace cc {
-struct BrowserControlsOffsetTagsInfo;
-}  // namespace cc
+struct BrowserControlsOffsetTags;
+}
 
 namespace cc::slim {
 class SurfaceLayer;
@@ -66,6 +66,7 @@ struct NativeWebKeyboardEvent;
 }  // namespace input
 
 namespace ui {
+struct BrowserControlsOffsetTagDefinitions;
 class MotionEventAndroid;
 class OverscrollRefreshHandler;
 struct DidOverscrollParams;
@@ -157,6 +158,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   gfx::Rect GetViewBounds() override;
   gfx::Size GetRequestedRendererSizeDevicePx() override;
   gfx::Size GetVisibleViewportSize() override;
+  gfx::Size GetVisibleViewportSizeDevicePx() override;
   void SetInsets(const gfx::Insets& insets) override;
   gfx::Size GetCompositorViewportPixelSize() override;
   bool IsSurfaceAvailableForCopy() override;
@@ -164,6 +166,11 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       const gfx::Rect& src_rect,
       const gfx::Size& output_size,
       base::OnceCallback<void(const SkBitmap&)> callback) override;
+  void CopyFromExactSurfaceWithIpcPriority(
+      const gfx::Rect& src_rect,
+      const gfx::Size& output_size,
+      base::OnceCallback<void(const SkBitmap&)> callback,
+      CopyOutputIpcPriority ipc_priority) override;
   void CopyFromExactSurface(
       const gfx::Rect& src_rect,
       const gfx::Size& output_size,
@@ -214,6 +221,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void OnOldViewDidNavigatePreCommit() override;
   void OnNewViewDidNavigatePostCommit() override;
   void DidEnterBackForwardCache() override;
+  void ActivatedOrEvictedFromBackForwardCache() override;
   const viz::FrameSinkId& GetFrameSinkId() const override;
   viz::FrameSinkId GetRootFrameSinkId() override;
   viz::SurfaceId GetCurrentSurfaceId() const override;
@@ -447,14 +455,20 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   const cc::slim::SurfaceLayer* GetSurfaceLayer() const;
 
-  void RegisterOffsetTags(const cc::BrowserControlsOffsetTagsInfo& tags_info);
-  void UnregisterOffsetTags(const cc::BrowserControlsOffsetTagsInfo& tags_info);
+  void RegisterOffsetTags(
+      const ui::BrowserControlsOffsetTagDefinitions& tag_definitions);
+  void UnregisterOffsetTags(const cc::BrowserControlsOffsetTags& tags);
 
   void PassImeRenderWidgetHost(
       mojo::PendingRemote<blink::mojom::ImeRenderWidgetHost> pending_remote);
 
   InputTransferHandlerAndroid* GetInputTransferHandlerForTesting() {
     return input_transfer_handler_.get();
+  }
+
+  void SetInputTransferHandlerForTesting(InputTransferHandlerAndroid* handler) {
+    input_transfer_handler_ =
+        std::unique_ptr<InputTransferHandlerAndroid>(handler);
   }
 
  protected:

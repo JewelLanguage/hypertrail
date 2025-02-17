@@ -71,7 +71,7 @@ CWV_EXPORT
 //   (not implemented for CWVWebView)
 //   |visibleURL| is the bad cert page URL. |lastCommittedURL| is the previous
 //   page URL.
-@property(nonatomic, readonly) NSURL* visibleURL;
+@property(nonatomic, readonly, nullable) NSURL* visibleURL;
 
 // A human-friendly string which represents the location of the document
 // currently being loaded. KVO compliant.
@@ -112,7 +112,8 @@ CWV_EXPORT
 // The scroll view associated with the web view.
 //
 // It is reset on state restoration.
-@property(nonatomic, readonly) UIScrollView* scrollView;
+// It is nil while the app is terminating. Otherwise it should never be nil.
+@property(nonatomic, readonly, nullable) UIScrollView* scrollView;
 
 // A Boolean value indicating whether horizontal swipe gestures will trigger
 // back-forward list navigations.
@@ -127,7 +128,8 @@ CWV_EXPORT
 
 // An equivalent of
 // https://developer.apple.com/documentation/webkit/wkwebview/1414977-backforwardlist
-@property(nonatomic, readonly, nonnull) CWVBackForwardList* backForwardList;
+// It is nil while the app is terminating. Otherwise it should never be nil.
+@property(nonatomic, readonly, nullable) CWVBackForwardList* backForwardList;
 
 // Enables Chrome's custom logic to handle long press and force touch. Defaults
 // to NO.
@@ -144,7 +146,7 @@ CWV_EXPORT
 // Defaults to NO.
 @property(nonatomic, class) BOOL webInspectorEnabled;
 
-// Normally ios/web_view/ CHECKs IsOptedInForAccountStorage() early on. Setting
+// Normally ios/web_view/ CHECKs IsAccountStorageEnabled() early on. Setting
 // this to true will cause the CHECK to be skipped, which potentially fixes
 // crbug.com/347862165.
 @property(nonatomic, class) BOOL skipAccountStorageCheckEnabled;
@@ -245,8 +247,9 @@ CWV_EXPORT
 // occur when the web view is navigating or if the current page content does
 // not allow JavaScript execution (ex: JS disabled or PDF content).
 - (void)evaluateJavaScript:(NSString*)javaScriptString
-         completionHandler:(nullable void (^)(id result,
-                            NSError* __nullable error))completion;
+         completionHandler:
+             (nullable void (^)(id result,
+                                NSError* __nullable error))completion;
 
 // DEPRECATED: Use `evaluateJavaScript:completionHandler` instead. These
 // methods are the same, but `evaluateJavaScript:completionHandler` provides

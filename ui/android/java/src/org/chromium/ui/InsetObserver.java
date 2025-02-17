@@ -37,6 +37,7 @@ public class InsetObserver implements OnApplyWindowInsetsListener {
     private final Rect mWindowInsets;
     private final Rect mCurrentSafeArea;
     private int mKeyboardInset;
+    private final Rect mSystemGestureInsets;
     protected final ObserverList<WindowInsetObserver> mObservers;
     private final KeyboardInsetObservableSupplier mKeyboardInsetSupplier;
     private final WindowInsetsAnimationCompat.Callback mWindowInsetsAnimationProxyCallback;
@@ -57,14 +58,12 @@ public class InsetObserver implements OnApplyWindowInsetsListener {
     /** Allows observing changes to the window insets from Android system UI. */
     public interface WindowInsetObserver {
         /**
-         * Triggered when the window insets have changed.
-         *
-         * @param left The left inset.
-         * @param top The top inset.
-         * @param right The right inset (but it feels so wrong).
-         * @param bottom The bottom inset.
+         * Triggered when the window insets for the system bars have changed, after all consumers
+         * has consumed the corresponding insets during {@link #onApplyWindowInsets}.
          */
-        default void onInsetChanged(int left, int top, int right, int bottom) {}
+        default void onInsetChanged() {}
+
+        default void onSystemGestureInsetsChanged(int left, int top, int right, int bottom) {}
 
         /**
          * Called when the keyboard inset changes. Note that the keyboard inset passed to this
@@ -158,6 +157,7 @@ public class InsetObserver implements OnApplyWindowInsetsListener {
         mCurrentSafeArea = new Rect();
         mDisplayCutoutRect = new Rect();
         mKeyboardInset = 0;
+        mSystemGestureInsets = new Rect();
         mObservers = new ObserverList<>();
         mKeyboardInsetSupplier = new KeyboardInsetObservableSupplier();
         addObserver(mKeyboardInsetSupplier);
@@ -247,6 +247,19 @@ public class InsetObserver implements OnApplyWindowInsetsListener {
         }
     }
 
+    /**
+     * Call {@link #onApplyWindowInsets(View, WindowInsetsCompat)} with the last seen raw window
+     * insets, if {@link #getLastRawWindowInsets()} is not null.
+     *
+     * <p>WARNING: This is used when an inset consumer is added / removed after the initial insets
+     * are populated. The added / removed inset consumer may change the consumed inset for the
+     * following consumer and observers.
+     */
+    public void retriggerOnApplyWindowInsets() {
+        if (mLastSeenRawWindowInset == null || mRootViewReference.get() == null) return;
+        onApplyWindowInsets(mRootViewReference.get(), mLastSeenRawWindowInset);
+    }
+
     /** Add a listener for inset animations. */
     public void addWindowInsetsAnimationListener(WindowInsetsAnimationListener listener) {
         mWindowInsetsAnimationListeners.addObserver(listener);
@@ -300,6 +313,12 @@ public class InsetObserver implements OnApplyWindowInsetsListener {
         Insets systemInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars());
         onInsetChanged(
                 systemInsets.left, systemInsets.top, systemInsets.right, systemInsets.bottom);
+        Insets systemGestureInsets = insets.getInsets(WindowInsetsCompat.Type.systemGestures());
+        onSystemGestureInsetsChanged(
+                systemGestureInsets.left,
+                systemGestureInsets.top,
+                systemGestureInsets.right,
+                systemGestureInsets.bottom);
         insets =
                 WindowInsetsCompat.toWindowInsetsCompat(
                         view.onApplyWindowInsets(insets.toWindowInsets()));
@@ -315,17 +334,30 @@ public class InsetObserver implements OnApplyWindowInsetsListener {
      * @param bottom The updated bottom inset.
      */
     private void onInsetChanged(int left, int top, int right, int bottom) {
-        if (mWindowInsets.left == left
-                && mWindowInsets.top == top
-                && mWindowInsets.right == right
-                && mWindowInsets.bottom == bottom) {
+        if (mWindowInsets.left != left
+                || mWindowInsets.top != top
+                || mWindowInsets.right != right
+                || mWindowInsets.bottom != bottom) {
+            mWindowInsets.set(left, top, right, bottom);
+        }
+
+        for (WindowInsetObserver observer : mObservers) {
+            observer.onInsetChanged();
+        }
+    }
+
+    private void onSystemGestureInsetsChanged(int left, int top, int right, int bottom) {
+        if (mSystemGestureInsets.left == left
+                && mSystemGestureInsets.top == top
+                && mSystemGestureInsets.right == right
+                && mSystemGestureInsets.bottom == bottom) {
             return;
         }
 
-        mWindowInsets.set(left, top, right, bottom);
+        mSystemGestureInsets.set(left, top, right, bottom);
 
         for (WindowInsetObserver observer : mObservers) {
-            observer.onInsetChanged(left, top, right, bottom);
+            observer.onSystemGestureInsetsChanged(left, top, right, bottom);
         }
     }
 
@@ -359,7 +391,18 @@ public class InsetObserver implements OnApplyWindowInsetsListener {
 
     /** Get the safe area from the WindowInsets, store it and notify any observers. */
     private void updateCurrentSafeArea() {
-        Rect newSafeArea = new Rect(mDisplayCutoutRect);
+        // When display cutout already included in the system bar insets, do not consider it as safe
+        // area.
+        Insets systemBarInsets =
+                getLastRawWindowInsets() == null
+                        ? Insets.NONE
+                        : getLastRawWindowInsets().getInsets(WindowInsetsCompat.Type.systemBars());
+        Rect newSafeArea =
+                new Rect(
+                        Math.max(0, mDisplayCutoutRect.left - systemBarInsets.left),
+                        Math.max(0, mDisplayCutoutRect.top - systemBarInsets.top),
+                        Math.max(0, mDisplayCutoutRect.right - systemBarInsets.right),
+                        Math.max(0, mDisplayCutoutRect.bottom - systemBarInsets.bottom));
         newSafeArea.bottom += mBottomInsetsForEdgeToEdge;
         // If the safe area has not changed then we should stop now.
         if (newSafeArea.equals(mCurrentSafeArea)) {

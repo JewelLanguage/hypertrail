@@ -11,6 +11,7 @@
 #include <shellapi.h>
 #include <wrl/client.h>
 
+#include <algorithm>
 #include <utility>
 
 #include "base/auto_reset.h"
@@ -23,7 +24,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_util_win.h"
 #include "base/task/current_thread.h"
 #include "base/task/single_thread_task_runner.h"
@@ -944,13 +944,13 @@ void HWNDMessageHandler::PaintAsActiveChanged() {
 void HWNDMessageHandler::SetWindowIcons(const gfx::ImageSkia& window_icon,
                                         const gfx::ImageSkia& app_icon) {
   if (!window_icon.isNull()) {
-    base::win::ScopedHICON previous_icon = std::move(window_icon_);
+    base::win::ScopedGDIObject<HICON> previous_icon = std::move(window_icon_);
     window_icon_ = IconUtil::CreateHICONFromSkBitmap(*window_icon.bitmap());
     SendMessage(hwnd(), WM_SETICON, ICON_SMALL,
                 reinterpret_cast<LPARAM>(window_icon_.get()));
   }
   if (!app_icon.isNull()) {
-    base::win::ScopedHICON previous_icon = std::move(app_icon_);
+    base::win::ScopedGDIObject<HICON> previous_icon = std::move(app_icon_);
     app_icon_ = IconUtil::CreateHICONFromSkBitmap(*app_icon.bitmap());
     SendMessage(hwnd(), WM_SETICON, ICON_BIG,
                 reinterpret_cast<LPARAM>(app_icon_.get()));
@@ -1623,12 +1623,12 @@ void HWNDMessageHandler::ResetWindowRegion(bool force, bool redraw) {
 
   // Changing the window region is going to force a paint. Only change the
   // window region if the region really differs.
-  base::win::ScopedRegion current_rgn(CreateRectRgn(0, 0, 0, 0));
+  base::win::ScopedGDIObject<HRGN> current_rgn(CreateRectRgn(0, 0, 0, 0));
   GetWindowRgn(hwnd(), current_rgn.get());
 
   RECT window_rect;
   GetWindowRect(hwnd(), &window_rect);
-  base::win::ScopedRegion new_region;
+  base::win::ScopedGDIObject<HRGN> new_region;
   if (custom_window_region_.is_valid()) {
     new_region.reset(CreateRectRgn(0, 0, 0, 0));
     CombineRgn(new_region.get(), custom_window_region_.get(), nullptr,
@@ -1821,7 +1821,7 @@ void HWNDMessageHandler::OnDestroy() {
   // If the window going away is a fullscreen window then remove its references
   // from the full screen window map.
   auto& map = fullscreen_monitor_map_.Get();
-  const auto i = base::ranges::find(
+  const auto i = std::ranges::find(
       map, this, &FullscreenWindowMonitorMap::value_type::second);
   if (i != map.end()) {
     map.erase(i);
@@ -2521,9 +2521,11 @@ void HWNDMessageHandler::OnNCPaint(HRGN rgn) {
     ::OffsetRect(&client_rect, -window_rect.left, -window_rect.top);
     // client_rect now is in window space.
 
-    base::win::ScopedRegion base(::CreateRectRgnIndirect(&dirty_region));
-    base::win::ScopedRegion client(::CreateRectRgnIndirect(&client_rect));
-    base::win::ScopedRegion nonclient(::CreateRectRgn(0, 0, 0, 0));
+    base::win::ScopedGDIObject<HRGN> base(
+        ::CreateRectRgnIndirect(&dirty_region));
+    base::win::ScopedGDIObject<HRGN> client(
+        ::CreateRectRgnIndirect(&client_rect));
+    base::win::ScopedGDIObject<HRGN> nonclient(::CreateRectRgn(0, 0, 0, 0));
     ::CombineRgn(nonclient.get(), base.get(), client.get(), RGN_DIFF);
 
     ::SelectClipRgn(dc, nonclient.get());

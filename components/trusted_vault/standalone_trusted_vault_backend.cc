@@ -20,7 +20,6 @@
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/ranges/algorithm.h"
 #include "base/sequence_checker.h"
 #include "base/stl_util.h"
 #include "base/task/sequenced_task_runner.h"
@@ -1106,7 +1105,7 @@ void StandaloneTrustedVaultBackend::FulfillFetchKeys(
       FindUserVault(gaia_id);
 
   if (status_for_uma.has_value()) {
-    RecordTrustedVaultDownloadKeysStatus(*status_for_uma);
+    RecordTrustedVaultDownloadKeysStatus(security_domain_id_, *status_for_uma);
   }
 
   std::vector<std::vector<uint8_t>> vault_keys;

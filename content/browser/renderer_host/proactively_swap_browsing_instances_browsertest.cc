@@ -106,7 +106,7 @@ class ProactivelySwapBrowsingInstancesTest : public RenderFrameHostManagerTest {
   ~ProactivelySwapBrowsingInstancesTest() override = default;
 
   void ExpectTotalCount(std::string_view name,
-                        base::HistogramBase::Count count) {
+                        base::HistogramBase::Count32 count) {
     FetchHistogramsFromChildProcesses();
     histogram_tester_.ExpectTotalCount(name, count);
   }
@@ -114,7 +114,7 @@ class ProactivelySwapBrowsingInstancesTest : public RenderFrameHostManagerTest {
   template <typename T>
   void ExpectBucketCount(std::string_view name,
                          T sample,
-                         base::HistogramBase::Count expected_count) {
+                         base::HistogramBase::Count32 expected_count) {
     FetchHistogramsFromChildProcesses();
     histogram_tester_.ExpectBucketCount(name, sample, expected_count);
   }
@@ -2264,7 +2264,7 @@ IN_PROC_BROWSER_TEST_P(ProactivelySwapBrowsingInstancesSameSiteCoopTest,
           web_contents->GetPrimaryMainFrame()->GetSiteInstance());
   EXPECT_FALSE(site_instance_2->IsRelatedSiteInstance(site_instance_3.get()));
   EXPECT_FALSE(site_instance_2->HasProcess());
-  EXPECT_NE(site_instance_2->GetProcess(), site_instance_3->GetProcess());
+  EXPECT_TRUE(site_instance_3->GetProcess());
 
   // 4) Do a back navigation to title2.html.
   RenderFrameDeletedObserver rfh_3_deleted_observer(

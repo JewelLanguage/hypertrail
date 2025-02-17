@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <algorithm>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <string_view>
@@ -17,7 +19,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
 #include "base/path_service.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/current_thread.h"
 #include "base/test/bind.h"
@@ -72,8 +73,12 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
+#include "third_party/blink/public/common/safe_url_pattern.h"
 #include "third_party/blink/public/common/switches.h"
+#include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
 #include "third_party/blink/public/mojom/manifest/manifest_launch_handler.mojom-shared.h"
+#include "third_party/blink/public/mojom/safe_url_pattern.mojom.h"
+#include "third_party/liburlpattern/pattern.h"
 #include "ui/base/window_open_disposition.h"
 #include "url/gurl.h"
 
@@ -87,12 +92,15 @@ constexpr char kDestinationPageScopeA[] =
     "/banners/link_capturing/scope_a/destination.html";
 constexpr char kDestinationPageScopeB[] =
     "/banners/link_capturing/scope_b/destination.html";
+constexpr char kDestinationPageScopeB2[] =
+    "/banners/link_capturing/scope_b/destination2.html";
 constexpr char kDestinationPageScopeX[] =
     "/banners/link_capturing/scope_x/destination.html";
 constexpr char kLinkCaptureTestInputPathPrefix[] = "chrome/test/data/web_apps/";
 
 constexpr char kValueScopeA2A[] = "A_TO_A";
 constexpr char kValueScopeA2B[] = "A_TO_B";
+constexpr char kValueScopeA2B2[] = "A_TO_B2";
 constexpr char kValueScopeA2X[] = "A_TO_X";
 constexpr char kValueLink[] = "LINK";
 constexpr char kValueButton[] = "BTN";
@@ -119,11 +127,12 @@ constexpr std::string_view ToParamString(LinkCapturing capturing) {
     case LinkCapturing::kDisabled:
       return "CaptureOff";
     case LinkCapturing::kEnabledViaClientMode:
-      return "CaptureForNonAuto";
+      return "CaptureForSpecifiedClientMode";
   }
 }
 
 // The user display mode configuration for the apps.
+// This should likely be renamed to AppEffectiveDisplayMode.
 enum class AppUserDisplayMode {
   // Both apps are UserDisplayMode::kBrowser.
   kBothBrowser,
@@ -132,7 +141,13 @@ enum class AppUserDisplayMode {
   // App A is UserDisplayMode::kStandalone, and App B is
   // UserDisplayMode::kBrowser.
   kAppAStandaloneAppBBrowser,
-  kMaxValue = kAppAStandaloneAppBBrowser,
+  // Both apps are UserDisplayMode::kStandalone,  App B's manifest display mode
+  // is 'tabbed', with no home tab configuration.
+  kAppAStandaloneAppBTabbed,
+  // Both apps are UserDisplayMode::kStandalone,  App B's manifest display mode
+  // is 'tabbed', and the 'home' tab configuration is for `destination.html`.
+  kAppAStandaloneAppBTabbedWithHome,
+  kMaxValue = kAppAStandaloneAppBTabbedWithHome,
 };
 
 constexpr std::string_view ToParamString(AppUserDisplayMode mode) {
@@ -143,6 +158,10 @@ constexpr std::string_view ToParamString(AppUserDisplayMode mode) {
       return "BothStandalone";
     case AppUserDisplayMode::kAppAStandaloneAppBBrowser:
       return "AppAStandaloneAppBBrowser";
+    case AppUserDisplayMode::kAppAStandaloneAppBTabbed:
+      return "AppAStandaloneAppBTabbed";
+    case AppUserDisplayMode::kAppAStandaloneAppBTabbedWithHome:
+      return "AppAStandaloneAppBTabbedWithHome";
   }
 }
 
@@ -168,6 +187,7 @@ constexpr std::string_view ToParamString(StartingPoint start) {
 enum class Destination {
   kScopeA2A,
   kScopeA2B,
+  kScopeA2B2,
   kScopeA2X,
 };
 
@@ -177,6 +197,8 @@ constexpr std::string ToIdString(Destination scope) {
       return kValueScopeA2A;
     case Destination::kScopeA2B:
       return kValueScopeA2B;
+    case Destination::kScopeA2B2:
+      return kValueScopeA2B2;
     case Destination::kScopeA2X:
       return kValueScopeA2X;
   }
@@ -188,6 +210,8 @@ constexpr std::string_view ToParamString(Destination scope) {
       return "ScopeA2A";
     case Destination::kScopeA2B:
       return "ScopeA2B";
+    case Destination::kScopeA2B2:
+      return "ScopeA2B2";
     case Destination::kScopeA2X:
       return "ScopeA2X";
   }
@@ -304,6 +328,9 @@ enum class ClientModeCombination {
   kBothNavigateExisting,
   kBothFocusExisting,
   kAppANavigateExistingAppBFocusExisting,
+#if !BUILDFLAG(IS_CHROMEOS)
+  kNotSpecified,
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 };
 
 std::string ToParamString(ClientModeCombination client_mode_combo) {
@@ -318,6 +345,10 @@ std::string ToParamString(ClientModeCombination client_mode_combo) {
       return "NavigateExisting";
     case ClientModeCombination::kAppANavigateExistingAppBFocusExisting:
       return "AppANavigateExistingAppBFocusExisting";
+#if !BUILDFLAG(IS_CHROMEOS)
+    case ClientModeCombination::kNotSpecified:
+      return "NotSpecifiedInManifest";
+#endif  // !BUILDFLAG(IS_CHROMEOS)
   }
 }
 
@@ -592,6 +623,11 @@ base::Value::Dict WebContentsToJson(const Browser& browser,
     }
   }
 
+  WebAppTabHelper* helper = WebAppTabHelper::FromWebContents(&web_contents);
+  if (helper->is_pinned_home_tab()) {
+    dict.Set("is_pinned_home_tab", true);
+  }
+
   return dict;
 }
 
@@ -730,24 +766,35 @@ class WebAppLinkCapturingParameterizedBrowserTest
       public testing::WithParamInterface<LinkCaptureTestParam> {
  public:
   WebAppLinkCapturingParameterizedBrowserTest() {
-    // kDropInputEventsBeforeFirstPaint is disabled to de-flake our simulated
-    // clicks.
     std::string mode = "reimpl_default_on";
     const char* param_name =
         ::testing::UnitTest::GetInstance()->current_test_info()->value_param();
-    if (param_name != nullptr && std::string_view(param_name).length() > 0) {
+    std::vector<base::test::FeatureRefAndParams> enabled_features;
+    bool is_parameterized_test =
+        param_name != nullptr && std::string_view(param_name).length() > 0;
+    if (is_parameterized_test) {
       // GetParam() crashes unless this test is run as a parameterized test. The
-      // 'Cleanup' tests are not.
+      // 'Cleanup' tests are not parameterized.
       if (GetLinkCapturing() == LinkCapturing::kEnabledViaClientMode) {
         mode = "reimpl_on_via_client_mode";
       }
+      if (GetAppUserDisplayMode() ==
+              AppUserDisplayMode::kAppAStandaloneAppBTabbed ||
+          GetAppUserDisplayMode() ==
+              AppUserDisplayMode::kAppAStandaloneAppBTabbedWithHome) {
+        enabled_features.emplace_back(blink::features::kDesktopPWAsTabStrip,
+                                      base::FieldTrialParams());
+        enabled_features.emplace_back(
+            blink::features::kDesktopPWAsTabStripCustomizations,
+            base::FieldTrialParams());
+      }
     }
+    enabled_features.emplace_back(
+        features::kPwaNavigationCapturing,
+        base::FieldTrialParams({{"link_capturing_state", mode}}));
     scoped_feature_list_.InitWithFeaturesAndParameters(
-        /*enabled_features=*/{base::test::FeatureRefAndParams(
-            features::kPwaNavigationCapturing,
-            {{"link_capturing_state", mode}})},
-        /*disabled_features=*/{
-            blink::features::kDropInputEventsBeforeFirstPaint});
+        /*enabled_features=*/enabled_features,
+        /*disabled_features=*/{});
   }
 
   // Returns the expectations JSON file name without extension.
@@ -773,6 +820,34 @@ class WebAppLinkCapturingParameterizedBrowserTest
 
   virtual std::string GetTestClassName() const {
     return "WebAppLinkCapturingParameterizedBrowserTest";
+  }
+
+  blink::SafeUrlPattern GetUrlPatternForDestinationB() const {
+    blink::SafeUrlPattern url_pattern;
+    GURL destination_page = GetDestinationUrlPageB();
+
+    using liburlpattern::Modifier;
+    using liburlpattern::Part;
+    using liburlpattern::PartType;
+
+    // The following matches everything. i.e. "*".
+    Part wildcard;
+    wildcard.modifier = Modifier::kNone;
+    wildcard.type = PartType::kFullWildcard;
+    wildcard.name = "0";
+
+    url_pattern.protocol.emplace_back(
+        PartType::kFixed, destination_page.scheme(), Modifier::kNone);
+    url_pattern.hostname.emplace_back(PartType::kFixed, destination_page.host(),
+                                      Modifier::kNone);
+    // The path can be the destination url plus anything else.
+    url_pattern.pathname.emplace_back(PartType::kFixed, destination_page.path(),
+                                      Modifier::kNone);
+    url_pattern.pathname.push_back(wildcard);
+    url_pattern.search.push_back(wildcard);
+    url_pattern.hash.push_back(wildcard);
+
+    return url_pattern;
   }
 
   // The expectations file can depend on whether link capturing is enabled or
@@ -1136,18 +1211,46 @@ class WebAppLinkCapturingParameterizedBrowserTest
     return std::get<AppUserDisplayMode>(GetParam());
   }
 
-  mojom::UserDisplayMode GetUserDisplayMode(GURL start_url) const {
+  mojom::UserDisplayMode GetUserDisplayMode(const GURL& start_url) const {
+    // It would be nice to have this keyed on an App enum, instead of using the
+    // start_url as a key, but this is fine for now.
     CHECK(start_url == GetDestinationUrlPageA() ||
           start_url == GetDestinationUrlPageB());
+    bool is_app_a = start_url == GetDestinationUrlPageA();
     switch (GetAppUserDisplayMode()) {
       case AppUserDisplayMode::kBothBrowser:
         return mojom::UserDisplayMode::kBrowser;
       case AppUserDisplayMode::kBothStandalone:
         return mojom::UserDisplayMode::kStandalone;
       case AppUserDisplayMode::kAppAStandaloneAppBBrowser:
-        return start_url == GetDestinationUrlPageA()
-                   ? mojom::UserDisplayMode::kStandalone
-                   : mojom::UserDisplayMode::kBrowser;
+        return is_app_a ? mojom::UserDisplayMode::kStandalone
+                        : mojom::UserDisplayMode::kBrowser;
+      case AppUserDisplayMode::kAppAStandaloneAppBTabbed:
+        return mojom::UserDisplayMode::kStandalone;
+      case AppUserDisplayMode::kAppAStandaloneAppBTabbedWithHome:
+        return mojom::UserDisplayMode::kStandalone;
+    }
+  }
+
+  blink::mojom::DisplayMode GetManifestDisplayMode(const GURL& start_url) {
+    // It would be nice to have this keyed on an App enum, instead of using the
+    // start_url as a key, but this is fine for now.
+    CHECK(start_url == GetDestinationUrlPageA() ||
+          start_url == GetDestinationUrlPageB());
+    bool is_app_a = start_url == GetDestinationUrlPageA();
+    switch (GetAppUserDisplayMode()) {
+      case AppUserDisplayMode::kBothBrowser:
+        return blink::mojom::DisplayMode::kStandalone;
+      case AppUserDisplayMode::kBothStandalone:
+        return blink::mojom::DisplayMode::kStandalone;
+      case AppUserDisplayMode::kAppAStandaloneAppBBrowser:
+        return blink::mojom::DisplayMode::kStandalone;
+      case AppUserDisplayMode::kAppAStandaloneAppBTabbed:
+        return is_app_a ? blink::mojom::DisplayMode::kStandalone
+                        : blink::mojom::DisplayMode::kTabbed;
+      case AppUserDisplayMode::kAppAStandaloneAppBTabbedWithHome:
+        return is_app_a ? blink::mojom::DisplayMode::kStandalone
+                        : blink::mojom::DisplayMode::kTabbed;
     }
   }
 
@@ -1177,6 +1280,10 @@ class WebAppLinkCapturingParameterizedBrowserTest
     return embedded_test_server()->GetURL(kDestinationPageScopeB);
   }
 
+  GURL GetDestinationUrlPageB2() const {
+    return embedded_test_server()->GetURL(kDestinationPageScopeB2);
+  }
+
   GURL GetDestinationUrlPageX() const {
     return embedded_test_server()->GetURL(kDestinationPageScopeX);
   }
@@ -1187,6 +1294,8 @@ class WebAppLinkCapturingParameterizedBrowserTest
         return GetDestinationUrlPageA();
       case Destination::kScopeA2B:
         return GetDestinationUrlPageB();
+      case Destination::kScopeA2B2:
+        return GetDestinationUrlPageB2();
       case Destination::kScopeA2X:
         return GetDestinationUrlPageX();
     }
@@ -1239,13 +1348,21 @@ class WebAppLinkCapturingParameterizedBrowserTest
 
   webapps::AppId InstallTestWebApp(
       const GURL& start_url,
-      blink::mojom::ManifestLaunchHandler_ClientMode client_mode) {
+      std::optional<blink::mojom::ManifestLaunchHandler_ClientMode>
+          client_mode) {
     auto web_app_info =
         WebAppInstallInfo::CreateWithStartUrlForTesting(start_url);
     web_app_info->launch_handler = blink::Manifest::LaunchHandler(client_mode);
     web_app_info->scope = start_url.GetWithoutFilename();
-    web_app_info->display_mode = blink::mojom::DisplayMode::kStandalone;
+    web_app_info->display_mode = GetManifestDisplayMode(start_url);
     web_app_info->user_display_mode = GetUserDisplayMode(start_url);
+    if (GetAppUserDisplayMode() ==
+        AppUserDisplayMode::kAppAStandaloneAppBTabbedWithHome) {
+      blink::Manifest::HomeTabParams home_tab_params;
+      home_tab_params.scope_patterns = {GetUrlPatternForDestinationB()};
+      web_app_info->tab_strip = blink::Manifest::TabStrip();
+      web_app_info->tab_strip->home_tab = home_tab_params;
+    }
     const webapps::AppId app_id =
         test::InstallWebApp(profile(), std::move(web_app_info));
     apps::AppReadinessWaiter(profile(), app_id).Await();
@@ -1396,8 +1513,8 @@ class WebAppLinkCapturingParameterizedBrowserTest
     // Install apps for scope A and B (note: scope X is deliberately excluded)
     // with the correct launch handling client modes defined.
 
-    blink::mojom::ManifestLaunchHandler_ClientMode client_mode_a;
-    blink::mojom::ManifestLaunchHandler_ClientMode client_mode_b;
+    std::optional<blink::mojom::ManifestLaunchHandler_ClientMode> client_mode_a;
+    std::optional<blink::mojom::ManifestLaunchHandler_ClientMode> client_mode_b;
     switch (GetClientModeCombination()) {
       case ClientModeCombination::kAuto:
         client_mode_a = blink::mojom::ManifestLaunchHandler_ClientMode::kAuto;
@@ -1427,6 +1544,10 @@ class WebAppLinkCapturingParameterizedBrowserTest
         client_mode_b =
             blink::mojom::ManifestLaunchHandler_ClientMode::kFocusExisting;
         break;
+#if !BUILDFLAG(IS_CHROMEOS)
+      case ClientModeCombination::kNotSpecified:
+        break;
+#endif  // !BUILDFLAG(IS_CHROMEOS)
     }
 
     const webapps::AppId app_a = InstallTestWebApp(
@@ -1455,6 +1576,10 @@ class WebAppLinkCapturingParameterizedBrowserTest
     DLOG(INFO) << "Setting up.";
 
     ASSERT_TRUE(MaybeCustomPreSetup(app_a, app_b));
+    // Some custom setups launch the app in a browser or app window, which can
+    // trigger a redirection. This ensure that the redirection can happen again
+    // in the main test body.
+    did_redirect_ = false;
 
     // Setup the initial page.
     Browser* browser_a;
@@ -1509,14 +1634,14 @@ class WebAppLinkCapturingParameterizedBrowserTest
         // This assumption holds because the Intent Picker w/kNavigateExisting
         // (and kFocusExisting) is tested in a separate test suite.
         expect_navigation = false;
-      } else if (ClickMethod() != test::ClickMethod::kRightClickLaunchApp) {
-        ASSERT_TRUE(
-            IsElementInPage(contents_a->GetPrimaryMainFrame(), GetElementId()));
-        test::SimulateClickOnElement(contents_a, GetElementId(), ClickMethod());
-      } else {
+      } else if (ClickMethod() == test::ClickMethod::kRightClickLaunchApp) {
         ASSERT_TRUE(
             IsElementInPage(contents_a->GetPrimaryMainFrame(), GetElementId()));
         SimulateRightClickOnElementAndLaunchApp(contents_a, GetElementId());
+      } else {
+        ASSERT_TRUE(
+            IsElementInPage(contents_a->GetPrimaryMainFrame(), GetElementId()));
+        test::SimulateClickOnElement(contents_a, GetElementId(), ClickMethod());
       }
 
       if (expect_navigation) {
@@ -1635,7 +1760,9 @@ class WebAppLinkCapturingParameterizedBrowserTest
                         "Cleanup")) {
       ASSERT_TRUE(file_read_success_)
           << "Failed to read test baselines from "
-          << GetExpectationsFile(file_config).value();
+          << GetExpectationsFile(file_config).value()
+          << ", try running with --rebaseline-link-capturing-test to create "
+             "it.";
     }
     if (!file_read_success_) {
       LOG(ERROR) << "Could not read file, loading empty json.";
@@ -2079,7 +2206,7 @@ INSTANTIATE_TEST_SUITE_P(
     Redirection_RightClickUseCases,
     WebAppLinkCapturingParameterizedBrowserTest,
     testing::Combine(testing::Values(ClientModeCombination::kAuto),
-                     testing::Values(mojom::UserDisplayMode::kStandalone),
+                     testing::Values(AppUserDisplayMode::kBothStandalone),
                      testing::Values(LinkCapturing::kEnabled),
                      testing::Values(StartingPoint::kAppWindow,
                                      StartingPoint::kTab),
@@ -2097,7 +2224,7 @@ INSTANTIATE_TEST_SUITE_P(
     FormPostSubmissions,
     WebAppLinkCapturingParameterizedBrowserTest,
     testing::Combine(testing::Values(ClientModeCombination::kAuto),
-                     testing::Values(mojom::UserDisplayMode::kStandalone),
+                     testing::Values(AppUserDisplayMode::kBothStandalone),
                      testing::Values(LinkCapturing::kEnabled),
                      testing::Values(StartingPoint::kTab),
                      testing::Values(Destination::kScopeA2A,
@@ -2111,12 +2238,32 @@ INSTANTIATE_TEST_SUITE_P(
                      testing::Values(NavigationTarget::kBlank)),
     LinkCaptureTestParamToString);
 
-// kEnabledViaClientMode should not capture when 'auto' is specified.
+#if !BUILDFLAG(IS_CHROMEOS)
+// kEnabledViaClientMode should not capture when no client mode is specified.
 INSTANTIATE_TEST_SUITE_P(
     ClientModeEnabledNoCapture,
     WebAppLinkCapturingParameterizedBrowserTest,
-    testing::Combine(testing::Values(ClientModeCombination::kAuto),
-                     testing::Values(mojom::UserDisplayMode::kStandalone),
+    testing::Combine(testing::Values(ClientModeCombination::kNotSpecified),
+                     testing::Values(AppUserDisplayMode::kBothStandalone),
+                     testing::Values(LinkCapturing::kEnabledViaClientMode),
+                     testing::Values(StartingPoint::kTab),
+                     testing::Values(Destination::kScopeA2B),
+                     testing::Values(RedirectType::kNone),
+                     testing::Values(NavigationElement::kElementLink),
+                     testing::Values(test::ClickMethod::kLeftClick),
+                     testing::Values(OpenerMode::kNoOpener),
+                     testing::Values(NavigationTarget::kBlank)),
+    LinkCaptureTestParamToString);
+#endif  // !BUILDFLAG(IS_CHROMEOS)
+
+// kEnabledViaClientMode should capture when the client modes are specified
+// (including `auto`).
+INSTANTIATE_TEST_SUITE_P(
+    ClientModeEnabledCaptured,
+    WebAppLinkCapturingParameterizedBrowserTest,
+    testing::Combine(testing::Values(ClientModeCombination::kBothNavigateNew,
+                                     ClientModeCombination::kAuto),
+                     testing::Values(AppUserDisplayMode::kBothStandalone),
                      testing::Values(LinkCapturing::kEnabledViaClientMode),
                      testing::Values(StartingPoint::kTab),
                      testing::Values(Destination::kScopeA2B),
@@ -2127,20 +2274,23 @@ INSTANTIATE_TEST_SUITE_P(
                      testing::Values(NavigationTarget::kBlank)),
     LinkCaptureTestParamToString);
 
-// kEnabledViaClientMode should capture when auto isn't specified.
 INSTANTIATE_TEST_SUITE_P(
-    ClientModeEnabledCaptured,
+    TabbedMode,
     WebAppLinkCapturingParameterizedBrowserTest,
-    testing::Combine(testing::Values(ClientModeCombination::kBothNavigateNew),
-                     testing::Values(mojom::UserDisplayMode::kStandalone),
-                     testing::Values(LinkCapturing::kEnabledViaClientMode),
-                     testing::Values(StartingPoint::kTab),
-                     testing::Values(Destination::kScopeA2B),
-                     testing::Values(RedirectType::kNone),
-                     testing::Values(NavigationElement::kElementLink),
-                     testing::Values(test::ClickMethod::kLeftClick),
-                     testing::Values(OpenerMode::kNoOpener),
-                     testing::Values(NavigationTarget::kBlank)),
+    testing::Combine(
+        testing::Values(ClientModeCombination::kAuto),
+        testing::Values(AppUserDisplayMode::kAppAStandaloneAppBTabbed,
+                        AppUserDisplayMode::kAppAStandaloneAppBTabbedWithHome),
+        testing::Values(LinkCapturing::kEnabled),
+        testing::Values(StartingPoint::kTab),
+        testing::Values(Destination::kScopeA2B, Destination::kScopeA2B2),
+        testing::Values(RedirectType::kNone,
+                        RedirectType::kServerSideViaA,
+                        RedirectType::kServerSideViaB),
+        testing::Values(NavigationElement::kElementLink),
+        testing::Values(test::ClickMethod::kLeftClick),
+        testing::Values(OpenerMode::kNoOpener),
+        testing::Values(NavigationTarget::kBlank)),
     LinkCaptureTestParamToString);
 
 // This is a derived test fixture that allows us to test Navigation Capturing
@@ -2176,7 +2326,9 @@ class NavigationCapturingTestWithAppBLaunched
     if (!launch_future.Wait()) {
       return testing::AssertionFailure() << "Unable to launch app b";
     }
-    url_observer.Wait();
+    if (GetRedirectType() != RedirectType::kServerSideViaB) {
+      url_observer.Wait();
+    }
     // Launching a web app should listen to a single navigation message.
     return apps::test::WaitForNavigationFinishedMessage(message_queue);
   }
@@ -2280,6 +2432,25 @@ INSTANTIATE_TEST_SUITE_P(
             NavigationElement::kElementLink),  // Navigate via element.
         testing::Values(
             test::ClickMethod::kLeftClick),  // Simulate left-mouse click.
+        testing::Values(OpenerMode::kNoOpener),
+        testing::Values(NavigationTarget::kBlank)),
+    LinkCaptureTestParamToString);
+
+INSTANTIATE_TEST_SUITE_P(
+    TabbedMode,
+    NavigationCapturingTestWithAppBLaunched,
+    testing::Combine(
+        testing::Values(ClientModeCombination::kAuto),
+        testing::Values(AppUserDisplayMode::kAppAStandaloneAppBTabbed,
+                        AppUserDisplayMode::kAppAStandaloneAppBTabbedWithHome),
+        testing::Values(LinkCapturing::kEnabled),
+        testing::Values(StartingPoint::kTab),
+        testing::Values(Destination::kScopeA2B, Destination::kScopeA2B2),
+        testing::Values(RedirectType::kNone,
+                        RedirectType::kServerSideViaA,
+                        RedirectType::kServerSideViaB),
+        testing::Values(NavigationElement::kElementLink),
+        testing::Values(test::ClickMethod::kLeftClick),
         testing::Values(OpenerMode::kNoOpener),
         testing::Values(NavigationTarget::kBlank)),
     LinkCaptureTestParamToString);

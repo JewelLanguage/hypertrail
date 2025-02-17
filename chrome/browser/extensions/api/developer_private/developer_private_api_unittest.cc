@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/extensions/api/developer_private/developer_private_api.h"
-
 #include <memory>
 #include <optional>
 #include <string_view>
@@ -25,6 +23,7 @@
 #include "base/test/values_test_util.h"
 #include "base/values.h"
 #include "chrome/browser/extensions/account_extension_tracker.h"
+#include "chrome/browser/extensions/api/developer_private/developer_private_functions.h"
 #include "chrome/browser/extensions/api/developer_private/extension_info_generator.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/extensions/error_console/error_console.h"
@@ -43,6 +42,7 @@
 #include "chrome/browser/extensions/permissions/permissions_updater.h"
 #include "chrome/browser/extensions/permissions/scripting_permissions_modifier.h"
 #include "chrome/browser/extensions/permissions/site_permissions_helper.h"
+#include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
 #include "chrome/browser/supervised_user/supervised_user_browser_utils.h"
@@ -77,6 +77,7 @@
 #include "extensions/browser/permissions_manager.h"
 #include "extensions/browser/test_event_router_observer.h"
 #include "extensions/browser/test_extension_registry_observer.h"
+#include "extensions/browser/user_script_manager.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
 #include "extensions/common/extension_features.h"
@@ -166,15 +167,17 @@ bool WasUserSiteSettingsChangedEventDispatched(
       api::developer_private::OnUserSiteSettingsChanged::kEventName;
   const auto& event_map = observer.events();
   auto iter = event_map.find(kEventName);
-  if (iter == event_map.end())
+  if (iter == event_map.end()) {
     return false;
+  }
 
   const Event& event = *iter->second;
   CHECK_GE(1u, event.event_args.size());
   auto site_settings =
       api::developer_private::UserSiteSettings::FromValue(event.event_args[0]);
-  if (!site_settings)
+  if (!site_settings) {
     return false;
+  }
 
   *settings = std::move(*site_settings);
   return true;
@@ -456,6 +459,7 @@ class DeveloperPrivateApiUnitTest : public ExtensionServiceTestWithInstall {
   }
 
  private:
+  base::test::ScopedFeatureList feature_list_;
   // This test does not create a root window. Because of this,
   // ScopedDisableRootChecking needs to be used (which disables the root window
   // check).
@@ -581,8 +585,9 @@ testing::AssertionResult DeveloperPrivateApiUnitTest::TestPackExtensionFunction(
     int expected_flags) {
   auto function =
       base::MakeRefCounted<api::DeveloperPrivatePackDirectoryFunction>();
-  if (!RunFunction(function, args))
+  if (!RunFunction(function, args)) {
     return testing::AssertionFailure() << "Could not run function.";
+  }
 
   // Extract the result. We don't have to test this here, since it's verified as
   // part of the general extension api system.
@@ -601,8 +606,9 @@ testing::AssertionResult DeveloperPrivateApiUnitTest::TestPackExtensionFunction(
   }
 
   if (response->override_flags != expected_flags) {
-    return testing::AssertionFailure() << "Expected flags: " <<
-        expected_flags << ", found flags: " << response->override_flags;
+    return testing::AssertionFailure()
+           << "Expected flags: " << expected_flags
+           << ", found flags: " << response->override_flags;
   }
 
   return testing::AssertionSuccess();
@@ -713,6 +719,21 @@ TEST_F(DeveloperPrivateApiUnitTest,
       base::BindRepeating(&HasPrefsPermission, &util::AllowFileAccess,
                           profile(), id),
       "fileAccess", id, /*expected_default_value=*/false);
+
+  // Test userScriptsAccess pref.
+  auto* extension_system =
+      static_cast<TestExtensionSystem*>(ExtensionSystem::Get(profile()));
+  ASSERT_TRUE(extension_system);
+  extension_system->CreateUserScriptManager();
+  UserScriptManager* user_script_manager =
+      extension_system->user_script_manager();
+  ASSERT_TRUE(user_script_manager);
+  auto user_scripts_enabled = [&]() {
+    return user_script_manager->IsUserScriptPrefEnabled(id);
+  };
+  TestExtensionPrefSetting(base::BindLambdaForTesting(user_scripts_enabled),
+                           "userScriptsAccess", id,
+                           /*expected_default_value=*/false);
 
   SitePermissionsHelper helper(profile());
   TestExtensionPrefSetting(
@@ -933,8 +954,8 @@ TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateLoadUnpacked) {
   // Function should fail and no new extensions are installed.
   EXPECT_EQ(manifest_errors::kManifestUnreadable, function->GetError());
   EXPECT_EQ(0u, base::STLSetDifference<ExtensionIdSet>(
-                    registry()->enabled_extensions().GetIDs(),
-                    current_ids).size());
+                    registry()->enabled_extensions().GetIDs(), current_ids)
+                    .size());
 }
 
 TEST_F(DeveloperPrivateApiUnitTest, DeveloperPrivateLoadUnpackedLoadError) {
@@ -1242,8 +1263,7 @@ TEST_F(DeveloperPrivateApiUnitTest, ReloadBadExtensionToLoadUnpackedRetry) {
     };
 
     UnloadedRegistryObserver unload_observer(path, registry());
-    auto function =
-        base::MakeRefCounted<api::DeveloperPrivateReloadFunction>();
+    auto function = base::MakeRefCounted<api::DeveloperPrivateReloadFunction>();
     function->SetRenderFrameHost(web_contents->GetPrimaryMainFrame());
     api_test_utils::RunFunction(function.get(), reload_args, profile());
     // Note: no need to validate a saw_load()-type method because the presence
@@ -1639,7 +1659,7 @@ TEST_F(DeveloperPrivateApiUnitTest, LoadUnpackedFailsWithBlocklistingPolicy) {
   EXPECT_TRUE(extension_management->BlocklistedByDefault());
   EXPECT_FALSE(extension_management->HasAllowlistedExtension());
 
-  auto info = DeveloperPrivateAPI::CreateProfileInfo(profile());
+  auto info = DeveloperPrivateEventRouter::CreateProfileInfo(profile());
   EXPECT_FALSE(info->can_load_unpacked);
 
   auto function =
@@ -1671,7 +1691,7 @@ TEST_F(DeveloperPrivateApiUnitTest,
       ExtensionManagementFactory::GetForBrowserContext(browser_context())
           ->HasAllowlistedExtension());
 
-  auto info = DeveloperPrivateAPI::CreateProfileInfo(profile());
+  auto info = DeveloperPrivateEventRouter::CreateProfileInfo(profile());
 
   EXPECT_TRUE(info->can_load_unpacked);
 }
@@ -3182,6 +3202,9 @@ class DeveloperPrivateApiAllowlistUnitTest
     feature_list_.InitAndEnableFeature(
         extensions_features::kSafeBrowsingCrxAllowlistShowWarnings);
   }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
 };
 
 TEST_F(DeveloperPrivateApiAllowlistUnitTest,
@@ -3452,8 +3475,7 @@ class DeveloperPrivateApiTransportModeUnitTest
  public:
   DeveloperPrivateApiTransportModeUnitTest() {
     scoped_feature_list_.InitWithFeatures(
-        {switches::kExplicitBrowserSigninUIOnDesktop,
-         syncer::kSyncEnableExtensionsInTransportMode},
+        {syncer::kSyncEnableExtensionsInTransportMode},
         /*disabled_features=*/{});
   }
 
@@ -3529,9 +3551,10 @@ class DeveloperPrivateApiTransportModeUnitTest
   void SimulateInitialSync(const std::vector<const Extension*>& extensions) {
     syncer::SyncDataList sync_data;
     for (const auto* extension : extensions) {
-      ExtensionSyncData data(*extension, true,
-                             extensions::disable_reason::DISABLE_NONE, false,
-                             false, extension_urls::GetWebstoreUpdateUrl());
+      ExtensionSyncData data(
+          *extension, true,
+          /*disable_reasons=*/{}, /*incognito_enabled=*/false,
+          /*remote_install=*/false, extension_urls::GetWebstoreUpdateUrl());
 
       sync_data.push_back(data.GetSyncData());
     }
@@ -3841,8 +3864,9 @@ TEST_F(DeveloperPrivateApiTransportModeUnitTest,
   // Simulate a later sync update where the same extension was installed on
   // another device and the change is synced over.
   ExtensionSyncData extension_installed_elsewhere(
-      *extension, true, extensions::disable_reason::DISABLE_NONE, false, false,
-      extension_urls::GetWebstoreUpdateUrl());
+      *extension, true,
+      /*disable_reasons=*/{}, /*incognito_enabled=*/false,
+      /*remote_install=*/false, extension_urls::GetWebstoreUpdateUrl());
   ExtensionSyncService::Get(profile())->ProcessSyncChanges(
       FROM_HERE, {extension_installed_elsewhere.GetSyncChange(
                      syncer::SyncChange::ACTION_UPDATE)});

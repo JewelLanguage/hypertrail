@@ -276,7 +276,7 @@ void InlineLayoutAlgorithm::PrepareBoxStates(
   // Check if the box states in InlineChildLayoutContext is valid for this line.
   // If the previous line was ::first-line, always rebuild because box states
   // have ::first-line styles.
-  const HeapVector<InlineItem>& items = line_info.ItemsData().items;
+  const InlineItems& items = line_info.ItemsData().items;
   if (!break_token->UseFirstLineStyle()) {
     box_states_ = context_->BoxStatesIfValidForItemIndex(
         items, break_token->StartItemIndex());
@@ -295,26 +295,14 @@ void InlineLayoutAlgorithm::PrepareBoxStates(
       .RebuildBoxStates(line_info, 0u, break_token->StartItemIndex());
 }
 
-static LayoutUnit AdjustLineOffsetForHanging(LineInfo* line_info,
-                                             LayoutUnit& line_offset) {
+static LayoutUnit AdjustLineOffsetForHanging(LineInfo* line_info) {
   if (IsLtr(line_info->BaseDirection()))
     return LayoutUnit();
 
-  // If !line_info->ShouldHangTrailingSpaces(), the hang width is not considered
-  // in ApplyTextAlign, and so line_offset points to where the left edge of the
-  // hanging spaces should be. Since the line box rect has to start at the left
-  // edge of the text instead (needed for caret positioning), we increase
-  // line_offset.
-  LayoutUnit hang_width = line_info->HangWidth();
-  if (!line_info->ShouldHangTrailingSpaces()) {
-    line_offset += hang_width;
-  }
-
-  // Now line_offset always points to where the left edge of the text should be.
   // If there are any hanging spaces, the starting position of the line must be
   // offset by the width of the hanging spaces so that the text starts at
   // line_offset.
-  return -hang_width;
+  return -line_info->HangWidth();
 }
 
 #if EXPENSIVE_DCHECKS_ARE_ON()
@@ -363,7 +351,7 @@ void InlineLayoutAlgorithm::CreateLine(const LineLayoutOpportunity& opportunity,
   LogicalLineItems* line_box = &line_container->BaseLine();
   // Apply justification before placing items, because it affects size/position
   // of items, which are needed to compute inline static positions.
-  LayoutUnit line_offset_for_text_align = ApplyTextAlign(line_info);
+  const LayoutUnit line_offset_for_text_align = ApplyTextAlign(line_info);
 
   // Clear the current line without releasing the buffer.
   line_container->Shrink();
@@ -373,8 +361,7 @@ void InlineLayoutAlgorithm::CreateLine(const LineLayoutOpportunity& opportunity,
   line_builder.CreateLine(line_info, line_box, this);
 
   const LayoutUnit hang_width = line_info->HangWidth();
-  const LayoutUnit position =
-      AdjustLineOffsetForHanging(line_info, line_offset_for_text_align);
+  const LayoutUnit position = AdjustLineOffsetForHanging(line_info);
   LayoutUnit inline_size = box_states_->ComputeInlinePositions(
       line_box, position, line_info->IsBlockInInline());
   if (hang_width) [[unlikely]] {
@@ -626,9 +613,9 @@ void InlineLayoutAlgorithm::ApplyTextBoxTrim(LineInfo& line_info,
 
   const FontHeight line_box_metrics = container_builder_.Metrics();
   FontHeight intrinsic_metrics = line_box_metrics;
-  InlineBoxState::AdjustEdges(
-      line_style, line_style.GetFont(), baseline_type_,
-      should_apply_over, should_apply_under, intrinsic_metrics);
+  InlineBoxState::AdjustEdges(line_style, *line_style.GetFont(), baseline_type_,
+                              should_apply_over, should_apply_under,
+                              intrinsic_metrics);
 
   if (should_apply_start) {
     // Apply `text-box-trim: start` if this is the first formatted line.
@@ -1018,15 +1005,15 @@ bool InlineLayoutAlgorithm::AddAnyClearanceAfterLine(
 
 LayoutUnit InlineLayoutAlgorithm::SetupLineClampEllipsis() {
   DCHECK(RuntimeEnabledFeatures::CSSLineClampLineBreakingEllipsisEnabled());
-  const Font& font = node_.Style().GetFont();
-  const SimpleFontData* font_data = font.PrimaryFont();
+  const Font* font = node_.Style().GetFont();
+  const SimpleFontData* font_data = font->PrimaryFont();
   DCHECK(font_data);
   String ellipsis_text =
       font_data && font_data->GlyphForCharacter(kHorizontalEllipsisCharacter)
           ? String(base::span_from_ref(kHorizontalEllipsisCharacter))
           : String(u"...");
   HarfBuzzShaper shaper(ellipsis_text);
-  const ShapeResult* shape_result = shaper.Shape(&font, Node().BaseDirection());
+  const ShapeResult* shape_result = shaper.Shape(font, Node().BaseDirection());
   DCHECK(shape_result);
 
   FontHeight text_metrics = font_data->GetFontMetrics().GetFontHeight(
@@ -1444,13 +1431,12 @@ void InlineLayoutAlgorithm::PositionLeadingFloats(
     return;
   }
 
-  const HeapVector<InlineItem>& items =
-      Node().ItemsData(/* is_first_line */ false).items;
+  const InlineItems& items = Node().ItemsData(/* is_first_line */ false).items;
 
   unsigned index = GetBreakToken() ? GetBreakToken()->StartItemIndex() : 0;
   HeapVector<PositionedFloat>& positioned_floats = leading_floats.floats;
   for (; index < items.size(); ++index) {
-    const InlineItem& item = items[index];
+    const InlineItem& item = *items[index];
 
     // Abort if we've found something non-empty.
     if (!item.IsEmptyItem())

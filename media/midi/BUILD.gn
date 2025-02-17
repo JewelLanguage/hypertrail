@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 
 import("//build/config/android/config.gni")
-import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//media/media_options.gni")
@@ -129,15 +128,19 @@ component("midi") {
   }
 
   if (is_apple) {
-    sources += [
-      "midi_manager_mac.cc",
-      "midi_manager_mac.h",
-    ]
-    frameworks = [
-      "CoreAudio.framework",
-      "CoreFoundation.framework",
-      "CoreMIDI.framework",
-    ]
+    if (!is_tvos) {
+      sources += [
+        "midi_manager_mac.cc",
+        "midi_manager_mac.h",
+      ]
+      frameworks = [
+        "CoreAudio.framework",
+        "CoreFoundation.framework",
+        "CoreMIDI.framework",
+      ]
+    } else {
+      sources += [ "midi_manager_tvos.cc" ]
+    }
   }
 
   if (is_win) {

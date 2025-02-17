@@ -253,11 +253,6 @@ const char kEnableCloudPrintProxy[] = "enable-cloud-print-proxy";
 // Enables Domain Reliability Monitoring.
 const char kEnableDomainReliability[] = "enable-domain-reliability";
 
-// Enables a number of UI improvements to downloads, download scanning, and
-// download warnings.
-const char kEnableDownloadWarningImprovements[] =
-    "enable-download-warning-improvements";
-
 // Enables logging for extension activity.
 const char kEnableExtensionActivityLogging[] =
     "enable-extension-activity-logging";
@@ -485,6 +480,11 @@ const char kPackExtension[] = "pack-extension";
 
 // Optional PEM private key to use in signing packaged .crx.
 const char kPackExtensionKey[] = "pack-extension-key";
+
+// This switch allows testing password change feature on provided URL. Password
+// change will be offered by submitting password form on any URL with matching
+// eTLD+1.
+const char kPasswordChangeUrl[] = "password-change-url";
 
 // Causes the browser process to crash very early in startup, just before
 // crashpad (or breakpad) is initialized.
@@ -747,15 +747,6 @@ const char kDisableLoginScreenApps[] = "disable-login-screen-apps";
 // Use a short (1 second) timeout for merge session loader throttle testing.
 const char kShortMergeSessionTimeoutForTest[] =
     "short-merge-session-timeout-for-test";
-
-// Selects the scheduler configuration specified in the parameter.
-const char kSchedulerConfiguration[] = "scheduler-configuration";
-const char kSchedulerConfigurationConservative[] = "conservative";
-const char kSchedulerConfigurationPerformance[] = "performance";
-
-// Specifies what the default scheduler configuration value is if the user does
-// not set one.
-const char kSchedulerConfigurationDefault[] = "scheduler-configuration-default";
 #else
 // Enables saving webpages as MHTML (Webpage, Single) by default, instead of
 // saving as HTML with a directory of sub-resources. (Webpage, Complete).
@@ -905,7 +896,12 @@ const char kForceNtpMobilePromo[] = "force-ntp-mobile-promo";
 #if BUILDFLAG(ENABLE_GLIC)
 // Overrides the glic guest URL.
 const char kGlicGuestURL[] = "glic-guest-url";
-const char kCSPOverride[] = "glic-webui-csp-override";
+const char kGlicAlwaysOpenFre[] = "glic-always-open-fre";
+const char kGlicFreURL[] = "glic-fre-url";
+// Use --glic-open-on-startup=attached or --glic-open-on-startup=detached.
+const char kGlicOpenOnStartup[] = "glic-open-on-startup";
+// List of allowed origins in the glic webview, as a space-separated list.
+const char kGlicAllowedOrigins[] = "glic-webui-allowed-origins";
 #endif
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)

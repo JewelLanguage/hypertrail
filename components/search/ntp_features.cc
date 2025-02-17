@@ -179,7 +179,7 @@ BASE_FEATURE(kNtpOneGoogleBar,
 // If enabled, outlook calendar module will be shown.
 BASE_FEATURE(kNtpOutlookCalendarModule,
              "NtpOutlookCalendarModule",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, Google Photos module will be shown.
 BASE_FEATURE(kNtpPhotosModule,
@@ -220,7 +220,7 @@ BASE_FEATURE(kNtpSafeBrowsingModule,
 // If enabled, sharepoint module will be shown.
 BASE_FEATURE(kNtpSharepointModule,
              "NtpSharepointModule",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, shortcuts will be shown.
 // This is a kill switch. Keep indefinitely.
@@ -281,12 +281,15 @@ BASE_FEATURE(kNtpMobilePromo,
 // If enabled, the Microsoft Authentication module will be shown.
 BASE_FEATURE(kNtpMicrosoftAuthenticationModule,
              "NtpMicrosoftAuthenticationModule",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, the OGB loader will request for the async bar parts payload type.
 BASE_FEATURE(kNtpOneGoogleBarAsyncBarParts,
              "NtpOneGoogleBarAsyncBarParts",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// If enabled, a footer will show on the NTP.
+BASE_FEATURE(kNtpFooter, "NtpFooter", base::FEATURE_DISABLED_BY_DEFAULT);
 
 const char kNtpModuleIgnoredCriteriaThreshold[] =
     "NtpModuleIgnoredCriteriaThreshold";
@@ -370,6 +373,15 @@ const base::FeatureParam<base::TimeDelta>
         &ntp_features::kNtpCalendarModule,
         "NtpCalendarModuleWindowStartDeltaParam",
         base::Minutes(-15));
+const base::FeatureParam<bool> kNtpOutlookCalendarModuleAttachmentCheckParam(
+    &ntp_features::kNtpOutlookCalendarModule,
+    "NtpOutlookCalendarModuleAttachmentCheckParam",
+    true);
+extern const base::FeatureParam<bool>
+    kNtpOutlookCalendarModuleDisableAttachmentsParam(
+        &ntp_features::kNtpOutlookCalendarModule,
+        "NtpOutlookCalendarModuleDisableAttachmentsParam",
+        false);
 const base::FeatureParam<int> kNtpOutlookCalendarModuleMaxEventsParam(
     &ntp_features::kNtpOutlookCalendarModule,
     "NtpOutlookCalendarModuleMaxEventsParam",
@@ -391,6 +403,11 @@ const base::FeatureParam<int> kNtpMobilePromoImpressionLimit(
     &ntp_features::kNtpMobilePromo,
     "kNtpMobilePromoImpressionLimit",
     10);
+const base::FeatureParam<bool>
+    kNtpMostRelevantTabResumptionModuleFilterLocalTabsParam{
+        &kNtpMostRelevantTabResumptionModule,
+        /*name=*/"local_tab_filter",
+        /*default_value=*/true};
 
 const base::FeatureParam<NtpSharepointModuleDataType>::Option
     kNtpSharepointModuleDataTypeOptions[] = {
@@ -406,6 +423,11 @@ const base::FeatureParam<NtpSharepointModuleDataType>
         &ntp_features::kNtpSharepointModule, "NtpSharepointModuleDataParam",
         NtpSharepointModuleDataType::kTrendingInsights,
         &kNtpSharepointModuleDataTypeOptions};
+
+const base::FeatureParam<int> kNtpMicrosoftFilesModuleMaxFilesParam(
+    &ntp_features::kNtpSharepointModule,
+    "NtpMicrosoftFilesModuleMaxFilesParam",
+    6);
 
 base::TimeDelta GetModulesLoadTimeout() {
   std::string param_value = base::GetFieldTrialParamValueByFeature(

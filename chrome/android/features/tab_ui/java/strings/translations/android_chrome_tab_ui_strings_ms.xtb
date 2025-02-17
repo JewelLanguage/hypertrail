@@ -25,10 +25,12 @@ Jika anda memadamkan kumpulan, semua orang akan kehilangan akses kepada kumpulan
 <translation id="176485176228926164"><ph name="BEGIN_LINK1" />Ketahui lebih lanjut<ph name="END_LINK1" /></translation>
 <translation id="1828808367831369073"><ph name="TABS_COUNT_ONE" /> tab dihimpunkan</translation>
 <translation id="1869137256605757565">{TABS_COUNT,plural, =1{<ph name="TABS_COUNT_ONE" /> tab}other{<ph name="TABS_COUNT_MANY" /> tab}}</translation>
+<translation id="1909810060368225529">Notis: Perubahan kepada Kumpulan Tab kongsi ini dapat dilihat oleh semua orang. Semua orang boleh membuat perubahan pada kumpulan tab dikongsi anda</translation>
 <translation id="2050597508048557928">{TABS_COUNT,plural, =1{Tandai halaman <ph name="TABS_COUNT_ONE" /> tab yang dipilih}other{Tandai halaman <ph name="TABS_COUNT_MANY" /> tab yang dipilih}}</translation>
 <translation id="2118649612461486615">Maklumat kedai</translation>
 <translation id="2123073051266141035">{INCOGNITO_TABS_COUNT,plural, =1{Tab dan kumpulan anda yang ditutup boleh dibuka semula daripada bahagian Tab terbaharu dan bahagian Kumpulan tab. Tab Inkognito anda tidak akan tersedia.}other{Tab dan kumpulan anda yang ditutup boleh dibuka semula daripada bahagian Tab terbaharu dan bahagian Kumpulan tab. # tab Inkognito anda tidak akan tersedia.}}</translation>
 <translation id="2162620598375156287">Sekarang <ph name="CURRENT_PRICE" /> pada <ph name="SOURCE_WEBSITE" /></translation>
+<translation id="2242907120821295124">Kumpulan tab <ph name="TAB_GROUP_NAME" /> tidak tersedia lagi</translation>
 <translation id="22623456902492423">{TABS_COUNT,plural, =1{Nyahkumpulkan tab}other{Nyahkumpulkan tab}}</translation>
 <translation id="2271452184061378400">Kumpulan tab anda disimpan di sini</translation>
 <translation id="2277224997687551299">Edit nama kumpulan</translation>
@@ -43,6 +45,7 @@ Jika anda memadamkan kumpulan, semua orang akan kehilangan akses kepada kumpulan
 <translation id="2671423594960767771">Kongsi kumpulan</translation>
 <translation id="2677748264148917807">Tinggalkan</translation>
 <translation id="2753098591787393794">{NUMBER_OF_TABS_ADDED,plural, =1{<ph name="ONE_ADDED" /> tab ditambahkan, <ph name="ANY_CHANGED" /> ditukar, <ph name="ANY_CLOSED" /> ditutup}other{<ph name="MANY_ADDED" /> tab ditambahkan, <ph name="ANY_CHANGED" /> ditukar, <ph name="ANY_CLOSED" /> ditutup}}</translation>
+<translation id="2755485474385016903">Perubahan yang dibuat dapat dilihat oleh semua orang dalam kumpulan</translation>
 <translation id="2776817246640326047">{NUM_HOURS,plural, =1{Dibuat <ph name="NUM_HOURS_ONE" /> jam yang lalu}other{Dibuat <ph name="NUM_HOURS_MANY" /> jam yang lalu}}</translation>
 <translation id="2801787514987684416">Lihat maklumat kedai?</translation>
 <translation id="2883875523421277445">{NUMBER_OF_TABS_CLOSED,plural, =1{<ph name="ONE_CLOSED" /> tab ditutup}other{<ph name="MANY_CLOSED" /> tab ditutup}}</translation>
@@ -60,6 +63,7 @@ Jika anda memadamkan kumpulan, semua orang akan kehilangan akses kepada kumpulan
 <translation id="3328308545011660196">Cadangan: <ph name="NUMBER_OF_TABS" /> tab kelihatan berkaitan. Himpunkan semua tab itu?</translation>
 <translation id="3547352561153509682">Tindakan ini akan memadamkan kumpulan daripada semua peranti yang dilog masuk menggunakan <ph name="USER_EMAIL" /></translation>
 <translation id="3613492231657284463">Dialog sembunyikan tab tidak aktif</translation>
+<translation id="3619255692378312441">Urus akses</translation>
 <translation id="3652027618765638838"><ph name="CURRENT_RATING" />/<ph name="RATING_BASELINE" /></translation>
 <translation id="374923079891132274">Lak. kecil pratntn helaian kongsi.</translation>
 <translation id="3810973564298564668">Urus</translation>
@@ -85,6 +89,8 @@ Jika anda memadamkan kumpulan, semua orang akan kehilangan akses kepada kumpulan
 <translation id="4783638485675352219">Kongsi tajuk dan URL tab yang dibuka daripada peranti ini dengan sistem pengendalian</translation>
 <translation id="4788280460033928884">{REVIEWS,plural, =1{(<ph name="REVIEWS_COUNT_ONE" /> ulasan)}other{(<ph name="REVIEWS_COUNT_MANY" /> ulasan)}}</translation>
 <translation id="4850886885716139402">Lihat</translation>
+<translation id="4861611890274104875">Ketepikan kad.</translation>
+<translation id="4861953997778766866">Semua orang boleh membuat perubahan pada kumpulan tab dikongsi anda</translation>
 <translation id="4870911314065352661">Tutup semua tab?</translation>
 <translation id="4871719318659334896">Tutup kumpulan</translation>
 <translation id="4881695831933465202">Buka</translation>
@@ -124,11 +130,13 @@ Jika anda memadamkan kumpulan, semua orang akan kehilangan akses kepada kumpulan
 <translation id="6381032505162537930">Anda akan menemukan kumpulan tab anda di sini</translation>
 <translation id="639823877092900621">{TABS_COUNT,plural, =1{Nyahkumpulkan <ph name="TABS_COUNT_ONE" /> tab yang dipilih}other{Nyahkumpulkan <ph name="TABS_COUNT_MANY" /> tab yang dipilih}}</translation>
 <translation id="6422650314852876533">{TABS_COUNT,plural, =1{<ph name="TABS_COUNT_ONE" /> tab}other{<ph name="TABS_COUNT_MANY" /> tab}}</translation>
+<translation id="6499296376514955580">Notis tentang perubahan Kumpulan Tab Kongsi yang ditutup</translation>
 <translation id="6527303717912515753">Kongsi</translation>
 <translation id="6542289363124393690">{DAY_COUNT,plural, =1{Selepas sehari}other{Selepas <ph name="DAY_COUNT_MANY" /> hari}}</translation>
 <translation id="6549021453810473782">Lihat maklumat kedai</translation>
 <translation id="6557858706263317126">+<ph name="HIDDEN_TABS_COUNT" /></translation>
 <translation id="6562820390860419811">Alihkan tab ke kiri</translation>
+<translation id="6589356853295569750">Notis tentang perubahan Kumpulan Tab Kongsi yang dibuka pada ketinggian penuh</translation>
 <translation id="6590332670428149473">Buka menu tindakan kumpulan tab untuk kumpulan tab dikongsi <ph name="TITLE_OF_GROUP" />, warna <ph name="COLOR_NAME" />.</translation>
 <translation id="6615455863669487791">Tunjukkan kepada saya</translation>
 <translation id="6668311240800004911">{NUMBER_OF_TABS_CHANGED,plural, =1{<ph name="ONE_CHANGED" /> tab ditukar}other{<ph name="MANY_CHANGED" /> tab ditukar}}</translation>
@@ -155,6 +163,7 @@ Jika anda memadamkan kumpulan, semua orang akan kehilangan akses kepada kumpulan
 <translation id="7699041944097291312">{TABS_COUNT,plural, =1{Kongsi <ph name="TABS_COUNT_ONE" /> tab yang dipilih}other{Kongsi <ph name="TABS_COUNT_MANY" /> tab yang dipilih}}</translation>
 <translation id="7773714564112603605">Alih keluar tab dan padamkan kumpulan</translation>
 <translation id="7792771145871471484">Semak cadangan.</translation>
+<translation id="7792860826279960128">Notis tentang perubahan Kumpulan Tab Kongsi pada separuh ketinggian</translation>
 <translation id="7825973332242257878">Kumpulan tab</translation>
 <translation id="7838146321400849846">{TABS_COUNT,plural, =1{Himpunkan <ph name="TABS_COUNT_ONE" /> tab yang dipilih}other{Himpunkan <ph name="TABS_COUNT_MANY" /> tab yang dipilih}}</translation>
 <translation id="7853202427316060426">Aktiviti</translation>
@@ -178,6 +187,7 @@ Jika anda memadamkan kumpulan, semua orang akan kehilangan akses kepada kumpulan
 <translation id="8516612320289425423">{NUMBER_OF_TABS_ADDED,plural, =1{<ph name="ONE_ADDED" /> tab ditambahkan, <ph name="ANY_CLOSED" /> ditutup}other{<ph name="MANY_ADDED" /> tab ditambahkan, <ph name="ANY_CLOSED" /> ditutup}}</translation>
 <translation id="8633025649649592204">Aktiviti baru-baru ini</translation>
 <translation id="870736955561925754">Tutup tab dan padamkan kumpulan?</translation>
+<translation id="8712637175834984815">Faham</translation>
 <translation id="8714939927607906138">Lebih murah</translation>
 <translation id="8730621377337864115">Selesai</translation>
 <translation id="8730999928494395583">Aktiviti anda dalam tab Inkognito ini akan dialih keluar daripada peranti ini</translation>
@@ -192,6 +202,7 @@ Jika anda memadamkan kumpulan, semua orang akan kehilangan akses kepada kumpulan
 <translation id="9169594135889675189">Tambahkan tab baharu pada kumpulan</translation>
 <translation id="9216898458513705996">Tab akan kekal terbuka pada peranti ini tetapi kumpulan akan dipadamkan daripada semua peranti yang dilog masuk menggunakan <ph name="USER_EMAIL" /></translation>
 <translation id="927441551066996669">{NUMBER_OF_TABS,plural, =1{Kembangkan kumpulan tab dengan <ph name="TABS_COUNT_ONE" /> tab, warna <ph name="COLOR_NAME" />.}other{Kembangkan kumpulan tab dengan <ph name="TABS_COUNT_MANY" /> tab, warna <ph name="COLOR_NAME" />.}}</translation>
+<translation id="945522503751344254">Hantar maklum balas</translation>
 <translation id="94870150074703282">Padamkan kumpulan?</translation>
 <translation id="992256792861109788">Merah Jambu</translation>
 </translationbundle>

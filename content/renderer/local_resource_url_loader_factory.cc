@@ -38,8 +38,7 @@ namespace content {
 namespace {
 
 std::map<url::Origin, LocalResourceURLLoaderFactory::Source>
-ConvertConfigToSourcesMap(
-    const blink::mojom::LocalResourceLoaderConfigPtr& config) {
+ConvertConfigToSourcesMap(blink::mojom::LocalResourceLoaderConfigPtr config) {
   std::map<url::Origin, LocalResourceURLLoaderFactory::Source> sources;
   // TODO(https://crbug.com/384765582) This manual copy is only necessary
   // because ui::ReplaceTemplateExpressions uses an unconventional map type.
@@ -47,7 +46,7 @@ ConvertConfigToSourcesMap(
   for (const auto& source : config->sources) {
     const url::Origin origin = source.first;
     const blink::mojom::LocalResourceSourcePtr& mojo_source = source.second;
-    const std::map<const std::string, std::string> replacement_strings(
+    const std::map<std::string, std::string> replacement_strings(
         mojo_source->replacement_strings.begin(),
         mojo_source->replacement_strings.end());
     LocalResourceURLLoaderFactory::Source local_source(
@@ -61,7 +60,7 @@ ConvertConfigToSourcesMap(
 
 LocalResourceURLLoaderFactory::Source::Source(
     blink::mojom::LocalResourceSourcePtr source,
-    std::map<const std::string, std::string> replacement_strings)
+    std::map<std::string, std::string> replacement_strings)
     : source(std::move(source)),
       replacement_strings(std::move(replacement_strings)) {}
 
@@ -72,11 +71,11 @@ LocalResourceURLLoaderFactory::Source::operator=(Source&& other) = default;
 LocalResourceURLLoaderFactory::Source::~Source() = default;
 
 LocalResourceURLLoaderFactory::LocalResourceURLLoaderFactory(
-    const blink::mojom::LocalResourceLoaderConfigPtr& config,
+    blink::mojom::LocalResourceLoaderConfigPtr config,
     mojo::PendingRemote<network::mojom::URLLoaderFactory> fallback)
     : sources_(base::MakeRefCounted<
                base::RefCountedData<std::map<url::Origin, Source>>>(
-          ConvertConfigToSourcesMap(config))),
+          ConvertConfigToSourcesMap(std::move(config)))),
       fallback_(std::move(fallback)) {}
 
 LocalResourceURLLoaderFactory::~LocalResourceURLLoaderFactory() = default;
@@ -153,7 +152,7 @@ void LocalResourceURLLoaderFactory::GetResourceAndRespond(
   CHECK(it != sources->data.end());
 
   const blink::mojom::LocalResourceSourcePtr& source = it->second.source;
-  const std::map<const std::string, std::string>& replacement_strings =
+  const std::map<std::string, std::string>& replacement_strings =
       it->second.replacement_strings;
 
   // Get resource id.

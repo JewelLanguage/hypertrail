@@ -23,7 +23,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/font_pref_change_notifier_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -153,7 +152,7 @@ const auto kFontDefaults = std::to_array<FontDefault>({
     {prefs::kWebKitCursiveFontFamily, IDS_CURSIVE_FONT_FAMILY},
     {prefs::kWebKitFantasyFontFamily, IDS_FANTASY_FONT_FAMILY},
     {prefs::kWebKitMathFontFamily, IDS_MATH_FONT_FAMILY},
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
     {prefs::kWebKitStandardFontFamilyJapanese,
      IDS_STANDARD_FONT_FAMILY_JAPANESE},
     {prefs::kWebKitFixedFontFamilyJapanese, IDS_FIXED_FONT_FAMILY_JAPANESE},
@@ -183,7 +182,7 @@ const auto kFontDefaults = std::to_array<FontDefault>({
     {prefs::kWebKitCursiveFontFamilyTraditionalHan,
      IDS_CURSIVE_FONT_FAMILY_TRADITIONAL_HAN},
 #endif
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     {prefs::kWebKitStandardFontFamilyArabic, IDS_STANDARD_FONT_FAMILY_ARABIC},
     {prefs::kWebKitSerifFontFamilyArabic, IDS_SERIF_FONT_FAMILY_ARABIC},
     {prefs::kWebKitSansSerifFontFamilyArabic,

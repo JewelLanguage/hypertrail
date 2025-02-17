@@ -31,7 +31,6 @@
 
 #include "base/memory/values_equivalent.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "third_party/blink/renderer/core/css/css_color.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/css_math_expression_node.h"
@@ -69,6 +68,13 @@ bool ColorIsDerivedFromElement(const CSSIdentifierValue& value) {
     default:
       return false;
   }
+}
+
+bool ColorCSSValueIsCacheable(const CSSValue& value) {
+  if (auto* identifier_value = DynamicTo<CSSIdentifierValue>(value)) {
+    return !ColorIsDerivedFromElement(*identifier_value);
+  }
+  return IsA<CSSColor>(value);
 }
 
 bool AppendPosition(StringBuilder& result,
@@ -109,8 +115,7 @@ bool AppendPosition(StringBuilder& result,
 
 bool CSSGradientColorStop::IsCacheable() const {
   if (!IsHint()) {
-    auto* identifier_value = DynamicTo<CSSIdentifierValue>(color_.Get());
-    if (identifier_value && ColorIsDerivedFromElement(*identifier_value)) {
+    if (!ColorCSSValueIsCacheable(*color_)) {
       return false;
     }
   }
@@ -232,7 +237,7 @@ struct CSSGradientValue::GradientDesc {
 
 static void ReplaceColorHintsWithColorStops(
     Vector<GradientStop>& stops,
-    const HeapVector<CSSGradientColorStop, 2>& css_gradient_stops,
+    const HeapVector<CSSGradientColorStop, 1>& css_gradient_stops,
     Color::ColorSpace color_interpolation_space,
     Color::HueInterpolationMethod hue_interpolation_method) {
   // This algorithm will replace each color interpolation hint with 9 regular
@@ -433,7 +438,7 @@ static const CSSValue* GetComputedStopColor(const CSSValue& color,
 void CSSGradientValue::AddComputedStops(
     const ComputedStyle& style,
     bool allow_visited_style,
-    const HeapVector<CSSGradientColorStop, 2>& stops,
+    const HeapVector<CSSGradientColorStop, 1>& stops,
     CSSValuePhase value_phase) {
   for (CSSGradientColorStop stop : stops) {
     if (!stop.IsHint()) {
@@ -449,7 +454,7 @@ namespace {
 bool RequiresStopsNormalization(const Vector<GradientStop>& stops,
                                 CSSGradientValue::GradientDesc& desc) {
   // We need at least two stops to normalize
-  if (stops.size() < 2) {
+  if (stops.empty()) {
     return false;
   }
 
@@ -471,7 +476,7 @@ bool RequiresStopsNormalization(const Vector<GradientStop>& stops,
 // gradient.
 bool NormalizeAndAddStops(const Vector<GradientStop>& stops,
                           CSSGradientValue::GradientDesc& desc) {
-  DCHECK_GT(stops.size(), 1u);
+  DCHECK_GE(stops.size(), 1u);
 
   const float first_offset = stops.front().offset;
   const float last_offset = stops.back().offset;
@@ -931,7 +936,7 @@ bool CSSGradientValue::ShouldSerializeColorSpace() const {
   }
 
   bool has_only_legacy_colors =
-      base::ranges::all_of(stops_, [](const CSSGradientColorStop& stop) {
+      std::ranges::all_of(stops_, [](const CSSGradientColorStop& stop) {
         const auto* color_value =
             DynamicTo<cssvalue::CSSColor>(stop.color_.Get());
         return !color_value ||

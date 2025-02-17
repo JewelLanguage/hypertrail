@@ -10,7 +10,6 @@
 #include "base/metrics/user_metrics.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/feature_engagement/tracker_factory.h"
 #include "chrome/browser/performance_manager/public/user_tuning/user_performance_tuning_manager.h"
 #include "chrome/browser/profiles/profile.h"
@@ -20,9 +19,11 @@
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/performance_controls/performance_controls_metrics.h"
 #include "chrome/browser/ui/singleton_tabs.h"
+#include "chrome/browser/ui/tabs/saved_tab_groups/most_recent_shared_tab_update_store.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/toolbar/app_menu_model.h"
@@ -50,6 +51,7 @@
 #include "chrome/browser/user_education/user_education_service.h"
 #include "chrome/browser/user_education/user_education_service_factory.h"
 #include "chrome/browser/web_applications/web_app_tab_helper.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/branded_strings.h"
@@ -57,6 +59,7 @@
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/compose/buildflags.h"
 #include "components/compose/core/browser/compose_features.h"
+#include "components/data_sharing/public/features.h"
 #include "components/feature_engagement/public/event_constants.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/lens/lens_features.h"
@@ -103,6 +106,10 @@
 #if BUILDFLAG(IS_MAC)
 #include "components/user_education/views/help_bubble_factory_mac.h"
 #endif  // BUILDFLAG(IS_MAC)
+
+#if BUILDFLAG(ENABLE_GLIC)
+#include "chrome/browser/glic/resources/grit/glic_browser_resources.h"
+#endif  // BUILDFLAG(ENABLE_GLIC)
 
 namespace {
 
@@ -564,26 +571,18 @@ void MaybeRegisterChromeFeaturePromos(
           FeaturePromoSpecification::AcceleratorInfo())
           .SetBubbleArrow(HelpBubbleArrow::kTopCenter)));
 
+#if BUILDFLAG(ENABLE_GLIC)
   // kIPHGlicPromoFeature:
   registry.RegisterFeature(std::move(
-      FeaturePromoSpecification::CreateForCustomAction(
+      FeaturePromoSpecification::CreateForSnoozePromo(
           feature_engagement::kIPHGlicPromoFeature, kGlicButtonElementId,
-          IDS_GLIC_PROMO_BODY, IDS_GLIC_PROMO_CUSTOM_ACTION,
-          base::BindRepeating(
-              [](ui::ElementContext context,
-                 user_education::FeaturePromoHandle promo_handle) {
-                if (auto* const button =
-                        views::ElementTrackerViews::GetInstance()
-                            ->GetUniqueViewAs<glic::GlicButton>(
-                                kGlicButtonElementId, context)) {
-                  button->LaunchUI();
-                }
-              }))
+          IDS_GLIC_PROMO_BODY)
           .SetBubbleArrow(HelpBubbleArrow::kTopRight)
           .SetBubbleTitleText(IDS_GLIC_PROMO_TITLE)
           .SetMetadata(
               133, "dfried@chromium.org",
               "Attempts to trigger when the user is on a supported page.")));
+#endif  // BUILDFLAG(ENABLE_GLIC)
 
   // kIPHGMCCastStartStopFeature:
   registry.RegisterFeature(FeaturePromoSpecification::CreateForLegacyPromo(
@@ -662,21 +661,6 @@ void MaybeRegisterChromeFeaturePromos(
                     .SetInAnyContext(true)
                     .SetBubbleIcon(kLightbulbOutlineIcon)
                     .SetBubbleArrow(HelpBubbleArrow::kTopRight)));
-
-  // kIPHAutofillPredictionImprovementsBootstrappingFeature:
-  registry.RegisterFeature(std::move(
-      FeaturePromoSpecification::CreateForToastPromo(
-          feature_engagement::
-              kIPHAutofillPredictionImprovementsBootstrappingFeature,
-          settings::SettingsUI::kAutofillPredictionImprovementsHeaderElementId,
-          IDS_AUTOFILL_PREDICTION_IMPROVEMENTS_BOOTSTRAPPING_IPH,
-          IDS_AUTOFILL_PREDICTION_IMPROVEMENTS_BOOTSTRAPPING_IPH_SCREENREADER,
-          FeaturePromoSpecification::AcceleratorInfo())
-          .SetInAnyContext(true)
-          .SetBubbleArrow(HelpBubbleArrow::kBottomCenter)
-          .SetMetadata(131, "brunobraga@google.com",
-                       "Triggered after autofill predections are bootstrapped "
-                       "from current autofill data.")));
 
   // kIPHPowerBookmarksSidePanelFeature:
   registry.RegisterFeature(
@@ -891,6 +875,56 @@ void MaybeRegisterChromeFeaturePromos(
             .SetMetadata(127, "dpenning@chromium.org",
                          "triggered on startup when the saved tab groups are "
                          "defaulted to saved for the first time.")));
+  }
+
+  if (tab_groups::SavedTabGroupUtils::SupportsSharedTabGroups()) {
+    registry.RegisterFeature(std::move(
+        FeaturePromoSpecification::CreateForCustomAction(
+            feature_engagement::kIPHTabGroupsSharedTabChangedFeature,
+            kTopContainerElementId, IDS_DATA_SHARING_USER_ED_FIRST_TAB_CHANGE,
+            IDS_LEARN_MORE,
+            CreateNavigationAction(GURL(
+                data_sharing::features::kLearnMoreSharedTabGroupPageURL.Get())))
+            .SetBubbleArrow(HelpBubbleArrow::kTopLeft)
+            .SetAnchorElementFilter(base::BindRepeating(
+                [](const ui::ElementTracker::ElementList& elements)
+                    -> ui::TrackedElement* {
+                  if (elements.empty()) {
+                    return nullptr;
+                  }
+                  BrowserView* const browser_view =
+                      views::ElementTrackerViews::GetInstance()
+                          ->GetFirstMatchingViewAs<BrowserView>(
+                              kBrowserViewElementId, elements[0]->context());
+
+                  tab_groups::MostRecentSharedTabUpdateStore*
+                      most_recent_shared_tab_update_store =
+                          browser_view->browser()
+                              ->GetFeatures()
+                              .most_recent_shared_tab_update_store();
+
+                  if (!most_recent_shared_tab_update_store ||
+                      !most_recent_shared_tab_update_store->HasUpdate()) {
+                    return nullptr;
+                  }
+
+                  return most_recent_shared_tab_update_store->GetIPHAnchor(
+                      browser_view);
+                }))
+            .SetMetadata(
+                134, "mickeyburks@google.org",
+                "triggered the first time a user updates a shared tab.")));
+
+    registry.RegisterFeature(std::move(
+        FeaturePromoSpecification::CreateForToastPromo(
+            feature_engagement::kIPHTabGroupsSharedTabFeedbackFeature,
+            kSharedTabGroupFeedbackElementId,
+            IDS_DATA_SHARING_SHARED_GROUPS_FEEDBACK_IPH,
+            IDS_DATA_SHARING_SHARED_GROUPS_FEEDBACK_IPH_SCREENREADER,
+            FeaturePromoSpecification::AcceleratorInfo())
+            .SetMetadata(
+                135, "dljames@chromium.org",
+                "Triggered when a shared tab becomes the active tab.")));
   }
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
@@ -1688,6 +1722,24 @@ void MaybeRegisterChromeNewBadges(user_education::NewBadgeRegistry& registry) {
       user_education::Metadata(
           132, "emshack@chromium.org",
           "Shown in app menu when Tab Declutter menu item is enabled.")));
+
+  // This is a custom UI new badge that uses a small help bubble to annotate the
+  // element instead of a badge.
+  registry.RegisterFeature(user_education::NewBadgeSpecification(
+      features::kGlic,
+      // TODO(crbug.com/391699323): fill in launch milestone
+      user_education::Metadata(132, "agale@chromium.org",
+                               "Shown in the glic settings page when the user "
+                               "wants to change the toggle value.")));
+
+  // This is a custom UI new badge that uses a small help bubble to annotate the
+  // element instead of a badge.
+  registry.RegisterFeature(user_education::NewBadgeSpecification(
+      features::kGlicKeyboardShortcutNewBadge,
+      // TODO(crbug.com/391699323): fill in launch milestone
+      user_education::Metadata(132, "agale@chromium.org",
+                               "Shown in the glic settings page when the user "
+                               "wants to change the keyboard shortcut.")));
 }
 
 std::unique_ptr<user_education::FeaturePromoControllerCommon>
@@ -1718,7 +1770,7 @@ CreateUserEducationResources(BrowserView* browser_view) {
   LowUsageHelpController::MaybeCreateForProfile(browser_view->GetProfile());
 
   if (user_education::features::IsUserEducationV25()) {
-    return std::make_unique<BrowserFeaturePromoController25>(
+    auto result = std::make_unique<BrowserFeaturePromoController25>(
         browser_view,
         feature_engagement::TrackerFactory::GetForBrowserContext(profile),
         &user_education_service->feature_promo_registry(),
@@ -1727,6 +1779,8 @@ CreateUserEducationResources(BrowserView* browser_view) {
         &user_education_service->feature_promo_session_policy(),
         &user_education_service->tutorial_service(),
         &user_education_service->product_messaging_controller());
+    result->Init();
+    return result;
   } else {
     return std::make_unique<BrowserFeaturePromoController20>(
         browser_view,

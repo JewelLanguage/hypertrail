@@ -27,9 +27,14 @@ NSString* const kUserDefaultsCredentialProviderManagedUserID =
     @"kUserDefaultsCredentialProviderManagedUserID";
 
 // Used to generate the key for the app group user defaults containing the
-// managed user email.
-NSString* const kUserDefaultsCredentialProviderManagedUserEmail =
-    @"kUserDefaultsCredentialProviderManagedUserEmail";
+// current user id.
+NSString* const kUserDefaultsCredentialProviderUserID =
+    @"kUserDefaultsCredentialProviderUserID";
+
+// Used to generate the key for the app group user defaults containing the
+// current user id.
+NSString* const kUserDefaultsCredentialProviderUserEmail =
+    @"kUserDefaultsCredentialProviderUserEmail";
 
 // Used to generate the key for the app group user defaults containing the
 // the metadata for credentials created in the extension.
@@ -55,6 +60,11 @@ NSString* const kUserDefaulsCredentialProviderSavingPasskeysEnabled =
 // syncing passwords is currently enabled.
 NSString* const kUserDefaultsCredentialProviderPasswordSyncSetting =
     @"kUserDefaultsCredentialProviderPasswordSyncSetting";
+
+// Used to generate the key for the app group user defaults containing whether
+// automatic passkey upgrade is currently enabled.
+NSString* const kUserDefaultsCredentialProviderAutomaticPasskeyUpgradeSetting =
+    @"kUserDefaultsCredentialProviderAutomaticPasskeyUpgradeSetting";
 
 // Used to generate the key for the app group user defaults containing whether
 // passkey PRF support is currently enabled.
@@ -90,8 +100,9 @@ NSURL* CredentialProviderSharedArchivableStoreURL() {
     NSBundle* bundle = base::apple::FrameworkBundle();
     NSNumber* isEarlGreyTest =
         [bundle objectForInfoDictionaryKey:@"CRIsEarlGreyTest"];
-    if ([isEarlGreyTest boolValue])
+    if ([isEarlGreyTest boolValue]) {
       groupURL = [NSURL fileURLWithPath:NSTemporaryDirectory()];
+    }
   }
 
   // Outside of Earl Grey tests,
@@ -105,14 +116,19 @@ NSURL* CredentialProviderSharedArchivableStoreURL() {
   return [credentialProviderURL URLByAppendingPathComponent:filename];
 }
 
-NSString* AppGroupUserDefaultsCredentialProviderUserID() {
+NSString* AppGroupUserDefaultsCredentialProviderManagedUserID() {
   return [AppGroupPrefix()
       stringByAppendingString:kUserDefaultsCredentialProviderManagedUserID];
 }
 
+NSString* AppGroupUserDefaultsCredentialProviderUserID() {
+  return [AppGroupPrefix()
+      stringByAppendingString:kUserDefaultsCredentialProviderUserID];
+}
+
 NSString* AppGroupUserDefaultsCredentialProviderUserEmail() {
   return [AppGroupPrefix()
-      stringByAppendingString:kUserDefaultsCredentialProviderManagedUserEmail];
+      stringByAppendingString:kUserDefaultsCredentialProviderUserEmail];
 }
 
 NSString* AppGroupUserDefaultsCredentialProviderNewCredentials() {
@@ -142,6 +158,13 @@ NSString* AppGroupUserDefaultsCredentialProviderPasswordSyncSetting() {
   return
       [AppGroupPrefix() stringByAppendingString:
                             kUserDefaultsCredentialProviderPasswordSyncSetting];
+}
+
+NSString*
+AppGroupUserDefaulsCredentialProviderAutomaticPasskeyUpgradeEnabled() {
+  return [AppGroupPrefix()
+      stringByAppendingString:
+          kUserDefaultsCredentialProviderAutomaticPasskeyUpgradeSetting];
 }
 
 NSString* AppGroupUserDefaulsCredentialProviderPasskeyPRFEnabled() {

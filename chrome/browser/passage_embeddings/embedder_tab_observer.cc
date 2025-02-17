@@ -42,7 +42,9 @@ blink::mojom::InnerTextParamsPtr MakeInnerTextParams() {
 }
 
 void OnGotEmbeddings(base::ElapsedTimer embeddings_computation_timer,
-                     std::vector<mojom::PassageEmbeddingsResultPtr> results,
+                     std::vector<std::string> passages,
+                     std::vector<Embedding> embeddings,
+                     Embedder::TaskId task_id,
                      ComputeEmbeddingsStatus status) {
   if (status != ComputeEmbeddingsStatus::kSuccess) {
     return;
@@ -54,7 +56,9 @@ void OnGotEmbeddings(base::ElapsedTimer embeddings_computation_timer,
 }  // namespace
 
 EmbedderTabObserver::EmbedderTabObserver(content::WebContents* web_contents)
-    : content::WebContentsObserver(web_contents) {}
+    : content::WebContentsObserver(web_contents),
+      embedder_(
+          ChromePassageEmbeddingsServiceController::Get()->MakeEmbedder()) {}
 
 EmbedderTabObserver::~EmbedderTabObserver() = default;
 
@@ -92,7 +96,13 @@ bool EmbedderTabObserver::ScheduleExtraction(
 
 void EmbedderTabObserver::MaybeExtractPassages(
     content::WeakDocumentPtr weak_render_frame_host) {
-  if (resource_coordinator::TabLoadTracker::Get()->GetLoadingTabCount() > 0) {
+  // Do not wait for all tabs when using performance scenario.
+  // SchedulingEmbedder will use performance scenario which takes loading states
+  // into account. By not enforcing this custom non-contention logic, the
+  // performance scenario load state handling can be tuned and the feature
+  // behavior will follow.
+  if (resource_coordinator::TabLoadTracker::Get()->GetLoadingTabCount() > 0 &&
+      !kUsePerformanceScenario.Get()) {
     VLOG(3) << "Extraction to be rescheduled; tabs still loading";
     ScheduleExtraction(weak_render_frame_host);
     return;
@@ -150,8 +160,8 @@ void EmbedderTabObserver::OnGotPassages(
           << total_text_size;
 
   base::ElapsedTimer embeddings_computation_timer;
-  ChromePassageEmbeddingsServiceController::Get()->GetEmbeddings(
-      std::move(passages), mojom::PassagePriority::kPassive,
+  embedder_->ComputePassagesEmbeddings(
+      PassagePriority::kPassive, std::move(passages),
       base::BindOnce(&OnGotEmbeddings,
                      std::move(embeddings_computation_timer)));
 }

@@ -5,7 +5,7 @@
 import("//build/chromeos/crosier_tests.gni")
 import("//build/config/chromeos/ui_mode.gni")
 
-assert(is_chromeos_ash)
+assert(is_chromeos)
 
 static_library("apps") {
   sources = [
@@ -80,11 +80,11 @@ static_library("apps") {
     "//ash/webui/shortcut_customization_ui:url_constants",
     "//base",
     "//chrome/browser:browser_public_dependencies",
-    "//chrome/browser/ash/system_web_apps/types",
     "//chrome/browser/profiles:profile",
     "//chrome/browser/web_applications",
     "//chrome/common",
     "//chromeos/ash/components/drivefs/mojom",
+    "//chromeos/ash/experiences/system_web_apps/types",
     "//content/public/browser",
     "//ui/base",
     "//ui/gfx/geometry",
@@ -135,7 +135,6 @@ static_library("apps") {
     "//chrome/browser:browser_process",
     "//chrome/browser/apps:user_type_filter",
     "//chrome/browser/apps/app_service:constants",
-    "//chrome/browser/ash/crosapi:browser_util",
     "//chrome/browser/ash/crostini",
     "//chrome/browser/ash/drive",
     "//chrome/browser/ash/file_manager",

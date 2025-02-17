@@ -33,8 +33,6 @@ class PasswordFeatureManagerImplTest : public ::testing::Test {
                                   &pref_service_,
                                   &sync_service_) {
 #if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
-    pref_service_.registry()->RegisterDictionaryPref(
-        password_manager::prefs::kAccountStoragePerAccountSettings);
     pref_service_.registry()->RegisterBooleanPref(
         ::prefs::kExplicitBrowserSignin, false);
 #endif  // !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
@@ -99,7 +97,7 @@ TEST_F(PasswordFeatureManagerImplTest, GenerationEnabledIfSyncing) {
 TEST_F(PasswordFeatureManagerImplTest,
        GenerationDisabledIfNonSyncingAndNotUsingAccountStorage) {
   sync_service_.SetSignedIn(signin::ConsentLevel::kSignin, account_);
-  // The user hasn't opted in to account storage yet.
+  // Account storage is disabled.
   sync_service_.GetUserSettings()->SetSelectedType(
       syncer::UserSelectableType::kPasswords, false);
 
@@ -110,7 +108,7 @@ TEST_F(PasswordFeatureManagerImplTest,
 }
 
 // Account storage remains disabled if there is an auth error.
-TEST_F(PasswordFeatureManagerImplTest, OptedOutIfSigninPaused) {
+TEST_F(PasswordFeatureManagerImplTest, AccountStorageDisabledIfSigninPaused) {
   sync_service_.SetSignedIn(signin::ConsentLevel::kSignin, account_);
   sync_service_.SetPersistentAuthError();
 
@@ -118,7 +116,7 @@ TEST_F(PasswordFeatureManagerImplTest, OptedOutIfSigninPaused) {
             syncer::SyncService::TransportState::PAUSED);
   ASSERT_EQ(password_manager::sync_util::GetPasswordSyncState(&sync_service_),
             password_manager::sync_util::SyncState::kNotActive);
-  EXPECT_FALSE(password_feature_manager_.IsOptedInForAccountStorage());
+  EXPECT_FALSE(password_feature_manager_.IsAccountStorageEnabled());
 }
 
 #if BUILDFLAG(IS_ANDROID)
@@ -164,24 +162,6 @@ TEST_F(PasswordFeatureManagerImplTest, GenerationDisabledIfSyncPaused) {
 
   EXPECT_FALSE(password_feature_manager_.IsGenerationEnabled());
 }
-
-#if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
-TEST_F(PasswordFeatureManagerImplTest, ShouldChangeDefaultPasswordStore) {
-  sync_service_.SetSignedIn(signin::ConsentLevel::kSignin, account_);
-
-  password_feature_manager_.SetDefaultPasswordStore(
-      password_manager::PasswordForm::Store::kProfileStore);
-  EXPECT_TRUE(password_feature_manager_.ShouldChangeDefaultPasswordStore());
-}
-
-TEST_F(PasswordFeatureManagerImplTest, ShouldNotChangeDefaultPasswordStore) {
-  sync_service_.SetSignedIn(signin::ConsentLevel::kSignin, account_);
-
-  password_feature_manager_.SetDefaultPasswordStore(
-      password_manager::PasswordForm::Store::kAccountStore);
-  EXPECT_FALSE(password_feature_manager_.ShouldChangeDefaultPasswordStore());
-}
-#endif  // !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS)
 

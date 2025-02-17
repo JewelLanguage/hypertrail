@@ -49,7 +49,6 @@
 #include "third_party/blink/public/common/metrics/document_update_reason.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/css/preferred_color_scheme.mojom-blink-forward.h"
-#include "third_party/blink/public/mojom/facilitated_payments/payment_link_handler.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/color_scheme.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/page/page.mojom-blink-forward.h"
@@ -72,6 +71,7 @@
 #include "third_party/blink/renderer/core/dom/document_timing.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/events/event_path.h"
+#include "third_party/blink/renderer/core/dom/focus_params.h"
 #include "third_party/blink/renderer/core/dom/live_node_list_registry.h"
 #include "third_party/blink/renderer/core/dom/node_list_invalidation_type.h"
 #include "third_party/blink/renderer/core/dom/qualified_name.h"
@@ -87,7 +87,6 @@
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
 #include "third_party/blink/renderer/platform/heap_observer_list.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
-#include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cancellable_task.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
 #include "third_party/blink/renderer/platform/timer.h"
@@ -96,6 +95,11 @@
 #include "third_party/blink/renderer/platform/wtf/gc_plugin.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
+
+#if BUILDFLAG(IS_ANDROID)
+#include "third_party/blink/public/mojom/facilitated_payments/payment_link_handler.mojom-blink.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
+#endif
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -239,6 +243,7 @@ class SecurityOrigin;
 class SelectorQueryCache;
 class SerializedScriptValue;
 class SetHTMLOptions;
+class SetHTMLUnsafeOptions;
 class Settings;
 class SlotAssignmentEngine;
 class StyleEngine;
@@ -1651,11 +1656,20 @@ class CORE_EXPORT Document : public ContainerNode,
     return popover_pointerdown_target_.Get();
   }
   void SetPopoverPointerdownTarget(const HTMLElement*);
+  std::optional<gfx::PointF> CustomizableSelectMousedownLocation() const {
+    return customizable_select_mousedown_location_;
+  }
+  void SetCustomizableSelectMousedownLocation(std::optional<gfx::PointF>);
   const HTMLDialogElement* DialogPointerdownTarget() const;
   void SetDialogPointerdownTarget(const HTMLDialogElement*);
 
   HeapLinkedHashSet<Member<HTMLDialogElement>>& AllOpenDialogs() {
     return all_open_dialogs_;
+  }
+
+  void SetKeyboardInterestTargetElement(Element*);
+  Member<Element> KeyboardInterestTargetElement() const {
+    return keyboard_interest_target_element_;
   }
 
   // https://crbug.com/1453291
@@ -1771,8 +1785,9 @@ class CORE_EXPORT Document : public ContainerNode,
   }
   PropertyRegistry& EnsurePropertyRegistry();
 
-  // May return nullptr when PerformanceManager instrumentation is disabled or
-  // when the Document is inactive.
+  // May return nullptr when PerformanceManager instrumentation is disabled,
+  // when the Document is inactive or when the document was installed for
+  // discarding.
   DocumentResourceCoordinator* GetResourceCoordinator();
 
   const AtomicString& bgColor() const;
@@ -1855,7 +1870,7 @@ class CORE_EXPORT Document : public ContainerNode,
   }
 
   bool IsVerticalScrollEnforced() const { return is_vertical_scroll_enforced_; }
-  bool IsFocusAllowed() const;
+  bool IsFocusAllowed(FocusTrigger trigger) const;
 
   LazyLoadImageObserver& EnsureLazyLoadImageObserver();
 
@@ -1867,7 +1882,7 @@ class CORE_EXPORT Document : public ContainerNode,
   DisplayLockDocumentState& GetDisplayLockDocumentState() const;
 
   // Deferred compositor commits are disallowed by default, and are only allowed
-  // for same-origin navigations to an html document fetched with http.
+  // for html documents fetched via the http family of protocols.
   bool DeferredCompositorCommitIsAllowed() const;
   void SetDeferredCompositorCommitIsAllowed(bool new_value) {
     deferred_compositor_commit_is_allowed_ = new_value;
@@ -2101,7 +2116,7 @@ class CORE_EXPORT Document : public ContainerNode,
   // should be merged.
   static Document* parseHTMLUnsafe(ExecutionContext* context,
                                    const String& html,
-                                   SetHTMLOptions* options,
+                                   SetHTMLUnsafeOptions* options,
                                    ExceptionState& exception_state);
   static Document* parseHTML(ExecutionContext* context,
                              const String& html,
@@ -2408,8 +2423,6 @@ class CORE_EXPORT Document : public ContainerNode,
   // Common implementation for parseHTML and parseHTMLUnsafe.
   static Document* parseHTMLInternal(ExecutionContext* context,
                                      const String& html,
-                                     SetHTMLOptions* options,
-                                     bool safe,
                                      ExceptionState& exception_state);
 
   // Mutable because the token is lazily-generated on demand if no token is
@@ -2430,6 +2443,12 @@ class CORE_EXPORT Document : public ContainerNode,
   // TODO(bokan): This should eventually be based on the document loading-mode:
   // https://github.com/jeremyroman/alternate-loading-modes/blob/main/prerendering-state.md#documentprerendering
   bool is_prerendering_;
+
+  // Tracks whether the current document was installed as the result of a
+  // discard operation.
+  // TODO(crbug.com/391949533): Explore combining this with
+  // `is_initial_empty_document_`.
+  const bool is_for_discard_;
 
   // Callbacks to execute upon activation of a prerendered page, just before the
   // prerenderingchange event is dispatched.
@@ -2656,7 +2675,7 @@ class CORE_EXPORT Document : public ContainerNode,
   bool has_draggable_regions_ = false;
   bool draggable_regions_dirty_ = false;
 
-  std::unique_ptr<SelectorQueryCache> selector_query_cache_;
+  Member<SelectorQueryCache> selector_query_cache_;
 
   // It is safe to keep a raw, untraced pointer to this stack-allocated
   // cache object: it is set upon the cache object being allocated on
@@ -2721,6 +2740,8 @@ class CORE_EXPORT Document : public ContainerNode,
   HeapVector<Member<HTMLElement>> popover_hint_stack_;
   // The popover (if any) that received the most recent pointerdown event.
   Member<const HTMLElement> popover_pointerdown_target_;
+  // The mouse location for the mousedown that opened the select, if any.
+  std::optional<gfx::PointF> customizable_select_mousedown_location_;
   // The dialog (if any) that received the most recent pointerdown event. This
   // is distinct from popover_pointerdown_target_ because the same pointer
   // action could trigger light dismiss on a containing popover and not a
@@ -2735,6 +2756,11 @@ class CORE_EXPORT Document : public ContainerNode,
 
   // The ordered list of currently-open dialogs, in order they were opened.
   HeapLinkedHashSet<Member<HTMLDialogElement>> all_open_dialogs_;
+
+  // If there was a keyboard-activated element with the `interesttarget`
+  // attribute, it will be stored here, so that when other elements are shown
+  // interest, this element can first "lose interest".
+  Member<Element> keyboard_interest_target_element_;
 
   Member<DocumentPartRoot> document_part_root_;
 

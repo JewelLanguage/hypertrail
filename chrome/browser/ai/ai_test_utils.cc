@@ -72,6 +72,10 @@ void AITestUtils::AITestBase::SetupNullOptimizationGuideKeyedService() {
                          -> std::unique_ptr<KeyedService> { return nullptr; }));
 }
 
+blink::mojom::AIManager* AITestUtils::AITestBase::GetAIManagerInterface() {
+  return ai_manager_.get();
+}
+
 mojo::Remote<blink::mojom::AIManager>
 AITestUtils::AITestBase::GetAIManagerRemote() {
   mojo::Remote<blink::mojom::AIManager> ai_manager;
@@ -131,4 +135,17 @@ void AITestUtils::CheckWritingAssistanceApiRequest(
   EXPECT_EQ(request->options().output_length(),
             expected_options.output_length());
   EXPECT_EQ(request->rewrite_text(), expected_input);
+}
+
+// static
+std::vector<blink::mojom::AILanguageCodePtr> AITestUtils::ToMojoLanguageCodes(
+    const std::vector<std::string>& language_codes) {
+  std::vector<blink::mojom::AILanguageCodePtr> result;
+  result.reserve(language_codes.size());
+  std::ranges::transform(
+      language_codes, std::back_inserter(result),
+      [](const std::string& language_code) {
+        return blink::mojom::AILanguageCode::New(language_code);
+      });
+  return result;
 }

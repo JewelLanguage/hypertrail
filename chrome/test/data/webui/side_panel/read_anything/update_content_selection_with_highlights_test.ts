@@ -9,7 +9,6 @@ import {currentReadHighlightClass, previousReadHighlightClass} from 'chrome-untr
 import {assertEquals} from 'chrome-untrusted://webui-test/chai_assert.js';
 import {microtasksFinished} from 'chrome-untrusted://webui-test/test_util.js';
 
-import {suppressInnocuousErrors} from './common.js';
 import {FakeReadingMode} from './fake_reading_mode.js';
 import type {FakeTree} from './fake_tree_builder.js';
 import {FakeTreeBuilder} from './fake_tree_builder.js';
@@ -28,7 +27,6 @@ import {TestColorUpdaterBrowserProxy} from './test_color_updater_browser_proxy.j
 // has been or is being read out loud.
 suite('UpdateContentSelectionWithHighlights', () => {
   let app: AppElement;
-  let testBrowserProxy: TestColorUpdaterBrowserProxy;
   let fakeTree: FakeTree;
 
   const textNodeIds = [3, 5, 7, 9];
@@ -40,13 +38,14 @@ suite('UpdateContentSelectionWithHighlights', () => {
   ];
 
   setup(() => {
-    suppressInnocuousErrors();
-    testBrowserProxy = new TestColorUpdaterBrowserProxy();
-    BrowserProxy.setInstance(testBrowserProxy);
+    // Clearing the DOM should always be done first.
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
+    BrowserProxy.setInstance(new TestColorUpdaterBrowserProxy());
     const readingMode = new FakeReadingMode();
     chrome.readingMode = readingMode as unknown as typeof chrome.readingMode;
 
+    // Don't use await createApp() when using a FakeTree, as it seems to cause
+    // flakiness.
     app = document.createElement('read-anything-app');
     document.body.appendChild(app);
 

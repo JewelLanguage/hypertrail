@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
@@ -9,11 +10,13 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
+#include "chrome/browser/ui/hats/hats_service_desktop.h"
 #include "chrome/browser/ui/views/location_bar/merchant_trust_chip_button_controller.h"
 #include "chrome/browser/ui/views/location_bar/omnibox_chip_button.h"
 #include "chrome/browser/ui/views/page_info/page_info_main_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_merchant_trust_content_view.h"
 #include "chrome/browser/ui/views/permissions/chip/permission_chip_view.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/interaction/interactive_browser_test.h"
 #include "components/commerce/core/proto/merchant_trust.pb.h"
@@ -48,9 +51,26 @@ class MerchantTrustChipButtonInteractiveUITest : public InteractiveBrowserTest {
   MerchantTrustChipButtonInteractiveUITest() {
     https_server_ = std::make_unique<net::EmbeddedTestServer>(
         net::EmbeddedTestServer::TYPE_HTTPS);
+    https_server()->SetSSLConfig(net::EmbeddedTestServer::CERT_TEST_NAMES);
+    https_server()->ServeFilesFromSourceDirectory(GetChromeTestDataDir());
+
+    CHECK(https_server()->Start());
+
+    // TODO(b/324418190): Parametrize the test to support both versions with the
+    // chip and without.
     std::vector<base::test::FeatureRefAndParams> enabled_features = {
         {page_info::kMerchantTrust,
-         {{page_info::kMerchantTrustForceShowUIForTestingName, "true"}}}};
+         {{page_info::kMerchantTrustForceShowUIForTestingName, "true"},
+          {page_info::kMerchantTrustEnableOmniboxChipName, "true"}}},
+        {features::kHappinessTrackingSurveysForDesktopDemo, {}},
+        {features::kHappinessTrackingSurveysConfiguration,
+         {{"custom-url", GetSurveyURL().spec()}}},
+        {page_info::kMerchantTrustLearnSurvey,
+         {
+             {"probability", "1"},
+             {"user_prompted", "true"},
+             {"trigger_id", "load"},
+         }}};
     feature_list_.InitWithFeaturesAndParameters(enabled_features, {});
   }
 
@@ -59,18 +79,9 @@ class MerchantTrustChipButtonInteractiveUITest : public InteractiveBrowserTest {
       const MerchantTrustChipButtonInteractiveUITest&) = delete;
   void operator=(const MerchantTrustChipButtonInteractiveUITest&) = delete;
 
-  void SetUp() override {
-    https_server()->SetSSLConfig(net::EmbeddedTestServer::CERT_TEST_NAMES);
-    https_server()->ServeFilesFromSourceDirectory(GetChromeTestDataDir());
-
-    ASSERT_TRUE(https_server()->InitializeAndListen());
-    InteractiveBrowserTest::SetUp();
-  }
-
   void SetUpOnMainThread() override {
     InteractiveBrowserTest::SetUpOnMainThread();
     host_resolver()->AddRule("*", "127.0.0.1");
-    https_server()->StartAcceptingConnections();
 
     auto* optimization_guide_decider =
         OptimizationGuideKeyedServiceFactory::GetForProfile(
@@ -122,6 +133,14 @@ class MerchantTrustChipButtonInteractiveUITest : public InteractiveBrowserTest {
                      value);
   }
 
+  auto CheckHistogramCounts(const std::string& name,
+                            auto sample,
+                            int expected_count) {
+    return Do([=, this]() {
+      histogram_tester_.ExpectUniqueSample(name, sample, expected_count);
+    });
+  }
+
   net::EmbeddedTestServer* https_server() { return https_server_.get(); }
 
   GURL GetURL() {
@@ -132,9 +151,14 @@ class MerchantTrustChipButtonInteractiveUITest : public InteractiveBrowserTest {
     return https_server()->GetURL("a.test", "/title1.html");
   }
 
+  GURL GetSurveyURL() {
+    return https_server()->GetURL("a.test", "/hats/hats_next_mock.html");
+  }
+
  private:
   std::unique_ptr<net::EmbeddedTestServer> https_server_;
   base::test::ScopedFeatureList feature_list_;
+  base::HistogramTester histogram_tester_;
 };
 
 IN_PROC_BROWSER_TEST_F(MerchantTrustChipButtonInteractiveUITest,
@@ -259,4 +283,36 @@ IN_PROC_BROWSER_TEST_F(MerchantTrustChipButtonInteractiveUITest,
       PressButton(PageInfoMerchantTrustContentView::kViewReviewsId),
       // Wait for the side panel to show.
       WaitForShow(kSidePanelElementId));
+}
+
+IN_PROC_BROWSER_TEST_F(MerchantTrustChipButtonInteractiveUITest,
+                       MerchantTrustSubpageHats) {
+  RunTestSequence(
+      InstrumentTab(kWebContentsElementId),
+      NavigateWebContents(kWebContentsElementId, GetURL()),
+      PressButton(kLocationIconElementId),
+      // Open the page info.
+      WaitForShow(PageInfoMainView::kMerchantTrustElementId),
+      // Click on the row.
+      PressButton(PageInfoMainView::kMerchantTrustElementId),
+      // Wait for the subpage to be open.
+      WaitForShow(PageInfoMerchantTrustContentView::kElementIdForTesting),
+      WaitForShow(PageInfoMerchantTrustContentView::kHatsButtonId),
+      CheckView(
+          PageInfoMerchantTrustContentView::kHatsButtonId,
+          [](RichHoverButton* button) { return button->GetTitleText(); },
+          l10n_util::GetStringUTF16(IDS_PAGE_INFO_MERCHANT_TRUST_HATS_BUTTON)),
+      // Press the HaTS button.
+      PressButton(PageInfoMerchantTrustContentView::kHatsButtonId),
+      CheckView(
+          PageInfoMerchantTrustContentView::kHatsButtonId,
+          [](RichHoverButton* button) { return button->GetTitleText(); },
+          l10n_util::GetStringUTF16(
+              IDS_PAGE_INFO_MERCHANT_TRUST_HATS_LOADING_BUTTON)),
+      // Wait for the bubble to be closed and for the survey to show.
+      WaitForHide(PageInfoMerchantTrustContentView::kElementIdForTesting),
+      InAnyContext(WaitForShow(kHatsNextWebDialogId)),
+      CheckHistogramCounts(kHatsShouldShowSurveyReasonHistogram,
+                           HatsServiceDesktop::ShouldShowSurveyReasons::kYes,
+                           1));
 }

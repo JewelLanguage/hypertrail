@@ -23,7 +23,6 @@ import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.core.AllOf.allOf;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -490,7 +489,6 @@ public class TabSwitcherLayoutTest {
 
     @Test
     @MediumTest
-    @DisableFeatures(ChromeFeatureList.TAB_GROUP_CREATION_DIALOG_ANDROID)
     public void testUndoGroupClosureInTabSwitcher() {
         final ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         SnackbarManager snackbarManager = mActivityTestRule.getActivity().getSnackbarManager();
@@ -498,44 +496,15 @@ public class TabSwitcherLayoutTest {
         enterTabSwitcher(cta);
         verifyTabSwitcherCardCount(cta, 2);
         // Create a tab group.
-        mergeAllNormalTabsToAGroup(cta);
+        TabModel normalTabModel = cta.getTabModelSelector().getModel(false);
+        List<Tab> tabGroup =
+                new ArrayList<>(
+                        Arrays.asList(normalTabModel.getTabAt(0), normalTabModel.getTabAt(1)));
+        createTabGroup(cta, false, tabGroup);
         verifyTabSwitcherCardCount(cta, 1);
-        assertNotNull(snackbarManager.getCurrentSnackbarForTesting());
 
         // Verify close this tab group and undo in tab switcher.
         closeFirstTabGroupInTabSwitcher(cta);
-        assertTrue(
-                snackbarManager.getCurrentSnackbarForTesting().getController()
-                        instanceof UndoBarController);
-        verifyTabSwitcherCardCount(cta, 0);
-        CriteriaHelper.pollInstrumentationThread(TabUiTestHelper::verifyUndoBarShowingAndClickUndo);
-        verifyTabSwitcherCardCount(cta, 1);
-    }
-
-    @Test
-    @MediumTest
-    @EnableFeatures({ChromeFeatureList.TAB_GROUP_PANE_ANDROID})
-    @DisabledTest(message = "crbug.com/353946452")
-    public void testTabGroupOverflowMenuInTabSwitcher_closeGroup() {
-        final ChromeTabbedActivity cta = mActivityTestRule.getActivity();
-        SnackbarManager snackbarManager = cta.getSnackbarManager();
-        createTabs(cta, false, 2);
-        enterTabSwitcher(cta);
-        verifyTabSwitcherCardCount(cta, 2);
-        // Create a tab group.
-        mergeNormalTabsToGroupWithDialog(cta, 2);
-        verifyGroupVisualDataDialogOpenedAndDismiss(cta);
-        verifyTabSwitcherCardCount(cta, 1);
-
-        verifyFirstCardTitle("2 tabs");
-        verifyFirstCardColor(TabGroupColorId.GREY);
-
-        // Click the close action button to close the group
-        String closeButtonText = cta.getString(R.string.close_tab_group_menu_item);
-        onView(withId(R.id.action_button)).perform(click());
-        onView(allOf(withText(closeButtonText), withId(R.id.menu_item_text))).perform(click());
-
-        // Verify the tab group was closed.
         assertTrue(
                 snackbarManager.getCurrentSnackbarForTesting().getController()
                         instanceof UndoBarController);
@@ -967,7 +936,6 @@ public class TabSwitcherLayoutTest {
     @MediumTest
     @EnableFeatures({
         ChromeFeatureList.TAB_GROUP_PANE_ANDROID,
-        ChromeFeatureList.TAB_GROUP_CREATION_DIALOG_ANDROID,
     })
     @DisableFeatures({
         ChromeFeatureList.TAB_GROUP_SYNC_ANDROID,
@@ -980,33 +948,6 @@ public class TabSwitcherLayoutTest {
         // Create a tab group.
         mergeNormalTabsToGroupWithDialog(cta, 1);
         verifyGroupVisualDataDialogOpenedAndDismiss(cta);
-        verifyTabSwitcherCardCount(cta, 1);
-    }
-
-    @Test
-    @MediumTest
-    @EnableFeatures({ChromeFeatureList.TAB_GROUP_PANE_ANDROID})
-    @DisableFeatures({
-        ChromeFeatureList.TAB_GROUP_SYNC_ANDROID,
-        ChromeFeatureList.TAB_GROUP_CREATION_DIALOG_ANDROID,
-    })
-    public void testNoTabGroupDialogSingleTab() {
-        final ChromeTabbedActivity cta = mActivityTestRule.getActivity();
-        SnackbarManager snackbarManager = mActivityTestRule.getActivity().getSnackbarManager();
-        createTabs(cta, false, 1);
-        enterTabSwitcher(cta);
-        verifyTabSwitcherCardCount(cta, 1);
-        // Create a tab group.
-        mergeNormalTabsToGroupWithDialog(cta, 1);
-        // Verify the undo group merge snackbar is showing.
-        assertTrue(
-                snackbarManager.getCurrentSnackbarForTesting().getController()
-                        instanceof UndoGroupSnackbarController);
-        // Verify that no modal dialog was shown.
-        CriteriaHelper.pollUiThread(
-                () -> {
-                    Criteria.checkThat(mModalDialogManager.isShowing(), Matchers.is(false));
-                });
         verifyTabSwitcherCardCount(cta, 1);
     }
 

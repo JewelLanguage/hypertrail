@@ -92,6 +92,7 @@
 #include <memory>
 #include <numeric>
 #include <utility>
+#include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/notreached.h"
@@ -103,6 +104,7 @@
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/web_sandbox_flags.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
 #include "third_party/blink/public/common/context_menu_data/context_menu_params_builder.h"
 #include "third_party/blink/public/common/frame/fenced_frame_sandbox_flags.h"
@@ -115,13 +117,11 @@
 #include "third_party/blink/public/mojom/frame/media_player_action.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/tree_scope_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/lcp_critical_path_predictor/lcp_critical_path_predictor.mojom.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink.h"
 #include "third_party/blink/public/platform/interface_registry.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_isolated_world_info.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_url_error.h"
-#include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/public/web/web_associated_url_loader_options.h"
 #include "third_party/blink/public/web/web_autofill_client.h"
@@ -305,7 +305,7 @@ class DummyFrameOwner final : public GarbageCollected<DummyFrameOwner>,
   }
   void AddResourceTiming(mojom::blink::ResourceTimingInfoPtr) override {}
   void DispatchLoad() override {}
-  void IntrinsicSizingInfoChanged() override {}
+  void NaturalSizingInfoChanged() override {}
   void SetNeedsOcclusionTracking(bool) override {}
   AtomicString BrowsingContextContainerName() const override {
     return AtomicString();
@@ -363,7 +363,7 @@ class ChromePrintContext : public PrintContext {
 
   void SpoolPagesWithBoundariesForTesting(cc::PaintCanvas* canvas,
                                           const gfx::Size& spool_size_in_pixels,
-                                          const WebVector<uint32_t>* pages) {
+                                          const std::vector<uint32_t>* pages) {
     gfx::Rect all_pages_rect(spool_size_in_pixels);
 
     PaintRecordBuilder builder;
@@ -375,7 +375,7 @@ class ChromePrintContext : public PrintContext {
     // Fill the whole background by white.
     context.FillRect(all_pages_rect, Color::kWhite, AutoDarkMode::Disabled());
 
-    WebVector<uint32_t> all_pages;
+    std::vector<uint32_t> all_pages;
     if (!pages) {
       all_pages.reserve(PageCount());
       all_pages.resize(PageCount());
@@ -1387,7 +1387,7 @@ void WebLocalFrameImpl::RemoveSpellingMarkers() {
 }
 
 void WebLocalFrameImpl::RemoveSpellingMarkersUnderWords(
-    const WebVector<WebString>& words) {
+    const std::vector<WebString>& words) {
   Vector<String> converted_words;
   converted_words.AppendSpan(base::span(words));
   GetFrame()->RemoveSpellingMarkersUnderWords(converted_words);
@@ -1634,7 +1634,7 @@ bool WebLocalFrameImpl::SetEditableSelectionOffsets(int start, int end) {
 }
 
 bool WebLocalFrameImpl::AddImeTextSpansToExistingText(
-    const WebVector<ui::ImeTextSpan>& ime_text_spans,
+    const std::vector<ui::ImeTextSpan>& ime_text_spans,
     unsigned text_start,
     unsigned text_end) {
   TRACE_EVENT0("blink", "WebLocalFrameImpl::AddImeTextSpansToExistingText");
@@ -1680,7 +1680,7 @@ bool WebLocalFrameImpl::ClearImeTextSpansByType(ui::ImeTextSpan::Type type,
 bool WebLocalFrameImpl::SetCompositionFromExistingText(
     int composition_start,
     int composition_end,
-    const WebVector<ui::ImeTextSpan>& ime_text_spans) {
+    const std::vector<ui::ImeTextSpan>& ime_text_spans) {
   TRACE_EVENT0("blink", "WebLocalFrameImpl::setCompositionFromExistingText");
   if (EditContext* edit_context =
           GetFrame()->GetInputMethodController().GetActiveEditContext()) {
@@ -1974,7 +1974,7 @@ WebPrintPageDescription WebLocalFrameImpl::GetPageDescription(
 }
 
 gfx::Size WebLocalFrameImpl::SpoolSizeInPixelsForTesting(
-    const WebVector<uint32_t>& pages) {
+    const std::vector<uint32_t>& pages) {
   int spool_width = 0;
   int spool_height = 0;
 
@@ -1998,7 +1998,7 @@ gfx::Size WebLocalFrameImpl::SpoolSizeInPixelsForTesting(
 }
 
 gfx::Size WebLocalFrameImpl::SpoolSizeInPixelsForTesting(uint32_t page_count) {
-  WebVector<uint32_t> pages(page_count);
+  std::vector<uint32_t> pages(page_count);
   std::iota(pages.begin(), pages.end(), 0);
   return SpoolSizeInPixelsForTesting(pages);
 }
@@ -2006,7 +2006,7 @@ gfx::Size WebLocalFrameImpl::SpoolSizeInPixelsForTesting(uint32_t page_count) {
 void WebLocalFrameImpl::PrintPagesForTesting(
     cc::PaintCanvas* canvas,
     const gfx::Size& spool_size_in_pixels,
-    const WebVector<uint32_t>* pages) {
+    const std::vector<uint32_t>* pages) {
   DCHECK(print_context_);
 
   print_context_->SpoolPagesWithBoundariesForTesting(
@@ -2776,7 +2776,8 @@ blink::mojom::CommitResult WebLocalFrameImpl::CommitSameDocumentNavigation(
     bool is_browser_initiated,
     bool has_ua_visual_transition,
     std::optional<scheduler::TaskAttributionId>
-        soft_navigation_heuristics_task_id) {
+        soft_navigation_heuristics_task_id,
+    bool should_skip_screenshot) {
   DCHECK(GetFrame());
   DCHECK(!url.ProtocolIs("javascript"));
 
@@ -2788,7 +2789,8 @@ blink::mojom::CommitResult WebLocalFrameImpl::CommitSameDocumentNavigation(
       has_transient_user_activation, initiator_origin.Get(),
       /*is_synchronously_committed=*/false, /*source_element=*/nullptr,
       mojom::blink::TriggeringEventInfo::kNotFromEvent, is_browser_initiated,
-      has_ua_visual_transition, soft_navigation_heuristics_task_id);
+      has_ua_visual_transition, soft_navigation_heuristics_task_id,
+      should_skip_screenshot);
 }
 
 bool WebLocalFrameImpl::IsLoading() const {
@@ -2844,7 +2846,7 @@ WebFrame* WebLocalFrameImpl::GetProvisionalOwnerFrame() {
 }
 
 void WebLocalFrameImpl::MaybeStartOutermostMainFrameNavigation(
-    const WebVector<WebURL>& urls) const {
+    const std::vector<WebURL>& urls) const {
   Vector<KURL> kurls;
   std::move(urls.begin(), urls.end(), std::back_inserter(kurls));
   GetFrame()->MaybeStartOutermostMainFrameNavigation(std::move(kurls));
@@ -3108,17 +3110,6 @@ WebInputMethodController* WebLocalFrameImpl::GetInputMethodController() {
   return &input_method_controller_;
 }
 
-bool WebLocalFrameImpl::ShouldSuppressKeyboardForFocusedElement() {
-  if (!autofill_client_)
-    return false;
-
-  DCHECK(GetFrame()->GetDocument());
-  auto* focused_form_control_element = DynamicTo<HTMLFormControlElement>(
-      GetFrame()->GetDocument()->FocusedElement());
-  return focused_form_control_element &&
-         autofill_client_->ShouldSuppressKeyboard(focused_form_control_element);
-}
-
 void WebLocalFrameImpl::AddMessageToConsoleImpl(
     const WebConsoleMessage& message,
     bool discard_duplicates) {
@@ -3357,7 +3348,7 @@ void WebLocalFrameImpl::SetLCPPHint(
 }
 
 bool WebLocalFrameImpl::IsFeatureEnabled(
-    const mojom::blink::PermissionsPolicyFeature& feature) const {
+    const network::mojom::PermissionsPolicyFeature& feature) const {
   return GetFrame()->DomWindow()->IsFeatureEnabled(feature);
 }
 

@@ -256,7 +256,6 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/system/sys_info.h"
 #include "base/trace_event/trace_event.h"
 #include "chromeos/ash/components/audio/system_sounds_delegate.h"
@@ -482,6 +481,16 @@ bool Shell::IsSystemModalWindowOpen() {
   return GetOpenSystemModalWindowContainerId() >= 0;
 }
 
+// static
+void Shell::UpdateAccessibilityForStatusAreaWidget() {
+  for (RootWindowController* rwc : GetAllRootWindowControllers()) {
+    StatusAreaWidget* saw = rwc->GetStatusAreaWidget();
+    if (saw) {
+      saw->InitializeAccessibleProperties();
+    }
+  }
+}
+
 display::DisplayConfigurator* Shell::display_configurator() {
   return display_manager_->configurator();
 }
@@ -559,13 +568,11 @@ bool Shell::HasPrimaryStatusArea() {
 }
 
 void Shell::SetLargeCursorSizeInDip(int large_cursor_size_in_dip) {
-  window_tree_host_manager_->cursor_window_controller()
-      ->SetLargeCursorSizeInDip(large_cursor_size_in_dip);
+  cursor_manager_->SetLargeCursorSizeInDip(large_cursor_size_in_dip);
 }
 
 void Shell::SetCursorColor(SkColor cursor_color) {
-  window_tree_host_manager_->cursor_window_controller()->SetCursorColor(
-      cursor_color);
+  cursor_manager_->SetCursorColor(cursor_color);
 }
 
 void Shell::UpdateCursorCompositingEnabled() {
@@ -1489,9 +1496,6 @@ void Shell::Init(
   resolution_notification_controller_ =
       std::make_unique<ResolutionNotificationController>();
 
-  cursor_manager_->SetDisplay(
-      display::Screen::GetScreen()->GetPrimaryDisplay());
-
   // Initialize before AcceleratorController and AshAcceleratorConfiguration.
   accelerator_prefs_ = std::make_unique<AcceleratorPrefs>(
       shell_delegate_->CreateAcceleratorPrefsDelegate());
@@ -1738,6 +1742,12 @@ void Shell::Init(
 
   window_tree_host_manager_->InitHosts();
   display_manager_->NotifyDisplaysInitialized();
+  // Set display after `WindowTreeHostManager::InitHosts()`
+  // since root window controller is created in
+  // `WindowTreeHostManager::InitHosts()` and
+  // `CursorWindowManager::SetDisplay` depends on it.
+  cursor_manager_->SetDisplay(
+      display::Screen::GetScreen()->GetPrimaryDisplay());
 
   if (ash::features::IsBootAnimationEnabled()) {
     booting_animation_controller_ =
@@ -1828,8 +1838,9 @@ void Shell::Init(
   }
 
   if (features::IsScannerEnabled()) {
+    // Depends on `session_controller_` (instantiated in the constructor).
     scanner_controller_ = std::make_unique<ScannerController>(
-        shell_delegate_->CreateScannerDelegate());
+        shell_delegate_->CreateScannerDelegate(), *session_controller_);
   }
 
   if (features::IsTilingWindowResizeEnabled()) {
@@ -1856,8 +1867,8 @@ void Shell::Init(
         if (clipboard_history_util::IsEnabledInCurrentMode()) {
           const auto& items = controller->history()->GetItems();
           descriptors.reserve(items.size());
-          base::ranges::transform(items, std::back_inserter(descriptors),
-                                  &clipboard_history_util::ItemToDescriptor);
+          std::ranges::transform(items, std::back_inserter(descriptors),
+                                 &clipboard_history_util::ItemToDescriptor);
         }
         return descriptors;
       },

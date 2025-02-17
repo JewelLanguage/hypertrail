@@ -12,6 +12,7 @@ import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.view.View;
 
+import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
@@ -419,6 +420,15 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
     }
 
     @Override
+    protected void initializeAdaptiveToolbarButton(Supplier<Tracker> trackerSupplier) {
+        if (!ChromeFeatureList.sCctAdaptiveButton.isEnabled()) return;
+
+        super.initializeAdaptiveToolbarButton(trackerSupplier);
+        // TODO(crbug/391931152): Instantiate CCT-specific ButtonControllers based on
+        //     the feature flag configuration.
+    }
+
+    @Override
     protected boolean canPreviewPromoteToTab() {
         return mActivityType == ActivityType.CUSTOM_TAB;
     }
@@ -616,10 +626,10 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
     }
 
     @Override
-    protected void setStatusBarScrimFraction(float scrimFraction) {
-        super.setStatusBarScrimFraction(scrimFraction);
+    protected void onScrimColorChanged(@ColorInt int scrimColor) {
+        super.onScrimColorChanged(scrimColor);
         // TODO(jinsukkim): Separate CCT scrim update action from status bar scrim stuff.
-        mCustomTabHeightStrategy.setScrimFraction(scrimFraction);
+        mCustomTabHeightStrategy.setScrimColor(scrimColor);
     }
 
     @Override
@@ -765,6 +775,8 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
                                             mActivityTabProvider,
                                             profile);
                             String appId = mIntentDataProvider.get().getClientPackageName();
+                            // TODO(crbug.com/390429345): Refactor Ads CCT Notice logic into the PS
+                            // dialog controller
                             if (ChromeFeatureList.isEnabled(
                                             ChromeFeatureList.PRIVACY_SANDBOX_ADS_NOTICE_CCT)
                                     && shouldShowPrivacySandboxDialog
@@ -782,6 +794,13 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
                                         "Startup.Android.PrivacySandbox.AdsNoticeCCTAppIDCheck",
                                         shouldShowPrivacySandboxDialogAppIdCheck);
                                 if (shouldShowPrivacySandboxDialogAppIdCheck) {
+                                    if (surveyController != null) {
+                                        PrivacySandboxDialogController.setOnDialogDismissRunnable(
+                                                () ->
+                                                        surveyController
+                                                                .maybeScheduleAdsCctTreatmentSurveyLaunch(
+                                                                        appId));
+                                    }
                                     didShowPrompt =
                                             PrivacySandboxDialogController
                                                     .maybeLaunchPrivacySandboxDialog(
@@ -795,7 +814,7 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
                                             ChromeFeatureList.PRIVACY_SANDBOX_ADS_NOTICE_CCT)
                                     && shouldShowPrivacySandboxDialog
                                     && isCustomTab) {
-                                surveyController.scheduleAdsCctControlSurveyLaunch(
+                                surveyController.maybeScheduleAdsCctControlSurveyLaunch(
                                         appId,
                                         new PrivacySandboxBridge(currentModelProfile)
                                                 .getRequiredPromptType(SurfaceType.AGACCT));

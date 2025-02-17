@@ -57,11 +57,13 @@
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/public/commands/lens_commands.h"
 #import "ios/chrome/browser/shared/public/commands/lens_overlay_commands.h"
+#import "ios/chrome/browser/shared/public/commands/open_lens_input_selection_command.h"
 #import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/shared/public/commands/snackbar_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/omnibox_util.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/snapshots/model/snapshot_tab_helper.h"
 #import "ios/chrome/browser/web/model/web_state_delegate_browser_agent.h"
 #import "ios/public/provider/chrome/browser/lens/lens_configuration.h"
@@ -74,6 +76,9 @@ namespace {
 
 // The expected number of animations happening at the same time when exiting.
 const int kExpectedExitAnimationCount = 2;
+
+// The delay for showing the search with camera tooltip hint.
+const base::TimeDelta kSearchWithCameraTooltipHintDelay = base::Seconds(2.0);
 
 }  // namespace
 
@@ -110,7 +115,7 @@ const int kExpectedExitAnimationCount = 2;
   ContextMenuConfigurationProvider* _resultContextMenuProvider;
 
   /// The tab helper associated with the current UI.
-  raw_ptr<LensOverlayTabHelper> _associatedTabHelper;
+  base::WeakPtr<LensOverlayTabHelper> _associatedTabHelper;
 
   /// Coordinator of the omnibox.
   OmniboxCoordinator* _omniboxCoordinator;
@@ -144,8 +149,8 @@ const int kExpectedExitAnimationCount = 2;
   /// Presenter for the lens container.
   LensOverlayContainerPresenter* _containerPresenter;
 
-  /// Whether the image should be repositioned when exiting.
-  BOOL _shouldResetSelectionToInitialPositionOnExit;
+  // The entrypoint associated with the current session.
+  LensOverlayEntrypoint _entrypoint;
 }
 
 #pragma mark - public
@@ -157,12 +162,9 @@ const int kExpectedExitAnimationCount = 2;
 #pragma mark - Helpers
 
 // Returns whether the UI was created succesfully.
-- (BOOL)createUIWithSnapshot:(UIImage*)snapshot
-                  entrypoint:(LensOverlayEntrypoint)entrypoint {
+- (BOOL)createUIWithImageSource:(LensImageSource*)imageSource {
   [self createContainerViewController];
-
-  [self createSelectionViewControllerWithSnapshot:snapshot
-                                       entrypoint:entrypoint];
+  [self createSelectionUIWithImageSource:imageSource];
   if (!_selectionViewController) {
     return NO;
   }
@@ -187,9 +189,7 @@ const int kExpectedExitAnimationCount = 2;
   return YES;
 }
 
-- (void)createSelectionViewControllerWithSnapshot:(UIImage*)snapshot
-                                       entrypoint:
-                                           (LensOverlayEntrypoint)entrypoint {
+- (void)createSelectionUIWithImageSource:(LensImageSource*)imageSource {
   if (_selectionViewController) {
     return;
   }
@@ -197,19 +197,41 @@ const int kExpectedExitAnimationCount = 2;
   LensOverlayConfigurationFactory* lensConfigurationFactory =
       [[LensOverlayConfigurationFactory alloc] init];
   LensConfiguration* config = [lensConfigurationFactory
-      configurationForEntrypoint:entrypoint
+      configurationForEntrypoint:_entrypoint
                          profile:self.browser->GetProfile()];
 
   LensOverlayOverflowMenuFactory* overflowMenuFactory =
-      [[LensOverlayOverflowMenuFactory alloc] initWithBrowser:self.browser];
+      [[LensOverlayOverflowMenuFactory alloc]
+                            initWithBrowser:self.browser
+          browserCoordinatorCommandsHandler:HandlerForProtocol(
+                                                self.browser
+                                                    ->GetCommandDispatcher(),
+                                                BrowserCoordinatorCommands)];
 
-  NSArray<UIAction*>* additionalMenuItems = @[
-    [overflowMenuFactory openUserActivityAction],
-    [overflowMenuFactory learnMoreAction],
-  ];
+  BOOL escapeHatchEnabled = IsLVFEscapeHatchEnabled();
+  config.useTrailingDismissButton = !escapeHatchEnabled;
+
+  NSArray<UIAction*>* additionalMenuItems;
+  if (escapeHatchEnabled) {
+    __weak __typeof(self) weakSelf = self;
+    UIAction* searchWithCameraAction =
+        [overflowMenuFactory searchWithCameraActionWithHandler:^{
+          [weakSelf didRequestSearchWithCamera];
+        }];
+    additionalMenuItems = @[
+      searchWithCameraAction,
+      [overflowMenuFactory openUserActivityAction],
+      [overflowMenuFactory learnMoreAction],
+    ];
+  } else {
+    additionalMenuItems = @[
+      [overflowMenuFactory openUserActivityAction],
+      [overflowMenuFactory learnMoreAction],
+    ];
+  }
 
   _selectionViewController = ios::provider::NewChromeLensOverlay(
-      snapshot, config, additionalMenuItems);
+      imageSource, config, additionalMenuItems);
 }
 
 - (void)createContainerViewController {
@@ -269,6 +291,21 @@ const int kExpectedExitAnimationCount = 2;
 
 #pragma mark - LensOverlayCommands
 
+- (void)searchWithLensImageMetadata:(id<LensImageMetadata>)metadata
+                         entrypoint:(LensOverlayEntrypoint)entrypoint
+                         completion:(void (^)(BOOL))completion {
+  [self prepareOverlayWithEntrypoint:entrypoint];
+  // Even if the image is already prepared at this point, the snapshotting
+  // infrastructure still needs to be built to allow the restoration window to
+  // be displayed when exiting and re-entering the experience.
+  [self prepareSnapshotCapturingInfrastructure];
+  LensImageSource* imageSource =
+      [[LensImageSource alloc] initWithImageMetadata:metadata];
+  [self handleOverlayImageSourceFound:imageSource
+                             animated:YES
+                           completion:completion];
+}
+
 - (void)searchImageWithLens:(UIImage*)image
                  entrypoint:(LensOverlayEntrypoint)entrypoint
                  completion:(void (^)(BOOL))completion {
@@ -277,48 +314,48 @@ const int kExpectedExitAnimationCount = 2;
   // infrastructure still needs to be built to allow the restoration window to
   // be displayed when exiting and re-entering the experience.
   [self prepareSnapshotCapturingInfrastructure];
-  _shouldResetSelectionToInitialPositionOnExit =
-      (entrypoint == LensOverlayEntrypoint::kLVFCameraCapture);
-  [self handleOverlayImageCaptured:image
-                        entrypoint:entrypoint
-                          animated:YES
-                        completion:completion];
+  LensImageSource* imageSource =
+      [[LensImageSource alloc] initWithSnapshot:image];
+  [self handleOverlayImageSourceFound:imageSource
+                             animated:YES
+                           completion:completion];
 }
 
 - (void)createAndShowLensUI:(BOOL)animated
                  entrypoint:(LensOverlayEntrypoint)entrypoint
                  completion:(void (^)(BOOL))completion {
   [self prepareOverlayWithEntrypoint:entrypoint];
-  _shouldResetSelectionToInitialPositionOnExit = YES;
   __weak __typeof(self) weakSelf = self;
   [self captureSnapshotWithCompletion:^(UIImage* snapshot) {
-    [weakSelf handleOverlayImageCaptured:snapshot
-                              entrypoint:entrypoint
-                                animated:animated
-                              completion:completion];
+    LensImageSource* imageSource =
+        [[LensImageSource alloc] initWithSnapshot:snapshot];
+    [weakSelf handleOverlayImageSourceFound:imageSource
+                                   animated:animated
+                                 completion:completion];
   }];
 }
 
 // Handles presenting the base image to be used in the overlay.
-- (void)handleOverlayImageCaptured:(UIImage*)snapshot
-                        entrypoint:(LensOverlayEntrypoint)entrypoint
-                          animated:(BOOL)animated
-                        completion:(void (^)(BOOL))completion {
-  if (!snapshot) {
+- (void)handleOverlayImageSourceFound:(LensImageSource*)imageSource
+                             animated:(BOOL)animated
+                           completion:(void (^)(BOOL))completion {
+  if (!imageSource.isValid) {
     if (completion) {
       completion(NO);
     }
     return;
   }
 
-  BOOL success = [self createUIWithSnapshot:snapshot entrypoint:entrypoint];
+  BOOL success = [self createUIWithImageSource:imageSource];
   if (success) {
     [self showLensUI:animated completion:completion];
   } else {
     [self destroyLensUI:NO
                  reason:lens::LensOverlayDismissalSource::
                             kErrorScreenshotCreationFailed];
-    completion(NO);
+    if (completion) {
+      completion(NO);
+    }
   }
 }
 
@@ -363,25 +400,38 @@ const int kExpectedExitAnimationCount = 2;
     return;
   }
 
-  // Start the selection UI only when the container is presented. This avoids
-  // results being reported before the container is fully shown.
-  if ([self termsOfServiceAccepted]) {
-    [_selectionViewController start];
-  }
-
   if (self.shouldShowConsentFlow) {
-    if (self.isResultsBottomSheetOpen) {
+    if (self.isResultsBottomSheetCreated) {
       [self stopResultPage];
     }
     [self presentConsentFlow];
-  } else if (self.isResultsBottomSheetOpen) {
-    [self showResultsBottomSheet];
+  } else {
+    // Start the selection UI only when the container is presented. This avoids
+    // results being reported before the container is fully shown.
+    [_selectionViewController start];
+
+    if (self.isResultsBottomSheetCreated) {
+      // Only show the bottom sheet when in selection. For translate, build the
+      // necessary infrastructure but don't show it, effectively starting it
+      // hidden.
+      [self buildResultsBottomSheetPresentation];
+      if (!_selectionViewController.translateFilterActive) {
+        [self showResultsBottomSheet];
+      }
+    }
   }
 
   // The auxiliary window should be retained until the container is confirmed
   // presented to avoid visual flickering when swapping back the main window.
   if (_associatedTabHelper) {
     _associatedTabHelper->ReleaseSnapshotAuxiliaryWindows();
+  }
+
+  // If the results bottom sheet hasn't been created yet, dismiss the
+  // restoration window. Otherwise, keep the restoration window until the
+  // results bottom sheet is presented.
+  if (!self.isResultsBottomSheetCreated) {
+    [self dismissRestorationWindow];
   }
 }
 
@@ -406,7 +456,10 @@ const int kExpectedExitAnimationCount = 2;
 
   _resultsPagePresenter.delegate = nil;
   [_metricsRecorder setLensOverlayInForeground:NO];
-  _associatedTabHelper->UpdateSnapshotStorage();
+  if (_associatedTabHelper) {
+    _associatedTabHelper->UpdateSnapshotStorage();
+  }
+
   [self dismissRestorationWindow];
   __weak id<LensCommands> weakCommands =
       HandlerForProtocol(self.browser->GetCommandDispatcher(), LensCommands);
@@ -421,9 +474,9 @@ const int kExpectedExitAnimationCount = 2;
                       [weakCommands
                           lensOverlayDidDismissWithCause:
                               LensOverlayDismissalCauseExternalNavigation];
-                      // If the result page is still visible, dismiss it before
+                      // If the result page is still present, dismiss it before
                       // calling the completion.
-                      if (weakResultsPagePresenter.isResultPageVisible) {
+                      if (weakResultsPagePresenter) {
                         [weakResultsPagePresenter
                             dismissResultsPageAnimated:animated
                                             completion:completion];
@@ -457,6 +510,9 @@ const int kExpectedExitAnimationCount = 2;
     _associatedTabHelper->RecordSheetDimensionState(SheetDimensionStateHidden);
     _associatedTabHelper->ClearViewportSnapshot();
     _associatedTabHelper->UpdateSnapshot();
+    if (IsLensOverlaySameTabNavigationEnabled()) {
+      _associatedTabHelper->ClearInvokationNavigationId();
+    }
   }
 
   if (!animated) {
@@ -474,9 +530,19 @@ const int kExpectedExitAnimationCount = 2;
   BOOL dismissedWithSwipeDown =
       dismissalSource ==
       lens::LensOverlayDismissalSource::kBottomSheetDismissed;
-  LensOverlayDismissalCause dismissalCause =
-      dismissedWithSwipeDown ? LensOverlayDismissalCauseSwipeDown
-                             : LensOverlayDismissalCauseDismissButton;
+
+  BOOL isInTranslate = _selectionViewController.translateFilterActive;
+
+  LensOverlayDismissalCause dismissalCause;
+  if (dismissedWithSwipeDown) {
+    if (isInTranslate) {
+      dismissalCause = LensOverlayDismissalCauseSwipeDownFromTranslate;
+    } else {
+      dismissalCause = LensOverlayDismissalCauseSwipeDownFromSelection;
+    }
+  } else {
+    dismissalCause = LensOverlayDismissalCauseDismissButton;
+  }
 
   [weakCommands lensOverlayWillDismissWithCause:dismissalCause];
   void (^onAnimationFinished)() = ^{
@@ -552,7 +618,7 @@ const int kExpectedExitAnimationCount = 2;
     [weakContainerPresenter fadeSelectionUIWithCompletion:completion];
   };
 
-  if (_shouldResetSelectionToInitialPositionOnExit) {
+  if (self.shouldResetSelectionToInitialPositionOnExit) {
     [_selectionViewController
         resetSelectionAreaToInitialPosition:onSelectionExitPositionSettled];
   } else {
@@ -617,6 +683,12 @@ const int kExpectedExitAnimationCount = 2;
 #pragma mark - LensOverlayMediatorDelegate
 
 - (void)lensOverlayMediatorDidOpenOverlayMenu:(LensOverlayMediator*)mediator {
+  // Capture the viewport snapshot before potential
+  // navigation (e.g., user taps the "Learn More" button) to preserve the
+  // current state.
+  if (_associatedTabHelper) {
+    _associatedTabHelper->RecordViewportSnaphot();
+  }
   [_metricsRecorder recordOverflowMenuOpened];
 }
 
@@ -627,9 +699,11 @@ const int kExpectedExitAnimationCount = 2;
   // bottom sheet in the view hierarchy. Refrain from commiting it to
   // the storage until the web state is marked hidden, as by that point all
   // other updates should be issued.
-  _associatedTabHelper->RecordViewportSnaphot();
-  _associatedTabHelper->RecordSheetDimensionState(
-      _resultsPagePresenter.sheetDimension);
+  if (_associatedTabHelper) {
+    _associatedTabHelper->RecordViewportSnaphot();
+    _associatedTabHelper->RecordSheetDimensionState(
+        _resultsPagePresenter.sheetDimension);
+  }
   if (IsLensOverlaySameTabNavigationEnabled()) {
     CommandDispatcher* dispatcher = self.browser->GetCommandDispatcher();
     [HandlerForProtocol(dispatcher, BrowserCoordinatorCommands)
@@ -638,6 +712,17 @@ const int kExpectedExitAnimationCount = 2;
     [self openURLInNewTab:URL];
     [self showRestorationWindowIfNeeded];
   }
+}
+
+- (void)respondToTabWillChange {
+  if (!_associatedTabHelper) {
+    return;
+  }
+
+  _associatedTabHelper->RecordViewportSnaphot();
+  _associatedTabHelper->RecordSheetDimensionState(
+      _resultsPagePresenter.sheetDimension);
+  _associatedTabHelper->UpdateSnapshotStorage();
 }
 
 #pragma mark - LensOverlayResultConsumer
@@ -703,6 +788,55 @@ const int kExpectedExitAnimationCount = 2;
   [self openURLInNewTab:GURL(kLearnMoreLensURL)];
 }
 
+- (void)didRequestSearchWithCamera {
+  [_metricsRecorder recordSearchWithCameraTapped];
+  __weak __typeof(self) weakSelf = self;
+  __weak id<LensCommands> weakLensHandler =
+      HandlerForProtocol(self.browser->GetCommandDispatcher(), LensCommands);
+  [self
+      hideLensUI:YES
+      completion:^{
+        OpenLensInputSelectionCommand* command =
+            [[OpenLensInputSelectionCommand alloc]
+                    initWithEntryPoint:LensEntrypoint::LensOverlayLvfEscapeHatch
+                     presentationStyle:LensInputSelectionPresentationStyle::
+                                           SlideFromRight
+                presentationCompletion:^{
+                  [weakSelf destroyLensUI:NO
+                                   reason:lens::LensOverlayDismissalSource::
+                                              kSearchWithCameraRequested];
+                }];
+
+        [weakLensHandler openLensInputSelection:command];
+      }];
+}
+
+- (void)scheduleTooltipHintDisplay {
+  if (_isExiting || _isStopped) {
+    return;
+  }
+  __weak __typeof(self) weakSelf = self;
+  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+      FROM_HERE, base::BindOnce(^{
+        [weakSelf onTooltipScheduledDisplayDelayElapsed];
+      }),
+      kSearchWithCameraTooltipHintDelay);
+}
+
+- (void)onTooltipScheduledDisplayDelayElapsed {
+  if (_isExiting || _isStopped) {
+    return;
+  }
+
+  BOOL hadInteraction = self.isResultsBottomSheetCreated;
+  if (!hadInteraction) {
+    if ([_selectionViewController
+            respondsToSelector:@selector(requestShowOverflowMenuTooltip)]) {
+      [_selectionViewController requestShowOverflowMenuTooltip];
+    }
+  }
+}
+
 #pragma mark - LensOverlayConsentPresenterDelegate
 
 - (void)requestDismissalOfConsentDialog:
@@ -727,7 +861,8 @@ const int kExpectedExitAnimationCount = 2;
              name:UIApplicationDidReceiveMemoryWarningNotification
            object:nil];
 
-  _associatedTabHelper = [self activeTabHelper];
+  _entrypoint = entrypoint;
+  _associatedTabHelper = self.activeTabHelper->GetWeakPtr();
 
   _metricsRecorder = [[LensOverlayMetricsRecorder alloc]
       initWithEntrypoint:entrypoint
@@ -749,8 +884,15 @@ const int kExpectedExitAnimationCount = 2;
 }
 
 - (BOOL)shouldShowConsentFlow {
-  return !self.termsOfServiceAccepted ||
-         base::FeatureList::IsEnabled(kLensOverlayForceShowOnboardingScreen);
+  if (lens::IsLVFEntrypoint(_entrypoint) ||
+      lens::IsImageContextMenuEntrypoint(_entrypoint)) {
+    return NO;
+  }
+
+  BOOL forceShowConsent =
+      base::FeatureList::IsEnabled(kLensOverlayForceShowOnboardingScreen);
+
+  return !self.termsOfServiceAccepted || forceShowConsent;
 }
 
 - (BOOL)termsOfServiceAccepted {
@@ -761,6 +903,15 @@ const int kExpectedExitAnimationCount = 2;
 
   return self.browser->GetProfile()->GetPrefs()->GetBoolean(
       prefs::kLensOverlayConditionsAccepted);
+}
+
+- (void)checkTermsOfServiceIfNeeded {
+  if (lens::IsLVFEntrypoint(_entrypoint) ||
+      lens::IsImageContextMenuEntrypoint(_entrypoint)) {
+    return;
+  }
+
+  CHECK(self.termsOfServiceAccepted);
 }
 
 - (void)startResultPage {
@@ -798,6 +949,7 @@ const int kExpectedExitAnimationCount = 2;
   _resultMediator.webViewContainer = _resultViewController.webViewContainer;
   _resultMediator.contextMenuProvider = _resultContextMenuProvider;
 
+  [self buildResultsBottomSheetPresentation];
   [self showResultsBottomSheet];
 
   // TODO(crbug.com/355179986): Implement omnibox navigation with
@@ -869,7 +1021,7 @@ const int kExpectedExitAnimationCount = 2;
   return _containerViewController != nil;
 }
 
-- (BOOL)isResultsBottomSheetOpen {
+- (BOOL)isResultsBottomSheetCreated {
   return _resultViewController != nil;
 }
 
@@ -882,7 +1034,7 @@ const int kExpectedExitAnimationCount = 2;
   _mediator = nil;
   _consentViewController = nil;
   _isExiting = NO;
-  _associatedTabHelper = nil;
+  _associatedTabHelper = nullptr;
   _metricsRecorder = nil;
   _containerPresenter = nil;
   _resultsPagePresenter = nil;
@@ -918,12 +1070,8 @@ const int kExpectedExitAnimationCount = 2;
   web::WebState* activeWebState =
       browser->GetWebStateList()->GetActiveWebState();
 
-  if (!activeWebState) {
-    return NO;
-  }
-
   UIWindow* sceneWindow = browser->GetSceneState().window;
-  if (!sceneWindow) {
+  if (!sceneWindow || !_associatedTabHelper || !activeWebState) {
     return NO;
   }
 
@@ -959,6 +1107,12 @@ const int kExpectedExitAnimationCount = 2;
   [self destroyLensUI:NO reason:lens::LensOverlayDismissalSource::kLowMemory];
 }
 
+// Whether the image should be repositioned when exiting.
+- (BOOL)shouldResetSelectionToInitialPositionOnExit {
+  return _entrypoint != LensOverlayEntrypoint::kSearchImageContextMenu &&
+         _entrypoint != LensOverlayEntrypoint::kLVFImagePicker;
+}
+
 - (BOOL)isLensOverlayVisible {
   return _containerPresenter.isLensOverlayVisible;
 }
@@ -975,17 +1129,17 @@ const int kExpectedExitAnimationCount = 2;
     return;
   }
 
-  CHECK([self termsOfServiceAccepted]);
+  [self checkTermsOfServiceIfNeeded];
   [self disableSelectionInteraction:NO];
   [_selectionViewController setTopIconsHidden:NO];
   [_selectionViewController start];
+
+  if (IsLVFEscapeHatchEnabled()) {
+    [self scheduleTooltipHintDisplay];
+  }
 }
 
-- (void)showResultsBottomSheet {
-  if (!_associatedTabHelper) {
-    return;
-  }
-
+- (void)buildResultsBottomSheetPresentation {
   _resultsPagePresenter = [[LensOverlayResultsPagePresenter alloc]
       initWithBaseViewController:_containerViewController
         resultPageViewController:_resultViewController];
@@ -993,6 +1147,12 @@ const int kExpectedExitAnimationCount = 2;
   _resultsPagePresenter.delegate = self;
   _resultMediator.presentationDelegate = _resultsPagePresenter;
   _mediator.presentationDelegate = _resultsPagePresenter;
+}
+
+- (void)showResultsBottomSheet {
+  if (!_associatedTabHelper) {
+    return;
+  }
 
   __weak __typeof(self) weakSelf = self;
 
@@ -1002,8 +1162,8 @@ const int kExpectedExitAnimationCount = 2;
   BOOL maximizeSheet = restoredSheetState == SheetDimensionStateLarge;
   [_resultsPagePresenter
       presentResultsPageAnimated:!isStateRestoration
-                      sceneState:self.browser->GetSceneState()
                    maximizeSheet:maximizeSheet
+                startInTranslate:_selectionViewController.translateFilterActive
                       completion:^{
                         [weakSelf resultsBottomSheetPresented];
                       }];
@@ -1016,6 +1176,13 @@ const int kExpectedExitAnimationCount = 2;
   if (!_associatedTabHelper || !sceneWindow) {
     return;
   }
+
+  // The Lens overlay is locked to portrait. Skip displaying the restoration
+  // window on landscape to avoid stretching the snapshot.
+  if (IsLandscape(sceneWindow) && !IsLensOverlayLandscapeOrientationEnabled()) {
+    return;
+  }
+
   UIImage* viewportSnapshot = _associatedTabHelper->GetViewportSnapshot();
   // If no snapshot was stored, it means that a restoration of state is not
   // needed.

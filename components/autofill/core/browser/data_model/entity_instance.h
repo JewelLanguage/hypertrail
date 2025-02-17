@@ -61,7 +61,13 @@ class AttributeInstance final {
   // Less-than relation based on the AttributeType.
   struct CompareByType;
 
-  AttributeInstance(AttributeType type, std::string value, Context context);
+  // Comparator that ranks types by their priority for disambiguating different
+  // instances of the same entity type, as specified in the schema.
+  // `DisambiguationOrder(x, y) == true` means `x` has higher priority than `y`.
+  static bool DisambiguationOrder(const AttributeInstance& lhs,
+                                  const AttributeInstance& rhs);
+
+  AttributeInstance(AttributeType type, std::u16string value, Context context);
 
   AttributeInstance(const AttributeInstance&);
   AttributeInstance& operator=(const AttributeInstance&);
@@ -72,7 +78,7 @@ class AttributeInstance final {
   const AttributeType& type() const { return type_; }
 
   // Typically a user-entered string, e.g., a date.
-  const std::string& value() const { return value_; }
+  const std::u16string& value() const { return value_; }
 
   // Metadata from the saving moment of the value.
   const Context& context() const { return context_; }
@@ -82,7 +88,7 @@ class AttributeInstance final {
 
  private:
   AttributeType type_;
-  std::string value_;
+  std::u16string value_;
   Context context_;
 };
 
@@ -108,11 +114,12 @@ struct AttributeInstance::CompareByType {
   }
 };
 
-// An entity instance is a set of attribute instances with additional metadata.
-// The type is an EntityType.
+// An entity instance is a non-empty set of attribute instances with additional
+// metadata. The type is an EntityType.
 class EntityInstance final {
  public:
-  EntityInstance(EntityType type_name,
+  // `attributes` must be non-empty and their type must be identical to `type`.
+  EntityInstance(EntityType type,
                  base::flat_set<AttributeInstance,
                                 AttributeInstance::CompareByType> attributes,
                  base::Uuid guid,
@@ -124,6 +131,11 @@ class EntityInstance final {
   EntityInstance(EntityInstance&&);
   EntityInstance& operator=(EntityInstance&&);
   ~EntityInstance();
+
+  // Comparator that ranks instances by their priority for import on form
+  // submission.
+  // `ImportOrder(x, y) == true` means `x` has higher priority than `y`.
+  static bool ImportOrder(const EntityInstance& lhs, const EntityInstance& rhs);
 
   const EntityType& type() const { return type_; }
 
@@ -149,6 +161,38 @@ class EntityInstance final {
 
   // The latest time the instance, including any of its attributes, was edited.
   base::Time date_modified() const { return date_modified_; }
+
+  struct EntityMergeability {
+    EntityMergeability();
+    EntityMergeability(std::vector<AttributeInstance> mergeable_attributes,
+                       bool is_subset);
+    EntityMergeability(const EntityMergeability&);
+    EntityMergeability(EntityMergeability&&);
+    EntityMergeability& operator=(const EntityMergeability&);
+    EntityMergeability& operator=(EntityMergeability&&);
+    ~EntityMergeability();
+
+    // Given two instances (caller and parameter), this specifies the values of
+    // the second instance which can be merged in the first one (caller). This
+    // is not present if `is_subset` is true.
+    std::vector<AttributeInstance> mergeable_attributes;
+
+    bool is_subset = false;
+  };
+
+  // - If `newer` is a proper superset of `this`,
+  //   `EntityMergeability::mergeable_attributes` contains the list of
+  //   attributes that `newer` has, but `this` does not. These attributes can be
+  //   set on `this` to update it.
+  // - If `newer` is a proper subset of `this`,
+  //   `EntityMergeability::mergeable_attributes` is empty and
+  //   `EntityMergeability::is_subset` is `true`. In this case no saving or
+  //   updating is required.
+  // - Otherwise, we have a situation were `newer` should be considered an
+  //   independent entity.
+  // TODO(389629676): This does not yet properly handle names and possibly
+  // dates.
+  EntityMergeability GetEntityMergeability(const EntityInstance& newer) const;
 
   friend bool operator==(const EntityInstance&,
                          const EntityInstance&) = default;

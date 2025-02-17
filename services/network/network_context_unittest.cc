@@ -29,7 +29,6 @@
 #include "base/metrics/field_trial.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/power_monitor/power_monitor_source.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/escape.h"
 #include "base/strings/strcat.h"
@@ -1069,6 +1068,54 @@ TEST_F(NetworkContextTest, QueueEnterpriseReport) {
   EXPECT_EQ(kGroup_, reports[0]->group);
   EXPECT_EQ(kType_, reports[0]->type);
   EXPECT_EQ(net::ReportingTargetType::kEnterprise, reports[0]->target_type);
+}
+
+TEST_F(NetworkContextTest, QueueReportAfterNetworkRevocation) {
+  auto reporting_context = std::make_unique<net::TestReportingContext>(
+      base::DefaultClock::GetInstance(), base::DefaultTickClock::GetInstance(),
+      net::ReportingPolicy());
+  mojom::NetworkContextParamsPtr params =
+      CreateNetworkContextParamsForTesting();
+  params->user_agent = kUserAgent_;
+  std::unique_ptr<NetworkContext> network_context = CreateContextWithParams(
+      std::move(params),
+      net::ReportingService::CreateForTesting(std::move(reporting_context)));
+
+  // Create 2 nonces. Only one will have its network access revoked.
+  const base::UnguessableToken revoked_nonce = base::UnguessableToken::Create();
+  const base::UnguessableToken allowed_nonce = base::UnguessableToken::Create();
+
+  // Revoke the nonce for untrusted network access.
+  base::test::TestFuture<void> revoked;
+  network_context->RevokeNetworkForNonces(
+      {revoked_nonce}, base::BindOnce(revoked.GetCallback()));
+  EXPECT_TRUE(revoked.Wait());
+  EXPECT_FALSE(
+      network_context->IsNetworkForNonceAndUrlAllowed(revoked_nonce, kUrl_));
+  EXPECT_TRUE(
+      network_context->IsNetworkForNonceAndUrlAllowed(allowed_nonce, kUrl_));
+
+  // Create the 2 NetworkAnonymizationKey(s).
+  const auto site = net::SchemefulSite(kUrl_);
+  net::NetworkAnonymizationKey revoked_anonymization_key =
+      net::NetworkAnonymizationKey::CreateFromFrameSite(site, site,
+                                                        revoked_nonce);
+  net::NetworkAnonymizationKey allowed_anonymization_key =
+      net::NetworkAnonymizationKey::CreateFromFrameSite(site, site,
+                                                        allowed_nonce);
+
+  // The report with the revoked key should not be queued after network cutoff,
+  // but the report with the still allowed key should.
+  const std::string revoked_type = "revoked_type";
+  const std::string allowed_type = "allowed_type";
+  network_context->QueueReport(revoked_type, kGroup_, kUrl_, kReportingSource_,
+                               revoked_anonymization_key, base::Value::Dict());
+  network_context->QueueReport(allowed_type, kGroup_, kUrl_, kReportingSource_,
+                               allowed_anonymization_key, base::Value::Dict());
+  std::vector<raw_ptr<const net::ReportingReport, VectorExperimental>> reports =
+      network_context->url_request_context()->reporting_service()->GetReports();
+  ASSERT_EQ(1u, reports.size());
+  EXPECT_EQ(allowed_type, reports[0]->type);
 }
 
 #if BUILDFLAG(ENABLE_DEVICE_BOUND_SESSIONS)
@@ -5155,7 +5202,7 @@ TEST_F(NetworkContextTest, CanSetCookieFalseIfCookiesBlocked) {
           *request, *cookie, /* options */ nullptr,
           net::FirstPartySetMetadata(), &status));
   EXPECT_FALSE(status.HasWarningReason(
-      net::CookieInclusionStatus::WARN_THIRD_PARTY_PHASEOUT));
+      net::CookieInclusionStatus::WarningReason::WARN_THIRD_PARTY_PHASEOUT));
 }
 
 TEST_F(NetworkContextTest, CanSetCookieTrueIfCookiesAllowed) {
@@ -5179,7 +5226,7 @@ TEST_F(NetworkContextTest, CanSetCookieTrueIfCookiesAllowed) {
           net::FirstPartySetMetadata(), &status));
 
   EXPECT_TRUE(status.HasWarningReason(
-      net::CookieInclusionStatus::WARN_THIRD_PARTY_PHASEOUT));
+      net::CookieInclusionStatus::WarningReason::WARN_THIRD_PARTY_PHASEOUT));
 }
 
 using NetworkContextAnnotateAndMoveUserBlockedCookiesTest = NetworkContextTest;
@@ -5414,12 +5461,16 @@ TEST_F(NetworkContextTest, PreconnectHSTS) {
 
   for (bool partition_connections : {false, true}) {
     base::test::ScopedFeatureList feature_list;
+    // Preconnects are not upgraded by HSTS when kHstsTopLevelNavigationsOnly is
+    // enabled. Disable it for this test.
     if (partition_connections) {
-      feature_list.InitAndEnableFeature(
-          net::features::kPartitionConnectionsByNetworkIsolationKey);
+      feature_list.InitWithFeatures(
+          {net::features::kPartitionConnectionsByNetworkIsolationKey},
+          {net::features::kHstsTopLevelNavigationsOnly});
     } else {
-      feature_list.InitAndDisableFeature(
-          net::features::kPartitionConnectionsByNetworkIsolationKey);
+      feature_list.InitWithFeatures(
+          {}, {net::features::kPartitionConnectionsByNetworkIsolationKey,
+               net::features::kHstsTopLevelNavigationsOnly});
     }
     std::unique_ptr<NetworkContext> network_context =
         CreateContextWithParams(CreateNetworkContextParamsForTesting());
@@ -5886,8 +5937,11 @@ TEST_F(NetworkContextTest, QueryHSTS) {
       CreateContextWithParams(CreateNetworkContextParamsForTesting());
 
   bool result = false, got_result = false;
+  // Setting `is_top_level_nav` true prevents the upgrade from being blocked by
+  // kHstsTopLevelNavigationsOnly.
   network_context->IsHSTSActiveForHost(
-      kTestDomain, base::BindLambdaForTesting([&](bool is_hsts) {
+      kTestDomain, /*is_top_level_nav=*/true,
+      base::BindLambdaForTesting([&](bool is_hsts) {
         result = is_hsts;
         got_result = true;
       }));
@@ -5902,12 +5956,26 @@ TEST_F(NetworkContextTest, QueryHSTS) {
 
   bool result2 = false, got_result2 = false;
   network_context->IsHSTSActiveForHost(
-      kTestDomain, base::BindLambdaForTesting([&](bool is_hsts) {
+      kTestDomain, /*is_top_level_nav=*/true,
+      base::BindLambdaForTesting([&](bool is_hsts) {
         result2 = is_hsts;
         got_result2 = true;
       }));
   EXPECT_TRUE(got_result2);
   EXPECT_TRUE(result2);
+
+  base::test::ScopedFeatureList scoped_feature_list(
+      net::features::kHstsTopLevelNavigationsOnly);
+
+  bool result3 = false, got_result3 = false;
+  network_context->IsHSTSActiveForHost(
+      kTestDomain, /*is_top_level_nav=*/false,
+      base::BindLambdaForTesting([&](bool is_hsts) {
+        result3 = is_hsts;
+        got_result3 = true;
+      }));
+  EXPECT_TRUE(got_result3);
+  EXPECT_FALSE(result3);
 }
 
 TEST_F(NetworkContextTest, GetHSTSState) {
@@ -6857,7 +6925,7 @@ TEST_F(NetworkContextTest, HangingHeaderClientAbortDuringOnHeadersReceived) {
     const net::cookie_util::ParsedRequestCookies& cookies,
     std::string_view name) {
   auto it =
-      base::ranges::find(cookies, name, [](const auto& p) { return p.first; });
+      std::ranges::find(cookies, name, [](const auto& p) { return p.first; });
   if (it == cookies.end()) {
     return ::testing::AssertionFailure() << "no cookie named " << name;
   }
@@ -6869,7 +6937,7 @@ TEST_F(NetworkContextTest, HangingHeaderClientAbortDuringOnHeadersReceived) {
     std::string_view name,
     std::string_view value) {
   auto it =
-      base::ranges::find(cookies, name, [](const auto& p) { return p.first; });
+      std::ranges::find(cookies, name, [](const auto& p) { return p.first; });
   if (it == cookies.end()) {
     return ::testing::AssertionFailure() << "no cookie named " << name;
   }
@@ -7808,10 +7876,14 @@ TEST_F(NetworkContextTest, HSTSPolicyBypassList) {
       CreateContextWithParams(std::move(params));
   net::TransportSecurityState* transport_security_state =
       network_context->url_request_context()->transport_security_state();
+  // Setting `is_top_level_nav` true prevents the upgrade from being blocked by
+  // kHstsTopLevelNavigationsOnly.
   // With the policy set, example should no longer upgrade to HTTPS.
-  EXPECT_FALSE(transport_security_state->ShouldUpgradeToSSL("example"));
+  EXPECT_FALSE(transport_security_state->ShouldUpgradeToSSL(
+      "example", /*is_top_level_nav=*/true));
   // But the policy shouldn't apply to subdomains.
-  EXPECT_TRUE(transport_security_state->ShouldUpgradeToSSL("sub.example"));
+  EXPECT_TRUE(transport_security_state->ShouldUpgradeToSSL(
+      "sub.example", /*is_top_level_nav=*/true));
 }
 
 TEST_F(NetworkContextTest, FactoriesDeletedWhenBindingsCleared) {
@@ -9624,7 +9696,7 @@ TEST_F(NetworkContextTest, ExemptUrlFromNetworkRevocationForNonce_InvalidURLs) {
                                 const std::string& url) {
     return network_context->IsNetworkForNonceAndUrlAllowed(nonce, GURL(url));
   };
-  ASSERT_TRUE(base::ranges::all_of(invalid_urls, is_network_allowed));
+  ASSERT_TRUE(std::ranges::all_of(invalid_urls, is_network_allowed));
   ASSERT_TRUE(
       network_context->IsNetworkForNonceAndUrlAllowed(nonce, GURL(valid_url)));
 
@@ -9635,7 +9707,7 @@ TEST_F(NetworkContextTest, ExemptUrlFromNetworkRevocationForNonce_InvalidURLs) {
   EXPECT_TRUE(revoked.Wait());
 
   // Now the `invalid_urls` and the `valid_url` all have network disabled.
-  ASSERT_TRUE(base::ranges::none_of(invalid_urls, is_network_allowed));
+  ASSERT_TRUE(std::ranges::none_of(invalid_urls, is_network_allowed));
   ASSERT_FALSE(
       network_context->IsNetworkForNonceAndUrlAllowed(nonce, GURL(valid_url)));
 
@@ -9649,7 +9721,7 @@ TEST_F(NetworkContextTest, ExemptUrlFromNetworkRevocationForNonce_InvalidURLs) {
 
   // Now the `valid_url` should be exempted. The `invalid_urls` are still
   // disabled for network.
-  ASSERT_TRUE(base::ranges::none_of(invalid_urls, is_network_allowed));
+  ASSERT_TRUE(std::ranges::none_of(invalid_urls, is_network_allowed));
   ASSERT_TRUE(
       network_context->IsNetworkForNonceAndUrlAllowed(nonce, GURL(valid_url)));
 }
@@ -10270,7 +10342,7 @@ class StorageAccessHeaderNetworkContextTest : public NetworkContextTest {
                           ContentSettingsType content_type,
                           std::initializer_list<PatternsAndSetting> patterns) {
     std::vector<ContentSettingPatternSource> settings;
-    base::ranges::transform(
+    std::ranges::transform(
         patterns, std::back_inserter(settings),
         [](const PatternsAndSetting& patterns_and_setting) {
           return ContentSettingPatternSource(

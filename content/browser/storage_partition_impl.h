@@ -95,7 +95,6 @@ class CacheStorageControlWrapper;
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
 class CdmStorageDataModel;
 class CdmStorageManager;
-class MediaLicenseManager;
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 class CookieDeprecationLabelManagerImpl;
 class CookieStoreManager;
@@ -300,9 +299,6 @@ class CONTENT_EXPORT StoragePartitionImpl
   const std::string& GetPartitionDomain() const;
   AggregationService* GetAggregationService();
   FontAccessManager* GetFontAccessManager();
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
-  MediaLicenseManager* GetMediaLicenseManager();
-#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
   storage::SharedStorageManager* GetSharedStorageManager() override;
   PrivateAggregationManager* GetPrivateAggregationManager();
@@ -364,6 +360,11 @@ class CONTENT_EXPORT StoragePartitionImpl
           listener) override;
   void OnWebSocketConnectedToPrivateNetwork(
       network::mojom::IPAddressSpace ip_address_space) override;
+  void OnUrlLoaderConnectedToPrivateNetwork(
+      const GURL& request_url,
+      network::mojom::IPAddressSpace response_address_space,
+      network::mojom::IPAddressSpace client_address_space,
+      network::mojom::IPAddressSpace target_address_space) override;
   void OnAuthRequired(
       const std::optional<base::UnguessableToken>& window_id,
       int32_t request_id,
@@ -459,6 +460,7 @@ class CONTENT_EXPORT StoragePartitionImpl
       int process_id,
       int routing_id,
       net::CookieSettingOverrides cookie_setting_overrides,
+      net::CookieSettingOverrides devtools_cookie_setting_overrides,
       mojo::PendingReceiver<network::mojom::RestrictedCookieManager> receiver,
       mojo::PendingRemote<network::mojom::CookieAccessObserver>
           cookie_observer);
@@ -792,10 +794,6 @@ class CONTENT_EXPORT StoragePartitionImpl
   std::unique_ptr<AggregationService> aggregation_service_;
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
   std::unique_ptr<CdmStorageManager> cdm_storage_manager_;
-
-  // TODO(crbug.com/40272342): Remove MediaLicenseManager once migration has
-  // been completed.
-  std::unique_ptr<MediaLicenseManager> media_license_manager_;
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
   mojo::Remote<network::mojom::DeviceBoundSessionManager>
       device_bound_session_manager_;

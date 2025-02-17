@@ -2268,9 +2268,12 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
     "client_mode": "focus-existing"
   })"});
   webapps::AppId app_id = InstallWebApp();
+  auto expected_launch_handler =
+      LaunchHandler{LaunchHandler::ClientMode::kFocusExisting};
   EXPECT_EQ(
-      GetProvider().registrar_unsafe().GetAppById(app_id)->launch_handler(),
-      (LaunchHandler{LaunchHandler::ClientMode::kFocusExisting}));
+      expected_launch_handler,
+      GetProvider().registrar_unsafe().GetAppById(app_id)->launch_handler());
+  EXPECT_TRUE(expected_launch_handler.client_mode_valid_and_specified());
 
   // New launch_handler syntax.
   OverrideManifest(kManifestTemplate, {kInstallableIconList, R"({
@@ -2286,9 +2289,13 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest,
                                  {{96, kWin}, kInstallableIconTopLeftColor},
                                  {{128, kAll}, kInstallableIconTopLeftColor},
                                  {{256, kAll}, kInstallableIconTopLeftColor}});
+
+  expected_launch_handler =
+      LaunchHandler{LaunchHandler::ClientMode::kNavigateExisting};
   EXPECT_EQ(
-      GetProvider().registrar_unsafe().GetAppById(app_id)->launch_handler(),
-      (LaunchHandler{LaunchHandler::ClientMode::kNavigateExisting}));
+      expected_launch_handler,
+      GetProvider().registrar_unsafe().GetAppById(app_id)->launch_handler());
+  EXPECT_TRUE(expected_launch_handler.client_mode_valid_and_specified());
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -2330,8 +2337,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerIsolatedWebAppBrowserTest,
       IsolatedWebAppBuilder(ManifestBuilder().SetStartUrl("/index.html"))
           .AddHtml("/index.html", "<html></html>")
           .BuildBundle();
-  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info,
-                       app->TrustBundleAndInstall(profile()));
+  ASSERT_OK_AND_ASSIGN(IsolatedWebAppUrlInfo url_info, app->Install(profile()));
 
   UpdateCheckResultAwaiter awaiter(
       url_info.origin().GetURL().Resolve("/index.html"));
@@ -4199,7 +4205,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_ScopeExtensions,
   OverrideScopeExtensions(R"(
           [
             {
-              "origin": "https://extension.com"
+              "type": "origin", "value": "https://extension.com"
             }
           ]
       )");
@@ -4238,7 +4244,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_ScopeExtensions,
   OverrideScopeExtensions(R"(
           [
             {
-              "origin": "https://extension.com"
+              "type": "origin", "value": "https://extension.com"
             }
           ]
       )");
@@ -4263,7 +4269,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_ScopeExtensions,
   OverrideScopeExtensions(R"(
           [
             {
-              "origin": "https://extension.com"
+              "type": "origin", "value": "https://extension.com"
             }
           ]
       )");
@@ -4296,7 +4302,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_ScopeExtensions,
   OverrideScopeExtensions(R"(
           [
             {
-              "origin": "https://extension_1.com"
+              "type": "origin", "value": "https://extension_1.com"
             }
           ]
       )");
@@ -4318,7 +4324,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_ScopeExtensions,
   OverrideScopeExtensions(R"(
           [
             {
-              "origin": "https://extension_2.com"
+              "type": "origin", "value": "https://extension_2.com"
             }
           ]
       )");
@@ -4346,7 +4352,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_ScopeExtensions,
   OverrideScopeExtensions(R"(
           [
             {
-              "origin": "https://extension.com"
+              "type": "origin", "value": "https://extension.com"
             }
           ]
       )");
@@ -4380,7 +4386,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_ScopeExtensions,
   OverrideScopeExtensions(R"(
           [
             {
-              "origin": "https://extension.com"
+              "type": "origin", "value": "https://extension.com"
             }
           ]
       )");
@@ -4415,7 +4421,7 @@ IN_PROC_BROWSER_TEST_F(ManifestUpdateManagerBrowserTest_ScopeExtensions,
   OverrideScopeExtensions(R"(
           [
             {
-              "origin": "https://extension.com"
+              "type": "origin", "value": "https://extension.com"
             }
           ]
       )");

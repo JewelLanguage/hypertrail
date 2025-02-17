@@ -400,7 +400,7 @@ ci.builder(
             ),
             "gl_tests_validating": targets.mixin(
                 args = [
-                    "--test-launcher-filter-file=../../testing/buildbot/filters/android.emulator_o_p.gl_tests.filter",
+                    "--test-launcher-filter-file=../../testing/buildbot/filters/android.emulator_o_p_10.gl_tests.filter",
                 ],
             ),
             "net_unittests": targets.mixin(
@@ -465,10 +465,6 @@ ci.builder(
             config = "chromium",
             apply_configs = [
                 "android",
-                # This is necessary due to this builder running the
-                # telemetry_perf_unittests suite.
-                "chromium_with_telemetry_dependencies",
-                "enable_wpr_tests",
             ],
         ),
         chromium_config = builder_config.chromium_config(
@@ -498,7 +494,6 @@ ci.builder(
             targets.bundle(
                 targets = [
                     "android_10_emulator_fyi_gtests",
-                    "q_isolated_scripts",
                 ],
                 mixins = targets.mixin(
                     args = [
@@ -506,7 +501,6 @@ ci.builder(
                     ],
                 ),
             ),
-            "chromium_android_scripts",
         ],
         additional_compile_targets = [
             "chrome_nocompile_tests",
@@ -520,69 +514,13 @@ ci.builder(
             "x86-64",
         ],
         per_test_modifications = {
-            "android_browsertests": targets.mixin(
-                swarming = targets.swarming(
-                    shards = 9,
-                ),
-            ),
-            "android_sync_integration_tests": targets.mixin(
-                swarming = targets.swarming(
-                    shards = 2,
-                ),
-            ),
-            "chrome_public_test_apk": targets.mixin(
-                swarming = targets.swarming(
-                    dimensions = {
-                        # use 8-core to shorten runtime
-                        "cores": "8",
-                    },
-                ),
-            ),
-            "components_browsertests": targets.mixin(
-                swarming = targets.swarming(
-                    shards = 4,
-                ),
-            ),
-            "content_shell_crash_test": targets.remove(
-                reason = "crbug.com/1084353",
-            ),
-            "content_shell_test_apk": targets.mixin(
-                swarming = targets.swarming(
-                    dimensions = {
-                        # use 8-core to shorten runtime
-                        "cores": "8",
-                    },
-                    shards = 6,
-                ),
-            ),
-            "content_unittests": targets.mixin(
+            "content_browsertests": targets.mixin(
                 args = [
-                    "--test-launcher-filter-file=../../testing/buildbot/filters/android.emulator_10.content_unittests.filter",
+                    "--emulator-debug-tags=all",
                 ],
-            ),
-            "perfetto_unittests": targets.mixin(
-                args = [
-                    # TODO(crbug.com/40201873): Fix the failed test
-                    "--gtest_filter=-ScopedDirTest.CloseOutOfScope",
-                ],
-            ),
-            "services_unittests": targets.mixin(
                 swarming = targets.swarming(
-                    shards = 3,
+                    shards = 40,
                 ),
-            ),
-            "system_webview_shell_layout_test_apk": targets.mixin(
-                args = [
-                    # TODO(crbug.com/390676579): Fix the failed test
-                    "--gtest_filter=-org.chromium.webview_shell.test.WebViewLayoutTest.*",
-                ],
-            ),
-            "telemetry_perf_unittests_android_chrome": targets.mixin(
-                # For whatever reason, automatic browser selection on this bot chooses
-                # webview instead of the full browser, so explicitly specify it here.
-                args = [
-                    "--browser=android-chromium",
-                ],
             ),
         },
     ),

@@ -9,8 +9,9 @@ source_set("launcher") {
     "glic_launcher_configuration.h",
   ]
 
-  deps = [
+  public_deps = [
     "//base",
+    "//chrome/browser/glic:enum",
     "//chrome/browser/profiles:profile",
     "//components/prefs",
     "//ui/base",
@@ -33,18 +34,38 @@ source_set("impl") {
     ":launcher",
     "//chrome/app:command_ids",
     "//chrome/app:generated_resources",
-    "//chrome/app/vector_icons",
     "//chrome/browser:browser_process",
     "//chrome/browser:global_features",
     "//chrome/browser/glic",
-    "//chrome/browser/glic:enabling",
+    "//chrome/browser/glic/resources:browser_resources",
     "//chrome/browser/profiles:profile",
+    "//chrome/browser/resources/glic:resources_grit",
     "//chrome/browser/ui",
     "//chrome/browser/ui:browser_element_identifiers",
     "//components/keep_alive_registry",
     "//ui/base",
     "//ui/base/accelerators/global_accelerator_listener",
     "//ui/gfx",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "glic_launcher_configuration_unittest.cc",
+    "glic_status_icon_unittest.cc",
+  ]
+  deps = [
+    ":impl",
+    ":launcher",
+    "//base/test:test_support",
+    "//chrome/browser:global_features",
+    "//chrome/browser/glic:glic",
+    "//chrome/browser/ui",
+    "//chrome/browser/ui/webui/whats_new:whats_new",
+    "//chrome/common:chrome_features",
+    "//chrome/test:test_support",
+    "//testing/gtest",
   ]
 }
 
@@ -61,6 +82,7 @@ source_set("browser_tests") {
     "//chrome/browser:browser_process",
     "//chrome/browser:global_features",
     "//chrome/browser/glic",
+    "//chrome/browser/glic:test_support",
     "//chrome/common:chrome_features",
     "//chrome/test:test_support_ui",
     "//components/keep_alive_registry",
@@ -69,4 +91,17 @@ source_set("browser_tests") {
     "//testing/gtest",
     "//ui/base/accelerators/global_accelerator_listener",
   ]
+}
+
+source_set("interactive_ui_tests") {
+  testonly = true
+  defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+  sources = [ "glic_controller_interactive_uitest.cc" ]
+  deps = [
+    ":launcher",
+    "//chrome/browser/glic:glic",
+    "//chrome/browser/glic:impl",
+    "//chrome/browser/glic:test_support",
+  ]
+  data_deps = [ "//chrome/test/data/webui/glic:generate_test_files" ]
 }

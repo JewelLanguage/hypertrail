@@ -24,6 +24,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "third_party/blink/renderer/core/css/resolver/style_builder_converter.h"
+
 #ifdef UNSAFE_BUFFERS_BUILD
 // TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
 #pragma allow_unsafe_buffers
@@ -68,6 +69,7 @@
 #include "third_party/blink/renderer/core/css/css_repeat_value.h"
 #include "third_party/blink/renderer/core/css/css_scoped_keyword_value.h"
 #include "third_party/blink/renderer/core/css/css_shadow_value.h"
+#include "third_party/blink/renderer/core/css/css_superellipse_value.h"
 #include "third_party/blink/renderer/core/css/css_unresolved_color_value.h"
 #include "third_party/blink/renderer/core/css/css_uri_value.h"
 #include "third_party/blink/renderer/core/css/css_value_list.h"
@@ -95,6 +97,7 @@
 #include "third_party/blink/renderer/core/style/style_overflow_clip_margin.h"
 #include "third_party/blink/renderer/core/style/style_svg_resource.h"
 #include "third_party/blink/renderer/core/style/style_view_transition_group.h"
+#include "third_party/blink/renderer/core/style/superellipse.h"
 #include "third_party/blink/renderer/platform/fonts/font_palette.h"
 #include "third_party/blink/renderer/platform/fonts/opentype/open_type_math_support.h"
 #include "third_party/blink/renderer/platform/geometry/layout_unit.h"
@@ -325,7 +328,7 @@ FilterOperations StyleBuilderConverter::ConvertFilterOperations(
 
 FilterOperations StyleBuilderConverter::ConvertOffscreenFilterOperations(
     const CSSValue& value,
-    const Font& font) {
+    const Font* font) {
   return FilterOperationResolver::CreateOffscreenFilterOperations(value, font);
 }
 
@@ -725,7 +728,7 @@ float MathScriptScaleFactor(StyleResolverState& state) {
   int exponent = b - a;
   float scaleFactor = 1.0;
   if (const SimpleFontData* font_data =
-          state.ParentStyle()->GetFont().PrimaryFont()) {
+          state.ParentStyle()->GetFont()->PrimaryFont()) {
     HarfBuzzFace* parent_harfbuzz_face =
         font_data->PlatformData().GetHarfBuzzFace();
     if (OpenTypeMathSupport::HasMathData(parent_harfbuzz_face)) {
@@ -1003,11 +1006,15 @@ FontSelectionValue StyleBuilderConverter::ConvertFontStyle(
 }
 
 FontSelectionValue StyleBuilderConverterBase::ConvertFontWeight(
+    const CSSLengthResolver& length_resolver,
     const CSSValue& value,
     FontSelectionValue parent_weight) {
   if (const auto* primitive_value = DynamicTo<CSSPrimitiveValue>(value)) {
     if (primitive_value->IsNumber()) {
-      return ClampTo<FontSelectionValue>(primitive_value->GetFloatValue());
+      // clamp to [1, 1000] range as per
+      // https://drafts.csswg.org/css-fonts/#font-weight-prop.
+      return ClampTo<FontSelectionValue>(std::clamp(
+          primitive_value->ComputeNumber(length_resolver), 1., 1000.));
     }
   }
 
@@ -1036,7 +1043,8 @@ FontSelectionValue StyleBuilderConverter::ConvertFontWeight(
     StyleResolverState& state,
     const CSSValue& value) {
   return StyleBuilderConverterBase::ConvertFontWeight(
-      value, state.ParentStyle()->GetFontDescription().Weight());
+      state.CssToLengthConversionData(), value,
+      state.ParentStyle()->GetFontDescription().Weight());
 }
 
 FontDescription::FontVariantCaps
@@ -1344,8 +1352,9 @@ StyleContentAlignmentData StyleBuilderConverter::ConvertContentAlignmentData(
   return alignment_data;
 }
 
-GridAutoFlow StyleBuilderConverter::ConvertGridAutoFlow(StyleResolverState&,
-                                                        const CSSValue& value) {
+GridAutoFlow StyleBuilderConverter::ConvertGridAutoFlow(
+    StyleResolverState& state,
+    const CSSValue& value) {
   const auto* list = DynamicTo<CSSValueList>(&value);
   if (list) {
     DCHECK_GE(list->length(), 1u);
@@ -1362,18 +1371,25 @@ GridAutoFlow StyleBuilderConverter::ConvertGridAutoFlow(StyleResolverState&,
   switch (first.GetValueID()) {
     case CSSValueID::kRow:
       if (second && second->GetValueID() == CSSValueID::kDense) {
+        UseCounter::Count(state.GetDocument(),
+                          WebFeature::kGridAutoFlowRowDense);
         return kAutoFlowRowDense;
       }
       return kAutoFlowRow;
     case CSSValueID::kColumn:
       if (second && second->GetValueID() == CSSValueID::kDense) {
+        UseCounter::Count(state.GetDocument(),
+                          WebFeature::kGridAutoFlowColumnDense);
         return kAutoFlowColumnDense;
       }
       return kAutoFlowColumn;
     case CSSValueID::kDense:
       if (second && second->GetValueID() == CSSValueID::kColumn) {
+        UseCounter::Count(state.GetDocument(),
+                          WebFeature::kGridAutoFlowColumnDense);
         return kAutoFlowColumnDense;
       }
+      UseCounter::Count(state.GetDocument(), WebFeature::kGridAutoFlowRowDense);
       return kAutoFlowRowDense;
     default:
       NOTREACHED();
@@ -1748,6 +1764,35 @@ int StyleBuilderConverter::ConvertBorderWidth(StyleResolverState& state,
   return ClampTo<int>(floor(result), 0, LayoutUnit::Max().ToInt());
 }
 
+Superellipse StyleBuilderConverter::ConvertCornerShape(
+    StyleResolverState& state,
+    const CSSValue& value) {
+  if (const auto* keyword = DynamicTo<CSSIdentifierValue>(value)) {
+    switch (keyword->GetValueID()) {
+      case CSSValueID::kBevel:
+        return Superellipse::Bevel();
+      case CSSValueID::kNotch:
+        return Superellipse::Notch();
+      case CSSValueID::kRound:
+        return Superellipse::Round();
+      case CSSValueID::kSquircle:
+        return Superellipse::Squircle();
+      case CSSValueID::kScoop:
+        return Superellipse::Scoop();
+      case CSSValueID::kStraight:
+        return Superellipse::Straight();
+      default:
+        NOTREACHED();
+    }
+  }
+
+  const auto& superellipse = To<cssvalue::CSSSuperellipseValue>(value);
+  return Superellipse(
+      superellipse.Param().ComputeNumber(state.CssToLengthConversionData()));
+
+  NOTREACHED();
+}
+
 LayoutUnit StyleBuilderConverter::ConvertLayoutUnit(
     const StyleResolverState& state,
     const CSSValue& value) {
@@ -1890,11 +1935,9 @@ static CSSToLengthConversionData LineHeightToLengthConversionData(
   }
 
   if (!state.StyleBuilder().GetTextSizeAdjust().IsAuto()) {
-    if (RuntimeEnabledFeatures::TextSizeAdjustImprovementsEnabled()) {
-      Settings* settings = state.GetDocument().GetSettings();
-      if (settings && settings->GetTextAutosizingEnabled()) {
-        multiplier *= state.StyleBuilder().GetTextSizeAdjust().Multiplier();
-      }
+    Settings* settings = state.GetDocument().GetSettings();
+    if (settings && settings->GetTextAutosizingEnabled()) {
+      multiplier *= state.StyleBuilder().GetTextSizeAdjust().Multiplier();
     }
   }
   return state.CssToLengthConversionData().CopyWithAdjustedZoom(multiplier);
@@ -2317,9 +2360,8 @@ GapDataList<T> ConvertGapDecorationDataList(StyleResolverState& state,
         repeat_count = gap_repeat_value->Repetitions()->ComputeInteger(
             state.CssToLengthConversionData());
       }
-      ValueRepeater<T>* value_repeater = value_repeater =
-          MakeGarbageCollected<ValueRepeater<T>>(std::move(gap_values),
-                                                 repeat_count);
+      ValueRepeater<T>* value_repeater = MakeGarbageCollected<ValueRepeater<T>>(
+          std::move(gap_values), repeat_count);
       gap_data = GapData<T>(value_repeater);
     } else {
       gap_data = GapData<T>(ConvertGapDecorationPropertyValue<T>(

@@ -136,7 +136,8 @@ IN_PROC_BROWSER_TEST_F(SunfishBrowserTest, SendSearchRequests) {
   // Send a region search.
   ChromeCaptureModeDelegate* delegate = ChromeCaptureModeDelegate::Get();
   delegate->SendRegionSearch(SkBitmap(), gfx::Rect(),
-                             base::BindRepeating([](GURL url) {}));
+                             base::BindRepeating([](GURL url) {}),
+                             base::BindRepeating([](std::string string) {}));
 
   // Send a multimodal search.
   delegate->SendMultimodalSearch(SkBitmap(), gfx::Rect(), "Search",
@@ -145,7 +146,8 @@ IN_PROC_BROWSER_TEST_F(SunfishBrowserTest, SendSearchRequests) {
   // Send a region search with a new region to simulate adjusting the selected
   // region.
   delegate->SendRegionSearch(SkBitmap(), gfx::Rect(10, 10, 400, 400),
-                             base::BindRepeating([](GURL url) {}));
+                             base::BindRepeating([](GURL url) {}),
+                             base::BindRepeating([](std::string string) {}));
 
   // Simulate sending a multimodal search with the adjusted region.
   delegate->SendMultimodalSearch(SkBitmap(), gfx::Rect(10, 10, 400, 400),
@@ -157,13 +159,13 @@ IN_PROC_BROWSER_TEST_F(SunfishBrowserTest, SendSearchRequests) {
 IN_PROC_BROWSER_TEST_F(SunfishBrowserTest, BrowserPolicy) {
   ChromeCaptureModeDelegate* delegate = ChromeCaptureModeDelegate::Get();
   EXPECT_TRUE(delegate->IsSearchAllowedByPolicy());
-  EXPECT_TRUE(IsSunfishAllowedAndEnabled());
+  EXPECT_TRUE(IsSunfishSessionAllowed());
 
   browser()->profile()->GetPrefs()->SetInteger(
       lens::prefs::kLensOverlaySettings,
       static_cast<int>(lens::prefs::LensOverlaySettingsPolicyValue::kDisabled));
   EXPECT_FALSE(delegate->IsSearchAllowedByPolicy());
-  EXPECT_FALSE(IsSunfishAllowedAndEnabled());
+  EXPECT_FALSE(IsSunfishSessionAllowed());
 }
 
 }  // namespace ash

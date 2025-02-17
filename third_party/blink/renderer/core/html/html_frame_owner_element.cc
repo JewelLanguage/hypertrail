@@ -25,13 +25,14 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/time/time.h"
 #include "services/network/public/mojom/content_security_policy.mojom-blink-forward.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/frame/fenced_frame_sandbox_flags.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/color_scheme.mojom-blink.h"
+#include "third_party/blink/public/mojom/frame/deferred_fetch_policy.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom-blink.h"
-#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink.h"
 #include "third_party/blink/public/mojom/timing/resource_timing.mojom-blink-forward.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
@@ -429,12 +430,7 @@ void HTMLFrameOwnerElement::UpdateDeferredFetchPolicy(const KURL& to_url) {
   }
   frame_policy_.deferred_fetch_policy =
       FetchLaterUtil::GetContainerDeferredFetchPolicyOnNavigation(this, to_url);
-
-  if (ContentFrame()) {
-    auto* frame = GetDocument().GetFrame();
-    frame->GetLocalFrameHostRemote().DidChangeFramePolicy(
-        ContentFrame()->GetFrameToken(), frame_policy_);
-  }
+  DidChangeContainerPolicy();
 }
 
 void HTMLFrameOwnerElement::MaybeClearDeferredFetchPolicy() {
@@ -442,15 +438,13 @@ void HTMLFrameOwnerElement::MaybeClearDeferredFetchPolicy() {
     return;
   }
 
+  // Must only be called from content frame.
   CHECK(ContentFrame());
   if (FetchLaterUtil::ShouldClearDeferredFetchPolicy(ContentFrame())) {
     frame_policy_.deferred_fetch_policy =
-        FramePolicy::DeferredFetchPolicy::kDisabled;
+        mojom::blink::DeferredFetchPolicy::kDisabled;
+    DidChangeContainerPolicy();
   }
-
-  auto* frame = GetDocument().GetFrame();
-  frame->GetLocalFrameHostRemote().DidChangeFramePolicy(
-      ContentFrame()->GetFrameToken(), frame_policy_);
 }
 
 network::mojom::blink::TrustTokenParamsPtr
@@ -883,7 +877,7 @@ ParsedPermissionsPolicy HTMLFrameOwnerElement::GetLegacyFramePolicies() {
     //  context is unable to use the API, regardless of origin.
     // https://fullscreen.spec.whatwg.org/#model
     ParsedPermissionsPolicyDeclaration allowlist(
-        mojom::blink::PermissionsPolicyFeature::kFullscreen);
+        network::mojom::PermissionsPolicyFeature::kFullscreen);
     container_policy.push_back(allowlist);
   }
   {
@@ -894,8 +888,8 @@ ParsedPermissionsPolicy HTMLFrameOwnerElement::GetLegacyFramePolicies() {
     // frame for the origin.
     // https://fergald.github.io/docs/explainers/permissions-policy-deprecate-unload.html
     ParsedPermissionsPolicyDeclaration allowlist(
-        mojom::blink::PermissionsPolicyFeature::kUnload, {}, std::nullopt,
-        /*allowed_by_default=*/true, /*matches_all_origins=*/true);
+        network::mojom::PermissionsPolicyFeature::kUnload, {}, std::nullopt,
+        /*matches_all_origins=*/true, /*matches_opaque_src=*/true);
     container_policy.push_back(allowlist);
   }
   return container_policy;

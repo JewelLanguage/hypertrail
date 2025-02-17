@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "services/network/url_loader.h"
 
 #include <stdint.h>
@@ -2785,228 +2790,6 @@ TEST_P(ParameterizedURLLoaderTest, CloseResponseBodyConsumerBeforeProducer) {
 
   client()->RunUntilComplete();
   EXPECT_EQ(net::ERR_FAILED, client()->completion_status().error_code);
-}
-
-TEST_P(ParameterizedURLLoaderTest,
-       PauseReadingBodyFromNetBeforeResponseHeaders) {
-  const char* const kPath = "/hello.html";
-  const char* const kBodyContents = "This is the data as you requested.";
-
-  net::EmbeddedTestServer server;
-  net::test_server::ControllableHttpResponse response_controller(&server,
-                                                                 kPath);
-  ASSERT_TRUE(server.Start());
-
-  ResourceRequest request = CreateResourceRequest("GET", server.GetURL(kPath));
-
-  base::RunLoop delete_run_loop;
-  mojo::Remote<mojom::URLLoader> loader;
-  std::unique_ptr<URLLoader> url_loader;
-  context().mutable_factory_params().process_id = mojom::kBrowserProcessId;
-  context().mutable_factory_params().is_orb_enabled = false;
-  url_loader = URLLoaderOptions().MakeURLLoader(
-      context(), DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      loader.BindNewPipeAndPassReceiver(), request, client()->CreateRemote());
-
-  // Pausing reading response body from network stops future reads from the
-  // underlying URLRequest. So no data should be sent using the response body
-  // data pipe.
-  loader->PauseReadingBodyFromNet();
-  // In order to avoid flakiness, make sure PauseReadBodyFromNet() is handled by
-  // the loader before the test HTTP server serves the response.
-  loader.FlushForTesting();
-
-  response_controller.WaitForRequest();
-  response_controller.Send(
-      "HTTP/1.1 200 OK\r\n"
-      "Content-Type: text/plain\r\n\r\n" +
-      std::string(kBodyContents));
-  response_controller.Done();
-
-  // We will still receive the response body data pipe, although there won't be
-  // any data available until ResumeReadBodyFromNet() is called.
-  client()->RunUntilResponseBodyArrived();
-  EXPECT_TRUE(client()->has_received_response());
-  EXPECT_FALSE(client()->has_received_completion());
-
-  // Wait for a little amount of time so that if the loader mistakenly reads
-  // response body from the underlying URLRequest, it is easier to find out.
-  base::RunLoop run_loop;
-  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
-      FROM_HERE, run_loop.QuitClosure(), base::Milliseconds(100));
-  run_loop.Run();
-
-  std::string available_data = ReadAvailableBody();
-  EXPECT_TRUE(available_data.empty());
-
-  loader->ResumeReadingBodyFromNet();
-  client()->RunUntilComplete();
-
-  available_data = ReadBody();
-  EXPECT_EQ(kBodyContents, available_data);
-
-  delete_run_loop.Run();
-  client()->Unbind();
-}
-
-TEST_P(ParameterizedURLLoaderTest, PauseReadingBodyFromNetWhenReadIsPending) {
-  const char* const kPath = "/hello.html";
-  const char* const kBodyContentsFirstHalf = "This is the first half.";
-  const char* const kBodyContentsSecondHalf = "This is the second half.";
-
-  net::EmbeddedTestServer server;
-  net::test_server::ControllableHttpResponse response_controller(&server,
-                                                                 kPath);
-  ASSERT_TRUE(server.Start());
-
-  ResourceRequest request = CreateResourceRequest("GET", server.GetURL(kPath));
-
-  base::RunLoop delete_run_loop;
-  mojo::Remote<mojom::URLLoader> loader;
-  std::unique_ptr<URLLoader> url_loader;
-  context().mutable_factory_params().process_id = mojom::kBrowserProcessId;
-  context().mutable_factory_params().is_orb_enabled = false;
-  url_loader = URLLoaderOptions().MakeURLLoader(
-      context(), DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      loader.BindNewPipeAndPassReceiver(), request, client()->CreateRemote());
-
-  response_controller.WaitForRequest();
-  response_controller.Send(
-      "HTTP/1.1 200 OK\r\n"
-      "Content-Type: text/plain\r\n\r\n" +
-      std::string(kBodyContentsFirstHalf));
-
-  client()->RunUntilResponseBodyArrived();
-  EXPECT_TRUE(client()->has_received_response());
-  EXPECT_FALSE(client()->has_received_completion());
-
-  loader->PauseReadingBodyFromNet();
-  loader.FlushForTesting();
-
-  response_controller.Send(kBodyContentsSecondHalf);
-  response_controller.Done();
-
-  // It is uncertain how much data has been read before reading is actually
-  // paused, because if there is a pending read when PauseReadingBodyFromNet()
-  // arrives, the pending read won't be cancelled. Therefore, this test only
-  // checks that after ResumeReadingBodyFromNet() we should be able to get the
-  // whole response body.
-  loader->ResumeReadingBodyFromNet();
-  client()->RunUntilComplete();
-
-  EXPECT_EQ(std::string(kBodyContentsFirstHalf) +
-                std::string(kBodyContentsSecondHalf),
-            ReadBody());
-
-  delete_run_loop.Run();
-  client()->Unbind();
-}
-
-TEST_P(ParameterizedURLLoaderTest,
-       ResumeReadingBodyFromNetAfterClosingConsumer) {
-  const char* const kPath = "/hello.html";
-  const char* const kBodyContentsFirstHalf = "This is the first half.";
-
-  net::EmbeddedTestServer server;
-  net::test_server::ControllableHttpResponse response_controller(&server,
-                                                                 kPath);
-  ASSERT_TRUE(server.Start());
-
-  ResourceRequest request = CreateResourceRequest("GET", server.GetURL(kPath));
-
-  base::RunLoop delete_run_loop;
-  mojo::Remote<mojom::URLLoader> loader;
-  std::unique_ptr<URLLoader> url_loader;
-  context().mutable_factory_params().process_id = mojom::kBrowserProcessId;
-  context().mutable_factory_params().is_orb_enabled = false;
-  url_loader = URLLoaderOptions().MakeURLLoader(
-      context(), DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      loader.BindNewPipeAndPassReceiver(), request, client()->CreateRemote());
-
-  loader->PauseReadingBodyFromNet();
-  loader.FlushForTesting();
-
-  response_controller.WaitForRequest();
-  response_controller.Send(
-      "HTTP/1.1 200 OK\r\n"
-      "Content-Type: text/plain\r\n\r\n" +
-      std::string(kBodyContentsFirstHalf));
-
-  client()->RunUntilResponseBodyArrived();
-  EXPECT_TRUE(client()->has_received_response());
-  EXPECT_FALSE(client()->has_received_completion());
-
-  auto response_body = client()->response_body_release();
-  response_body.reset();
-
-  // It shouldn't cause any issue even if a ResumeReadingBodyFromNet() call is
-  // made after the response body data pipe is closed.
-  loader->ResumeReadingBodyFromNet();
-  loader.FlushForTesting();
-
-  loader.reset();
-  client()->Unbind();
-  delete_run_loop.Run();
-}
-
-TEST_P(ParameterizedURLLoaderTest, MultiplePauseResumeReadingBodyFromNet) {
-  const char* const kPath = "/hello.html";
-  const char* const kBodyContentsFirstHalf = "This is the first half.";
-  const char* const kBodyContentsSecondHalf = "This is the second half.";
-
-  net::EmbeddedTestServer server;
-  net::test_server::ControllableHttpResponse response_controller(&server,
-                                                                 kPath);
-  ASSERT_TRUE(server.Start());
-
-  ResourceRequest request = CreateResourceRequest("GET", server.GetURL(kPath));
-
-  base::RunLoop delete_run_loop;
-  mojo::Remote<mojom::URLLoader> loader;
-  std::unique_ptr<URLLoader> url_loader;
-  context().mutable_factory_params().process_id = mojom::kBrowserProcessId;
-  context().mutable_factory_params().is_orb_enabled = false;
-  url_loader = URLLoaderOptions().MakeURLLoader(
-      context(), DeleteLoaderCallback(&delete_run_loop, &url_loader),
-      loader.BindNewPipeAndPassReceiver(), request, client()->CreateRemote());
-
-  // It is okay to call ResumeReadingBodyFromNet() even if there is no prior
-  // PauseReadingBodyFromNet().
-  loader->ResumeReadingBodyFromNet();
-  loader.FlushForTesting();
-
-  response_controller.WaitForRequest();
-  response_controller.Send(
-      "HTTP/1.1 200 OK\r\n"
-      "Content-Type: text/plain\r\n\r\n" +
-      std::string(kBodyContentsFirstHalf));
-
-  loader->PauseReadingBodyFromNet();
-
-  client()->RunUntilResponseBodyArrived();
-  EXPECT_TRUE(client()->has_received_response());
-  EXPECT_FALSE(client()->has_received_completion());
-
-  loader->PauseReadingBodyFromNet();
-  loader->PauseReadingBodyFromNet();
-  loader.FlushForTesting();
-
-  response_controller.Send(kBodyContentsSecondHalf);
-  response_controller.Done();
-
-  // One ResumeReadingBodyFromNet() call will resume reading even if there are
-  // multiple PauseReadingBodyFromNet() calls before it.
-  loader->ResumeReadingBodyFromNet();
-
-  delete_run_loop.Run();
-  client()->RunUntilComplete();
-
-  EXPECT_EQ(std::string(kBodyContentsFirstHalf) +
-                std::string(kBodyContentsSecondHalf),
-            ReadBody());
-
-  loader.reset();
-  client()->Unbind();
 }
 
 TEST_P(ParameterizedURLLoaderTest, UploadBytes) {
@@ -5899,7 +5682,8 @@ TEST_P(ParameterizedURLLoaderTest, RawRequestCookiesFlagged) {
     EXPECT_EQ("b", devtools_observer.raw_request_cookies()[0].cookie.Value());
     EXPECT_TRUE(devtools_observer.raw_request_cookies()[0]
                     .access_result.status.HasExactlyExclusionReasonsForTesting(
-                        {net::CookieInclusionStatus::EXCLUDE_NOT_ON_PATH}));
+                        {net::CookieInclusionStatus::ExclusionReason::
+                             EXCLUDE_NOT_ON_PATH}));
 
     EXPECT_EQ("TEST", devtools_observer.devtools_request_id());
   }
@@ -5972,10 +5756,10 @@ TEST_P(ParameterizedURLLoaderTest, RawResponseCookiesInvalid) {
     EXPECT_EQ(200, devtools_observer.raw_response_http_status_code());
     // On these failures the cookie object is not created
     EXPECT_FALSE(devtools_observer.raw_response_cookies()[0].cookie);
-    EXPECT_TRUE(
-        devtools_observer.raw_response_cookies()[0]
-            .access_result.status.HasExactlyExclusionReasonsForTesting(
-                {net::CookieInclusionStatus::EXCLUDE_DISALLOWED_CHARACTER}));
+    EXPECT_TRUE(devtools_observer.raw_response_cookies()[0]
+                    .access_result.status.HasExactlyExclusionReasonsForTesting(
+                        {net::CookieInclusionStatus::ExclusionReason::
+                             EXCLUDE_DISALLOWED_CHARACTER}));
 
     EXPECT_EQ("TEST", devtools_observer.devtools_request_id());
   }
@@ -6067,7 +5851,8 @@ TEST_P(ParameterizedURLLoaderTest, RawResponseCookiesRedirect) {
         devtools_observer.raw_response_cookies()[0].cookie->SecureAttribute());
     EXPECT_TRUE(devtools_observer.raw_response_cookies()[0]
                     .access_result.status.HasExactlyExclusionReasonsForTesting(
-                        {net::CookieInclusionStatus::EXCLUDE_SECURE_ONLY}));
+                        {net::CookieInclusionStatus::ExclusionReason::
+                             EXCLUDE_SECURE_ONLY}));
   }
 }
 
@@ -6148,7 +5933,8 @@ TEST_P(ParameterizedURLLoaderTest, RawResponseCookiesAuth) {
         devtools_observer.raw_response_cookies()[0].cookie->SecureAttribute());
     EXPECT_TRUE(devtools_observer.raw_response_cookies()[0]
                     .access_result.status.HasExactlyExclusionReasonsForTesting(
-                        {net::CookieInclusionStatus::EXCLUDE_SECURE_ONLY}));
+                        {net::CookieInclusionStatus::ExclusionReason::
+                             EXCLUDE_SECURE_ONLY}));
 
     EXPECT_EQ("TEST", devtools_observer.devtools_request_id());
   }
@@ -6294,7 +6080,7 @@ TEST_P(ParameterizedURLLoaderTest, CookieReportingCategories) {
                     false /* is_included */)));
     EXPECT_TRUE(cookie_observer.observed_cookies()[0]
                     .status.HasExactlyExclusionReasonsForTesting(
-                        {net::CookieInclusionStatus::
+                        {net::CookieInclusionStatus::ExclusionReason::
                              EXCLUDE_SAMESITE_UNSPECIFIED_TREATED_AS_LAX}));
     EXPECT_TRUE(cookie_observer.observed_cookies()[0].status.HasWarningReason(
         net::CookieInclusionStatus::WarningReason::
@@ -6338,10 +6124,10 @@ TEST_P(ParameterizedURLLoaderTest, CookieReportingCategories) {
         testing::ElementsAre(MatchesCookieDetails(
             CookieAccessType::kChange,
             CookieOrLine("a=b", mojom::CookieOrLine::Tag::kCookie), false)));
-    EXPECT_TRUE(
-        cookie_observer.observed_cookies()[0]
-            .status.HasExactlyExclusionReasonsForTesting(
-                {net::CookieInclusionStatus::EXCLUDE_USER_PREFERENCES}));
+    EXPECT_TRUE(cookie_observer.observed_cookies()[0]
+                    .status.HasExactlyExclusionReasonsForTesting(
+                        {net::CookieInclusionStatus::ExclusionReason::
+                             EXCLUDE_USER_PREFERENCES}));
 
     test_network_delegate()->set_cookie_options(0);
   }

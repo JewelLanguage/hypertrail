@@ -163,41 +163,6 @@ class WebAppRegistrar {
       const GURL& url,
       const WebAppFilter& filter) const;
 
-  // This struct can be used `FindBestAppWithUrlInScope` and possible future
-  // methods to filter apps.
-  struct AppFilterOptions {
-    // If false, removes apps that will be launched in a browser tab.
-    bool include_open_in_browser_tab = true;
-    // If false, removes DIY apps.
-    bool include_diy = true;
-    // TODO(crbug.com/341337420): Change this to default true.
-    bool include_extended_scope = false;
-  };
-
-  // DEPRECATED: Use `FindBestAppWithUrlInScope(GURL, WebAppFilter)` instead.
-  // Returns the app id of an app in the registry in one of the given
-  // `allowed_states` and the longest scope that is a prefix of `url`. Will
-  // CHECK-fail if `allowed_states` is empty.
-  // The 'best' criteria is a combination of the following:
-  // - The length of the scope of the potential controlling app.
-  std::optional<webapps::AppId> FindBestAppWithUrlInScope(
-      const GURL& url,
-      std::initializer_list<proto::InstallState> allowed_states) const;
-  // DEPRECATED: Use `FindBestAppWithUrlInScope(GURL, WebAppFilter)` instead.
-  // Same as above but with more filtering options.
-  std::optional<webapps::AppId> FindBestAppWithUrlInScope(
-      const GURL& url,
-      std::initializer_list<proto::InstallState> allowed_states,
-      AppFilterOptions options) const;
-
-  // DEPRECATED: Use `FindAllAppsNestedInUrl(GURL, WebAppFilter)` instead.
-  // Finds all apps that have scopes that are nested within the given
-  // `outer_scope`, and are in one of the given `allowed_states`. Will
-  // CHECK-fail if `allowed_states` is empty.
-  std::vector<webapps::AppId> FindAllAppsNestedInUrl(
-      const GURL& outer_scope,
-      std::initializer_list<proto::InstallState> allowed_states) const;
-
   // Finds all apps that have scopes that are nested within the given
   // `outer_scope`, and match the specified filter.
   std::vector<webapps::AppId> FindAllAppsNestedInUrl(
@@ -454,6 +419,10 @@ class WebAppRegistrar {
   // enabled, otherwise returns nullopt.
   std::optional<GURL> GetAppPinnedHomeTabUrl(
       const webapps::AppId& app_id) const;
+
+  // Returns true if the given `url` is in scope for the home tab for the given
+  // app, if it has tabbed mode enabled.
+  bool IsUrlInHomeTabScope(const GURL& url, const webapps::AppId& app_id) const;
 
   // Returns the current WebAppOsIntegrationState stored in the web_app DB.
   std::optional<proto::WebAppOsIntegrationState>

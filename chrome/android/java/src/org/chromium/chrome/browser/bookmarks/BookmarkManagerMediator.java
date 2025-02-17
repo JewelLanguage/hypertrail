@@ -66,6 +66,7 @@ import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyModel;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -78,7 +79,7 @@ import java.util.function.Predicate;
 /** Responsible for BookmarkManager business logic. */
 // TODO(crbug.com/40256938): Remove BookmarkDelegate if possible.
 class BookmarkManagerMediator
-        implements BookmarkDelegate, TestingDelegate, PartnerBookmarksReader.FaviconUpdateObserver {
+        implements BookmarkDelegate, PartnerBookmarksReader.FaviconUpdateObserver {
     private static final int PROMO_MAX_INDEX = 1;
     private static final int SEARCH_BOX_MAX_INDEX = 0;
 
@@ -625,13 +626,24 @@ class BookmarkManagerMediator
         int endIndex = getBookmarkItemEndIndex();
 
         // Get the new order for the IDs.
-        long[] newOrder = new long[endIndex - startIndex + 1];
+        List<Long> newOrder = new ArrayList<>(endIndex - startIndex + 1);
         for (int i = startIndex; i <= endIndex; i++) {
             BookmarkItem bookmarkItem = getItemByPosition(i).getBookmarkItem();
+            // The parter bookmark folder is under "Mobile boomkmarks", but can't be reordered.
+            if (!bookmarkItem.isReorderable()) {
+                assert i == endIndex
+                        : "Partner bookmarks should always be at the end of the list when mobile"
+                                + " bookmark children are re-ordered.";
+                continue;
+            }
             assert bookmarkItem != null;
-            newOrder[i - startIndex] = bookmarkItem.getId().getId();
+            newOrder.add(bookmarkItem.getId().getId());
         }
-        mBookmarkModel.reorderBookmarks(getCurrentFolderId(), newOrder);
+        long[] newOrderArr = new long[newOrder.size()];
+        for (int i = 0; i < newOrder.size(); i++) {
+            newOrderArr[i] = newOrder.get(i);
+        }
+        mBookmarkModel.reorderBookmarks(getCurrentFolderId(), newOrderArr);
         if (mDragStateDelegate.getDragActive()) {
             RecordUserAction.record("MobileBookmarkManagerDragReorder");
         }
@@ -651,23 +663,6 @@ class BookmarkManagerMediator
 
     DraggabilityProvider getDraggabilityProvider() {
         return mDraggabilityProvider;
-    }
-
-    // TestingDelegate implementation.
-
-    @Override
-    public BookmarkId getIdByPositionForTesting(int position) {
-        return getIdByPosition(position);
-    }
-
-    @Override
-    public void searchForTesting(@Nullable String query) {
-        search(query);
-    }
-
-    @Override
-    public void simulateSignInForTesting() {
-        mBookmarkUiObserver.onFolderStateSet(getCurrentFolderId());
     }
 
     // BookmarkDelegate implementation.
@@ -1213,7 +1208,7 @@ class BookmarkManagerMediator
         }
     }
 
-    private int getBookmarkItemStartIndex() {
+    int getBookmarkItemStartIndex() {
         return firstIndexWithPredicate(
                 0,
                 mModelList.size(),
@@ -1223,7 +1218,7 @@ class BookmarkManagerMediator
                 });
     }
 
-    private int getBookmarkItemEndIndex() {
+    int getBookmarkItemEndIndex() {
         return firstIndexWithPredicate(
                 mModelList.size() - 1,
                 -1,
@@ -1477,7 +1472,7 @@ class BookmarkManagerMediator
                         }
                     } else if (textId == R.string.bookmark_item_edit) {
                         BookmarkItem bookmarkItem = mBookmarkModel.getBookmarkById(bookmarkId);
-                        BookmarkUtils.startEditActivity(mContext, bookmarkItem.getId());
+                        BookmarkUtils.startEditActivity(mContext, mProfile, bookmarkItem.getId());
                     } else if (textId == R.string.reading_list_mark_as_read) {
                         BookmarkItem bookmarkItem = mBookmarkModel.getBookmarkById(bookmarkId);
                         mBookmarkModel.setReadStatusForReadingList(
@@ -1732,5 +1727,13 @@ class BookmarkManagerMediator
 
     DragStateDelegate getDragStateDelegateForTesting() {
         return mDragStateDelegate;
+    }
+
+    BookmarkId getIdByPositionForTesting(int position) {
+        return getIdByPosition(getBookmarkItemStartIndex() + position);
+    }
+
+    void simulateSignInForTesting() {
+        mBookmarkUiObserver.onFolderStateSet(getCurrentFolderId());
     }
 }

@@ -4,7 +4,9 @@
 
 #include "chrome/browser/apps/app_service/publishers/extension_apps_chromeos.h"
 
+#include <cstddef>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -31,6 +33,7 @@
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/apps/app_service/menu_util.h"
 #include "chrome/browser/apps/app_service/metrics/app_service_metrics.h"
+#include "chrome/browser/apps/app_service/publishers/chrome_app_deprecation_controller.h"
 #include "chrome/browser/apps/app_service/publishers/extension_apps_util.h"
 #include "chrome/browser/ash/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ash/app_list/extension_app_utils.h"
@@ -44,7 +47,6 @@
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/arc/arc_web_contents_data.h"
-#include "chrome/browser/chromeos/extensions/web_file_handlers/intent_util.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_uninstall_dialog.h"
 #include "chrome/browser/extensions/extension_util.h"
@@ -86,6 +88,7 @@
 #include "extensions/browser/path_util.h"
 #include "extensions/browser/ui_util.h"
 #include "extensions/common/constants.h"
+#include "extensions/common/extension.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/manifest_handlers/app_display_info.h"
 #include "extensions/common/manifest_handlers/file_handler_info.h"
@@ -188,6 +191,32 @@ void MaybeAssociateWebContentsWithArcContext(
         &arc::ArcWebContentsData::kArcTransitionFlag,
         std::make_unique<arc::ArcWebContentsData>(web_contents));
   }
+}
+
+// Get all names that were selected when the intent to open was initiated.
+std::vector<base::SafeBaseName> GetBaseNamesForIntent(
+    const apps::Intent& intent) {
+  std::vector<base::SafeBaseName> base_names;
+  for (const auto& file : intent.files) {
+    std::optional<base::SafeBaseName> optional_base_name =
+        base::SafeBaseName::Create(file->url.path());
+
+    // Launch requires that every file have a base name.
+    if (!optional_base_name.has_value() ||
+        optional_base_name.value().path().empty()) {
+      return {};
+    }
+
+    base_names.emplace_back(std::move(optional_base_name.value()));
+  }
+  return base_names;
+}
+
+// Legacy versions of the QuickOffice extension are not compatible with web file
+// handlers.
+bool IsLegacyQuickOfficeExtension(const extensions::Extension& extension) {
+  return extension_misc::IsQuickOfficeExtension(extension.id()) &&
+         !extensions::WebFileHandlers::SupportsWebFileHandlers(extension);
 }
 }  // namespace
 
@@ -346,8 +375,7 @@ void ExtensionAppsChromeOs::LaunchAppWithIntent(const std::string& app_id,
 
   // Launch Web File Handlers if they're supported by the extension.
   if (extensions::WebFileHandlers::SupportsWebFileHandlers(*extension)) {
-    std::vector<base::SafeBaseName> base_names =
-        extensions::GetBaseNamesForIntent(*intent);
+    std::vector<base::SafeBaseName> base_names = GetBaseNamesForIntent(*intent);
 
     // This vector cannot be empty because this is reached after explicitly
     // opening one or more files.
@@ -928,8 +956,7 @@ AppPtr ExtensionAppsChromeOs::CreateApp(const extensions::Extension* extension,
   app->has_badge = app_notifications_.HasNotification(extension->id());
   app->paused = paused;
 
-  if (extension->is_app() ||
-      extensions::IsLegacyQuickOfficeExtension(*extension)) {
+  if (extension->is_app() || IsLegacyQuickOfficeExtension(*extension)) {
     app->intent_filters = apps_util::CreateIntentFiltersForChromeApp(extension);
   } else if (extension->is_extension()) {
     app->intent_filters = apps_util::CreateIntentFiltersForExtension(extension);
@@ -1040,6 +1067,10 @@ void ExtensionAppsChromeOs::RegisterInstance(extensions::AppWindow* app_window,
 
 content::WebContents* ExtensionAppsChromeOs::LaunchImpl(
     AppLaunchParams&& params) {
+  if (!chrome_app_deprecation::IsLaunchAllowed(params.app_id, profile())) {
+    return nullptr;
+  }
+
   AppLaunchParams params_for_restore(
       params.app_id, params.container, params.disposition, params.launch_source,
       params.display_id, params.launch_files, params.intent);

@@ -4,8 +4,10 @@
 
 #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
 
+#include <algorithm>
 #include <memory>
 #include <set>
+#include <string_view>
 #include <utility>
 
 #include "base/auto_reset.h"
@@ -16,7 +18,6 @@
 #include "base/i18n/rtl.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/escape.h"
 #include "base/strings/string_util.h"
 #include "base/task/single_thread_task_runner.h"
@@ -375,7 +376,7 @@ void OmniboxViewViews::Update() {
 
 std::u16string OmniboxViewViews::GetText() const {
   // TODO(oshima): IME support
-  return Textfield::GetText();
+  return std::u16string(Textfield::GetText());
 }
 
 void OmniboxViewViews::SetUserText(const std::u16string& text,
@@ -722,7 +723,7 @@ void OmniboxViewViews::SetSelectedRanges(
   UpdateAccessibleTextSelection();
 }
 
-std::u16string OmniboxViewViews::GetSelectedText() const {
+std::u16string_view OmniboxViewViews::GetSelectedText() const {
   // TODO(oshima): Support IME.
   return views::Textfield::GetSelectedText();
 }
@@ -752,7 +753,7 @@ void OmniboxViewViews::OnOmniboxPaste() {
       // fakebox is hidden and there's only whitespace in the omnibox, it's
       // difficult for the user to see that the focus moved to the omnibox.
       (model()->focus_state() == OMNIBOX_FOCUS_INVISIBLE &&
-       base::ranges::all_of(text, base::IsUnicodeWhitespace<char16_t>))) {
+       std::ranges::all_of(text, base::IsUnicodeWhitespace<char16_t>))) {
     return;
   }
 
@@ -952,7 +953,7 @@ bool OmniboxViewViews::UnapplySteadyStateElisions(UnelisionGesture gesture) {
 
   // Try to unelide. Early exit if there's no unelisions to perform.
   const std::u16string original_text = GetText();
-  const std::u16string original_selected_text = GetSelectedText();
+  const std::u16string original_selected_text(GetSelectedText());
   if (!model()->Unelide()) {
     return false;
   }
@@ -1864,7 +1865,7 @@ void OmniboxViewViews::OnAfterCutOrCopy(ui::ClipboardBuffer clipboard_buffer) {
 void OmniboxViewViews::OnWriteDragData(ui::OSExchangeData* data) {
   GURL url;
   bool write_url;
-  std::u16string selected_text = GetSelectedText();
+  std::u16string selected_text(GetSelectedText());
   model()->AdjustTextForCopy(GetSelectedRange().GetMin(), &selected_text, &url,
                              &write_url);
   data->SetString(selected_text);
@@ -1881,7 +1882,7 @@ void OmniboxViewViews::OnWriteDragData(ui::OSExchangeData* data) {
 }
 
 void OmniboxViewViews::OnGetDragOperationsForTextfield(int* drag_operations) {
-  std::u16string selected_text = GetSelectedText();
+  std::u16string selected_text(GetSelectedText());
   GURL url;
   bool write_url;
   model()->AdjustTextForCopy(GetSelectedRange().GetMin(), &selected_text, &url,
@@ -2090,5 +2091,5 @@ ADD_READONLY_PROPERTY_METADATA(bool, SelectionAtEnd)
 ADD_READONLY_PROPERTY_METADATA(int, TextWidth)
 ADD_READONLY_PROPERTY_METADATA(int, UnelidedTextWidth)
 ADD_READONLY_PROPERTY_METADATA(int, Width)
-ADD_READONLY_PROPERTY_METADATA(std::u16string, SelectedText)
+ADD_READONLY_PROPERTY_METADATA(std::u16string_view, SelectedText)
 END_METADATA

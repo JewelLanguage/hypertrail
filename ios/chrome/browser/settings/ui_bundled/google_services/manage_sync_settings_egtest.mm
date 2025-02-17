@@ -190,12 +190,15 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
       assertWithMatcher:grey_notNil()];
   [SigninEarlGrey forgetFakeIdentity:fakeIdentity];
   [ChromeEarlGreyUI waitForAppToIdle];
-  [[EarlGrey selectElementWithMatcher:scrollViewMatcher]
-      assertWithMatcher:grey_nil()];
+
+  // Verify the "manage sync" view is popped.
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityID(
+                                   kManageSyncTableViewAccessibilityIdentifier)]
+      assertWithMatcher:grey_notVisible()];
 }
 
-// Tests that unified account settings row is showing, and the Sync row is not
-// showing.
+// Tests that unified account settings row is showing.
 - (void)testShowingUnifiedAccountSettings {
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
   [SigninEarlGrey addFakeIdentity:fakeIdentity];
@@ -205,9 +208,6 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
   // Sign in with fake identity using the settings sign-in promo.
   SignInWithPromoFromAccountSettings(fakeIdentity,
                                      /*expect_history_sync_ui=*/YES);
-
-  // Verify the Sync settings row is not showing.
-  [SigninEarlGrey verifySyncUIIsHidden];
 
   // Verify the account settings row is showing.
   [[EarlGrey selectElementWithMatcher:SettingsAccountButton()]
@@ -596,8 +596,7 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
   // Sign in.
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
   [SigninEarlGrey addFakeIdentity:fakeIdentity];
-  [SigninEarlGrey signinWithFakeIdentity:fakeIdentity];
-  [ChromeEarlGrey waitForSyncTransportStateActiveWithTimeout:base::Seconds(10)];
+  [SigninEarlGrey signinAndWaitForSyncTransportStateActive:fakeIdentity];
 
   // Open the account settings.
   [ChromeEarlGreyUI openSettingsMenu];
@@ -1571,9 +1570,11 @@ void ExpectBatchUploadConfirmationSnackbar(int count, NSString* email) {
 // and cleared when account is removed from device.
 // TODO(crbug.com/384646508): This test is flaky on the iPad simulator.
 #if TARGET_IPHONE_SIMULATOR
-#define MAYBE_testRememberCustomPassphraseAfterSignout FLAKY_testRememberCustomPassphraseAfterSignout
+#define MAYBE_testRememberCustomPassphraseAfterSignout \
+  FLAKY_testRememberCustomPassphraseAfterSignout
 #else
-#define MAYBE_testRememberCustomPassphraseAfterSignout testRememberCustomPassphraseAfterSignout
+#define MAYBE_testRememberCustomPassphraseAfterSignout \
+  testRememberCustomPassphraseAfterSignout
 #endif  // TARGET_IPHONE_SIMULATOR
 - (void)MAYBE_testRememberCustomPassphraseAfterSignout {
   // Enable custom passphrase.

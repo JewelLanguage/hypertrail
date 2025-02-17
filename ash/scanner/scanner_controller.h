@@ -6,13 +6,21 @@
 #define ASH_SCANNER_SCANNER_CONTROLLER_H_
 
 #include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "ash/ash_export.h"
 #include "ash/public/cpp/session/session_observer.h"
+#include "ash/scanner/scanner_action_view_model.h"
 #include "ash/scanner/scanner_session.h"
+#include "base/functional/callback.h"
+#include "base/memory/raw_ref.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+
+class PrefRegistrySimple;
 
 namespace manta::proto {
 class ScannerAction;
@@ -22,18 +30,33 @@ namespace ash {
 
 class ScannerCommandDelegateImpl;
 class ScannerDelegate;
+class SessionControllerImpl;
 
 // This is the top level controller used for Scanner. It acts as a mediator
 // between Scanner and any consuming features.
 class ASH_EXPORT ScannerController : public SessionObserver {
  public:
-  explicit ScannerController(std::unique_ptr<ScannerDelegate> delegate);
+  using OnActionFinishedCallback = base::OnceCallback<void(bool success)>;
+
+  explicit ScannerController(std::unique_ptr<ScannerDelegate> delegate,
+                             SessionControllerImpl& session_controller);
   ScannerController(const ScannerController&) = delete;
   ScannerController& operator=(const ScannerController&) = delete;
   ~ScannerController() override;
 
+  static void RegisterProfilePrefs(PrefRegistrySimple* registry);
+
   // SessionObserver:
   void OnActiveUserSessionChanged(const AccountId& account_id) override;
+
+  // Checks system level constraints (e.g. feature flags) and returns
+  // true if the constraints allow the scanner UI to show.
+  // Note that this ignores consent status.
+  bool CanShowUi();
+
+  // Checks system level constraints (e.g. feature flags) and returns
+  // true if the constraints allow a Scanner settings toggle to be shown.
+  bool CanShowFeatureSettingsToggle();
 
   // Checks system level constraints (e.g. prefs, feature flags) and returns
   // true if the constraints allow a Scanner session to be created.
@@ -63,14 +86,29 @@ class ASH_EXPORT ScannerController : public SessionObserver {
 
   // Opens a feedback dialog for an action that has been performed, and the
   // (resized) screenshot which initiated the action.
-  void OpenFeedbackDialog(manta::proto::ScannerAction action,
+  // WARNING: This function does not check whether the account has feedback
+  // enabled or not!
+  void OpenFeedbackDialog(const AccountId& account_id,
+                          manta::proto::ScannerAction action,
                           scoped_refptr<base::RefCountedMemory> screenshot);
+
+  // Sets mock ScannerOutput data for testing.
+  void SetScannerResponsesForTesting(const std::vector<std::string> responses);
 
   bool HasActiveSessionForTesting() const;
 
   ScannerDelegate* delegate_for_testing() { return delegate_.get(); }
 
+  void SetOnActionFinishedForTesting(OnActionFinishedCallback callback);
+
  private:
+  // Should be called when an action finishes execution.
+  void OnActionFinished(
+      manta::proto::ScannerAction::ActionCase action_case,
+      scoped_refptr<base::RefCountedMemory> downscaled_jpeg_bytes,
+      manta::proto::ScannerAction populated_action,
+      bool success);
+
   std::unique_ptr<ScannerDelegate> delegate_;
 
   // Delegate to handle Scanner commands for actions fetched during a session.
@@ -80,6 +118,15 @@ class ASH_EXPORT ScannerController : public SessionObserver {
 
   // May hold an active Scanner session, to allow access to the Scanner feature.
   std::unique_ptr<ScannerSession> scanner_session_;
+
+  OnActionFinishedCallback on_action_finished_for_testing_;
+
+  // External dependencies not owned by this class:
+  // Session controller, stored in `Shell`. Always outlives this class.
+  raw_ref<SessionControllerImpl> session_controller_;
+
+  // Holds mock ScannerOutput data for testing.
+  std::vector<std::string> mock_scanner_responses_for_testing_;
 
   ScopedSessionObserver session_observer_{this};
 

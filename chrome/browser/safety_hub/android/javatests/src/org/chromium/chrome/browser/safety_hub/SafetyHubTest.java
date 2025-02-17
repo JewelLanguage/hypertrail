@@ -208,8 +208,10 @@ public final class SafetyHubTest {
         mActivityTestRule.startMainActivityOnBlankPage();
         mProfile = mActivityTestRule.getProfile(/* incognito= */ false);
 
-        // Make sure the compromised passwords count is reset at the beginning of the test suite.
+        // Reset state to the default of the compromised passwords count and the browsing data
+        // state.
         clearCompromisedPasswordsCount();
+        setSafeBrowsingState(SafeBrowsingState.STANDARD_PROTECTION);
     }
 
     @Test
@@ -337,9 +339,8 @@ public final class SafetyHubTest {
         scrollToPreference(withText(permissionsTitle));
         onView(withText(permissionsTitle)).check(matches(isDisplayed()));
 
-        // Module should be collapsed initially since it's in an info state.
-        verifyButtonsNextToTextVisibility(permissionsTitle, false);
-        expandPreferenceWithText(permissionsTitle);
+        // Module should be expanded initially since it's in an info state.
+        verifyButtonsNextToTextVisibility(permissionsTitle, true);
 
         // Open the permissions subpage.
         scrollToExpandedPreference(permissionsTitle);
@@ -666,6 +667,9 @@ public final class SafetyHubTest {
         expandPreferenceWithText(safeBrowsingTitle);
         verifyButtonsNextToTextVisibility(safeBrowsingTitle, true);
         verifySummaryNextToTextVisibility(safeBrowsingTitle, true);
+
+        // Reset Safe Browsing state so it doesn't leak to other tests.
+        setSafeBrowsingState(SafeBrowsingState.STANDARD_PROTECTION);
     }
 
     @Test

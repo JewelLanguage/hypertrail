@@ -14,6 +14,7 @@
 #import "ios/chrome/browser/authentication/ui_bundled/identity_chooser/identity_chooser_coordinator_delegate.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/instant_signin/instant_signin_mediator.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/interruptible_chrome_coordinator.h"
+#import "ios/chrome/browser/authentication/ui_bundled/signin/logging/user_signin_logger.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_constants.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_coordinator+protected.h"
 #import "ios/chrome/browser/shared/coordinator/alert/alert_coordinator.h"
@@ -24,8 +25,7 @@
 #import "ios/chrome/browser/signin/model/chrome_account_manager_service_factory.h"
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 
-@interface InstantSigninCoordinator () <AuthenticationFlowDelegate,
-                                        IdentityChooserCoordinatorDelegate,
+@interface InstantSigninCoordinator () <IdentityChooserCoordinatorDelegate,
                                         InstantSigninMediatorDelegate>
 
 @end
@@ -45,6 +45,8 @@
   ActivityOverlayCoordinator* _activityOverlayCoordinator;
   // Action recorded if sign-in succeeded.
   signin_metrics::AccountConsistencyPromoAction _actionToRecordOnSuccess;
+  // The signin logger.
+  UserSigninLogger* _signinLogger;
 }
 
 #pragma mark - Public
@@ -75,7 +77,9 @@
 
 - (void)start {
   [super start];
-  signin_metrics::LogSignInStarted(self.accessPoint);
+  _signinLogger = [[UserSigninLogger alloc] initWithAccessPoint:self.accessPoint
+                                                    promoAction:_promoAction];
+  [_signinLogger logSigninStarted];
   ProfileIOS* profile = self.browser->GetProfile();
   _mediator =
       [[InstantSigninMediator alloc] initWithAccessPoint:self.accessPoint];
@@ -96,7 +100,7 @@
   }
 
   bool hasAccountOnDevice = false;
-  if (AreSeparateProfilesForManagedAccountsEnabled()) {
+  if (IsUseAccountListFromIdentityManagerEnabled()) {
     signin::IdentityManager* identityManager =
         IdentityManagerFactory::GetForProfile(profile);
     hasAccountOnDevice = !identityManager->GetAccountsOnDevice().empty();
@@ -134,6 +138,7 @@
   CHECK(!_addAccountSigninCoordinator);
   CHECK(!_activityOverlayCoordinator);
   CHECK(!_identityChooserCoordinator);
+  _signinLogger = nil;
   [_mediator disconnect];
   _mediator.delegate = nil;
   _mediator = nil;
@@ -183,16 +188,6 @@
       [_mediator interruptWithAction:action completion:completion];
     }
   }
-}
-
-#pragma mark - AuthenticationFlowDelegate
-
-- (void)didPresentDialog {
-  [self removeActivityOverlay];
-}
-
-- (void)didDismissDialog {
-  [self showActivityOverlay];
 }
 
 #pragma mark - IdentityChooserCoordinatorDelegate
@@ -258,23 +253,20 @@
 
 // Starts the sign-in flow.
 - (void)startSignInOnlyFlow {
-  // TODO(crbug.com/375605482): Handle the case where the chosen identity is
-  // assigned to a different profile.
   [self showActivityOverlay];
   signin_metrics::RecordSigninUserActionForAccessPoint(self.accessPoint);
   // If this was triggered by the user tapping the default button in the sign-in
   // promo, give the user a chance to see the full email, by showing a snackbar.
-  auto postSigninActions =
-      _promoAction == signin_metrics::PromoAction::PROMO_ACTION_WITH_DEFAULT
-          ? PostSignInActionSet({PostSignInAction::kShowSnackbar})
-          : PostSignInActionSet({PostSignInAction::kNone});
-  if (self.accessPoint ==
-      signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER) {
-    postSigninActions.Put(PostSignInAction::kEnableUserSelectableTypeBookmarks);
-  } else if (self.accessPoint ==
-             signin_metrics::AccessPoint::ACCESS_POINT_READING_LIST) {
-    postSigninActions.Put(
-        PostSignInAction::kEnableUserSelectableTypeReadingList);
+  PostSignInActionSet postSigninActions;
+  if (_promoAction == signin_metrics::PromoAction::PROMO_ACTION_WITH_DEFAULT) {
+    postSigninActions.Put(PostSignInAction::kShowSnackbar);
+    if (self.accessPoint == signin_metrics::AccessPoint::kBookmarkManager) {
+      postSigninActions.Put(
+          PostSignInAction::kEnableUserSelectableTypeBookmarks);
+    } else if (self.accessPoint == signin_metrics::AccessPoint::kReadingList) {
+      postSigninActions.Put(
+          PostSignInAction::kEnableUserSelectableTypeReadingList);
+    }
   }
   AuthenticationFlow* authenticationFlow =
       [[AuthenticationFlow alloc] initWithBrowser:self.browser
@@ -282,7 +274,6 @@
                                       accessPoint:self.accessPoint
                                 postSignInActions:postSigninActions
                          presentingViewController:self.baseViewController];
-  authenticationFlow.delegate = self;
   authenticationFlow.precedingHistorySync = YES;
   [_mediator startSignInOnlyFlowWithAuthenticationFlow:authenticationFlow];
 }

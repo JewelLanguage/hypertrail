@@ -834,8 +834,8 @@ chromium-metrics-reviews@google.com.
   <affected-histogram name="Cras.StreamCallbackThreshold.Output"/>
   <affected-histogram name="Cras.StreamChannelCount.Input"/>
   <affected-histogram name="Cras.StreamChannelCount.Output"/>
-  <affected-histogram name="Cras.StreamEffects.Input"/>
-  <affected-histogram name="Cras.StreamEffects.Output"/>
+  <affected-histogram name="Cras.StreamEffectsOnDestroy.Input"/>
+  <affected-histogram name="Cras.StreamEffectsOnDestroy.Output"/>
   <affected-histogram name="Cras.StreamFlags.Input"/>
   <affected-histogram name="Cras.StreamFlags.Output"/>
   <affected-histogram name="Cras.StreamOverrunCount"/>
@@ -853,7 +853,7 @@ chromium-metrics-reviews@google.com.
   <suffix name="Output" label="Playback"/>
   <affected-histogram name="Cras.StreamCallbackThreshold"/>
   <affected-histogram name="Cras.StreamChannelCount"/>
-  <affected-histogram name="Cras.StreamEffects"/>
+  <affected-histogram name="Cras.StreamEffectsOnDestroy"/>
   <affected-histogram name="Cras.StreamFlags"/>
   <affected-histogram name="Cras.StreamRuntime"/>
   <affected-histogram name="Cras.StreamSamplingFormat"/>
@@ -1441,18 +1441,6 @@ chromium-metrics-reviews@google.com.
   <affected-histogram name="LevelDBEnv.MissingFiles"/>
 </histogram_suffixes>
 
-<histogram_suffixes name="LoadingPredictorHintOrigin" separator=".">
-  <suffix name="Navigation"
-      label="Prediction trigged at start of navigation based on what was
-             learned locally from previous navigations to the same origin."/>
-  <suffix name="OptimizationGuide"
-      label="Prediction triggered by Optimization Guide."/>
-  <affected-histogram name="LoadingPredictor.PreconnectLearningCount"/>
-  <affected-histogram name="LoadingPredictor.PreconnectLearningPrecision"/>
-  <affected-histogram name="LoadingPredictor.PreconnectLearningRecall"/>
-  <affected-histogram name="LoadingPredictor.PreconnectLearningRedirectStatus"/>
-</histogram_suffixes>
-
 <histogram_suffixes name="MacAudioInputVariants" separator="_">
   <suffix name="HighLatency"
       label="Measures the standard Mac audio driver (i.e. not low-latency)."/>
@@ -2038,8 +2026,6 @@ chromium-metrics-reviews@google.com.
   <suffix name="OutOfRaster"
       label="Task was not performed as part of a raster task."/>
   <affected-histogram name="Renderer4.GpuImageDecodeState.FirstLockWasted"/>
-  <affected-histogram
-      name="Renderer4.SoftwareImageDecodeState.FirstLockWasted"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="PageLoadBackgrounded2" separator=".">

@@ -20,10 +20,8 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.chrome.browser.autofill.AutofillUiUtils.CardIconSpecs;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.components.autofill.ImageSize;
 import org.chromium.components.image_fetcher.test.TestImageFetcher;
 import org.chromium.url.GURL;
@@ -32,7 +30,6 @@ import java.util.Map;
 
 /** Unit tests for {@link AutofillImageFetcher}. */
 @RunWith(BaseRobolectricTestRunner.class)
-@Features.EnableFeatures(ChromeFeatureList.AUTOFILL_ENABLE_NEW_CARD_ART_AND_NETWORK_IMAGES)
 public class AutofillImageFetcherTest {
     private static final Bitmap TEST_CARD_ART_IMAGE =
             Bitmap.createBitmap(100, 200, Bitmap.Config.ARGB_8888);
@@ -83,7 +80,7 @@ public class AutofillImageFetcherTest {
 
         // Each card art image is cached at 2 resolutions: 32x20 for the Keyboard Accessory, and
         // 40x24 on all other surfaces.
-        assertEquals(cachedImages.size(), 4);
+        assertEquals(4, cachedImages.size());
         assertTrue(treatedImageSmall.sameAs(cachedImages.get(cachedValidUrlSmall1.getSpec())));
         assertTrue(treatedImageSmall.sameAs(cachedImages.get(cachedValidUrlSmall2.getSpec())));
         assertTrue(treatedImageLarge.sameAs(cachedImages.get(cachedValidUrlLarge1.getSpec())));
@@ -136,7 +133,7 @@ public class AutofillImageFetcherTest {
         Map<String, Bitmap> cachedImages = mImageFetcher.getCachedImagesForTesting();
 
         // Verify that the images are successfully fetched and cached.
-        assertEquals(cachedImages.size(), 2);
+        assertEquals(2, cachedImages.size());
         assertTrue(treatedImage.sameAs(cachedImages.get(cachedValidUrl1.getSpec())));
         assertTrue(treatedImage.sameAs(cachedImages.get(cachedValidUrl2.getSpec())));
 
@@ -162,7 +159,7 @@ public class AutofillImageFetcherTest {
         Map<String, Bitmap> cachedImages = mImageFetcher.getCachedImagesForTesting();
 
         // Verify that the cache contains only the already cached image.
-        assertEquals(cachedImages.size(), 1);
+        assertEquals(1, cachedImages.size());
         assertTrue(TEST_CARD_ART_IMAGE.sameAs(cachedImages.get(cachedValidUrl.getSpec())));
 
         expectedHistogram.assertExpected();

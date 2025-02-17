@@ -31,6 +31,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_prefs.h"
 #include "chrome/browser/ui/toolbar/toolbar_pref_names.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/common/extensions/api/settings_private.h"
 #include "chrome/common/pref_names.h"
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
@@ -74,9 +75,7 @@
 #include "extensions/common/extension.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
-#include "ash/components/arc/arc_prefs.h"
 #include "ash/constants/ash_pref_names.h"
-#include "ash/constants/ash_pref_names.h"  // nogncheck
 #include "ash/public/cpp/ambient/ambient_prefs.h"
 #include "chrome/browser/ash/app_restore/full_restore_prefs.h"
 #include "chrome/browser/ash/bruschetta/bruschetta_pref_names.h"
@@ -89,7 +88,6 @@
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/settings/supervised_user_cros_settings_provider.h"
 #include "chrome/browser/ash/system/timezone_util.h"
-#include "chrome/browser/chromeos/extensions/controlled_pref_mapping.h"
 #include "chrome/browser/extensions/api/settings_private/chromeos_resolve_time_zone_by_geolocation_method_short.h"
 #include "chrome/browser/extensions/api/settings_private/chromeos_resolve_time_zone_by_geolocation_on_off.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
@@ -97,6 +95,7 @@
 #include "chromeos/ash/components/settings/cros_settings.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "chromeos/ash/components/tether/pref_names.h"
+#include "chromeos/ash/experiences/arc/arc_prefs.h"
 #include "chromeos/ash/services/assistant/public/cpp/assistant_prefs.h"
 #include "chromeos/components/quick_answers/public/cpp/quick_answers_prefs.h"
 #include "components/account_manager_core/pref_names.h"
@@ -194,6 +193,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS)
   (*s_allowlist)[autofill::prefs::kAutofillPredictionImprovementsEnabled] =
+      settings_api::PrefType::kBoolean;
+  (*s_allowlist)[autofill::prefs::kAutofillBnplEnabled] =
       settings_api::PrefType::kBoolean;
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
         // BUILDFLAG(IS_CHROMEOS)
@@ -746,7 +747,7 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::kBoolean;
   (*s_allowlist)[ash::prefs::kAccessibilityReducedAnimationsEnabled] =
       settings_api::PrefType::kBoolean;
-  (*s_allowlist)[ash::prefs::kAccessibilityOverlayScrollbarEnabled] =
+  (*s_allowlist)[ash::prefs::kAccessibilityAlwaysShowScrollbarsEnabled] =
       settings_api::PrefType::kBoolean;
   (*s_allowlist)
       [ash::prefs::kAccessibilityFaceGazeAcceleratorDialogHasBeenAccepted] =
@@ -936,6 +937,10 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::kBoolean;
   (*s_allowlist)[ash::prefs::kSunfishEnabled] =
       settings_api::PrefType::kBoolean;
+  (*s_allowlist)[ash::prefs::kScannerEnabled] =
+      settings_api::PrefType::kBoolean;
+  (*s_allowlist)[ash::prefs::kScannerEnterprisePolicyAllowed] =
+      settings_api::PrefType::kNumber;
 
   // Bluetooth & Internet settings.
   (*s_allowlist)[ash::kAllowBluetooth] = settings_api::PrefType::kBoolean;
@@ -1153,33 +1158,33 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
   (*s_allowlist)[::prefs::kPrintingAPIExtensionsAllowlist] =
       settings_api::PrefType::kList;
 
-  (*s_allowlist)[chromeos::prefs::kAccessibilityFocusHighlightEnabled] =
+  (*s_allowlist)[ash::prefs::kAccessibilityFocusHighlightEnabled] =
       settings_api::PrefType::kBoolean;
-  (*s_allowlist)[chromeos::prefs::kDockedMagnifierEnabled] =
+  (*s_allowlist)[ash::prefs::kDockedMagnifierEnabled] =
       settings_api::PrefType::kBoolean;
-  (*s_allowlist)[chromeos::prefs::kAccessibilityAutoclickEnabled] =
+  (*s_allowlist)[ash::prefs::kAccessibilityAutoclickEnabled] =
       settings_api::PrefType::kBoolean;
-  (*s_allowlist)[chromeos::prefs::kAccessibilityCaretHighlightEnabled] =
+  (*s_allowlist)[ash::prefs::kAccessibilityCaretHighlightEnabled] =
       settings_api::PrefType::kBoolean;
-  (*s_allowlist)[chromeos::prefs::kAccessibilityCursorHighlightEnabled] =
+  (*s_allowlist)[ash::prefs::kAccessibilityCursorHighlightEnabled] =
       settings_api::PrefType::kBoolean;
-  (*s_allowlist)[chromeos::prefs::kAccessibilityDictationEnabled] =
+  (*s_allowlist)[ash::prefs::kAccessibilityDictationEnabled] =
       settings_api::PrefType::kBoolean;
-  (*s_allowlist)[chromeos::prefs::kAccessibilityHighContrastEnabled] =
+  (*s_allowlist)[ash::prefs::kAccessibilityHighContrastEnabled] =
       settings_api::PrefType::kBoolean;
-  (*s_allowlist)[chromeos::prefs::kAccessibilityLargeCursorEnabled] =
+  (*s_allowlist)[ash::prefs::kAccessibilityLargeCursorEnabled] =
       settings_api::PrefType::kBoolean;
-  (*s_allowlist)[chromeos::prefs::kAccessibilityScreenMagnifierEnabled] =
+  (*s_allowlist)[ash::prefs::kAccessibilityScreenMagnifierEnabled] =
       settings_api::PrefType::kBoolean;
-  (*s_allowlist)[chromeos::prefs::kAccessibilitySelectToSpeakEnabled] =
+  (*s_allowlist)[ash::prefs::kAccessibilitySelectToSpeakEnabled] =
       settings_api::PrefType::kBoolean;
-  (*s_allowlist)[chromeos::prefs::kAccessibilitySpokenFeedbackEnabled] =
+  (*s_allowlist)[ash::prefs::kAccessibilitySpokenFeedbackEnabled] =
       settings_api::PrefType::kBoolean;
-  (*s_allowlist)[chromeos::prefs::kAccessibilityStickyKeysEnabled] =
+  (*s_allowlist)[ash::prefs::kAccessibilityStickyKeysEnabled] =
       settings_api::PrefType::kBoolean;
-  (*s_allowlist)[chromeos::prefs::kAccessibilitySwitchAccessEnabled] =
+  (*s_allowlist)[ash::prefs::kAccessibilitySwitchAccessEnabled] =
       settings_api::PrefType::kBoolean;
-  (*s_allowlist)[chromeos::prefs::kAccessibilityVirtualKeyboardEnabled] =
+  (*s_allowlist)[ash::prefs::kAccessibilityVirtualKeyboardEnabled] =
       settings_api::PrefType::kBoolean;
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
@@ -1241,6 +1246,9 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
   (*s_allowlist)[optimization_guide::prefs::GetSettingEnabledPrefName(
       optimization_guide::UserVisibleFeatureKey::kHistorySearch)] =
       settings_api::PrefType::kNumber;
+  (*s_allowlist)[optimization_guide::prefs::GetSettingEnabledPrefName(
+      optimization_guide::UserVisibleFeatureKey::kPasswordChangeSubmission)] =
+      settings_api::PrefType::kNumber;
 
   // AI enterprise prefs
   (*s_allowlist)
@@ -1254,6 +1262,9 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
   (*s_allowlist)
       [optimization_guide::prefs::kHistorySearchEnterprisePolicyAllowed] =
           settings_api::PrefType::kNumber;
+  (*s_allowlist)[optimization_guide::prefs::
+                     kPasswordChangeSubmissionEnterprisePolicyAllowed] =
+      settings_api::PrefType::kNumber;
   (*s_allowlist)[optimization_guide::prefs::
                      kProductSpecificationsEnterprisePolicyAllowed] =
       settings_api::PrefType::kNumber;
@@ -1269,6 +1280,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
         settings_api::PrefType::kBoolean;
     (*s_allowlist)[glic::prefs::kGlicTabContextEnabled] =
         settings_api::PrefType::kBoolean;
+    (*s_allowlist)[glic::prefs::kGlicSettingsPolicy] =
+        settings_api::PrefType::kNumber;
   }
 #endif
 

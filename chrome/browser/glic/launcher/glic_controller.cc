@@ -4,13 +4,24 @@
 
 #include "chrome/browser/glic/launcher/glic_controller.h"
 
+#include "chrome/browser/glic/glic_keyed_service.h"
 #include "chrome/browser/glic/glic_keyed_service_factory.h"
 #include "chrome/browser/glic/glic_profile_manager.h"
+
+namespace glic {
 
 GlicController::GlicController() = default;
 GlicController::~GlicController() = default;
 
-void GlicController::Show() {
+void GlicController::Toggle(InvocationSource source) {
+  ToggleUI(/*prevent_close=*/false, source);
+}
+
+void GlicController::Show(InvocationSource source) {
+  ToggleUI(/*prevent_close=*/true, source);
+}
+
+void GlicController::ToggleUI(bool prevent_close, InvocationSource source) {
   Profile* profile =
       glic::GlicProfileManager::GetInstance()->GetProfileForLaunch();
   if (!profile) {
@@ -20,10 +31,9 @@ void GlicController::Show() {
     return;
   }
 
-  glic::GlicKeyedServiceFactory::GetGlicKeyedService(profile)->LaunchUI(
-      nullptr);
+  GlicKeyedService* glic_keyed_service =
+      glic::GlicKeyedServiceFactory::GetGlicKeyedService(profile);
+  glic_keyed_service->ToggleUI(nullptr, prevent_close, source);
 }
 
-void GlicController::Hide() {
-  glic::GlicProfileManager::GetInstance()->CloseGlicWindow();
-}
+}  // namespace glic

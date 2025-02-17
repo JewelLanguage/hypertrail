@@ -167,7 +167,7 @@ bool IsInstalledNonChildApp(content::RenderFrameHost& render_frame_host) {
 // potential race between the parent app calling an API while being uninstalled.
 bool CanAccessSubAppsApi(content::RenderFrameHost& render_frame_host) {
   return render_frame_host.IsFeatureEnabled(
-             blink::mojom::PermissionsPolicyFeature::kSubApps) &&
+             network::mojom::PermissionsPolicyFeature::kSubApps) &&
          content::HasIsolatedContextCapability(&render_frame_host) &&
          IsInstalledNonChildApp(render_frame_host);
 }
@@ -591,7 +591,7 @@ void SubAppsServiceImpl::RemoveSubApp(
 void SubAppsServiceImpl::NotifyUninstall(
     RemoveCallback result_callback,
     std::vector<SubAppsServiceRemoveResultPtr> remove_results) {
-  int num_successful_uninstalls = base::ranges::count(
+  int num_successful_uninstalls = std::ranges::count(
       remove_results, SubAppsServiceResultCode::kSuccess,
       [](const auto& result) { return result->result_code; });
 

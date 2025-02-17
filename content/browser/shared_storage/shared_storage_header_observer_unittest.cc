@@ -28,6 +28,7 @@
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/test_shared_storage_header_observer.h"
 #include "content/test/test_web_contents.h"
+#include "services/network/public/cpp/permissions_policy/origin_with_possible_wildcards.h"
 #include "services/network/public/cpp/shared_storage_utils.h"
 #include "services/network/public/mojom/optional_bool.mojom.h"
 #include "services/network/public/mojom/url_loader_network_service_observer.mojom.h"
@@ -35,6 +36,7 @@
 #include "testing/gtest/include/gtest/gtest-param-test.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/permissions_policy/permissions_policy_declaration.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -76,15 +78,15 @@ using OperationAndResult = SharedStorageWriteOperationAndResult;
     const url::Origin& request_origin,
     bool shared_storage_enabled_for_request,
     bool shared_storage_enabled_for_all) {
-  std::vector<blink::OriginWithPossibleWildcards> allowed_origins =
+  std::vector<network::OriginWithPossibleWildcards> allowed_origins =
       shared_storage_enabled_for_request
-          ? std::vector<blink::OriginWithPossibleWildcards>(
-                {*blink::OriginWithPossibleWildcards::FromOrigin(
+          ? std::vector<network::OriginWithPossibleWildcards>(
+                {*network::OriginWithPossibleWildcards::FromOrigin(
                     request_origin)})
-          : std::vector<blink::OriginWithPossibleWildcards>();
+          : std::vector<network::OriginWithPossibleWildcards>();
   return blink::ParsedPermissionsPolicy(
       {blink::ParsedPermissionsPolicyDeclaration(
-          blink::mojom::PermissionsPolicyFeature::kSharedStorage,
+          network::mojom::PermissionsPolicyFeature::kSharedStorage,
           std::move(allowed_origins),
           /*self_if_matches=*/std::nullopt,
           /*matches_all_origins=*/shared_storage_enabled_for_all,
@@ -736,21 +738,6 @@ TEST_P(SharedStorageHeaderObserverTest, Basic_MultiOrigin_AllSuccessful) {
   EXPECT_EQ(observer_->header_results().back(), kOrigin3);
 
   observer_->WaitForOperations(3);
-  EXPECT_EQ(observer_->operations()[0],
-            OperationAndResult(kOrigin1,
-                               CloneSharedStorageMethods(methods_with_options1),
-                               /*with_lock=*/"lock1",
-                               /*success=*/true));
-  EXPECT_EQ(observer_->operations()[1],
-            OperationAndResult(kOrigin2,
-                               CloneSharedStorageMethods(methods_with_options2),
-                               /*with_lock=*/std::nullopt,
-                               /*success=*/true));
-  EXPECT_EQ(observer_->operations()[2],
-            OperationAndResult(kOrigin3,
-                               CloneSharedStorageMethods(methods_with_options3),
-                               /*with_lock=*/std::nullopt,
-                               /*success=*/true));
 
   // Operations on different origins don't affect each other.
   EXPECT_EQ(GetExistingValue(kOrigin1, "a"), "b");

@@ -1,6 +1,7 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="mr">
+<translation id="1000127192436081677">क्विक शेअर टॉगल करा. क्विक शेअर<ph name="QUICK_SHARE_STATE" /> आहे</translation>
 <translation id="1012876632442809908">USB-C डिव्‍हाइस (पुढील बाजूचे पोर्ट)</translation>
 <translation id="1013923882670373915">"<ph name="DEVICE_NAME" />" Bluetooth डिव्हाइस जोडण्यासाठी परवानगी घेऊ इच्छिते. कृपया त्या डिव्हाइसवर हा पिन एंटर करा: <ph name="PINCODE" /></translation>
 <translation id="1014722676793506285">हे <ph name="APP_NAME" /> आणि स्थान परवानगीसह सर्व अ‍ॅप्स व वेबसाइट आणि ChromeOS ला वाय-फाय व मोबाइल नेटवर्क स्थान वापरण्याची अनुमती देते.</translation>
@@ -114,7 +115,6 @@
 <translation id="132346741904777634">कॅमेरा सर्वात वरच्या डाव्या कोपर्‍यात स्नॅप केला आहे. सिस्टीम सर्फेसवरील इतर ॲपवर ओव्‍हरलॅप होत आहे.</translation>
 <translation id="132415371743256095"><ph name="DESK_NAME" /> आणि विंडो बंद करा</translation>
 <translation id="1333308631814936910"><ph name="DISPLAY_NAME" /> कनेक्‍ट केले</translation>
-<translation id="1337081488893096731">तुमच्या शाळेचा खाते डेटा तुमच्या वैयक्तिक खात्यामध्ये हलवण्यासाठी Content Transfer ॲप वापरा</translation>
 <translation id="1340378040547539434">पेजवर झूम आउट करा</translation>
 <translation id="1341651618736211726">ओव्हरफ्लो</translation>
 <translation id="1341926407152459446">ऑडिओ इनपुट आणि आउटपुटसाठी "<ph name="DEVICE_NAME" />" वापरा</translation>
@@ -140,6 +140,7 @@
 <translation id="1415846719612499304">नेटवर्क सूची दाखवा. <ph name="STATE_TEXT" />.</translation>
 <translation id="1419738280318246476">सूचनेशी संबंधित क्रिया पार पाडण्यासाठी डिव्हाइस अनलॉक करा</translation>
 <translation id="1420408895951708260">रात्रीचा प्रकाश टॉगल करा. <ph name="STATE_TEXT" /></translation>
+<translation id="1421166164855200062">सुचवलेला गट</translation>
 <translation id="1426410128494586442">होय</translation>
 <translation id="1435537621343861112">डिक्टेशन सुरू करू शकत नाही. तुमचा माइक बंद आहे.</translation>
 <translation id="1445031758921122223">फेस नियंत्रण फाइल डाउनलोड केल्या आहेत</translation>
@@ -154,6 +155,7 @@
 <translation id="1469148162491666137">हे <ph name="APP1_NAME" />, <ph name="APP2_NAME" /> आणि कॅमेरा व मायक्रोफोन वापरण्याच्या परवानग्यांसह सर्व अ‍ॅप्स व वेबसाइट अ‍ॅक्सेस करण्यास अनुमती देते. तुम्हाला वेब पेज रिफ्रेश करावे लागू शकते किंवा ॲप रीस्टार्ट करावे लागू शकते.</translation>
 <translation id="147310119694673958">फोनची बॅटरी <ph name="BATTERY_PERCENTAGE" />%</translation>
 <translation id="1475340220124222168">हॉटस्पॉट टॉगल करा. हॉटस्पॉट सुरू आहे, १ डिव्हाइस कनेक्ट केले आहे.</translation>
+<translation id="1479685784053141667">संपर्क तयार करा</translation>
 <translation id="1479909375538722835">फ्लोटिंग अ‍ॅक्सेसिबिलिटी मेनू</translation>
 <translation id="1483493594462132177">पाठवा</translation>
 <translation id="1484102317210609525"><ph name="DEVICE_NAME" /> (HDMI/DP)</translation>
@@ -178,7 +180,6 @@
 <translation id="1550523713251050646">अधिक पर्यायांसाठी क्लिक करा</translation>
 <translation id="1555130319947370107">निळा</translation>
 <translation id="1557622599341396706">डेस्‍कचे नाव दाखवा</translation>
-<translation id="1567138500090284106">माउस की बटण</translation>
 <translation id="1569384531973824928">हे कॅमेरा आणि मायक्रोफोन वापरण्याच्या परवानग्यांसह सर्व अ‍ॅप्स आणि वेबसाइट अ‍ॅक्सेस करण्यास अनुमती देते. तुम्हाला वेब पेज रिफ्रेश करावे लागू शकते किंवा ॲप रीस्टार्ट करावे लागू शकते.</translation>
 <translation id="1571697193564730395">व्यत्यय आणू नका टॉगल करा. <ph name="STATE_TEXT" /></translation>
 <translation id="1576623706766186887">मॅग्निफायर सुरू असताना झूम आउट करा</translation>
@@ -192,6 +193,7 @@
 <translation id="1607312127821884567">तुमच्या फोनमधील ॲप्स पाहण्याचे सेट करणे डिसमिस करा</translation>
 <translation id="1610778689852195798">"पहिल्यासारखे करा"</translation>
 <translation id="1611993646327628135">सुरू करा</translation>
+<translation id="1612679292338846734">तुम्ही ही वैशिष्ट्ये सुरू करता, तेव्हा इनपुट मजकूर, दस्तऐवज आशय आणि वेब पेज URL या गोष्टी Google AI सर्व्हरकडे पाठवल्या जाऊ शकतात. ही माहिती लेखनासाठी सूचना, सारांश जनरेट करण्याकरिता, प्रश्नांची उत्तरे देण्याकरिता आणि उत्पादनामध्ये सुधारणा करण्याकरिता, ती <ph name="LINK_TO_SERVICE_TERMS" /> च्या अधीन आहे. वैयक्तिक, संवेदनशील किंवा गोपनीय असे काहीही समाविष्ट करू नका.</translation>
 <translation id="1620510694547887537">कॅमेरा</translation>
 <translation id="1623768535032616219">Google Classroom कोलॅप्स करा</translation>
 <translation id="163032029566320584"><ph name="UNAVAILABLE_DLC" /> उपलब्ध नाही.</translation>
@@ -243,12 +245,13 @@
 <translation id="17722141032474077">गणना</translation>
 <translation id="1774796056689732716">कॅलेंडर, <ph name="CURRENT_MONTH_YEAR" />, सध्या <ph name="DATE" /> निवडली आहे.</translation>
 <translation id="178347895271755507">तुमच्या फोनमधील अलीकडील फोटो, मीडिया आणि सूचना पाहणे सेट करा</translation>
+<translation id="1785317913592722944">सुचवलेल्या गटामधून आयटम काढून टाका</translation>
 <translation id="1786487376942610288">चित्रात-चित्र विंडोच्या कमाल किंवा सध्याच्या आकारादरम्यान स्विच करा</translation>
 <translation id="1787955149152357925">बंद करा</translation>
 <translation id="1796561540704213354">तुम्ही भेट दिलेल्या आणि उघडलेल्या पेजसह वेबसाइट</translation>
-<translation id="179842970735685253">Google च्या सेवा अटी</translation>
 <translation id="1805407494113167797">फोकस मोडसंबंधित आवाज प्ले करता आले नाहीत</translation>
 <translation id="181103072419391116">सिग्नल क्षमता <ph name="SIGNAL_STRENGTH" />, तुमच्या अ‍ॅडमिनिस्ट्रेटरने व्यवस्थापित केलेले</translation>
+<translation id="1815039896005206046">थंब्स डाउन हे तुम्हाला हा सुचवलेला गट आवडला नाही असा फीडबॅक सबमिट करेल</translation>
 <translation id="1816896987747843206">हे कॅमेरा परवानगी असलेल्या सर्व अ‍ॅप्स आणि वेबसाइटना कॅमेराच्या अ‍ॅक्सेसची अनुमती देते</translation>
 <translation id="1823873187264960516">इथरनेट: <ph name="ADDRESS" /></translation>
 <translation id="1824922790784036530">स्थान ॲक्सेस सुरू करा</translation>
@@ -279,6 +282,7 @@
 <translation id="1925320505152357008">१ मिनिटापेक्षा कमी</translation>
 <translation id="1928739107511554905">अपडेट करण्यासाठी, संलग्न केलेल्या कीबोर्डसह तुमचे Chromebook रीस्टार्ट करण्यासाठी टचस्क्रीन वापरा.</translation>
 <translation id="1929331825127010451">प्रश्नावर परत जा</translation>
+<translation id="1946615340060705561">रिलीझ करण्यासाठी "c" प्रेस करा</translation>
 <translation id="1948405482892809935">पुढील वापरकर्त्यावर स्विच करा</translation>
 <translation id="1951012854035635156">Assistant</translation>
 <translation id="1954252331066828794">स्क्रीन रेकॉर्डिंग पूर्ण झाले</translation>
@@ -390,6 +394,7 @@
 <translation id="2369165858548251131">चिनी भाषेत "हॅलो"</translation>
 <translation id="2370971919968699910">यासाठी डेटा शुल्क लागू शकते.
 <ph name="DEVICECOUNT" /> डिव्हाइस कनेक्ट केली आहेत.</translation>
+<translation id="2383521554963939360">अ‍ॅप आणि टॅब गट</translation>
 <translation id="2386292613071805067">पेजवरील प्रत्येक गोष्ट निवडा</translation>
 <translation id="2389423187722941333">Gemini टॉगल करा</translation>
 <translation id="2392659840443812875">कोणताही हॉटस्पॉट उपलब्ध नाही. तुमचे डिव्हाइस जवळपास असल्याची आणि ब्लूटूथ सुरू असल्याची खात्री करा.</translation>
@@ -462,6 +467,7 @@
 <translation id="2598725286293895280">डेस्‍कमधील सपोर्ट नसलेली अ‍ॅप्स</translation>
 <translation id="2607678425161541573">ऑनलाइन साइन इन करणे आवश्यक आहे</translation>
 <translation id="2612072250312279703">अ‍ॅक्टिव्हिटी मॉनिटर</translation>
+<translation id="261210853165551493">फॉरमॅटिंगसह कॉपी करा</translation>
 <translation id="2612614436418177118">अ‍ॅप आयकन हा अ‍ॅप ग्रिडमध्ये हलवा</translation>
 <translation id="2619052155095999743">समाविष्ट करा</translation>
 <translation id="2619326010008283367">टूरच्या <ph name="TOTAL_STEPS" /> पायऱ्यांपैकी <ph name="STEP" />. लाँचर मध्ये तुम्ही तुमची डिव्हाइस सेटिंग्ज पाहू शकता. तुमचा वॉलपेपर बदलणे किंवा स्क्रीन सेव्हर सेट करणे यासारख्या गोष्टींसाठी सेटिंग्ज मध्ये तुमचे <ph name="PRODUCT_NAME" /> कस्टमाइझ करून पहा.</translation>
@@ -486,6 +492,7 @@
 <translation id="2689613560355655046">डेस्‍क ८</translation>
 <translation id="2695305337569143674">वेब</translation>
 <translation id="2697697418792422688">कीबोर्ड सेटिंग्ज दाखवा. <ph name="KEYBOARD_NAME" /> निवडला.</translation>
+<translation id="2699913284398121653">तुमच्या शाळेचा खाते डेटा तुमच्या वैयक्तिक खात्यामध्ये हलवण्यासाठी आशय ट्रान्सफर ॲप वापरा</translation>
 <translation id="2700493154570097719">तुमचा कीबोर्ड सेट करा</translation>
 <translation id="2701576323154693023">हॉटस्पॉट सुरू आहे (वाय-फाय बंद आहे)</translation>
 <translation id="2704781753052663061">इतर वाय-फाय नेटवर्कमध्ये सामील व्हा</translation>
@@ -553,11 +560,13 @@
 <translation id="2932487126591186298">१० मिनिटे जोडली आहेत. <ph name="REMAINING_TIME" /> शिल्लक आहेत.</translation>
 <translation id="2935225303485967257">प्रोफाइल व्यवस्थापित करा</translation>
 <translation id="2941112035454246133">निम्न</translation>
+<translation id="2941232201846070406">तुमचे इंटरनेट तपासा आणि पुन्हा प्रयत्न करा</translation>
 <translation id="2942350706960889382">डॉक केलेले मॅग्निफायर</translation>
 <translation id="2942516765047364088">शेल्फ स्थिती</translation>
 <translation id="2946119680249604491">कनेक्शन जोडा</translation>
 <translation id="2947835478872237115">बॅटरीची सद्य पातळी <ph name="BATTERY_PERCENTAGE" />% आहे, पूर्ण संपेपर्यंत <ph name="TIME" /></translation>
 <translation id="2949420361496057765"><ph name="MODIFIER" /> प्रेस करा आणि लिंकवर क्लिक करा</translation>
+<translation id="2957159466053076448">तुम्ही सेटिंग्ज मध्ये कधीही ही वैशिष्ट्ये बंद करू शकता. <ph name="LINK_TO_LEARN_MORE" /></translation>
 <translation id="295852781144570696">डिव्हाइस ऑडिओ</translation>
 <translation id="2960314608273155470">कॅप्चर मोड, <ph name="SOURCE" /> <ph name="TYPE" /> हा डीफॉल्ट आहे. कीबोर्ड नेव्हिगेशनसाठी टॅब प्रेस करा.</translation>
 <translation id="2961963223658824723">काहीतरी चूक झाली. काही सेकंदांनी पुन्हा प्रयत्न करा.</translation>
@@ -637,6 +646,7 @@
 <translation id="3206735939915734551">कॅप्स लॉक सुरू/बंद करा</translation>
 <translation id="3207953481422525583">वापरकर्ता सेटिंग्ज</translation>
 <translation id="3208321278970793882">ॲप</translation>
+<translation id="3212221635583599601">अधिकसाठी इंटरनेटशी कनेक्ट करा</translation>
 <translation id="3213571860604332401">बुकमार्क म्हणून लिंक सेव्ह करा</translation>
 <translation id="3217205077783620295">व्हॉल्यूम सुरू आहे, टॉगल केल्याने ऑडिओ म्यूट होईल.</translation>
 <translation id="3226991577105957773">आणखी +<ph name="COUNT" /></translation>
@@ -726,6 +736,7 @@
 <translation id="3522979239100719575">उपलब्ध प्रोफाइल शोधत आहे. यासाठी काही मिनिटे लागू शकतात.</translation>
 <translation id="3526440770046466733">नवीन टॅबमध्ये लिंक उघडा आणि सध्याच्या टॅबमध्ये रहा</translation>
 <translation id="353086728817903341"><ph name="NUM_DEVICES" /> डिव्हाइसशी कनेक्ट केले</translation>
+<translation id="3532247131850366052">Google Sheet तयार करता आली नाही</translation>
 <translation id="3533126039236445965">शेल्फमधील अ‍ॅप्स</translation>
 <translation id="3539957339480430241"><ph name="DEVICE_NAME" /> हॉटस्पॉट</translation>
 <translation id="3540893133818942399">तुमच्या फोनमधील अलीकडील फोटो आणि मीडिया पाहण्याचे सेट करणे डिसमिस करा</translation>
@@ -824,6 +835,7 @@
 <translation id="380165613292957338">हाय, मला तुमची कशी मदत करता येईल?</translation>
 <translation id="3804737937830804242">कॅमेरा कोलॅप्स करा</translation>
 <translation id="3808558065322073119">{NUM_RESULTS,plural, =1{१ इमोजी. इतर कोणतेही परिणाम नाहीत.}other{# इमोजी. इतर कोणतेही परिणाम नाहीत.}}</translation>
+<translation id="3822403841174077928">फॉरमॅटिंगसह कॉपी करता आला नाही</translation>
 <translation id="3824784079442479685">हे कॅमेरा वापरण्याची परवानगी असलेल्या <ph name="APP_NAME" /> आणि सर्व अ‍ॅप्स व वेबसाइटना कॅमेराच्या अ‍ॅक्सेसची अनुमती देते. तुम्हाला वेब पेज रिफ्रेश करावे लागू शकते किंवा ॲप रीस्टार्ट करावे लागू शकते.</translation>
 <translation id="3826099427150913765">पासवर्ड वर स्विच करा</translation>
 <translation id="383058930331066723">बॅटरी सेव्हर मोड सुरू आहे</translation>
@@ -841,6 +853,7 @@
 <translation id="3870197372373144624">तुमचे डिव्हाइस बंद करून पहा.</translation>
 <translation id="3886872229787704059">आज उघडलेली</translation>
 <translation id="3891340733213178823">साइन आउट करण्यासाठी Ctrl+Shift+Q दोनदा प्रेस करा.</translation>
+<translation id="3892148308691398805">मजकूर कॉपी करा</translation>
 <translation id="3893630138897523026">ChromeVox (वाचिक अभिप्राय)</translation>
 <translation id="3897533311200664389">मजकूर क्वेरी सुरू करा</translation>
 <translation id="3898464793473355515">घड्याळाच्‍या काट्याच्या दिशेने स्क्रीन ९० अंश फिरवा</translation>
@@ -920,6 +933,7 @@
 <translation id="4151054805501931758">पोर्ट्रेट टच-अप</translation>
 <translation id="4156293514828496577"><ph name="PERCENTAGE" />% बॅटरी शिल्लक आहे (सुमारे <ph name="TIME_LEFT" />).
 बॅटरी लाइफ वाढवण्यासाठी काही वैशिष्ट्ये मर्यादित केलेली आहेत.</translation>
+<translation id="4158003972857765638">नवीन डेस्कमध्ये संगतवार लावा</translation>
 <translation id="4160919062868802509">एकाहून अधिक ऑडिओ स्रोत डिटेक्ट केले आहेत</translation>
 <translation id="416245495747357243">पूर्ण झाले!</translation>
 <translation id="4165275524535002941">केबल कदाचित डिस्प्लेला सपोर्ट करणार नाही</translation>
@@ -964,10 +978,12 @@
 <translation id="4275663329226226506">माध्यम</translation>
 <translation id="4279490309300973883">मिररिंग</translation>
 <translation id="4280601795273309128">सुरक्षा अपडेट पूर्ण झाली आहेत. तुमचे डिव्हाइस अपग्रेड करा.</translation>
+<translation id="4281739221820540368">Google Docs तयार करा</translation>
 <translation id="4283888303416325161">आणखी सुरक्षिततेसाठी पासवर्ड एंटर करा</translation>
 <translation id="4285498937028063278">अनपिन</translation>
 <translation id="428715201724021596">प्रोफाइलशी कनेक्ट करत आहे. याला काही मिनिटे लागू शकतात.</translation>
 <translation id="4287250812980588583">Chrome विंडो</translation>
+<translation id="4291322857434980285">{NUM_APPS,plural, =1{<ph name="APP_NAME" /> द्वारे माइकचा व्हॉल्यूम नियंत्रित केला जातो}other{# अ‍ॅप्सद्वारे माइकचा व्हॉल्यूम नियंत्रित केला जातो}}</translation>
 <translation id="4294319844246081198">सुप्रभात <ph name="GIVEN_NAME" />,</translation>
 <translation id="4296136865091727875">सर्व <ph name="COUNT" /> सूचना साफ करा</translation>
 <translation id="4300272766492248925">अ‍ॅप उघडा</translation>
@@ -984,6 +1000,7 @@
 <translation id="4322742403972824594">Ctrl + Alt + Up Arrow कीबोर्ड शॉर्टकट बदलला आहे. होम की वापरण्यासाठी, <ph name="LAUNCHER_KEY_NAME" /> की + लेफ्ट अ‍ॅरो प्रेस करा.</translation>
 <translation id="4324840740119394760">हे कॅमेरा परवानगी असलेल्या <ph name="APP_NAME" /> आणि सर्व अ‍ॅप्स व वेबसाइटना कॅमेराच्या अ‍ॅक्सेसची अनुमती देते</translation>
 <translation id="4327147325944669226">गेम रेकॉर्ड करा</translation>
+<translation id="4329076911374908740">सेव्ह केलेल्या कमाल गटांची संख्या गाठली.</translation>
 <translation id="4338109981321384717">भिंग</translation>
 <translation id="4348580496249286403"><ph name="VOLUME_LEVEL" />, म्यूट केला आहे</translation>
 <translation id="4351244548802238354">डायलॉग बंद करा</translation>
@@ -1034,6 +1051,7 @@
 <translation id="4513044611477939680">क्विक शेअर</translation>
 <translation id="4513946894732546136">फीडबॅक</translation>
 <translation id="4518404433291145981">तुमचे Chromebook अनलॉक करण्यासाठी, आधी तुमचा फोन अनलॉक करा</translation>
+<translation id="4525887279712865285">क्विक शेअर सेटिंग्ज दाखवा</translation>
 <translation id="4527045527269911712">"<ph name="DEVICE_NAME" />" Bluetooth डिव्हाइस जोडण्यासाठी परवानगी घेऊ इच्छिते.</translation>
 <translation id="4531536770443562276">फक्त फुलस्क्रीन उपलब्ध आहे</translation>
 <translation id="4533343294786968049">तुमची बॅटरी लाइफ वाढवत आहे. <ph name="FULLY_CHARGE_TIME" /> पर्यंत बॅटरी पूर्णपणे चार्ज होईल.</translation>
@@ -1207,6 +1225,7 @@
 <translation id="5043679421800073804">शेल्फवरील शेवटच्या आयकनवर क्लिक किंवा टॅप करा</translation>
 <translation id="504465286040788597">मागील परिच्छेद</translation>
 <translation id="5045550434625856497">चुकीचा पासवर्ड</translation>
+<translation id="5058794129231928255">Google दस्तऐवज तयार करता आला नाही</translation>
 <translation id="5062496344832867502">RAM</translation>
 <translation id="5068762093486106012">म्यूट केलेले असताना तुम्ही बोलल्यास, तुम्हाला सूचित केले जाईल. ऑडिओ तुमच्या डिव्हाइसमध्ये कायम राहतो.</translation>
 <translation id="5077416371682039027">तुमच्या फोनमधील अलीकडील फोटो, मीडिया, सूचना आणि ॲप्स पाहणे सेट करा</translation>
@@ -1231,7 +1250,6 @@
 <translation id="5121628974188116412">पेजच्या तळाशी जा</translation>
 <translation id="5122517996953421795"><ph name="DESK_NAME" /> चे पूर्वावलोकन करा. इनॅक्टिव्ह डेस्‍क.</translation>
 <translation id="5136175204352732067">वेगळा कीबोर्ड कनेक्ट केला आहे</translation>
-<translation id="5140105873789567560">लिहिण्यात मला मदत करा आणि वाचायला मला मदत करा हे वापरण्यासाठी तुमचे वय किमान १८ वर्षे असणे आवश्यक आहे.</translation>
 <translation id="5144005092084035179">ऑडिओ इनपुट स्विच करायचे आहे का?</translation>
 <translation id="5147567197700016471">अनलॉक केली</translation>
 <translation id="5150070631291639005">गोपनीयता सेटिंग्ज</translation>
@@ -1386,7 +1404,6 @@
 <translation id="5625955975703555628">LTE+</translation>
 <translation id="5627392655516693966">तुमच्या पासवर्डची पडताळणी करता आली नाही. पुन्हा प्रयत्न करा.</translation>
 <translation id="5632485077360054581">मला कसे ते दाखवा</translation>
-<translation id="5633826232582408011">तुम्ही लिहिण्यात मला मदत करा आणि वाचायला मला मदत करा हे सुरू करता, तेव्हा इनपुट मजकूर, दस्तऐवजातील आशय आणि वेब पेज URL या गोष्टी लेखनासाठी सूचना, सारांश जनरेट करण्याकरिता, प्रश्नांची उत्तरे देण्याकरिता व उत्पादनामध्ये सुधारणा करण्याकरिता Google AI सर्व्हरकडे पाठवल्या जातात, ज्या<ph name="LINK_TO_SERVICE_TERMS" /> च्या अधीन आहे. वैयक्तिक, संवेदनशील किंवा गोपनीय असे काहीही समाविष्ट करू नका.</translation>
 <translation id="5648021990716966815">माइक जॅक</translation>
 <translation id="5652575806481723716"><ph name="FOCUSED_APP_NAME" /> तुम्हाला लक्ष देण्याची विनंती करते.</translation>
 <translation id="5662075790140998213">डेस्‍क १०</translation>
@@ -1470,7 +1487,6 @@
 <translation id="589817443623831496">पॉइंट स्कॅनिंग</translation>
 <translation id="5901316534475909376">Shift+Esc</translation>
 <translation id="5901630391730855834">पिवळा</translation>
-<translation id="5911231045062997865">Lacros विंडोना सध्या सपोर्ट नाही. इतर ॲप्स सेव्ह केली जातील.</translation>
 <translation id="5911909173233110115"><ph name="USERNAME" /> (<ph name="MAIL" />)</translation>
 <translation id="5916646100036936191">नवीन सूचना, एकूण <ph name="NOTIFICATION_COUNT" /></translation>
 <translation id="5916664084637901428">सुरू</translation>
@@ -1591,6 +1607,7 @@
 <translation id="6274202259872570803">Screencast</translation>
 <translation id="6276708887952587684">पेज स्रोत पहा</translation>
 <translation id="6284232397434400372">रीझोल्युशन बदलले</translation>
+<translation id="6285871695023807425">Calendar मध्ये जोडा</translation>
 <translation id="6288235558961782912">पालकाच्या परवानगीने <ph name="USER_EMAIL_ADDRESS" /> नंतर पुन्हा जोडता येईल.</translation>
 <translation id="6291221004442998378">चार्ज होत नाही</translation>
 <translation id="6298183524022479114">ॲपमध्ये हे डिव्हाइस कस्टमाइझ करा</translation>
@@ -1640,6 +1657,7 @@
 <translation id="6468406072297048412">{0,plural, =1{१ मिनिटामध्ये मागील आवृत्तीवर डिव्हाइस अपडेट करा}other{# मिनिटांमध्ये मागील आवृत्तीवर डिव्हाइस अपडेट करा}}</translation>
 <translation id="6469104339369989396">हॉटस्पॉट टॉगल करा</translation>
 <translation id="6477681113376365978">फाइल डाउनलोड करू शकत नाही</translation>
+<translation id="648135757200234041">संपर्क तयार करता आला नाही</translation>
 <translation id="6482559668224714696">फुल-स्क्रीन मॅग्निफायर</translation>
 <translation id="6485086611007560630">हवामान (उपलब्ध नाही)</translation>
 <translation id="6490471652906364588">USB-C डिव्‍हाइस (उजवे पोर्ट)</translation>
@@ -1686,6 +1704,7 @@
 <translation id="6612889377159412215">उपटास्क</translation>
 <translation id="6613765291890844037"><ph name="STORAGE_IN_USE_SIZE" /> स्टोरेज वापरात आहे | <ph name="STORAGE_TOTAL_SIZE" /> एकूण</translation>
 <translation id="6614169507485700968">गोपनीयता स्क्रीन सुरू आहे</translation>
+<translation id="6618277154885124991">Google Sheets तयार करा</translation>
 <translation id="6622679827379792051">तुमच्या फोनमधील ॲप्स पाहणे सेट करा</translation>
 <translation id="662279009180869175">स्प्लिट स्क्रीनचा आकार बदलण्यासाठी लेफ्ट आणि राइट अ‍ॅरो वापरा</translation>
 <translation id="6624493541160101248">सध्याचा डेस्क: <ph name="DESK_NAME" />. <ph name="DESK_COUNT" /> पैकी <ph name="DESK_INDEX" /> डेस्‍क.</translation>
@@ -1695,6 +1714,7 @@
 <translation id="6637729079642709226">वेळ बदला</translation>
 <translation id="6641720045729354415">लाइव्ह कॅप्शन टॉगल करा. <ph name="STATE_TEXT" /></translation>
 <translation id="6643169293433369663">नावानुसार क्रमवारीचा क्रम पहिल्यासारखा करा</translation>
+<translation id="664793810957802384">सुचवलेल्या गटामधील आयटम</translation>
 <translation id="6649641931981131786">तुम्हाला स्क्रीनच्या मध्यभागी ठेवण्यासाठी कॅमेरा अ‍ॅडजस्ट करा.</translation>
 <translation id="6650072551060208490">हे तुम्हीच असल्याची <ph name="ORIGIN_NAME" /> ला खात्री करायची आहे</translation>
 <translation id="6650742588569439432">आयटम लोड करता आले नाहीत.</translation>
@@ -1887,6 +1907,7 @@
 <translation id="735745346212279324">VPN डिस्कनेक्ट केले</translation>
 <translation id="7360036564632145207">पेरिफेरल सेटिंगसाठी डेटा अ‍ॅक्सेस संरक्षण बदलल्याने परफॉर्मन्स ऑप्टिमाइझ होऊ शकतो</translation>
 <translation id="736045644501761622">वॉलपेपर आणि स्टाइल सेट करा</translation>
+<translation id="7368041336688136012">AI वापरून वाचण्यात मला मदत करा, लिहिण्यात मला मदत करा आणि इमेज तयार करण्यासाठी तुमचे वय किमान १८ वर्षे असणे आवश्यक आहे.</translation>
 <translation id="7371404428569700291">विंडो रेकॉर्ड करा</translation>
 <translation id="7372069265635026568">एकूण <ph name="TOTAL_MEMORY" /> पैकी <ph name="AVAILABLE_MEMORY" /> मेमरी उपलब्ध आहे</translation>
 <translation id="737315737514430195">हे मायक्रोफोन परवानगी असलेल्या सर्व अ‍ॅप्स आणि वेबसाइटना मायक्रोफोन अ‍ॅक्सेसची अनुमती देते</translation>
@@ -1941,6 +1962,7 @@
 <translation id="7524043547948122239">Google Tasks</translation>
 <translation id="7525067979554623046">तयार करा</translation>
 <translation id="7526573455193969409">नेटवर्कचे परीक्षण केले जाऊ शकते</translation>
+<translation id="7534543072325030705">थंब्स अप हे तुम्हाला हा सुचवलेला गट आवडला आहे असा फीडबॅक सबमिट करेल</translation>
 <translation id="7536035074519304529">IP पत्ता: <ph name="ADDRESS" /></translation>
 <translation id="7536832381700852123">डावी विंडो अपडेट करा</translation>
 <translation id="7543399541175347147">Linux अ‍ॅप्स आणि गुप्त विंडोना सध्या सपोर्ट नाही. इतर ॲप्स सेव्ह केली जातील.</translation>
@@ -1968,6 +1990,7 @@
 <translation id="7611213136657090146">कॅमेरा पुन्हा कनेक्ट केला.</translation>
 <translation id="7613620083300976559">गेम नियंत्रणे सुरू करा</translation>
 <translation id="761736749114493194">कॅमेरा फ्रेमिंग टॉगल करा. <ph name="STATE_TEXT" /></translation>
+<translation id="7621008024906456933">क्विक शेअर सेटिंग्ज</translation>
 <translation id="7624117708979618027"><ph name="TEMPERATURE_F" />° फॅ</translation>
 <translation id="7627303771480696593">प्रश्न विचारा</translation>
 <translation id="7634648064048557203">कॅमेरा सर्वात खालच्या उजव्या कोपऱ्यात स्नॅप केला आहे</translation>
@@ -2010,7 +2033,7 @@
 <translation id="7749443890790263709">डेस्कची कमाल मर्यादा गाठली आहे.</translation>
 <translation id="7749958366403230681">ExpressKey ४</translation>
 <translation id="7751260505918304024">सर्व दर्शवा</translation>
-<translation id="7759183637555564029">लिहिण्यात मला मदत करा आणि वाचायला मला मदत करा हे तुम्ही सेटिंग्ज मध्ये कधीही बंद करू शकता. <ph name="LINK_TO_LEARN_MORE" /></translation>
+<translation id="7762664108390426952">Google च्या सेवा अटी आणि गोपनीयता धोरण</translation>
 <translation id="7768784765476638775">बोलण्यासाठी निवडा</translation>
 <translation id="7769299611924763557">तुमची GIF लवकरच तयार होईल</translation>
 <translation id="7773536009433685931">त्याऐवजी वायफाय सुरू करा</translation>
@@ -2020,7 +2043,6 @@
 <translation id="7781829728241885113">काल</translation>
 <translation id="7787212146956232129">इनपुट आणि आउटपुट डिव्हाइस सेट केलेली आहेत. बदलण्यासाठी सेटिंग्ज वर जा.</translation>
 <translation id="7792590255364786396">दृश्यमान</translation>
-<translation id="7793389284006812057">जनरेटिव्ह AI हे प्रायोगिक आहे, ते विकासाच्या सुरुवातीच्या टप्प्यात असून सध्या त्याची उपलब्धता मर्यादित आहे.</translation>
 <translation id="7796735576426975947">नवीन सूचना लपवलेल्या आहेत</translation>
 <translation id="7798302898096527229">रद्द करण्यासाठी Search किंवा Shift प्रेस करा.</translation>
 <translation id="780301667611848630">नाही, नको</translation>
@@ -2105,6 +2127,7 @@
 <translation id="8004512796067398576">बढती</translation>
 <translation id="8005527720597583355">फोकस सेशन सुरू करा</translation>
 <translation id="8015361438441228492">टास्क संपादित करता आली नाही.</translation>
+<translation id="8027187124910699148">सुचवलेला गट पुन्हा सुरू करा</translation>
 <translation id="802782383769312836">मागील डेस्‍क: <ph name="DESK_NAME" />. <ph name="DESK_COUNT" /> पैकी <ph name="DESK_INDEX" /> डेस्‍क.</translation>
 <translation id="8029247720646289474">हॉटस्पॉट कनेक्ट करता आले नाही</translation>
 <translation id="8029629653277878342">आणखी सुरक्षिततेसाठी पिन किंवा पासवर्ड आवश्यक आहे</translation>
@@ -2213,6 +2236,7 @@
 <translation id="8426708595819210923">शुभ संध्याकाळ <ph name="GIVEN_NAME" />,</translation>
 <translation id="8428213095426709021">सेटिंग्ज</translation>
 <translation id="8428810263141909179"><ph name="MODIFIER_ONE" /><ph name="MODIFIER_TWO" /><ph name="DELIMITER" /><ph name="KEY_ONE" /> ते <ph name="KEY_TWO" /></translation>
+<translation id="8429547770382807369">गट नंतरसाठी सेव्ह करा</translation>
 <translation id="8433186206711564395">नेटवर्क सेटिंग्ज</translation>
 <translation id="8433977262951327081">शेल्फमधील इनपुट पर्याय मेनू दर्शविण्यासाठीचा शॉर्टकट बदलला आहे. कृपया <ph name="OLD_SHORTCUT" /> ऐवजी <ph name="NEW_SHORTCUT" /> वापरा.</translation>
 <translation id="8437311513256731931">फीडबॅक टूल उघडा</translation>
@@ -2221,6 +2245,7 @@
 <translation id="8446884382197647889">अधिक जाणून घ्या</translation>
 <translation id="8456543082656546101"><ph name="SHORTCUT_KEY_NAME" /> + V</translation>
 <translation id="8462305545768648477">बोलण्यासाठी निवडा बंद करा</translation>
+<translation id="8466665972451889002"><ph name="GROUP_NAME" /> मधील आयटम दाखवा</translation>
 <translation id="8468806060683421065"><ph name="DUE_DATE_AND_TIME" /> रोजी शेवटची तारीख आहे</translation>
 <translation id="847056008324733326">स्केल सेटिंग्‍ज दाखवा</translation>
 <translation id="8473301994082929012"><ph name="ORGANIZATION_NAME" /> कडे <ph name="FEATURE_STATE" /> <ph name="FEATURE_NAME" /> आहेत.</translation>
@@ -2237,12 +2262,14 @@
 <translation id="851660987304951246">आशयाचा झटपट सारांश देण्यासाठी किंवा प्रश्न विचारण्यासाठी मला वाचण्यात मदत करा वापरा</translation>
 <translation id="8517041960877371778">तुमचे <ph name="DEVICE_TYPE" /> सुरू केले असताना कदाचित चार्ज होणार नाही.</translation>
 <translation id="8535393432370007982">रंगानुसार क्रमवारीचा क्रम पहिल्यासारखा करा</translation>
+<translation id="8539803091108018926">मजकूर क्लिपबोर्डवर कॉपी केला</translation>
 <translation id="8541078764854166027">कॅमेरा फ्रेमिंग</translation>
 <translation id="8542053257095774575">कोणतीही सेव्ह केलेली डेस्‍क किंवा टेंप्लेट नाहीत</translation>
 <translation id="8546059259582788728">क्रमाने लावणे पहिल्यासारखे करण्यात यश आले</translation>
 <translation id="8551588720239073785">तारीख आणि वेळ सेटिंग्ज</translation>
 <translation id="8553395910833293175">सर्व डेस्कना आधीपासून असाइन केले आहे.</translation>
 <translation id="8555757996376137129">सध्याचा डेस्क काढून टाका</translation>
+<translation id="8558521694042102707">जनरेटिव्ह AI हे लोकांच्या बाबतीतदेखील चुका करू शकते, त्यामुळे ते दोनदा तपासा.</translation>
 <translation id="8559845965695780508"><ph name="USER" /> यांनी संपादित केली आहे</translation>
 <translation id="8569146227972631631">°फॅ</translation>
 <translation id="8569751806372591456">वापरून पाहण्यासाठी या काही सूचना आहेत</translation>
@@ -2265,6 +2292,7 @@
 <translation id="8637598503828012618"><ph name="CONNECTION_STATUS" />, सिग्नल क्षमता <ph name="SIGNAL_STRENGTH" />, तुमच्या अ‍ॅडमिनिस्ट्रेटरने व्यवस्थापित केलेले</translation>
 <translation id="8638637208069328956">मायक्रोफोन सुरू/बंद करा</translation>
 <translation id="8639760480004882931"><ph name="PERCENTAGE" /> शिल्लक</translation>
+<translation id="8640470573049727749">गटाशी संबंधित सर्व सूचना लपवा</translation>
 <translation id="8641510901370802679"><ph name="ANSWER_TYPE" /> माहिती दाखवत आहे</translation>
 <translation id="8646417893960517480"><ph name="TOTAL_TIME" /> टायमर</translation>
 <translation id="8647931990447795414">एखाद्या व्यक्तीला जोडण्यासाठी तुमचा Family Link पालक ॲक्सेस कोड एंटर करा</translation>
@@ -2273,6 +2301,7 @@
 <translation id="8653151467777939995">सूचना सेटिंग्ज दाखवा. सूचना सुरू आहेत</translation>
 <translation id="8657066291275741003">लोअरकेस</translation>
 <translation id="8660331759611631213">७१ चे वर्गमूळ</translation>
+<translation id="8662921061190671299">Calendar मध्ये जोडता आला नाही</translation>
 <translation id="8663756353922886599"><ph name="CONNECTION_STATUS" />, सिग्नल क्षमता <ph name="SIGNAL_STRENGTH" /></translation>
 <translation id="8664282223139913403">आंशिक स्क्रीनशॉट कॅप्चर करण्यासाठी एंटर प्रेस करा</translation>
 <translation id="8676770494376880701">निम्न-उर्जेचे चार्जर कनेक्ट केले</translation>
@@ -2347,6 +2376,7 @@
 <translation id="8905919797434099235">(शीर्षक नाही)</translation>
 <translation id="890616557918890486">स्रोत बदला</translation>
 <translation id="8909138438987180327">बॅटरी <ph name="PERCENTAGE" /> टक्के आहे.</translation>
+<translation id="8916866375277139011"><ph name="GROUP_NAME" /> मधील आयटम लपवा</translation>
 <translation id="8921554779039049422">H+</translation>
 <translation id="8921624153894383499">Google Assistant ही भाषा बोलत नाही.</translation>
 <translation id="8926951137623668982">शेल्फ नेहमी लपवलेले आहे</translation>
@@ -2363,6 +2393,7 @@
 <translation id="8956420987536947088">तुमच्या मागील विंडो आणि अ‍ॅप्स उघडा</translation>
 <translation id="8959380109429710384">तुम्ही फुल-स्क्रीन मॅग्निफायरसाठी कीबोर्ड शॉर्टकट प्रेस केला आहे. झूम इन केलेल्या दृश्यामध्ये आजूबाजूला फिरण्यासाठी ctrl + alt + arrows वापरा.</translation>
 <translation id="8964525410783593407">१ तास</translation>
+<translation id="8970887620466824814">काहीतरी चूक झाली.</translation>
 <translation id="8973885907461690937">मेनू आयकनवर फोकस करा</translation>
 <translation id="8980862970816311842">अ‍ॅप आयकन अ‍ॅप ग्रिडमधील फोल्डरच्या आत/बाहेर हलवा</translation>
 <translation id="8982906748181120328">Nearby असलेले</translation>

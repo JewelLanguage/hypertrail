@@ -10,13 +10,13 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_metrics.h"
-#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
 #include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/app_menu_model.h"
 #include "chrome/browser/ui/toolbar/bookmark_sub_menu_model.h"
 #include "chrome/browser/ui/views/bookmarks/saved_tab_groups/saved_tab_group_everything_menu.h"
+#include "chrome/browser/ui/views/bookmarks/saved_tab_groups/saved_tab_group_tabs_menu_model.h"
 #include "chrome/browser/ui/views/data_sharing/data_sharing_bubble_controller.h"
 #include "chrome/browser/ui/views/tabs/recent_activity_bubble_dialog_view.h"
 #include "chrome/browser/ui/views/tabs/tab_group_header.h"
@@ -32,6 +32,7 @@
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
+#include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "content/public/test/browser_test.h"
 #include "google_apis/gaia/core_account_id.h"
@@ -202,6 +203,30 @@ class SharedTabGroupInteractiveUiTest : public InteractiveBrowserTest {
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
+// Verify the feedback button is only shown when there is at least one shared
+// tab group in the current browser.
+IN_PROC_BROWSER_TEST_F(SharedTabGroupInteractiveUiTest, FeedbackButtonVisible) {
+  TabGroupId group_id = CreateNewTabGroup();
+  ShareTabGroup(group_id, "fake_collaboration_id",
+                data_sharing::MemberRole::kOwner, /*should_sign_in=*/false);
+
+  // Manually activate an inactive tab since the test version of
+  // MakeTabGroupShared does not fire observers.
+  browser()->GetTabStripModel()->ActivateTabAt(1);
+
+  RunTestSequence(
+      // Verify the feedback button is visible when there is 1 shared tab group.
+      FinishTabstripAnimations(), WaitForShow(kTabGroupHeaderElementId),
+      WaitForShow(kSharedTabGroupFeedbackElementId),
+      // Verify the feedback button is not visible if we remove it.
+      HoverTabGroupHeader(group_id), ClickMouse(ui_controls::RIGHT),
+      WaitForShow(kTabGroupEditorBubbleId),
+      PressButton(kTabGroupEditorBubbleCloseGroupButtonId),
+      WaitForHide(kTabGroupEditorBubbleCloseGroupButtonId),
+      FinishTabstripAnimations(),
+      WaitForHide(kSharedTabGroupFeedbackElementId));
+}
+
 // Take a screenshot of the shared tab group in app menu > tab groups.
 IN_PROC_BROWSER_TEST_F(SharedTabGroupInteractiveUiTest,
                        SharedTabGroupInAppMenu) {
@@ -360,7 +385,7 @@ IN_PROC_BROWSER_TEST_F(SharedTabGroupInteractiveUiTest,
                   WaitForShow(AppMenuModel::kTabGroupsMenuItem),
                   SelectMenuItem(AppMenuModel::kTabGroupsMenuItem),
                   SelectMenuItem(STGEverythingMenu::kTabGroup),
-                  SelectMenuItem(STGEverythingMenu::kOpenGroup),
+                  SelectMenuItem(STGTabsMenuModel::kOpenGroup),
                   FinishTabstripAnimations(),
                   // Close the app menu to prevent flakes on mac.
                   HoverTabAt(0), ClickMouse(),
@@ -478,8 +503,8 @@ IN_PROC_BROWSER_TEST_F(SharedTabGroupInteractiveUiTest,
       WaitForShow(AppMenuModel::kTabGroupsMenuItem),
       SelectMenuItem(AppMenuModel::kTabGroupsMenuItem),
       SelectMenuItem(STGEverythingMenu::kTabGroup),
-      EnsurePresent(SavedTabGroupUtils::kLeaveGroupMenuItem),
-      SelectMenuItem(SavedTabGroupUtils::kLeaveGroupMenuItem),
+      EnsurePresent(STGTabsMenuModel::kLeaveGroupMenuItem),
+      SelectMenuItem(STGTabsMenuModel::kLeaveGroupMenuItem),
       WaitForShow(kDeletionDialogOkButtonId),
       PressButton(kDeletionDialogOkButtonId), FinishTabstripAnimations(),
       WaitForHide(kTabGroupHeaderElementId));

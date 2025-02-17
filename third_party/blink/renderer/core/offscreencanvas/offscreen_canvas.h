@@ -39,7 +39,6 @@ class ScriptState;
 
 class CORE_EXPORT OffscreenCanvas final
     : public EventTarget,
-      public ImageBitmapSource,
       public CanvasRenderingContextHost,
       public CanvasResourceDispatcherClient {
   DEFINE_WRAPPERTYPEINFO();
@@ -164,7 +163,6 @@ class CORE_EXPORT OffscreenCanvas final
   }
 
   // ImageBitmapSource implementation
-  gfx::Size BitmapSourceSize() const final;
   ScriptPromise<ImageBitmap> CreateImageBitmap(ScriptState*,
                                                std::optional<gfx::Rect>,
                                                const ImageBitmapOptions*,
@@ -200,6 +198,11 @@ class CORE_EXPORT OffscreenCanvas final
   void CheckForGpuContextLost();
   void SetRestoringGpuContext(bool restoring_gpu_context) {
     restoring_gpu_context_ = restoring_gpu_context;
+  }
+
+  TextDirection GetTextDirection(const ComputedStyle*) override;
+  void SetTextDirection(TextDirection direction) {
+    text_direction_ = direction;
   }
 
   FontSelector* GetFontSelector() override;
@@ -267,6 +270,7 @@ class CORE_EXPORT OffscreenCanvas final
   WeakMember<ExecutionContext> execution_context_;
 
   DOMNodeId placeholder_canvas_id_ = kInvalidDOMNodeId;
+  std::optional<TextDirection> text_direction_;
 
   bool disposing_ = false;
   bool is_neutered_ = false;

@@ -12,7 +12,6 @@
 #include "base/metrics/field_trial_params.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/common/buildflags.h"
 #include "extensions/buildflags/buildflags.h"
 
@@ -30,24 +29,13 @@ BASE_DECLARE_FEATURE(kAllowEyeDropperWGCScreenCapture);
 BASE_DECLARE_FEATURE(kCloseOmniboxPopupOnInactiveAreaClick);
 
 BASE_DECLARE_FEATURE(kDefaultBrowserPromptRefresh);
-BASE_DECLARE_FEATURE(kDefaultBrowserPromptRefreshTrial);
-
-// String representation of the study group for running a synthetic trial.
-extern const base::FeatureParam<std::string>
-    kDefaultBrowserPromptRefreshStudyGroup;
 
 // Whether to show the default browser info bar prompt.
 extern const base::FeatureParam<bool> kShowDefaultBrowserInfoBar;
 
-// Whether to show the default browser app menu chip prompt.
-extern const base::FeatureParam<bool> kShowDefaultBrowserAppMenuChip;
-
 // Whether to show the default browser app menu item anytime the browser isn't
 // default, even if the app menu chip prompt isn't enabled.
 extern const base::FeatureParam<bool> kShowDefaultBrowserAppMenuItem;
-
-// Whether to show the updated info bar strings.
-extern const base::FeatureParam<bool> kUpdatedInfoBarCopy;
 
 // Base duration after which the user may be remprompted.
 extern const base::FeatureParam<base::TimeDelta> kRepromptDuration;
@@ -56,32 +44,12 @@ extern const base::FeatureParam<base::TimeDelta> kRepromptDuration;
 // value, the user will be prompted indefinitely.
 extern const base::FeatureParam<int> kMaxPromptCount;
 
-// Exponential backoff multiplier for the reprompt duration.
-extern const base::FeatureParam<int> kRepromptDurationMultiplier;
-
-// The duration after which the app menu prompt should not longer be shown.
-extern const base::FeatureParam<base::TimeDelta> kDefaultBrowserAppMenuDuration;
-
-// Whether the app menu chip should use more prominent colors.
-extern const base::FeatureParam<bool> kAppMenuChipColorPrimary;
-
 BASE_DECLARE_FEATURE(kExtensionsMenuInAppMenu);
 bool IsExtensionMenuInRootAppMenu();
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 BASE_DECLARE_FEATURE(kFewerUpdateConfirmations);
 #endif
-
-#if !BUILDFLAG(IS_ANDROID)
-BASE_DECLARE_FEATURE(kIOSPromoRefreshedPasswordBubble);
-BASE_DECLARE_FEATURE(kIOSPromoAddressBubble);
-BASE_DECLARE_FEATURE(kIOSPromoPaymentBubble);
-
-// String params for the Desktop to iOS promos' QR code URLs.
-extern const base::FeatureParam<std::string> kIOSPromoPasswordBubbleQRCodeURL;
-extern const base::FeatureParam<std::string> kIOSPromoAddressBubbleQRCodeURL;
-extern const base::FeatureParam<std::string> kIOSPromoPaymentBubbleQRCodeURL;
-#endif  // !BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 BASE_DECLARE_FEATURE(kLightweightExtensionOverrideConfirmations);
@@ -130,6 +98,10 @@ extern const base::FeatureParam<std::string>
 #if !BUILDFLAG(IS_ANDROID)
 BASE_DECLARE_FEATURE(kPressAndHoldEscToExitBrowserFullscreen);
 #endif
+
+BASE_DECLARE_FEATURE(kScrimForBrowserWindowModal);
+
+BASE_DECLARE_FEATURE(KScrimForTabModal);
 
 BASE_DECLARE_FEATURE(kSideBySide);
 
@@ -267,6 +239,13 @@ BASE_DECLARE_FEATURE(kPageActionsMigration);
 // Controls whether browser tab loading animations are driven by the compositor
 // vs. a repeating timer.
 BASE_DECLARE_FEATURE(kCompositorLoadingAnimations);
+
+// If enabled, when no given_name is provided, the FedCM Continue button will
+// say "Continue" instead of "Continue as Firstname Lastname".
+BASE_DECLARE_FEATURE(kFedCmContinueWithoutName);
+
+// If enabled, the by date history will show in the side panel.
+BASE_DECLARE_FEATURE(kByDateHistoryInSidePanel);
 
 }  // namespace features
 

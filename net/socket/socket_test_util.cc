@@ -13,6 +13,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include <algorithm>
 #include <memory>
 #include <ostream>
 #include <string>
@@ -29,7 +30,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
 #include "base/rand_util.h"
-#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
@@ -900,7 +900,7 @@ std::unique_ptr<SSLClientSocket> MockClientSocketFactory::CreateSSLClientSocket(
                         << mock_ssl_data_.next_index();
   SSLSocketDataProvider* next_ssl_data = mock_ssl_data_.GetNext();
   if (next_ssl_data->next_protos_expected_in_ssl_config.has_value()) {
-    EXPECT_TRUE(base::ranges::equal(
+    EXPECT_TRUE(std::ranges::equal(
         next_ssl_data->next_protos_expected_in_ssl_config.value(),
         ssl_config.alpn_protos));
   }
@@ -2081,6 +2081,7 @@ int MockTransportClientSocketPool::RequestSocket(
     ClientSocketHandle* handle,
     CompletionOnceCallback callback,
     const ProxyAuthCallback& on_auth_callback,
+    bool fail_if_alias_requires_proxy_override,
     const NetLogWithSource& net_log) {
   last_request_priority_ = priority;
   std::unique_ptr<StreamSocket> socket =

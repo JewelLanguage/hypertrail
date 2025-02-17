@@ -35,6 +35,7 @@
 <translation id="164952285225495380">Dieses Paket wird bereits in Chromium verfolgt.</translation>
 <translation id="1707458603865303524">Öffne Links immer in Chromium, wenn du sie in Messages oder anderen Apps antippst.</translation>
 <translation id="1722370509450468186">Dein Passwort wird in deinem Konto (<ph name="EMAIL" />) gespeichert.</translation>
+<translation id="1747088204252710672">Ein personalisierter Feed für dich</translation>
 <translation id="1811860791247653035">Zur Personalisierung und für andere Funktionen musst du Chromium in „<ph name="FEATURE_NAME_1" />“ und „<ph name="FEATURE_NAME_2" />“ aufnehmen</translation>
 <translation id="1838412507805038478">Chromium hat verifiziert, dass <ph name="ISSUER" /> das Zertifikat dieser Website ausgestellt hat.</translation>
 <translation id="1839447949248872139">Links standardmäßig in Chromium öffnen</translation>
@@ -68,6 +69,7 @@ Warte einige Minuten, bevor du dich abmeldest. Wenn du dich jetzt abmeldest, wer
 <translation id="2459183986985456602">Aktuellen Tab in Chromium öffnen.</translation>
 <translation id="2476409803017965813">Du kannst deine Auswahl jederzeit in den Chromium-Einstellungen ändern.</translation>
 <translation id="2478931088402984578">Wähle <ph name="BEGIN_BOLD" />Chromium<ph name="END_BOLD" /> aus</translation>
+<translation id="2485774047568879945">Lege Chromium als Standardbrowser fest, um Links ganz einfach zu teilen und zu öffnen</translation>
 <translation id="2512597191798760956">Halte das Chromium-Symbol gedrückt und klicke auf „Startbildschirm bearbeiten“</translation>
 <translation id="2517624234762908348">Chromium-Daten synchronisieren</translation>
 <translation id="2592940277904433508">Chromium weiterhin verwenden</translation>
@@ -165,6 +167,7 @@ Wenn du diese Einstellung ändern möchtest, <ph name="BEGIN_LINK" />lösche die
 <translation id="5088872414922783602">Über das Startbildschirm-Dock schneller auf Chromium zugreifen.</translation>
 <translation id="5124429847818367226">Du kannst jetzt Chromium jederzeit nutzen, wenn du surfst oder auf Links in Nachrichten, Dokumenten und anderen Apps tippst.</translation>
 <translation id="5131565040785979529">Deine Organisation, <ph name="DOMAIN" />, verwaltet das Konto, in dem du angemeldet bist, und die Nutzung von Chromium.</translation>
+<translation id="5134464247000681876">Links aus Gmail, Maps, YouTube und anderen Apps in Chromium öffnen</translation>
 <translation id="5224391634244552924">Keine gespeicherten Passwörter. Chromium kann deine Passwörter prüfen, wenn du sie speicherst.</translation>
 <translation id="5259423875997548710">Bilder in Chromium suchen.</translation>
 <translation id="5308226104666789935">Chromium kann nicht nach Aktualisierungen suchen</translation>
@@ -180,10 +183,10 @@ Wenn du diese Einstellung ändern möchtest, <ph name="BEGIN_LINK" />lösche die
 2. Tippe auf „Standard-Browser-App“
 3. Wähle Chromium aus</translation>
 <translation id="5521125884468363740">Melde dich an und aktiviere die Synchronisierung, um deine Tabs überall dort aufzurufen, wo du Chromium verwendest</translation>
-<translation id="5522297504975449419">Einige Chromium-Funktionen sind dann nicht mehr verfügbar.</translation>
 <translation id="5534584691915394889">Dadurch kannst du in deinem Apple-Kalender Termine anhand von Inhalten aus Chromium und Google Lens erstellen.</translation>
 <translation id="5571094606370987472">Öffnet die zuletzt geöffneten Chromium-Tabs.</translation>
 <translation id="5603085937604338780">chromium</translation>
+<translation id="5657280937522795751">Chromium ein-/ausblenden</translation>
 <translation id="5664395081284292058">Aktuellen Tab in Chromium öffnen</translation>
 <translation id="5671188105328420281">Chromium-Tipps</translation>
 <translation id="5688047395118852662">Auf dieser Karte findest du Vorschläge, wie du Chromium optimal nutzen kannst.</translation>
@@ -214,7 +217,6 @@ Wichtige Hinweise:
 <translation id="6268381023930128611">Von Chromium abmelden?</translation>
 <translation id="6324041800010509197">Tab-Raster in Chromium aufrufen</translation>
 <translation id="6325378625795868881">Du kannst Chromium jederzeit nutzen, wenn du in Nachrichten und anderen Apps auf Links tippst.</translation>
-<translation id="6337530241089703714">Möchtest du deine Chromium-Daten von diesem Gerät löschen oder sie behalten?</translation>
 <translation id="6424492062988593837">Chromium ist jetzt noch besser! Es ist eine neue Version verfügbar.</translation>
 <translation id="6433172051771630690">Tipps erhalten, wie du Chromium noch besser nutzen kannst.</translation>
 <translation id="65045991564554105">Chromium-Lesezeichen ansehen</translation>
@@ -227,6 +229,7 @@ Wichtige Hinweise:
 <translation id="6752854822223394465">Deine Organisation richtet Chromium ein…</translation>
 <translation id="6794054469102824109">Öffnet Chromium Dino.</translation>
 <translation id="6820823224820483452">Chromium konnte nicht alle Passwörter prüfen. Versuche es morgen noch einmal.</translation>
+<translation id="6830782797004194206">Mit Chromium Autofill schneller anmelden</translation>
 <translation id="6831043979455480757">Übersetzen</translation>
 <translation id="6852419005633611413">Über das Startbildschirm-Dock schneller auf Chromium zugreifen</translation>
 <translation id="6852799557929001644">Du kannst in anderen Apps auf diesem Gerät auf deine Chromium-Passwörter und mehr zugreifen.</translation>
@@ -258,6 +261,7 @@ Nur Personen, die deine Passphrase kennen, können deine verschlüsselten Daten 
 <translation id="7674213385180944843">Öffne „Einstellungen“ &gt; „Datenschutz“ &gt; „Kamera“ &gt; „Chromium“ und aktiviere die Kamera.</translation>
 <translation id="7733418656985455268">Chromium-Tipp: Mit Lens suchen</translation>
 <translation id="7747820849741499258">In Chromium suchen</translation>
+<translation id="7753923083404296545">Im Inkognitomodus von Chromium geöffnet</translation>
 <translation id="7762622637388462191">Du kannst Inkognitotabs sperren lassen, wenn du Chromium verlässt oder zu einer anderen App wechselst.</translation>
 <translation id="7763454117143368771">Wenn du Chromium als Standardbrowser verwendest, bist du bestmöglich vor gefährlichen Websites geschützt und kannst auch deine Passwörter besser schützen</translation>
 <translation id="7784950022329154821">Inkognitotabs sperren, wenn Chromium geschlossen wird</translation>
@@ -283,7 +287,6 @@ Nur Personen, die deine Passphrase kennen, können deine verschlüsselten Daten 
 <translation id="8197822717502700527">Jetzt kannst du Chromium auf deinem Gerät optimal nutzen.</translation>
 <translation id="8240981428553046115">Chromium konnte nicht nach Updates suchen. Versuche es später noch einmal.</translation>
 <translation id="8254729934443216898">Entdecke neue Funktionen, mit denen du Chromium noch besser nutzen kannst.</translation>
-<translation id="829047622686389424">Ein personalisierter Feed für dich.</translation>
 <translation id="8293572045658095405">Chromium befindet sich im Inkognitomodus</translation>
 <translation id="830951810931292870">Öffnet die eingegebenen URLs in Chromium im Inkognitomodus.</translation>
 <translation id="8409374867500149834">Du nutzt den umfangreichen Schutz von Chromium vor schädlichen Websites</translation>
@@ -305,7 +308,6 @@ Nur Personen, die deine Passphrase kennen, können deine verschlüsselten Daten 
 <translation id="8866191443434488382">Chromium erkennt Sendungsnummern auf Websites, die du besuchst, und zeigt dir aktuelle Informationen zu deinen Paketen auf der Seite „Neuer Tab“ an. Die Sendungsnummer und der Name der Website werden an Chromium gesendet, um diese Funktion bereitzustellen und die Shopping-Funktionen für alle zu verbessern. Du kannst dies jederzeit in den <ph name="BEGIN_LINK" />Einstellungen für die Paketverfolgung<ph name="END_LINK" /> aktualisieren.</translation>
 <translation id="8880024619507699923">Deine Organisation verlangt, dass du dich für die Verwendung von Chromium anmeldest. <ph name="BEGIN_LINK" />Weitere Informationen<ph name="END_LINK" /></translation>
 <translation id="8900052431807804054">Die stärksten Sicherheitsfunktionen von Chromium nutzen</translation>
-<translation id="894437814105052438">Wenn du dich abmeldest, synchronisiert Chromium keine neuen Daten mehr mit deinem Google-Konto. Daten, die bereits synchronisiert wurden, bleiben im Konto gespeichert.</translation>
 <translation id="8950326149985259075">{THRESHOLD,plural, =1{Das passiert, wenn Chromium {THRESHOLD} Minute lang nicht verwendet wird}other{Das passiert, wenn Chromium {THRESHOLD} Minuten lang nicht verwendet wird}}</translation>
 <translation id="8963279154877372067">Chromium-Benachrichtigungen erlauben, Benachrichtigungen zu Preisnachlässen abzurufen</translation>
 <translation id="8975812008711371178">Sprachsuche in Chromium</translation>

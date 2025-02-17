@@ -51,17 +51,14 @@ BASE_FEATURE(kAutofillAddressUserPerceptionSurvey,
              "AutofillAddressUserPerceptionSurvey",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// If enabled, populates the Autofill AI database with simple test entity
-// instances.
-BASE_FEATURE(kAutofillAiTestData,
-             "AutofillAiTestData",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Enables the second iteration Autofill with AI.
 // This feature is independent of `autofill_ai::kAutofillAi`.
 BASE_FEATURE(kAutofillAiWithDataSchema,
              "AutofillAiWithDataSchema",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+const base::FeatureParam<int> kAutofillAiWithDataSchemaServerExperimentId{
+    &kAutofillAiWithDataSchema, "autofill_ai_server_experiment_id", 0};
 
 // Same as `kAutofillAddressUserPerceptionSurvey` but for credit card forms.
 BASE_FEATURE(kAutofillCreditCardUserPerceptionSurvey,
@@ -169,6 +166,12 @@ BASE_FEATURE(kAutofillEnableLabelPrecedenceForTurkishAddresses,
              "AutofillEnableLabelPrecedenceForTurkishAddresses",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// When enabled, Autofill will help users fill in loyalty card details.
+// TODO(crbug.com/395831853): Remove once launched.
+BASE_FEATURE(kAutofillEnableLoyaltyCardsFilling,
+             "AutofillEnableLoyaltyCardsFilling",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // When enabled, focusing on a credit card number field that was traditionally
 // autofilled will yield all credit card suggestions.
 // TODO(crbug.com/354175563): Remove when launched.
@@ -208,12 +211,6 @@ BASE_FEATURE(kAutofillImproveAddressFieldSwapping,
 BASE_FEATURE(kAutofillOptimizeFormExtraction,
              "AutofillOptimizeFormExtraction",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Killswitch that guards replacing some form and field semantic comparison with
-// just [Form|Field]GlobalId comparisons.
-BASE_FEATURE(kAutofillUseFewerFormAndFieldComparison,
-             "AutofillUseFewerFormAndFieldComparison",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Resets the autofill state of a field when JavaScript modifies its value.
 // Also resets the AutofillState of the blink element to kAutofilled if the
@@ -335,6 +332,13 @@ BASE_FEATURE(kAutofillUseSubmittedFormInHtmlSubmission,
 // TODO(crbug.com/40281981): Remove when launched.
 BASE_FEATURE(kAutofillPreferSavedFormAsSubmittedForm,
              "AutofillPreferSavedFormAsSubmittedForm",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Allows the import of an Autofill profile if duplicate fields were present
+// with identical field values.
+// TODO(crbug.com/395855125): Remove when launched.
+BASE_FEATURE(kAutofillRelaxAddressImport,
+             "AutofillRelaxAddressImport",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Replaces blink::WebFormElementObserver usage in FormTracker by updated logic
@@ -629,21 +633,6 @@ const base::FeatureParam<int>
     kAutofillEnableCacheForRegexMatchingCacheSizeParam{
         &kAutofillEnableCacheForRegexMatching, "cache_size", 1000};
 
-// When enabled, various deduplication related metrics are logged on startup
-// and on import.
-// TODO(crbug.com/325452461): Remove once rolled out.
-BASE_FEATURE(kAutofillLogDeduplicationMetrics,
-             "AutofillLogDeduplicationMetrics",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-const base::FeatureParam<size_t>
-    kAutofillLogDeduplicationMetricsMaxProfilesSizeParam{
-        &kAutofillLogDeduplicationMetrics, "max_profiles_size",
-        100};
-const base::FeatureParam<size_t>
-    kAutofillLogDeduplicationMetricsMaxFieldLengthForMergingParam{
-        &kAutofillLogDeduplicationMetrics, "max_field_value_length_for_merging",
-        100};
-
 BASE_FEATURE(kAutofillUKMExperimentalFields,
              "AutofillUKMExperimentalFields",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -689,11 +678,6 @@ COMPONENT_EXPORT(AUTOFILL)
 BASE_FEATURE(kPlusAddressAcceptedFirstTimeCreateSurvey,
              "PlusAddressAcceptedFirstTimeCreateSurvey",
              base::FEATURE_DISABLED_BY_DEFAULT);
-const base::FeatureParam<int>
-    kPlusAddressAcceptedFirstTimeCreateSurveyCooldownOverrideDays{
-        &kPlusAddressAcceptedFirstTimeCreateSurvey,
-        "plus-address-accepted-first-time-create-survey-cooldown-override-days",
-        0};
 
 // When enabled, a HaTS survey is shown after the declined the first plus
 // address creation flow.
@@ -701,11 +685,6 @@ COMPONENT_EXPORT(AUTOFILL)
 BASE_FEATURE(kPlusAddressDeclinedFirstTimeCreateSurvey,
              "PlusAddressDeclinedFirstTimeCreateSurvey",
              base::FEATURE_DISABLED_BY_DEFAULT);
-const base::FeatureParam<int>
-    kPlusAddressDeclinedFirstTimeCreateSurveyCooldownOverrideDays{
-        &kPlusAddressDeclinedFirstTimeCreateSurvey,
-        "plus-address-declined-first-time-create-survey-cooldown-override-days",
-        0};
 
 // When enabled, a HaTS survey is shown after the user fills a plus address
 // after triggering autofill manually.
@@ -713,12 +692,6 @@ COMPONENT_EXPORT(AUTOFILL)
 BASE_FEATURE(kPlusAddressFilledPlusAddressViaManualFallbackSurvey,
              "PlusAddressFilledPlusAddressViaManualFallbackSurvey",
              base::FEATURE_DISABLED_BY_DEFAULT);
-const base::FeatureParam<int>
-    kPlusAddressFilledPlusAddressViaManualFallbackSurveyCooldownOverrideDays{
-        &kPlusAddressFilledPlusAddressViaManualFallbackSurvey,
-        "plus-address-filled-plus-address-via-manual-fallback-survey-cooldown-"
-        "override-days",
-        0};
 
 // When enabled, a HaTS survey is shown after the user creates a 3rd+ plus
 // address.
@@ -726,12 +699,6 @@ COMPONENT_EXPORT(AUTOFILL)
 BASE_FEATURE(kPlusAddressUserCreatedMultiplePlusAddressesSurvey,
              "PlusAddressUserCreatedMultiplePlusAddressesSurvey",
              base::FEATURE_DISABLED_BY_DEFAULT);
-const base::FeatureParam<int>
-    kPlusAddressUserCreatedMultiplePlusAddressesSurveyCooldownOverrideDays{
-        &kPlusAddressUserCreatedMultiplePlusAddressesSurvey,
-        "plus-address-user-created-multiple-plus-addresses-survey-cooldown-"
-        "override-days",
-        0};
 
 // When enabled, a HaTS survey is shown after the user creates a plus address
 // triggering the popup via the Chrome context menu on Desktop or via the
@@ -740,12 +707,6 @@ COMPONENT_EXPORT(AUTOFILL)
 BASE_FEATURE(kPlusAddressUserCreatedPlusAddressViaManualFallbackSurvey,
              "PlusAddressUserCreatedPlusAddressViaManualFallbackSurvey",
              base::FEATURE_DISABLED_BY_DEFAULT);
-const base::FeatureParam<int>
-    kPlusAddressUserCreatedPlusAddressViaManualFallbackSurveyCooldownOverrideDays{
-        &kPlusAddressUserCreatedPlusAddressViaManualFallbackSurvey,
-        "plus-address-user-created-plus-address-via-manual-fallback-survey-"
-        "cooldown-override-days",
-        0};
 
 // When enabled, a HaTS survey is shown after the user chooses to fill an email
 // when a plus address suggestion is also offered in the Autofill popup.
@@ -753,12 +714,6 @@ COMPONENT_EXPORT(AUTOFILL)
 BASE_FEATURE(kPlusAddressUserDidChooseEmailOverPlusAddressSurvey,
              "PlusAddressUserDidChooseEmailOverPlusAddressSurvey",
              base::FEATURE_DISABLED_BY_DEFAULT);
-const base::FeatureParam<int>
-    kPlusAddressUserDidChooseEmailOverPlusAddressSurveyCooldownOverrideDays{
-        &kPlusAddressUserDidChooseEmailOverPlusAddressSurvey,
-        "plus-address-user-did-choose-email-over-plus-address-survey-cooldown-"
-        "override-days",
-        0};
 
 // When enabled, a HaTS survey is shown after the user chooses to fill a plus
 // address when an email suggestion is also offered in the Autofill popup.
@@ -766,12 +721,6 @@ COMPONENT_EXPORT(AUTOFILL)
 BASE_FEATURE(kPlusAddressUserDidChoosePlusAddressOverEmailSurvey,
              "PlusAddressUserDidChoosePlusAddressOverEmailSurvey",
              base::FEATURE_DISABLED_BY_DEFAULT);
-const base::FeatureParam<int>
-    kPlusAddressUserDidChoosePlusAddressOverEmailSurveyCooldownOverrideDays{
-        &kPlusAddressUserDidChoosePlusAddressOverEmailSurvey,
-        "plus-address-user-did-choose-plus-address-over-email-survey-cooldown-"
-        "override-days",
-        0};
 
 // When enabled, the placeholder is not considered a label fallback on the
 // renderer side anymore. Instead, local heuristic will match regexes against
@@ -888,12 +837,12 @@ BASE_FEATURE(kAutofillOverridePredictions,
 
 // The override specification in string form.
 const base::FeatureParam<std::string> kAutofillOverridePredictionsSpecification{
-    &kAutofillOverridePredictions, "spec", "[]"};
+    &kAutofillOverridePredictions, "spec", ""};
 
 // The override specification using alternative_form_signature in string form.
 const base::FeatureParam<std::string>
     kAutofillOverridePredictionsForAlternativeFormSignaturesSpecification{
-        &kAutofillOverridePredictions, "alternative_signature_spec", "[]"};
+        &kAutofillOverridePredictions, "alternative_signature_spec", ""};
 
 // Enables or Disables (mostly for hermetic testing) autofill server
 // communication. The URL of the autofill server can further be controlled via

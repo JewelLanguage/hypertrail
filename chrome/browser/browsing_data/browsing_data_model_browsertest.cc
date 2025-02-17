@@ -113,14 +113,14 @@ class TestDeviceBoundSessionAccessObserver
   // WebContentsObserver
   void OnDeviceBoundSessionAccessed(
       content::RenderFrameHost* render_frame_host,
-      const net::device_bound_sessions::SessionKey& session) override {
+      const net::device_bound_sessions::SessionAccess& access) override {
     if (on_access_closure_) {
       std::move(on_access_closure_).Run();
     }
   }
   void OnDeviceBoundSessionAccessed(
       content::NavigationHandle* navigation_handle,
-      const net::device_bound_sessions::SessionKey& session) override {
+      const net::device_bound_sessions::SessionAccess& access) override {
     if (on_access_closure_) {
       std::move(on_access_closure_).Run();
     }
@@ -547,9 +547,10 @@ class BrowsingDataModelBrowserTest
     ASSERT_TRUE(https_server_->InitializeAndListen());
 
     // Must come after `InitializeAndListen` so we know the `base_url()`.
+    // We are testing DBSC against kTestHost, so register a handler for it.
     https_server_->RegisterRequestHandler(
         net::device_bound_sessions::GetTestRequestHandler(
-            https_server_->base_url()));
+            https_server_->GetURL(kTestHost, "/")));
 
     https_server_->StartAcceptingConnections();
   }
@@ -992,7 +993,7 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataModelBrowserTest,
   std::unique_ptr<web_app::ScopedBundledIsolatedWebApp> app1 =
       web_app::IsolatedWebAppBuilder(web_app::ManifestBuilder()).BuildBundle();
   ASSERT_OK_AND_ASSIGN(web_app::IsolatedWebAppUrlInfo iwa_url_info1,
-                       app1->TrustBundleAndInstall(profile));
+                       app1->Install(profile));
   auto* iwa_frame1 =
       web_app::OpenIsolatedWebApp(profile, iwa_url_info1.app_id());
   AddLocalStorageUsage(iwa_frame1, 100);
@@ -1000,7 +1001,7 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataModelBrowserTest,
   std::unique_ptr<web_app::ScopedBundledIsolatedWebApp> app2 =
       web_app::IsolatedWebAppBuilder(web_app::ManifestBuilder()).BuildBundle();
   ASSERT_OK_AND_ASSIGN(web_app::IsolatedWebAppUrlInfo iwa_url_info2,
-                       app2->TrustBundleAndInstall(profile));
+                       app2->Install(profile));
   auto* iwa_frame2 =
       web_app::OpenIsolatedWebApp(profile, iwa_url_info2.app_id());
   AddLocalStorageUsage(iwa_frame2, 500);

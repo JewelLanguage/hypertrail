@@ -61,6 +61,7 @@ function generateProfilesList(n: number): ProfileState[] {
              avatarIcon: `AvatarUrl-${i}`,
              avatarBadge: i % 4 === 0 ? 'cr:domain' : '',
              profileCardButtonLabel: '',
+             hasEnterpriseLabel: false,
            }));
 }
 
@@ -147,12 +148,12 @@ suite('ProfilePickerMainViewTest', function() {
     assertEquals(navigationElement.route, Routes.MAIN);
     await browserProxy.whenCalled('initializeMainView');
     // Hidden while profiles list is not yet defined.
-    assertTrue(mainViewElement.$.profilesContainer.hidden);
+    assertTrue(mainViewElement.$.profilesWrapper.hidden);
     assertTrue(mainViewElement.$.askOnStartup.hidden);
     const profiles = generateProfilesList(6);
     await simulateProfilesListChanged(profiles);
     // Profiles list defined.
-    assertTrue(!mainViewElement.$.profilesContainer.hidden);
+    assertTrue(!mainViewElement.$.profilesWrapper.hidden);
     assertTrue(!mainViewElement.$.askOnStartup.hidden);
     assertTrue(mainViewElement.$.askOnStartup.checked);
     // Verify profile card.
@@ -178,6 +179,34 @@ suite('ProfilePickerMainViewTest', function() {
     profiles.splice(3, 1);
     await verifyProfileCard(
         profiles, mainViewElement.shadowRoot!.querySelectorAll('profile-card'));
+  });
+
+  test('EditLocalProfileNameDisabledForWorkProfile', async function() {
+    await browserProxy.whenCalled('initializeMainView');
+    const profiles = Array({
+      profilePath: `profilePath`,
+      localProfileName: `Work Profile`,
+      isSyncing: true,
+      needsSignin: false,
+      gaiaName: `User`,
+      userName: `User@example.com`,
+      avatarIcon: `AvatarUrl`,
+      avatarBadge: 'cr:domain',
+      profileCardButtonLabel: '',
+      hasEnterpriseLabel: true,
+    });
+    await simulateProfilesListChanged(profiles);
+
+    // Verify that the input field is disabled.
+    const localProfileName =
+        mainViewElement.shadowRoot!.querySelector('profile-card')!.$.nameInput;
+    assertEquals(localProfileName.value, profiles[0]!.localProfileName);
+    assertTrue(localProfileName.disabled);
+    // Verify that the hover line is hidden.
+    const hoverUnderline =
+        mainViewElement.shadowRoot!.querySelector('profile-card')!.shadowRoot!
+            .querySelector<HTMLElement>('#hoverUnderline');
+    assertTrue(!!hoverUnderline && hoverUnderline?.hidden);
   });
 
   test('EditLocalProfileName', async function() {
@@ -233,7 +262,7 @@ suite('ProfilePickerMainViewTest', function() {
   test('AskOnStartupSingleToMultipleProfiles', async function() {
     await browserProxy.whenCalled('initializeMainView');
     // Hidden while profiles list is not yet defined.
-    assertTrue(mainViewElement.$.profilesContainer.hidden);
+    assertTrue(mainViewElement.$.profilesWrapper.hidden);
     assertTrue(mainViewElement.$.askOnStartup.hidden);
     let profiles = generateProfilesList(1);
     await simulateProfilesListChanged(profiles);
@@ -257,7 +286,7 @@ suite('ProfilePickerMainViewTest', function() {
   test('AskOnStartupMultipleToSingleProfile', async function() {
     await browserProxy.whenCalled('initializeMainView');
     // Hidden while profiles list is not yet defined.
-    assertTrue(mainViewElement.$.profilesContainer.hidden);
+    assertTrue(mainViewElement.$.profilesWrapper.hidden);
     assertTrue(mainViewElement.$.askOnStartup.hidden);
     const profiles = generateProfilesList(2);
     await simulateProfilesListChanged(profiles);
@@ -279,7 +308,7 @@ suite('ProfilePickerMainViewTest', function() {
 
     await browserProxy.whenCalled('initializeMainView');
     // Hidden while profiles list is not yet defined.
-    assertTrue(mainViewElement.$.profilesContainer.hidden);
+    assertTrue(mainViewElement.$.profilesWrapper.hidden);
     assertTrue(mainViewElement.$.askOnStartup.hidden);
     const profiles = generateProfilesList(2);
     await simulateProfilesListChanged(profiles);
@@ -302,11 +331,12 @@ suite('ProfilePickerMainViewTest', function() {
         profiles, mainViewElement.shadowRoot!.querySelectorAll('profile-card'));
   });
 
-  test('LearnMoreClicked', async function() {
+  test('LearnMoreClickedInFooterText', async function() {
     loadTimeData.overrideValues({isGlicVersion: true});
     resetTest();
 
     await browserProxy.whenCalled('initializeMainView');
+    await simulateProfilesListChanged(generateProfilesList(2));
 
     const footerText =
         mainViewElement.shadowRoot!.querySelector('#footer-text')!;
@@ -314,7 +344,27 @@ suite('ProfilePickerMainViewTest', function() {
 
     const learnMoreLink =
         mainViewElement.shadowRoot!.querySelector<HTMLElement>(
-            '#learn-more-link')!;
+            '.learn-more-link')!;
+    assertTrue(isVisible(learnMoreLink));
+
+    learnMoreLink.click();
+    await browserProxy.whenCalled('onLearnMoreClicked');
+  });
+
+  test('LearnMoreClickedWithNoProfiles', async function() {
+    loadTimeData.overrideValues({isGlicVersion: true});
+    resetTest();
+
+    await browserProxy.whenCalled('initializeMainView');
+    await simulateProfilesListChanged(generateProfilesList(0));
+
+    const footerText =
+        mainViewElement.shadowRoot!.querySelector('#footer-text')!;
+    assertFalse(isVisible(footerText));
+
+    const learnMoreLink =
+        mainViewElement.shadowRoot!.querySelector<HTMLElement>(
+            '.learn-more-link')!;
     assertTrue(isVisible(learnMoreLink));
 
     learnMoreLink.click();
@@ -566,7 +616,7 @@ suite('ProfilePickerProfilesReorderingTest', function() {
     expectedEndProfileOrder: string[],
   }) {
     // Adapts the function to 1 cycle.
-    testProfileReorderingDragCycles({
+    await testProfileReorderingDragCycles({
       expectedInitialProfileOrder: dragData.expectedInitialProfileOrder,
       dragEventCycles: [{
         dragIndex: dragData.dragIndex,

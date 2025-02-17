@@ -136,7 +136,7 @@ void AssistantZeroStateView::InitLayout() {
   greeting_label_->SetMultiLine(true);
   greeting_label_->SetText(
       l10n_util::GetStringUTF16(IDS_ASH_ASSISTANT_PROMPT_DEFAULT));
-  greeting_label_->SetBackgroundColorId(kColorAshAssistantBgPlate);
+  greeting_label_->SetBackgroundColor(kColorAshAssistantBgPlate);
   greeting_label_->SetEnabledColorId(kColorAshAssistantTextColorPrimary);
 
   // Spacer.
@@ -163,8 +163,7 @@ void AssistantZeroStateView::UpdateLayout() {
   iph_view_->SetVisible(show_iph);
 }
 
-void AssistantZeroStateView::RunLauncherSearchQuery(
-    const std::u16string& query) {
+void AssistantZeroStateView::RunLauncherSearchQuery(std::u16string_view query) {
   delegate_->OnLauncherSearchChipPressed(query);
 }
 

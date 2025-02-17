@@ -465,6 +465,13 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
     RunCommand("expect_legacy_policy_status_succeeds");
   }
 
+  void LegacyInstallApp(const std::string& app_id,
+                        const base::Version& version) const override {
+    RunCommand(
+        "legacy_install_app",
+        {Param("app_id", app_id), Param("app_version", version.GetString())});
+  }
+
   void RunUninstallCmdLine() const override {
     RunCommand("run_uninstall_cmd_line");
   }
@@ -578,10 +585,12 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
   }
 
   void RunOfflineInstallOsNotSupported(bool is_legacy_install,
-                                       bool is_silent_install) override {
+                                       bool is_silent_install,
+                                       const std::string& language) override {
     RunCommand("run_offline_install_os_not_supported",
                {Param("legacy_install", BoolToString(is_legacy_install)),
-                Param("silent", BoolToString(is_silent_install))});
+                Param("silent", BoolToString(is_silent_install)),
+                Param("language", language)});
   }
 
   void DMPushEnrollmentToken(const std::string& enrollment_token) override {
@@ -648,14 +657,14 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
     base::CommandLine helper_command(path);
     helper_command.AppendSwitch(command_switch);
     for (const Param& param : params) {
-      helper_command.AppendSwitchASCII(param.name, param.value);
+      helper_command.AppendSwitchUTF8(param.name, param.value);
     }
 
     // Avoids the test runner banner about test debugging.
     helper_command.AppendSwitch("single-process-tests");
-    helper_command.AppendSwitchASCII("gtest_filter",
-                                     "TestHelperCommandRunner.Run");
-    helper_command.AppendSwitchASCII("gtest_brief", "1");
+    helper_command.AppendSwitchUTF8("gtest_filter",
+                                    "TestHelperCommandRunner.Run");
+    helper_command.AppendSwitchUTF8("gtest_brief", "1");
     for (const std::string& s :
          {switches::kUiTestActionTimeout, switches::kUiTestActionMaxTimeout,
           switches::kTestTinyTimeout, switches::kTestLauncherTimeout}) {

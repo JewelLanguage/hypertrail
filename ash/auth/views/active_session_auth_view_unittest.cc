@@ -18,7 +18,6 @@
 #include "base/time/time.h"
 #include "chromeos/ash/components/cryptohome/auth_factor.h"
 #include "components/account_id/account_id.h"
-#include "components/prefs/testing_pref_service.h"
 #include "components/user_manager/fake_user_manager.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "google_apis/gaia/gaia_id.h"
@@ -33,7 +32,7 @@ namespace ash {
 namespace {
 
 const char kTestAccount[] = "user@test.com";
-const char kFakeGaia[] = "fake_gaia";
+const GaiaId::Literal kFakeGaia("fake_gaia");
 const std::u16string title = u"title";
 const std::u16string description = u"description";
 
@@ -53,12 +52,11 @@ class ActiveSessionAuthViewUnitTest : public AshTestBase {
     widget_->SetFullscreen(true);
     widget_->Show();
 
-    user_manager::UserManagerImpl::RegisterPrefs(local_state_.registry());
     auto fake_user_manager =
-        std::make_unique<user_manager::FakeUserManager>(&local_state_);
+        std::make_unique<user_manager::FakeUserManager>(local_state());
 
     AccountId account_id =
-        AccountId::FromUserEmailGaiaId(kTestAccount, GaiaId(kFakeGaia));
+        AccountId::FromUserEmailGaiaId(kTestAccount, kFakeGaia);
     fake_user_manager->AddGaiaUser(account_id,
                                    user_manager::UserType::kRegular);
     scoped_user_manager_ = std::make_unique<user_manager::ScopedUserManager>(
@@ -117,7 +115,6 @@ class ActiveSessionAuthViewUnitTest : public AshTestBase {
     AshTestBase::TearDown();
   }
 
-  TestingPrefServiceSimple local_state_;
   std::unique_ptr<views::Widget> widget_;
   std::unique_ptr<MockActiveSessionAuthViewObserver> mock_observer_;
   std::unique_ptr<AuthInputRowView::TestApi> test_api_pin_input_;
@@ -151,7 +148,7 @@ TEST_F(ActiveSessionAuthViewUnitTest, CloseButtonWithDisabledInputTest) {
 
 // Verify password submit observer.
 TEST_F(ActiveSessionAuthViewUnitTest, PasswordSubmitTest) {
-  const std::u16string kPassword(u"password");
+  static constexpr std::u16string_view kPassword(u"password");
   EXPECT_CALL(*mock_observer_, OnPasswordSubmit(kPassword)).Times(1);
 
   container_view_->GetFocusManager()->SetFocusedView(
@@ -170,7 +167,7 @@ TEST_F(ActiveSessionAuthViewUnitTest, PasswordSubmitTest) {
 
 // Verify the password input is no op with disabled input area.
 TEST_F(ActiveSessionAuthViewUnitTest, PasswordSubmitWithDisabledInputTest) {
-  const std::u16string kPassword(u"password");
+  static constexpr std::u16string_view kPassword(u"password");
   EXPECT_CALL(*mock_observer_, OnPasswordSubmit(kPassword)).Times(0);
 
   container_view_->GetFocusManager()->SetFocusedView(
@@ -197,7 +194,7 @@ TEST_F(ActiveSessionAuthViewUnitTest, PinSubmitTest) {
   container_view_->GetFocusManager()->SetFocusedView(
       test_api_pin_input_->GetTextfield());
 
-  const std::u16string kPin(u"6893112");
+  static constexpr std::u16string_view kPin(u"6893112");
   EXPECT_CALL(*mock_observer_, OnPinSubmit(kPin)).Times(1);
 
   for (const char16_t c : kPin) {

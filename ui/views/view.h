@@ -16,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/auto_reset.h"
 #include "base/callback_list.h"
 #include "base/check.h"
 #include "base/containers/contains.h"
@@ -465,12 +466,6 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   T* AddChildView(raw_ptr<T, Traits> view) {
     CHECK_CLASS_HAS_METADATA(T)
     AddChildViewAtImpl(view.get(), children_.size());
-    return view;
-  }
-  template <typename T, base::RawPtrTraits Traits = base::RawPtrTraits::kEmpty>
-  T* AddChildViewAt(raw_ptr<T, Traits> view, size_t index) {
-    CHECK_CLASS_HAS_METADATA(T)
-    AddChildViewAtImpl(view.get(), index);
     return view;
   }
 
@@ -1377,23 +1372,23 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 
   // Tooltips ------------------------------------------------------------------
 
-  // Gets the tooltip for this View. If the View does not have a tooltip,
-  // the returned value should be empty.
-  // Any time the tooltip text that a View is displaying changes, it must
-  // invoke TooltipTextChanged.
-  // |p| provides the coordinates of the mouse (relative to this view).
-  // TODO(crbug.com/378724151): Remove this implementation and all its overrides
-  // once the refactor is done.
-  virtual std::u16string GetTooltipText(const gfx::Point& p) const;
+  // Gets the rendered tooltip for this View. If the View does not have a
+  // tooltip, the returned value should be empty. `p` provides the coordinates
+  // of the mouse (relative to this view). If a View needs to provide a tooltip
+  // that depends on the mouse location, or a point, it should override this
+  // method to provide it.
+  virtual std::u16string GetRenderedTooltipText(const gfx::Point& p) const;
 
   // Gets the cached tooltip for this View. If the View does not have a tooltip,
   // the returned value should be empty.
-  // Any time the tooltip text that a View is displaying changes, it must
-  // invoke TooltipTextChanged.
-  // TODO(crbug.com/378724151): When the refator is done, rename this method to
-  // GetTooltipText and remove the other GetTooltipText method.
-  const std::u16string& GetCachedTooltipText() const;
-  void SetCachedTooltipText(const std::u16string& text);
+  // In most cases, this and GetRenderedTooltipText should return the same, but
+  // there are some Views that require a Point to compute the tooltip text.
+  const std::u16string& GetTooltipText() const;
+  void SetTooltipText(const std::u16string& text);
+
+  // Views can override this to add custom logic after the tooltip has changed
+  // and they need the old tooltip text.
+  virtual void OnTooltipTextChanged(const std::u16string& old_tooltip_text);
 
   base::CallbackListSubscription AddTooltipTextChangedCallback(
       PropertyChangedCallback callback);
@@ -1510,18 +1505,6 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Get the object managing the accessibility interface for this View.
   ViewAccessibility& GetViewAccessibility() const;
 
-  // Modifies `node_data` to reflect the current accessible state of this view.
-  // It accomplishes this by keeping the data up-to-date in response to the use
-  // of the accessible-property setters.
-  // NOTE: View authors should use the available property setters rather than
-  // overriding this function. Views which need to expose accessibility
-  // properties which are currently not supported View properties should ensure
-  // their view's `GetAccessibleNodeData` calls `GetAccessibleNodeData` on the
-  // parent class. This ensures that if an owning view customizes an accessible
-  // property, such as the name, role, or description, that customization is
-  // included in your view's `AXNodeData`.
-  virtual void GetAccessibleNodeData(ui::AXNodeData* node_data) {}
-
   // This method allows lazy loading of some accessibility attributes. It is
   // used only for accessibility attributes that can be expensive to compute
   // and/or heavy to store, such as long string attributes. Views that override
@@ -1633,13 +1616,21 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // view. Returns true on success, but note that the success/failure is
   // not propagated to the client that requested the action, since the
   // request is sometimes asynchronous. The right way to send a response is
-  // via NotifyAccessibilityEvent(), below.
+  // via NotifyAccessibilityEventDeprecated(), below.
   virtual bool HandleAccessibleAction(const ui::AXActionData& action_data);
 
   // Returns an instance of the native accessibility interface for this view.
   virtual gfx::NativeViewAccessible GetNativeViewAccessible();
 
-  // DEPRECATED: Use `ViewAccessibility::NotifyEvent` instead.
+  // DEPRECATED:
+  // In most situations, this function should not be called directly.
+  // There are a lot of events that are already sent automatically by
+  // the setters from ViewAccessibility. Soon, events will be generated
+  // automatically by the AXEventGenerator, using
+  // the AXNodeData cached in the View's ViewAccessibility.
+  // Some specific scenarios currently do require manual event generation,
+  // for example if its an event not being fired by the ViewAccessibility
+  // setters.
   //
   // Notifies assistive technology that an accessibility event has
   // occurred on this view, such as when the view is focused or when its
@@ -1647,8 +1638,8 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // cases where the view is a native control that's already sending a
   // native accessibility event and the duplicate event would cause
   // problems.
-  void NotifyAccessibilityEvent(ax::mojom::Event event_type,
-                                bool send_native_event);
+  void NotifyAccessibilityEventDeprecated(ax::mojom::Event event_type,
+                                          bool send_native_event);
 
   // Views may override this function to know when an accessibility
   // event is fired. This will be called by NotifyAccessibilityEvent.
@@ -1821,6 +1812,8 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Override to provide rendering in any part of the View's bounds. Typically
   // this is the "contents" of the view. If you override this method you will
   // have to call the subsequent OnPaint*() methods manually.
+  // Note that the paint operation is done with regards to the origin of the
+  // current view.
   virtual void OnPaint(gfx::Canvas* canvas);
 
   // Override to paint a background before any content is drawn. Typically this
@@ -2548,6 +2541,7 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
 
 namespace internal {
 
+// Helper to catch reentrant mutations while iterating over a view's children.
 #if DCHECK_IS_ON()
 class ScopedChildrenLock {
  public:
@@ -2564,8 +2558,8 @@ class ScopedChildrenLock {
 #else
 class ScopedChildrenLock {
  public:
-  explicit ScopedChildrenLock(const View* view);
-  ~ScopedChildrenLock();
+  explicit ScopedChildrenLock(const View* view) {}
+  ~ScopedChildrenLock() = default;
 };
 #endif
 

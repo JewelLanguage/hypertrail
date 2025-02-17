@@ -30,6 +30,7 @@
 
 namespace cc {
 
+struct AppendQuadsContext;
 class AppendQuadsData;
 class DamageTracker;
 class FilterOperations;
@@ -97,11 +98,16 @@ class CC_EXPORT RenderSurfaceImpl {
   SkColor4f GetDebugBorderColor() const;
   float GetDebugBorderWidth() const;
 
-  void SetDrawTransform(const gfx::Transform& draw_transform) {
+  void SetDrawTransform(const gfx::Transform& draw_transform,
+                        const gfx::Vector2dF& pixel_alignment_offset) {
     draw_properties_.draw_transform = draw_transform;
+    draw_properties_.pixel_alignment_offset = pixel_alignment_offset;
   }
   const gfx::Transform& draw_transform() const {
     return draw_properties_.draw_transform;
+  }
+  const gfx::Vector2dF& pixel_alignment_offset() const {
+    return draw_properties_.pixel_alignment_offset;
   }
 
   void SetScreenSpaceTransform(const gfx::Transform& screen_space_transform) {
@@ -243,7 +249,7 @@ class CC_EXPORT RenderSurfaceImpl {
   viz::ResourceId GetMaskResourceFromLayer(PictureLayerImpl* mask_layer,
                                            gfx::Size* mask_texture_size,
                                            gfx::RectF* mask_uv_rect) const;
-  void AppendQuads(DrawMode draw_mode,
+  void AppendQuads(const AppendQuadsContext& context,
                    viz::CompositorRenderPass* render_pass,
                    AppendQuadsData* append_quads_data);
 
@@ -286,8 +292,11 @@ class CC_EXPORT RenderSurfaceImpl {
     float draw_opacity = 1.0f;
 
     // Transforms from the surface's own space to the space of its target
-    // surface.
+    // surface. This has been adjusted from the original draw transform
+    // calculated from the property tree, by -pixel_alignment_offset.
     gfx::Transform draw_transform;
+    // See draw_property_utils::PixelAlignmentOffset().
+    gfx::Vector2dF pixel_alignment_offset;
     // Transforms from the surface's own space to the viewport.
     gfx::Transform screen_space_transform;
 

@@ -96,7 +96,6 @@ class SaveToDriveCoordinatorTest : public PlatformTest {
                      initWithDownloadTask:download_task_.get()
                        saveToDriveHandler:[OCMArg any]
                 manageStorageAlertHandler:[OCMArg any]
-                       applicationHandler:[OCMArg any]
                      accountPickerHandler:[OCMArg any]
                               prefService:pref_service_
                     accountManagerService:account_manager_service_
@@ -158,8 +157,6 @@ TEST_F(SaveToDriveCoordinatorTest, StartsAndDisconnectsMediator) {
                        saveToDriveHandler:static_cast<id<SaveToDriveCommands>>(
                                               browser_->GetCommandDispatcher())
                 manageStorageAlertHandler:manage_storage_commands
-                       applicationHandler:static_cast<id<ApplicationCommands>>(
-                                              browser_->GetCommandDispatcher())
                      accountPickerHandler:account_picker_commands
                               prefService:pref_service_
                     accountManagerService:account_manager_service_
@@ -251,9 +248,8 @@ TEST_F(SaveToDriveCoordinatorTest, ShowsAddAccount) {
                 EXPECT_EQ(AuthenticationOperation::kAddAccount,
                           command.operation);
                 EXPECT_FALSE(command.identity);
-                EXPECT_EQ(
-                    signin_metrics::AccessPoint::ACCESS_POINT_SAVE_TO_DRIVE_IOS,
-                    command.accessPoint);
+                EXPECT_EQ(signin_metrics::AccessPoint::kSaveToDriveIos,
+                          command.accessPoint);
                 EXPECT_EQ(
                     signin_metrics::PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO,
                     command.promoAction);

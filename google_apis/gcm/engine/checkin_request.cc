@@ -8,7 +8,7 @@
 #include "base/location.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/task/sequenced_task_runner.h"
-#include "build/chromeos_buildflags.h"
+#include "build/build_config.h"
 #include "google_apis/credentials_mode.h"
 #include "google_apis/gcm/monitoring/gcm_stats_recorder.h"
 #include "google_apis/gcm/protocol/checkin.pb.h"
@@ -94,12 +94,10 @@ void RecordCheckinStatusAndReportUMA(CheckinRequestStatus status,
 CheckinRequest::RequestInfo::RequestInfo(
     uint64_t android_id,
     uint64_t security_token,
-    const std::map<std::string, std::string>& account_tokens,
     const std::string& settings_digest,
     const checkin_proto::ChromeBuildProto& chrome_build_proto)
     : android_id(android_id),
       security_token(security_token),
-      account_tokens(account_tokens),
       settings_digest(settings_digest),
       chrome_build_proto(chrome_build_proto) {}
 
@@ -141,20 +139,11 @@ void CheckinRequest::Start() {
 
   checkin_proto::AndroidCheckinProto* checkin = request.mutable_checkin();
   checkin->mutable_chrome_build()->CopyFrom(request_info_.chrome_build_proto);
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
   checkin->set_type(checkin_proto::DEVICE_CHROME_OS);
 #else
   checkin->set_type(checkin_proto::DEVICE_CHROME_BROWSER);
 #endif
-
-  // Pack a map of email -> token mappings into a repeated field, where odd
-  // entries are email addresses, while even ones are respective OAuth2 tokens.
-  for (std::map<std::string, std::string>::const_iterator iter =
-           request_info_.account_tokens.begin();
-       iter != request_info_.account_tokens.end(); ++iter) {
-    request.add_account_cookie(iter->first);
-    request.add_account_cookie(iter->second);
-  }
 
   std::string upload_data;
   CHECK(request.SerializeToString(&upload_data));

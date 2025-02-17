@@ -47,8 +47,7 @@ class TestAccountSelectionView : public AccountSelectionViewBase,
                                  public views::WidgetDelegate {
  public:
   explicit TestAccountSelectionView(FedCmAccountSelectionView* owner)
-      : AccountSelectionViewBase(/*web_contents=*/nullptr,
-                                 owner,
+      : AccountSelectionViewBase(owner,
                                  /*url_loader_factory=*/nullptr,
                                  /*rp_for_display=*/std::u16string()) {
     // This matches behavior of the production code, which implicitly passes
@@ -268,8 +267,10 @@ class StubAccountSelectionViewDelegate : public AccountSelectionView::Delegate {
   StubAccountSelectionViewDelegate& operator=(
       const StubAccountSelectionViewDelegate&) = delete;
 
-  void OnAccountSelected(const GURL&,
-                         const content::IdentityRequestAccount&) override {}
+  void OnAccountSelected(
+      const GURL&,
+      const std::string&,
+      const content::IdentityRequestAccount::LoginState&) override {}
   void OnDismiss(DismissReason dismiss_reason) override {
     dismiss_reason_ = dismiss_reason;
     if (on_dismiss_) {
@@ -322,7 +323,7 @@ class FedCmAccountSelectionViewDesktopTest : public ChromeViewsTestBase {
           disclosure_fields = kDefaultDisclosureFields) {
     return base::MakeRefCounted<content::IdentityProviderData>(
         /*idp_for_display=*/"", content::IdentityProviderMetadata(),
-        content::ClientMetadata(GURL(), GURL(), GURL()),
+        content::ClientMetadata(GURL(), GURL(), GURL(), gfx::Image()),
         blink::mojom::RpContext::kSignIn, disclosure_fields,
         has_login_status_mismatch);
   }
@@ -724,8 +725,10 @@ class ViewDeletingAccountSelectionViewDelegate
     view_ = std::move(view);
   }
 
-  void OnAccountSelected(const GURL&,
-                         const content::IdentityRequestAccount&) override {
+  void OnAccountSelected(
+      const GURL&,
+      const std::string&,
+      const content::IdentityRequestAccount::LoginState&) override {
     view_.reset();
   }
 

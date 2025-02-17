@@ -9,6 +9,7 @@
 
 #include "ash/webui/recorder_app_ui/recorder_app_ui.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <utility>
 #include <vector>
@@ -23,7 +24,6 @@
 #include "ash/webui/recorder_app_ui/resources/grit/recorder_app_resources_map.h"
 #include "ash/webui/recorder_app_ui/url_constants.h"
 #include "base/feature_list.h"
-#include "base/ranges/algorithm.h"
 #include "chromeos/ash/components/audio/cras_audio_handler.h"
 #include "chromeos/ash/components/mojo_service_manager/connection.h"
 #include "chromeos/services/machine_learning/public/cpp/service_connection.h"
@@ -107,9 +107,9 @@ void TranslateAudioDeviceId(
 }
 
 int GetResourceIdFromStringName(const std::string& name) {
-  auto iter = base::ranges::find(
-      kLocalizedStrings, name,
-      [](const webui::LocalizedString& s) { return s.name; });
+  auto iter =
+      std::ranges::find(kLocalizedStrings, name,
+                        [](const webui::LocalizedString& s) { return s.name; });
   CHECK(iter != std::end(kLocalizedStrings));
   return iter->id;
 }
@@ -313,6 +313,7 @@ void RecorderAppUI::GetModelInfo(on_device_model::mojom::FormatFeature feature,
 
   if (base::FeatureList::IsEnabled(ash::features::kConchLargeModel)) {
     model_info->input_token_limit = kInputTokenXsModelLimit;
+    model_info->is_large_model = true;
 
     if (feature == on_device_model::mojom::FormatFeature::kAudioSummary) {
       model_info->model_id =
@@ -323,6 +324,7 @@ void RecorderAppUI::GetModelInfo(on_device_model::mojom::FormatFeature feature,
     }
   } else {
     model_info->input_token_limit = kInputTokenXxsModelLimit;
+    model_info->is_large_model = false;
 
     if (feature == on_device_model::mojom::FormatFeature::kAudioSummary) {
       model_info->model_id =
@@ -677,9 +679,10 @@ void RecorderAppUI::LoadSpeechRecognizer(
   config->library_dlc_path = soda_library_path.value();
   config->enable_formatting =
       chromeos::machine_learning::mojom::OptionalBool::kTrue;
-  // This forces to use the large model.
+  // Large recognizer will be used because all CPU models starting from v5058
+  // are large size only. (See go/soda-application-domain)
   config->recognition_mode =
-      chromeos::machine_learning::mojom::SodaRecognitionMode::kIme;
+      chromeos::machine_learning::mojom::SodaRecognitionMode::kCaption;
   config->speaker_diarization_mode = chromeos::machine_learning::mojom::
       SpeakerDiarizationMode::kSpeakerLabelDetection;
   config->max_speaker_count = 7;

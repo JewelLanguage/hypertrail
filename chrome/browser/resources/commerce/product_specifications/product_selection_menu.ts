@@ -18,6 +18,7 @@ import {ShoppingServiceBrowserProxyImpl} from 'chrome://resources/cr_components/
 import {AnchorAlignment} from 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
 import type {CrActionMenuElement} from 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
 import type {CrLazyRenderLitElement} from 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render_lit.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
 
@@ -56,25 +57,11 @@ export class ProductSelectionMenuElement extends CrLitElement {
 
   static override get properties() {
     return {
-      selectedUrl: {
-        type: String,
-      },
-
-      excludedUrls: {
-        type: Array,
-      },
-
-      forNewColumn: {
-        type: Boolean,
-      },
-
-      isTableFull: {
-        type: Boolean,
-      },
-
-      sections: {
-        type: Array,
-      },
+      selectedUrl: {type: String},
+      excludedUrls: {type: Array},
+      forNewColumn: {type: Boolean},
+      isTableFull: {type: Boolean},
+      sections: {type: Array},
     };
   }
 
@@ -165,7 +152,14 @@ export class ProductSelectionMenuElement extends CrLitElement {
                         }));
   }
 
-  protected onSelect_(item: UrlListEntry, sectionType: SectionType) {
+  protected onSelect_(e: Event) {
+    const currentTarget = e.currentTarget as HTMLElement;
+    const itemIndex = Number(currentTarget.dataset['itemIndex']);
+    const sectionIndex = Number(currentTarget.dataset['sectionIndex']);
+    const sectionType =
+        Number(currentTarget.dataset['sectionType']) as SectionType;
+    const item = this.sections[sectionIndex]?.entries[itemIndex] || null;
+    assert(!!item);
     this.close();
     this.dispatchEvent(new CustomEvent('selected-url-change', {
       bubbles: true,

@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
+#pragma allow_unsafe_libc_calls
+#endif
+
 #include "components/omnibox/browser/autocomplete_match.h"
 
 #include <algorithm>
@@ -17,7 +22,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
-#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -63,17 +67,6 @@ constexpr bool kIsDesktop = !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS);
 constexpr bool kIsAndroid = BUILDFLAG(IS_ANDROID);
 
 namespace {
-
-#if (!BUILDFLAG(IS_ANDROID) || BUILDFLAG(ENABLE_VR)) && !BUILDFLAG(IS_IOS)
-// Used for `SEARCH_SUGGEST_TAIL` and `NULL_RESULT_MESSAGE` (e.g. starter pack)
-// type suggestion icons.
-
-const gfx::VectorIcon& GetEmptyIcon() {
-  static const gfx::VectorIcon instance;
-  return instance;
-}
-
-#endif
 
 bool IsTrivialClassification(const ACMatchClassifications& classifications) {
   return classifications.empty() ||
@@ -542,7 +535,6 @@ const gfx::VectorIcon& AutocompleteMatch::GetVectorIcon(
     case Type::HISTORY_URL:
     case Type::HISTORY_TITLE:
     case Type::HISTORY_BODY:
-    case Type::HISTORY_KEYWORD:
     case Type::NAVSUGGEST:
     case Type::BOOKMARK_TITLE:
     case Type::NAVSUGGEST_PERSONALIZED:
@@ -599,7 +591,7 @@ const gfx::VectorIcon& AutocompleteMatch::GetVectorIcon(
       // Found), fallthrough to use the empty icon.
       switch (iph_type) {
         case IphType::kNone:
-          return GetEmptyIcon();
+          return gfx::VectorIcon::EmptyIcon();
         case IphType::kGemini:
           return omnibox::kSparkIcon;
         case IphType::kFeaturedEnterpriseSearch:
@@ -607,7 +599,7 @@ const gfx::VectorIcon& AutocompleteMatch::GetVectorIcon(
         case IphType::kHistoryEmbeddingsSettingsPromo:
           return omnibox::kSparkIcon;
         case IphType::kHistoryEmbeddingsDisclaimer:
-          return GetEmptyIcon();
+          return gfx::VectorIcon::EmptyIcon();
         case IphType::kHistoryScopePromo:
           return vector_icons::kHistoryChromeRefreshIcon;
         case IphType::kHistoryEmbeddingsScopePromo:
@@ -616,7 +608,7 @@ const gfx::VectorIcon& AutocompleteMatch::GetVectorIcon(
 
     case Type::SEARCH_SUGGEST_TAIL:
     case Type::HISTORY_EMBEDDINGS_ANSWER:
-      return GetEmptyIcon();
+      return gfx::VectorIcon::EmptyIcon();
 
     case Type::DOCUMENT_SUGGESTION:
       switch (document_type) {
@@ -663,7 +655,10 @@ const gfx::VectorIcon& AutocompleteMatch::GetVectorIcon(
       return omnibox::kProductChromeRefreshIcon;
 
     case Type::NUM_TYPES:
-      NOTREACHED();
+      NOTREACHED() << "Unexpected AutocompleteMatchType value: "
+                   << static_cast<int>(type);
+    default:
+      return omnibox::kPageChromeRefreshIcon;
   }
 }
 #endif
@@ -1189,10 +1184,6 @@ void AutocompleteMatch::LogSearchEngineUsed(
   } else if (template_url->type() == TemplateURL::OMNIBOX_API_EXTENSION) {
     // The omnibox API only allows for keyword/site search entries, not default
     // search engines so only one type of histogram needs to be recorded here.
-    //
-    // TODO(crbug.com/367330704): Figure out why this code path isn't being
-    //   reached when issuing an omnibox API extension search. Tested with
-    //   https://chromewebstore.google.com/detail/github-omnibox/pdifemobhgmmnjlfjigebjkkbhllgcgp
     UMA_HISTOGRAM_ENUMERATION(
         "Omnibox.SearchEngineType.SetByExtension.OmniboxAPI",
         search_engine_type, SEARCH_ENGINE_MAX);
@@ -1400,6 +1391,7 @@ AutocompleteMatch::GetOmniboxEventResultType(int action_index) const {
       case OmniboxActionId::HISTORY_CLUSTERS:
       case OmniboxActionId::ACTION_IN_SUGGEST:
       case OmniboxActionId::ANSWER_ACTION:
+      case OmniboxActionId::EXTENSION_ACTION:
         // Preserve existing behavior by continuing on to use the match `type`.
         break;
       case OmniboxActionId::UNKNOWN:
@@ -1417,8 +1409,6 @@ AutocompleteMatch::GetOmniboxEventResultType(int action_index) const {
       return OmniboxEventProto::Suggestion::HISTORY_TITLE;
     case AutocompleteMatchType::HISTORY_BODY:
       return OmniboxEventProto::Suggestion::HISTORY_BODY;
-    case AutocompleteMatchType::HISTORY_KEYWORD:
-      return OmniboxEventProto::Suggestion::HISTORY_KEYWORD;
     case AutocompleteMatchType::NAVSUGGEST:
       return OmniboxEventProto::Suggestion::NAVSUGGEST;
     case AutocompleteMatchType::SEARCH_WHAT_YOU_TYPED:
@@ -1482,6 +1472,7 @@ AutocompleteMatch::GetOmniboxEventResultType(int action_index) const {
     case AutocompleteMatchType::PHYSICAL_WEB_OVERFLOW_DEPRECATED:
     case AutocompleteMatchType::TAB_SEARCH_DEPRECATED:
     case AutocompleteMatchType::NUM_TYPES:
+    default:
       break;
   }
   DUMP_WILL_BE_NOTREACHED() << "Unknown AutocompleteMatchType: " << type;
@@ -1500,7 +1491,7 @@ bool AutocompleteMatch::IsVerbatimType() const {
 
 bool AutocompleteMatch::IsVerbatimUrlSuggestion() const {
   return type == AutocompleteMatchType::URL_WHAT_YOU_TYPED ||
-         base::ranges::any_of(duplicate_matches, [](const auto& match) {
+         std::ranges::any_of(duplicate_matches, [](const auto& match) {
            return match.type == AutocompleteMatchType::URL_WHAT_YOU_TYPED;
          });
 }
@@ -1622,7 +1613,7 @@ bool AutocompleteMatch::IsMlScoringEligible() const {
   // If any of the duplicates under this match are ineligible for ML scoring,
   // then the top-level match (this) is also considered ineligible for ML
   // scoring.
-  if (base::ranges::any_of(duplicate_matches, [](const auto& match) {
+  if (std::ranges::any_of(duplicate_matches, [](const auto& match) {
         return !match.IsMlScoringEligible();
       })) {
     return false;
@@ -1648,7 +1639,7 @@ void AutocompleteMatch::FilterOmniboxActions(
 
   // Find the type of object we can keep.
   auto allowed_action_id_iter =
-      base::ranges::find_if(allowed_action_ids, [this](auto allowed_action_id) {
+      std::ranges::find_if(allowed_action_ids, [this](auto allowed_action_id) {
         return GetActionWhere([allowed_action_id](const auto& action) {
                  return action->ActionId() == allowed_action_id;
                }) != nullptr;
@@ -1712,9 +1703,9 @@ bool AutocompleteMatch::IsTrivialAutocompletion() const {
 }
 
 bool AutocompleteMatch::SupportsDeletion() const {
-  return deletable ||
-         base::ranges::any_of(duplicate_matches,
-                              [](const auto& m) { return m.deletable; });
+  return deletable || std::ranges::any_of(duplicate_matches, [](const auto& m) {
+           return m.deletable;
+         });
 }
 
 AutocompleteMatch

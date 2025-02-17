@@ -18,6 +18,7 @@ import("//chrome/android/chrome_public_apk_tmpl.gni")
 import("//chrome/android/expectations/expectations.gni")
 import("//chrome/android/trichrome.gni")
 import("//components/safe_browsing/buildflags.gni")
+import("//components/site_isolation/site_isolation.gni")
 import("//components/spellcheck/spellcheck_build_features.gni")
 import("//components/supervised_user/buildflags.gni")
 import("//device/vr/buildflags/buildflags.gni")
@@ -503,7 +504,6 @@ generate_jni("browser_jni_headers") {
   sources = [
     "java/src/org/chromium/android_webview/AndroidProtocolHandler.java",
     "java/src/org/chromium/android_webview/AppDefinedDomains.java",
-    "java/src/org/chromium/android_webview/AwAssetReader.java",
     "java/src/org/chromium/android_webview/AwBrowserContext.java",
     "java/src/org/chromium/android_webview/AwBrowserContextStore.java",
     "java/src/org/chromium/android_webview/AwBrowserMainParts.java",
@@ -526,6 +526,7 @@ generate_jni("browser_jni_headers") {
     "java/src/org/chromium/android_webview/AwNoVarySearchData.java",
     "java/src/org/chromium/android_webview/AwPacProcessor.java",
     "java/src/org/chromium/android_webview/AwPdfExporter.java",
+    "java/src/org/chromium/android_webview/AwPrefetchManager.java",
     "java/src/org/chromium/android_webview/AwPrefetchParameters.java",
     "java/src/org/chromium/android_webview/AwProxyController.java",
     "java/src/org/chromium/android_webview/AwQuotaManagerBridge.java",
@@ -564,8 +565,8 @@ android_library("browser_java") {
   sources = [
     "java/src/org/chromium/android_webview/AndroidProtocolHandler.java",
     "java/src/org/chromium/android_webview/AppDefinedDomains.java",
+    "java/src/org/chromium/android_webview/AsyncShouldInterceptRequestCallback.java",
     "java/src/org/chromium/android_webview/AwActionModeCallback.java",
-    "java/src/org/chromium/android_webview/AwAssetReader.java",
     "java/src/org/chromium/android_webview/AwBrowserContext.java",
     "java/src/org/chromium/android_webview/AwBrowserContextStore.java",
     "java/src/org/chromium/android_webview/AwBrowserMainParts.java",
@@ -606,6 +607,7 @@ android_library("browser_java") {
     "java/src/org/chromium/android_webview/AwPacProcessor.java",
     "java/src/org/chromium/android_webview/AwPdfExporter.java",
     "java/src/org/chromium/android_webview/AwPrefetchCallback.java",
+    "java/src/org/chromium/android_webview/AwPrefetchManager.java",
     "java/src/org/chromium/android_webview/AwPrefetchParameters.java",
     "java/src/org/chromium/android_webview/AwPrintDocumentAdapter.java",
     "java/src/org/chromium/android_webview/AwProxyController.java",
@@ -659,6 +661,7 @@ android_library("browser_java") {
     "java/src/org/chromium/android_webview/WebMessageListener.java",
     "java/src/org/chromium/android_webview/WebMessageListenerHolder.java",
     "java/src/org/chromium/android_webview/WebMessageListenerInfo.java",
+    "java/src/org/chromium/android_webview/WebResponseCallback.java",
     "java/src/org/chromium/android_webview/WebViewChromiumRunQueue.java",
     "java/src/org/chromium/android_webview/WebviewErrorCode.java",
     "java/src/org/chromium/android_webview/autofill/AndroidAutofillSafeModeAction.java",
@@ -1203,6 +1206,7 @@ grit("generate_components_resources") {
     "safe_browsing_mode=$safe_browsing_mode",
     "enable_supervised_users=$enable_supervised_users",
     "use_blink=$use_blink",
+    "use_internal_isolated_origins=$use_internal_isolated_origins",
   ]
 
   # See :generate_webui_resources for an explanation of the allowlist

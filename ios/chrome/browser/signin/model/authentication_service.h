@@ -135,13 +135,11 @@ class AuthenticationService : public KeyedService,
                                 signin_metrics::AccessPoint access_point);
 
   // Signs the authenticated user out of Chrome and clears the browsing
-  // data if the account is managed. If `force_clear_browsing_data` is true,
-  // clears the browsing data unconditionally.
+  // data if the account is managed.
   // Sync consent is automatically removed from all signed-out accounts.
   // `completion` is then executed asynchronously.
   // Virtual for testing.
   virtual void SignOut(signin_metrics::ProfileSignout signout_source,
-                       bool force_clear_browsing_data,
                        ProceduralBlock completion);
 
   // Returns whether there is a cached associated MDM error for `identity`.
@@ -207,7 +205,7 @@ class AuthenticationService : public KeyedService,
       const signin::PrimaryAccountChangeEvent& event_details) override;
 
   // ChromeAccountManagerService::Observer implementation.
-  void OnIdentityListChanged() override;
+  void OnIdentitiesInProfileChanged() override;
   void OnRefreshTokenUpdated(id<SystemIdentity> identity) override;
   void OnAccessTokenRefreshFailed(id<SystemIdentity> identity,
                                   id<RefreshAccessTokenError> error) override;
@@ -226,6 +224,9 @@ class AuthenticationService : public KeyedService,
 
   // Clears the account settings prefs of all removed accounts from device.
   void ClearAccountSettingsPrefsOfRemovedAccounts();
+
+  // Called once account switching is done.
+  void AccountSwitchDone();
 
   // Returns the active identities for MDM.
   NSArray<id<SystemIdentity>>* ActiveIdentities();

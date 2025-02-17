@@ -32,6 +32,10 @@ typedef NS_ENUM(NSInteger, PasswordSettingsOnDeviceEncryptionState) {
 // policy.
 - (void)setManagedByPolicy:(BOOL)managedByPolicy;
 
+// Indicates whether automatic passkey upgrades setting is managed by enterprise
+// policy. If managed, the view should not display the switch for it.
+- (void)setAutomaticPasskeyUpgradesManagedByPolicy:(BOOL)managed;
+
 // Indicates whether or not the "Offer to Save Passwords" feature is enabled.
 - (void)setSavePasswordsEnabled:(BOOL)enabled;
 
@@ -50,8 +54,8 @@ typedef NS_ENUM(NSInteger, PasswordSettingsOnDeviceEncryptionState) {
 - (void)setOnDeviceEncryptionState:
     (PasswordSettingsOnDeviceEncryptionState)onDeviceEncryptionState;
 
-// Enables/disables the "Delete all data" button based on the current state.
-- (void)updateDeleteAllCredentialsButton;
+// Update the delete all credentials section based on the current state.
+- (void)updateDeleteAllCredentialsSection;
 
 // Enables/disables the "Export Passwords..." button based on the current state.
 - (void)updateExportPasswordsButton;

@@ -33,11 +33,13 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/page.h"
 #include "content/public/browser/page_navigator.h"
+#include "content/public/browser/prefetch_handle.h"
 #include "content/public/browser/preloading.h"
 #include "content/public/browser/preloading_trigger_type.h"
 #include "content/public/browser/prerender_handle.h"
 #include "content/public/browser/save_page_type.h"
 #include "content/public/browser/visibility.h"
+#include "content/public/browser/web_contents_capability_type.h"
 #include "content/public/common/stop_find_action.h"
 #include "net/base/network_handle.h"
 #include "net/http/http_request_headers.h"
@@ -80,7 +82,7 @@ struct RendererPreferences;
 }  // namespace blink
 
 namespace cc {
-struct BrowserControlsOffsetTagsInfo;
+struct BrowserControlsOffsetTagModifications;
 }  // namespace cc
 
 namespace device {
@@ -153,21 +155,6 @@ class WebContents : public PageNavigator, public base::SupportsUserData {
   ADVANCED_MEMORY_SAFETY_CHECKS();
 
  public:
-  // Device activity types that can be used by a WebContents.
-  enum class CapabilityType {
-    // WebUSB
-    kUSB,
-    // Web Bluetooth
-    kBluetoothConnected,
-    kBluetoothScanning,
-    // WebHID
-    kHID,
-    // Web Serial
-    kSerial,
-    // Geolocation
-    kGeolocation
-  };
-
   struct CONTENT_EXPORT CreateParams {
     explicit CreateParams(
         BrowserContext* context,
@@ -831,8 +818,9 @@ class WebContents : public PageNavigator, public base::SupportsUserData {
   virtual bool IsCurrentlyAudible() = 0;
 
   // Indicates whether any frame in the WebContents is connected to anything in
-  // the WebContents::CapabilityType enum.
-  virtual bool IsCapabilityActive(CapabilityType capability_type) = 0;
+  // the WebContentsCapabilityType enum.
+  virtual bool IsCapabilityActive(
+      WebContentsCapabilityType capability_type) = 0;
 
   // Indicates whether any frame in the WebContents has File System Access
   // handles.
@@ -1506,8 +1494,8 @@ class WebContents : public PageNavigator, public base::SupportsUserData {
       cc::BrowserControlsState constraints,
       cc::BrowserControlsState current,
       bool animate,
-      const std::optional<cc::BrowserControlsOffsetTagsInfo>&
-          offset_tags_info) = 0;
+      const std::optional<cc::BrowserControlsOffsetTagModifications>&
+          offset_tag_modifications) = 0;
 
   // Transmits data to V8CrowdsourcedCompileHintsConsumer in the renderer. The
   // data is a model describing which JavaScript functions on the page should be
@@ -1556,7 +1544,10 @@ class WebContents : public PageNavigator, public base::SupportsUserData {
   //   request.
   // - `holdback_status_override` is used to override holdback status, if
   //   specified.
-  virtual void StartPrefetch(
+  //  - Returns `PrefetchHandle` to control prefetch resources. This can be
+  //    nullptr when this function can't add `PrefetchContainer` to
+  //    `PrefetchService`.
+  virtual std::unique_ptr<PrefetchHandle> StartPrefetch(
       const GURL& prefetch_url,
       bool use_prefetch_proxy,
       const blink::mojom::Referrer& referrer,
@@ -1598,6 +1589,12 @@ class WebContents : public PageNavigator, public base::SupportsUserData {
 
   // Cancels all prerendering hosted on this WebContents.
   virtual void CancelAllPrerendering() = 0;
+
+  // Returns true when prerendering can be triggered by StartPrerendering()
+  // without hitting the number limit of running prerenders. When this returns
+  // false, an embedder is expected to cancel existing prerendering before
+  // starting a new one.
+  virtual bool IsAllowedToStartPrerendering() = 0;
 
   // May be called when the embedder believes that it is likely that the user
   // will perform a back navigation due to the trigger indicated by `predictor`
