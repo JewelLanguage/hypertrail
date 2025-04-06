@@ -577,6 +577,11 @@
 // NOTE: The last valid command value is 57343 (0xDFFF)
 // See http://msdn.microsoft.com/en-us/library/t2zechd4(VS.71).aspx
 
+// Hypertrail Commands start here
+
+// Jewel Api Entry Point
+#define IDC_JEWEL_ENTRY    57000
+
 // Starting command id for menus showing an arbitrarily high (variable) number
 // of menu items. Currently, this includes the recent tabs and bookmarks menus.
 // While command ids passed to Windows functions must not be higher than

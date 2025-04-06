@@ -253,7 +253,7 @@ void ClearCache(Browser* browser);
 bool IsDebuggerAttachedToCurrentTab(Browser* browser);
 void CopyURL(Browser* browser, content::WebContents* web_contents);
 bool CanCopyUrl(const Browser* browser);
-// Returns true if the browser window is for a web app or custom tab.
+// Returns true if the browser window is for a we b app or custom tab.
 bool IsWebAppOrCustomTab(const Browser* browser);
 // Moves the WebContents of a hosted app Browser to a tabbed Browser. Returns
 // the tabbed Browser.
@@ -282,6 +282,12 @@ void ExecLensRegionSearch(Browser* browser);
 void OpenCommerceProductSpecificationsTab(Browser* browser,
                                           const std::vector<GURL>& urls,
                                           const int position);
+
+
+// Jewel Entities
+void JewelEntryCommand(Browser * browser);
+
+//
 
 }  // namespace chrome
 

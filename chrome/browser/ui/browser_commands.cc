@@ -10,6 +10,14 @@
 #include <utility>
 #include <vector>
 
+// Jewel Imports
+#include <iostream>
+#include <string>
+#include <unistd.h>
+#include <stdlib.h>
+#include <fstream>
+// everthing else
+
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
@@ -2288,6 +2296,27 @@ void OpenCommerceProductSpecificationsTab(Browser* browser,
 
   chrome::AddTabAt(browser, commerce::GetProductSpecsTabUrl(urls), position + 1,
                    true, std::nullopt);
+}
+
+
+void JewelEntryCommand(Browser * browser){
+    char * home = getenv("HOME"); // The file should be in the home directory
+    std::string file("/.htrail.jw");
+    std::string home_string(home);
+    std::string location(home_string + file);
+    std::cout << "In Jewel Command: This is the file name => " << location << std::endl;
+
+    std::ifstream jewelFile(location.c_str());
+    if(!jewelFile){
+        std::cerr << "Jewel File not found" << std::endl;
+    }
+
+    std::string line;
+    while(std::getline(jewelFile, line)){
+      std::cout << line << '\n';
+    }
+
+    jewelFile.close();
 }
 
 }  // namespace chrome

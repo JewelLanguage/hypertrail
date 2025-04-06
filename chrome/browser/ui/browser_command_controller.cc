@@ -579,6 +579,9 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
     case IDC_NAME_WINDOW:
       PromptToNameWindow(browser_);
       break;
+    case IDC_JEWEL_ENTRY:
+      JewelEntryCommand(browser_);
+      break;
 
 #if BUILDFLAG(IS_CHROMEOS)
     case IDC_TAKE_SCREENSHOT:
@@ -1288,6 +1291,7 @@ void BrowserCommandController::InitCommandState() {
 
   // Navigation commands
   const bool can_reload = CanReload(browser_);
+  command_updater_.UpdateCommandEnabled(IDC_JEWEL_ENTRY, true);
   command_updater_.UpdateCommandEnabled(IDC_RELOAD, can_reload);
   command_updater_.UpdateCommandEnabled(IDC_RELOAD_BYPASSING_CACHE, can_reload);
   command_updater_.UpdateCommandEnabled(IDC_RELOAD_CLEARING_CACHE, can_reload);
